@@ -36,6 +36,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesGenres { get; set; } = null;
 
+        // Tags-specific option for Audio media type - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentAlbumTags { get; set; } = null;
+
         // Helper property to check if this is a user-specific expression
         // Only serialize when UserId is not null
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

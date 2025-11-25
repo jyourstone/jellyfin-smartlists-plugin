@@ -762,6 +762,15 @@
             '<option value="true">Yes - Also check tags from parent series</option>' +
             '</select>' +
             '</div>' +
+            '<div class="rule-album-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            'Include parent album tags:' +
+            '</label>' +
+            '<select is="emby-select" class="emby-select rule-album-tags-select" style="width: 100%;">' +
+            '<option value="false">No - Only check audio track tags</option>' +
+            '<option value="true">Yes - Also check tags from parent album</option>' +
+            '</select>' +
+            '</div>' +
             '<div class="rule-studios-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
             'Include parent series studios:' +
@@ -831,6 +840,9 @@
         // Initialize Tags options visibility
         SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
+        // Initialize Album Tags options visibility
+        SmartLists.updateAlbumTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
+
         // Initialize Studios options visibility
         SmartLists.updateStudiosOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
@@ -849,6 +861,7 @@
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
+            SmartLists.updateAlbumTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateStudiosOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateGenresOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateSimilarityOptionsVisibility(newRuleRow, fieldSelect.value);
@@ -1064,6 +1077,7 @@
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, currentFieldValue, page);
+                    SmartLists.updateAlbumTagsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateSimilarityOptionsVisibility(ruleRow, currentFieldValue);
@@ -1078,6 +1092,7 @@
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, fieldSelect.value, page);
+                    SmartLists.updateAlbumTagsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateSimilarityOptionsVisibility(ruleRow, fieldSelect.value);
@@ -1230,6 +1245,7 @@
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, '', page);
+                        SmartLists.updateAlbumTagsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateStudiosOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateGenresOptionsVisibility(ruleRow, '', page);
                     }
@@ -1246,6 +1262,7 @@
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, currentValue, page);
+                        SmartLists.updateAlbumTagsOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateStudiosOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateGenresOptionsVisibility(ruleRow, currentValue, page);
                     }
@@ -1445,6 +1462,30 @@
         SmartLists.updateAllRules(page, SmartLists.updateTagsOptionsVisibility);
     };
 
+    SmartLists.updateAlbumTagsOptionsVisibility = function (ruleRow, fieldValue, page) {
+        const isTagsField = fieldValue === 'Tags';
+        const albumTagsOptionsDiv = ruleRow.querySelector('.rule-album-tags-options');
+
+        if (albumTagsOptionsDiv) {
+            // Get selected media types to check if Audio is selected
+            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+            const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
+
+            // Show only if Tags field is selected AND Audio media type is selected
+            if (isTagsField && hasAudio) {
+                albumTagsOptionsDiv.style.display = 'block';
+            } else {
+                // Hide but preserve user's selection - don't reset value
+                albumTagsOptionsDiv.style.display = 'none';
+            }
+        }
+    };
+
+    // Update visibility of Album Tags options for all rules when media types change
+    SmartLists.updateAllAlbumTagsOptionsVisibility = function (page) {
+        SmartLists.updateAllRules(page, SmartLists.updateAlbumTagsOptionsVisibility);
+    };
+
     SmartLists.updateStudiosOptionsVisibility = function (ruleRow, fieldValue, page) {
         const isStudiosField = fieldValue === 'Studios';
         const studiosOptionsDiv = ruleRow.querySelector('.rule-studios-options');
@@ -1639,6 +1680,7 @@
         const expressionSets = [];
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
+        const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
 
         page.querySelectorAll('.logic-group').forEach(function (logicGroup) {
             const expressions = [];
@@ -1719,34 +1761,53 @@
                     // Handle Tags-specific options (only if Episode is selected)
                     const tagsSelect = rule.querySelector('.rule-tags-select');
                     if (tagsSelect && memberName === 'Tags' && hasEpisode) {
-                        // Convert string to boolean and only include if it's explicitly true
+                        // Convert string to boolean and always set the property explicitly
                         const includeParentSeriesTags = tagsSelect.value === 'true';
                         if (includeParentSeriesTags) {
                             expression.IncludeParentSeriesTags = true;
+                        } else {
+                            // Explicitly set to false to ensure old true values are overwritten
+                            expression.IncludeParentSeriesTags = false;
                         }
-                        // If false (default), don't include the parameter to save space
+                    }
+
+                    // Handle Tags-specific options for Audio (only if Audio is selected)
+                    const albumTagsSelect = rule.querySelector('.rule-album-tags-select');
+                    if (albumTagsSelect && memberName === 'Tags' && hasAudio) {
+                        // Convert string to boolean and always set the property explicitly
+                        const includeParentAlbumTags = albumTagsSelect.value === 'true';
+                        if (includeParentAlbumTags) {
+                            expression.IncludeParentAlbumTags = true;
+                        } else {
+                            // Explicitly set to false to ensure old true values are overwritten
+                            expression.IncludeParentAlbumTags = false;
+                        }
                     }
 
                     // Handle Studios-specific options (only if Episode is selected)
                     const studiosSelect = rule.querySelector('.rule-studios-select');
                     if (studiosSelect && memberName === 'Studios' && hasEpisode) {
-                        // Convert string to boolean and only include if it's explicitly true
+                        // Convert string to boolean and always set the property explicitly
                         const includeParentSeriesStudios = studiosSelect.value === 'true';
                         if (includeParentSeriesStudios) {
                             expression.IncludeParentSeriesStudios = true;
+                        } else {
+                            // Explicitly set to false to ensure old true values are overwritten
+                            expression.IncludeParentSeriesStudios = false;
                         }
-                        // If false (default), don't include the parameter to save space
                     }
 
                     // Handle Genres-specific options (only if Episode is selected)
                     const genresSelect = rule.querySelector('.rule-genres-select');
                     if (genresSelect && memberName === 'Genres' && hasEpisode) {
-                        // Convert string to boolean and only include if it's explicitly true
+                        // Convert string to boolean and always set the property explicitly
                         const includeParentSeriesGenres = genresSelect.value === 'true';
                         if (includeParentSeriesGenres) {
                             expression.IncludeParentSeriesGenres = true;
+                        } else {
+                            // Explicitly set to false to ensure old true values are overwritten
+                            expression.IncludeParentSeriesGenres = false;
                         }
-                        // If false (default), don't include the parameter to save space
                     }
 
                     expressions.push(expression);
@@ -1795,6 +1856,7 @@
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateTagsOptionsVisibility(ruleRow, actualMemberName, page);
+                SmartLists.updateAlbumTagsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateStudiosOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateGenresOptionsVisibility(ruleRow, actualMemberName, page);
             }
@@ -1853,6 +1915,11 @@
                 if (tagsSelect) {
                     const includeValue = expression.IncludeParentSeriesTags === true ? 'true' : 'false';
                     tagsSelect.value = includeValue;
+                }
+                const albumTagsSelect = ruleRow.querySelector('.rule-album-tags-select');
+                if (albumTagsSelect) {
+                    const includeValue = expression.IncludeParentAlbumTags === true ? 'true' : 'false';
+                    albumTagsSelect.value = includeValue;
                 }
             }
             if (expression.MemberName === 'Studios') {

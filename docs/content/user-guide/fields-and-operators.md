@@ -142,6 +142,14 @@ When using **Tags**, **Studios**, or **Genres** fields with episodes selected as
 
 These options are useful when series-level metadata is more complete than episode-level metadata, or when you want to match episodes based on series characteristics.
 
+### Audio-Specific Collection Field Options
+
+When using the **Tags** field with audio tracks selected as a media type, you can configure whether to also check the parent album:
+
+- **Include parent album tags** (Tags field only, default: No) - When enabled, audio tracks will match if either the track or its parent album has the specified tag.
+
+This is useful for creating playlists based on album-level tags (e.g., "Soundtrack", "Compilation", "Live") that might not be applied to individual tracks.
+
 ### Similar To Options
 
 When using the **Similar To** field, you can configure which metadata fields to use for similarity comparison:

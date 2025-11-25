@@ -35,6 +35,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool ExtractParentSeriesTags { get; set; } = false;
         public bool ExtractParentSeriesStudios { get; set; } = false;
         public bool ExtractParentSeriesGenres { get; set; } = false;
+        public bool ExtractParentAlbumTags { get; set; } = false;
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
     }
@@ -1238,6 +1239,108 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Helper method to safely extract AlbumId as Guid from audio items.
+        /// Handles Guid, Guid?, and string representations, with fallback to ParentId.
+        /// </summary>
+        private static bool TryGetAudioAlbumGuid(BaseItem baseItem, out Guid albumGuid)
+        {
+            albumGuid = Guid.Empty;
+            
+            // Check if this is an Audio item
+            if (baseItem is not Audio)
+            {
+                return false;
+            }
+
+            var audioType = baseItem.GetType();
+
+            // Try AlbumId property first
+            var albumIdProperty = audioType.GetProperty("AlbumId");
+            if (albumIdProperty != null)
+            {
+                var albumId = albumIdProperty.GetValue(baseItem);
+                if (albumId is Guid g) { albumGuid = g; return true; }
+                if (albumId != null && albumId.GetType() == typeof(Guid?))
+                {
+                    var nullableGuid = (Guid?)albumId;
+                    if (nullableGuid.HasValue) { albumGuid = nullableGuid.Value; return true; }
+                }
+                if (albumId is string s && Guid.TryParse(s, out var parsed)) { albumGuid = parsed; return true; }
+            }
+
+            // Fallback to ParentId if AlbumId is not available
+            if (baseItem.ParentId != Guid.Empty)
+            {
+                albumGuid = baseItem.ParentId;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Extracts the parent album tags for audio items with per-refresh caching.
+        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
+        /// </summary>
+        private static void ExtractParentAlbumTags(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.ParentAlbumTags = [];
+            try
+            {
+                // Only process audio items - other item types don't have parent albums
+                if (baseItem is not Audio)
+                {
+                    logger?.LogDebug("Item '{ItemName}' is not an audio item, parent album tags remain empty", baseItem.Name);
+                    return;
+                }
+
+                // Use helper to extract AlbumId safely
+                if (TryGetAudioAlbumGuid(baseItem, out var albumGuid))
+                {
+                    // Check cache first to avoid repeated library lookups (expensive!)
+                    if (cache.AlbumTagsById.TryGetValue(albumGuid, out var cachedTags))
+                    {
+                        operand.ParentAlbumTags = cachedTags;
+                        logger?.LogDebug("Using cached parent album tags for audio '{AudioName}' (album ID: {AlbumId}): [{Tags}]",
+                            baseItem.Name, albumGuid, string.Join(", ", cachedTags));
+                    }
+                    else
+                    {
+                        try
+                        {
+                            // Get the parent album from the library manager (expensive operation!)
+                            var parentAlbum = libraryManager.GetItemById(albumGuid);
+                            var albumTags = parentAlbum?.Tags?.ToList() ?? [];
+
+                            // Cache the result for future audio items from the same album
+                            cache.AlbumTagsById[albumGuid] = albumTags;
+                            operand.ParentAlbumTags = albumTags;
+
+                            logger?.LogDebug("Extracted and cached parent album tags for audio '{AudioName}' (album: '{AlbumName}'): [{Tags}]",
+                                baseItem.Name, parentAlbum?.Name ?? "Unknown", string.Join(", ", albumTags));
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogDebug(ex, "Failed to get parent album tags for audio '{AudioName}' with AlbumId {AlbumId}",
+                                baseItem.Name, albumGuid);
+
+                            // Cache empty list to avoid repeated failures
+                            cache.AlbumTagsById[albumGuid] = [];
+                        }
+                    }
+                }
+                else
+                {
+                    logger?.LogDebug("Could not extract valid AlbumId from audio '{AudioName}'", baseItem.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract parent album tags for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
         /// Extracts people (actors, directors, producers, etc.) associated with the item.
         /// </summary>
         private static void ExtractPeople(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -1584,6 +1687,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractParentSeriesTags = options.ExtractParentSeriesTags;
             var extractParentSeriesStudios = options.ExtractParentSeriesStudios;
             var extractParentSeriesGenres = options.ExtractParentSeriesGenres;
+            var extractParentAlbumTags = options.ExtractParentAlbumTags;
             var includeUnwatchedSeries = options.IncludeUnwatchedSeries;
             var additionalUserIds = options.AdditionalUserIds;
 
@@ -1927,6 +2031,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             else
             {
                 operand.ParentSeriesGenres = [];
+            }
+
+            // Extract parent album tags for audio items - only when needed for performance
+            // This is an expensive operation (database lookup), so we use caching
+            if (extractParentAlbumTags)
+            {
+                ExtractParentAlbumTags(operand, baseItem, libraryManager, cache, logger);
+            }
+            else
+            {
+                operand.ParentAlbumTags = [];
             }
 
             // Extract artists and album artists only for music-related items (cheap operations when applicable)

@@ -1120,6 +1120,8 @@
                         let tagsInfo = '';
                         if (rule.MemberName === 'Tags' && rule.IncludeParentSeriesTags === true) {
                             tagsInfo = ' (including parent series tags)';
+                        } else if (rule.MemberName === 'Tags' && rule.IncludeParentAlbumTags === true) {
+                            tagsInfo = ' (including parent album tags)';
                         }
 
                         // Add Studios configuration info

@@ -116,6 +116,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildCombinedStringEnumerableExpression(r, param, "Genres", "ParentSeriesGenres", logger);
             }
 
+            // Special handling for Tags field with IncludeParentAlbumTags option (Audio media type)
+            if (r.MemberName == "Tags" && r.IncludeParentAlbumTags == true)
+            {
+                logger?.LogDebug("SmartLists building Tags expression with parent album tags inclusion");
+                return BuildCombinedStringEnumerableExpression(r, param, "Tags", "ParentAlbumTags", logger);
+            }
+
             // Get the property/field expression for non-user-specific fields
             var left = System.Linq.Expressions.Expression.PropertyOrField(param, r.MemberName);
             var tProp = left.Type;
