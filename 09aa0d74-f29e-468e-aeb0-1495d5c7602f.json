@@ -1,0 +1,58 @@
+{
+  "Public": true,
+  "UserPlaylists": [
+    {
+      "UserId": "3ea7c3e4af89436c93fa40b573743e2a",
+      "JellyfinPlaylistId": "75027a4028c8ef6cc45fbd8a24a3c5d5"
+    }
+  ],
+  "Type": "Playlist",
+  "Id": "09aa0d74-f29e-468e-aeb0-1495d5c7602f",
+  "Name": "Regex T Lunes",
+  "FileName": "09aa0d74-f29e-468e-aeb0-1495d5c7602f.json",
+  "ExpressionSets": [
+    {
+      "Expressions": [
+        {
+          "MemberName": "Name",
+          "Operator": "MatchRegex",
+          "TargetValue": "^T\\w*"
+        },
+        {
+          "MemberName": "IsPlayed",
+          "Operator": "Equal",
+          "TargetValue": "false",
+          "UserId": "3ea7c3e4af89436c93fa40b573743e2a",
+          "IsUserSpecific": true
+        }
+      ]
+    }
+  ],
+  "Order": {
+    "SortOptions": [
+      {
+        "SortBy": "Random",
+        "SortOrder": "Ascending"
+      }
+    ]
+  },
+  "MediaTypes": [
+    "Audio"
+  ],
+  "Enabled": true,
+  "MaxItems": 25,
+  "MaxPlayTimeMinutes": 0,
+  "AutoRefresh": "Never",
+  "Schedules": [
+    {
+      "Trigger": "Weekly",
+      "Time": "03:30:00",
+      "DayOfWeek": 1
+    }
+  ],
+  "LastRefreshed": "2025-12-06T22:06:35.0472885Z",
+  "DateCreated": "2025-10-04T19:30:11.3189234Z",
+  "ItemCount": 25,
+  "TotalRuntimeMinutes": 100.38360919666668,
+  "SimilarityComparisonFields": []
+}

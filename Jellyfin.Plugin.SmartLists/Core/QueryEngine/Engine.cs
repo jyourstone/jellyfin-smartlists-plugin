@@ -378,8 +378,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 throw new ArgumentException($"String comparison requires a valid value for field '{r.MemberName}', but got: '{r.TargetValue}'");
             }
 
-            // Use case-insensitive comparison for string fields
+            // Legacy IsPlayed field support: Convert boolean values to PlaybackStatus values
             var cleanedTarget = r.TargetValue.Trim();
+            if (r.MemberName == "IsPlayed")
+            {
+                // Convert "true"/"false" to "Played"/"Unplayed" for backward compatibility
+                if (bool.TryParse(cleanedTarget, out bool boolValue))
+                {
+                    cleanedTarget = boolValue ? "Played" : "Unplayed";
+                    logger?.LogDebug("SmartLists converted legacy IsPlayed value '{OldValue}' to PlaybackStatus value '{NewValue}'", r.TargetValue, cleanedTarget);
+                }
+            }
+
+            // Use case-insensitive comparison for string fields
             var targetConstant = System.Linq.Expressions.Expression.Constant(cleanedTarget, typeof(string));
             var comparisonConstant = System.Linq.Expressions.Expression.Constant(StringComparison.OrdinalIgnoreCase);
 

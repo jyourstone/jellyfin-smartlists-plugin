@@ -203,6 +203,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         if (playlist != null)
                         {
                             playlist.Type = SmartListType.Playlist;
+                            
+                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
+                            playlist.MigrateLegacyFields();
+                            
                             playlists.Add(playlist);
                         }
                         continue;
@@ -219,6 +223,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         {
                             // Ensure type is set
                             playlist.Type = SmartListType.Playlist;
+                            
+                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
+                            playlist.MigrateLegacyFields();
+                            
                             playlists.Add(playlist);
                         }
                     }
@@ -229,6 +237,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         {
                             // Ensure type is set
                             collection.Type = SmartListType.Collection;
+                            
+                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
+                            collection.MigrateLegacyFields();
+                            
                             collections.Add(collection);
                         }
                     }

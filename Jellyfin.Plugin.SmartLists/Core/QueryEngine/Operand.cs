@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 {
@@ -89,6 +90,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public Dictionary<string, bool> IsFavoriteByUser { get; set; } = [];
         public Dictionary<string, bool> NextUnwatchedByUser { get; set; } = [];
         public Dictionary<string, double> LastPlayedDateByUser { get; set; } = [];
+
 
         // Similarity score - calculated when SimilarTo rules are present
         public float? SimilarityScore { get; set; } = null;

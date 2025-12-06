@@ -55,6 +55,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return MemberName switch
             {
                 "PlaybackStatus" => "GetPlaybackStatusByUser",
+                "IsPlayed" => "GetPlaybackStatusByUser", // Legacy field - treat as PlaybackStatus
                 "PlayCount" => "GetPlayCountByUser",
                 "IsFavorite" => "GetIsFavoriteByUser",
                 "NextUnwatched" => "GetNextUnwatchedByUser",
@@ -68,6 +69,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return memberName switch
             {
                 "PlaybackStatus" => true,
+                "IsPlayed" => true, // Legacy field - treat as user-specific
                 "PlayCount" => true,
                 "IsFavorite" => true,
                 "NextUnwatched" => true,
