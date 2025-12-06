@@ -208,8 +208,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Now deserialize as collection since we've confirmed it's a collection
             var dto = JsonSerializer.Deserialize<SmartCollectionDto>(jsonContent, SmartListFileSystem.SharedJsonOptions);
             
-            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
-            dto?.MigrateLegacyFields();
+            if (dto != null)
+            {
+                // Apply common post-processing (sets Type, migrates legacy fields)
+                SmartListFileSystem.ApplyPostProcessing(dto);
+            }
             
             return dto;
         }

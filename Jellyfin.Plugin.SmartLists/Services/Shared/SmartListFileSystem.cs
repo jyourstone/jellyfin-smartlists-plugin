@@ -148,6 +148,44 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
+        /// Applies common post-processing to a playlist after deserialization.
+        /// This includes setting the Type property and migrating legacy fields.
+        /// </summary>
+        /// <param name="playlist">The playlist to process</param>
+        public static void ApplyPostProcessing(SmartPlaylistDto playlist)
+        {
+            if (playlist == null)
+            {
+                return;
+            }
+
+            // Ensure type is set
+            playlist.Type = SmartListType.Playlist;
+
+            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
+            playlist.MigrateLegacyFields();
+        }
+
+        /// <summary>
+        /// Applies common post-processing to a collection after deserialization.
+        /// This includes setting the Type property and migrating legacy fields.
+        /// </summary>
+        /// <param name="collection">The collection to process</param>
+        public static void ApplyPostProcessing(SmartCollectionDto collection)
+        {
+            if (collection == null)
+            {
+                return;
+            }
+
+            // Ensure type is set
+            collection.Type = SmartListType.Collection;
+
+            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
+            collection.MigrateLegacyFields();
+        }
+
+        /// <summary>
         /// Tries to extract SmartListType from a JSON element.
         /// Handles both string and numeric type values for backward compatibility.
         /// </summary>
@@ -202,11 +240,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         var playlist = JsonSerializer.Deserialize<SmartPlaylistDto>(jsonContent, SharedJsonOptions);
                         if (playlist != null)
                         {
-                            playlist.Type = SmartListType.Playlist;
-                            
-                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
-                            playlist.MigrateLegacyFields();
-                            
+                            ApplyPostProcessing(playlist);
                             playlists.Add(playlist);
                         }
                         continue;
@@ -221,12 +255,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         var playlist = JsonSerializer.Deserialize<SmartPlaylistDto>(jsonContent, SharedJsonOptions);
                         if (playlist != null)
                         {
-                            // Ensure type is set
-                            playlist.Type = SmartListType.Playlist;
-                            
-                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
-                            playlist.MigrateLegacyFields();
-                            
+                            ApplyPostProcessing(playlist);
                             playlists.Add(playlist);
                         }
                     }
@@ -235,12 +264,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         var collection = JsonSerializer.Deserialize<SmartCollectionDto>(jsonContent, SharedJsonOptions);
                         if (collection != null)
                         {
-                            // Ensure type is set
-                            collection.Type = SmartListType.Collection;
-                            
-                            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
-                            collection.MigrateLegacyFields();
-                            
+                            ApplyPostProcessing(collection);
                             collections.Add(collection);
                         }
                     }

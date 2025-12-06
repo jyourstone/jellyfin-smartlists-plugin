@@ -257,10 +257,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
 
             // Migrate old UserId/JellyfinPlaylistId format to UserPlaylists array
+            // This is playlist-specific and not part of common post-processing
             MigrateToUserPlaylists(dto);
 
-            // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
-            dto.MigrateLegacyFields();
+            // Apply common post-processing (sets Type, migrates legacy fields)
+            SmartListFileSystem.ApplyPostProcessing(dto);
 
             return dto;
         }

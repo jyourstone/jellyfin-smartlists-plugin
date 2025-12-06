@@ -382,8 +382,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var cleanedTarget = r.TargetValue.Trim();
             if (r.MemberName == "IsPlayed")
             {
+                // Strip quotes if present (JSON serialization may add them)
+                // This matches the logic in ValidateAndParseBooleanValue for consistency
+                var strippedValue = cleanedTarget.Trim('"').Trim('\'');
+                
                 // Convert "true"/"false" to "Played"/"Unplayed" for backward compatibility
-                if (bool.TryParse(cleanedTarget, out bool boolValue))
+                if (bool.TryParse(strippedValue, out bool boolValue))
                 {
                     cleanedTarget = boolValue ? "Played" : "Unplayed";
                     logger?.LogDebug("SmartLists converted legacy IsPlayed value '{OldValue}' to PlaybackStatus value '{NewValue}'", r.TargetValue, cleanedTarget);
