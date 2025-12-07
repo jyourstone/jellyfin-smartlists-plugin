@@ -361,3 +361,27 @@ You can test your regex patterns using [Regex101.com](https://regex101.com/) - m
     - Use `$` to match the end of a string
     - Use `|` for "OR" logic (e.g., `(eng|en|english)`)
     - Use `\b` to match word boundaries
+
+## Managing Rules
+
+The web interface provides several tools to help you manage and organize your rules efficiently:
+
+### Cloning Rules
+
+You can quickly duplicate individual rules or entire OR rule groups to save time when creating similar rules.
+
+#### Cloning Individual Rules
+
+To clone a single rule:
+
+1. Click the **clone button** (copy icon) on the rule you want to duplicate
+2. A new rule will be created last, in the same rule group
+3. The cloned rule will have all the same settings as the original
+
+#### Cloning OR Rule Groups
+
+To clone an entire OR rule group (all rules within a group):
+
+1. Click the **clone button** (copy icon) in the rule group header
+2. A complete copy of the entire rule group will be created last
+3. The cloned rule group will have all the same individual rule fields as the original

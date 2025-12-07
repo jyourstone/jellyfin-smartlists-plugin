@@ -705,22 +705,51 @@
             const target = e.target;
 
             // Handle rule action buttons
-            if (target.classList.contains('and-btn')) {
-                const ruleRow = target.closest('.rule-row');
-                const logicGroup = ruleRow.closest('.logic-group');
-                if (SmartLists.addRuleToGroup) {
+            const andBtn = target.closest('.and-btn');
+            if (andBtn) {
+                const ruleRow = andBtn.closest('.rule-row');
+                const logicGroup = ruleRow ? ruleRow.closest('.logic-group') : null;
+                if (logicGroup && SmartLists.addRuleToGroup) {
                     SmartLists.addRuleToGroup(page, logicGroup);
                 }
             }
-            if (target.classList.contains('or-btn')) {
+
+            const orBtn = target.closest('.or-btn');
+            if (orBtn) {
                 if (SmartLists.addNewLogicGroup) {
                     SmartLists.addNewLogicGroup(page);
                 }
             }
-            if (target.classList.contains('delete-btn')) {
-                const ruleRow = target.closest('.rule-row');
+
+            const deleteBtn = target.closest('.delete-btn');
+            if (deleteBtn) {
+                const ruleRow = deleteBtn.closest('.rule-row');
                 if (ruleRow && SmartLists.removeRule) {
                     SmartLists.removeRule(page, ruleRow);
+                }
+            }
+
+            const cloneRuleBtn = target.closest('.clone-rule-btn');
+            if (cloneRuleBtn) {
+                const ruleRow = cloneRuleBtn.closest('.rule-row');
+                if (ruleRow && SmartLists.cloneRule) {
+                    SmartLists.cloneRule(page, ruleRow);
+                }
+            }
+
+            const cloneGroupBtn = target.closest('.clone-group-btn');
+            if (cloneGroupBtn) {
+                const logicGroup = cloneGroupBtn.closest('.logic-group');
+                if (logicGroup && SmartLists.cloneLogicGroup) {
+                    SmartLists.cloneLogicGroup(page, logicGroup);
+                }
+            }
+
+            const deleteGroupBtn = target.closest('.delete-group-btn');
+            if (deleteGroupBtn) {
+                const logicGroup = deleteGroupBtn.closest('.logic-group');
+                if (logicGroup && SmartLists.removeLogicGroup) {
+                    SmartLists.removeLogicGroup(page, logicGroup);
                 }
             }
 

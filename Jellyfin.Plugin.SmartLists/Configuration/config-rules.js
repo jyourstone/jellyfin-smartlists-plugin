@@ -692,6 +692,33 @@
     };
 
     // ===== LOGIC GROUP MANAGEMENT =====
+    SmartLists.createLogicGroupHeader = function () {
+        const headerDiv = SmartLists.createStyledElement('div', 'logic-group-header', SmartLists.STYLES.logicGroupHeader);
+
+        const cloneBtn = document.createElement('button');
+        cloneBtn.type = 'button';
+        cloneBtn.className = 'rule-action-btn clone-btn clone-group-btn';
+        cloneBtn.title = 'Clone OR Block';
+        cloneBtn.innerHTML = '<span class="material-icons" style="font-size: 1em;">content_copy</span>';
+
+        // Style the clone button using the styling system
+        SmartLists.styleRuleActionButton(cloneBtn, 'clone');
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'rule-action-btn delete-btn delete-group-btn';
+        deleteBtn.title = 'Remove OR Block';
+        deleteBtn.textContent = '×';
+
+        // Style the delete button
+        SmartLists.styleRuleActionButton(deleteBtn, 'delete');
+
+        headerDiv.appendChild(cloneBtn);
+        headerDiv.appendChild(deleteBtn);
+
+        return headerDiv;
+    };
+
     SmartLists.createInitialLogicGroup = function (page) {
         const rulesContainer = page.querySelector('#rules-container');
         const logicGroupId = 'logic-group-' + Date.now();
@@ -700,6 +727,10 @@
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
 
         rulesContainer.appendChild(logicGroupDiv);
+
+        // Add header with clone button
+        const header = SmartLists.createLogicGroupHeader();
+        logicGroupDiv.appendChild(header);
 
         // Add the first rule to this group
         SmartLists.addRuleToGroup(page, logicGroupDiv);
@@ -738,9 +769,10 @@
             '<span class="rule-value-container" style="flex: 1;">' +
             '<input type="text" class="emby-input rule-value-input" placeholder="Value" style="width: 100%;">' +
             '</span>' +
-            '<div class="rule-actions">' +
+            '<div class="rule-actions" style="display: flex; gap: 4px; align-items: center;">' +
             '<button type="button" class="rule-action-btn and-btn" title="Add AND rule">And</button>' +
             '<button type="button" class="rule-action-btn or-btn" title="Add OR group">Or</button>' +
+            '<button type="button" class="rule-action-btn clone-btn clone-rule-btn" title="Clone rule"><span class="material-icons" style="font-size: 1.2em;">content_copy</span></button>' +
             '<button type="button" class="rule-action-btn delete-btn" title="Remove rule">×</button>' +
             '</div>' +
             '</div>' +
@@ -924,20 +956,12 @@
             let buttonType;
             if (button.classList.contains('and-btn')) buttonType = 'and';
             else if (button.classList.contains('or-btn')) buttonType = 'or';
+            else if (button.classList.contains('clone-btn')) buttonType = 'clone';
             else if (button.classList.contains('delete-btn')) buttonType = 'delete';
 
             if (buttonType) {
                 // Apply base styles
                 SmartLists.styleRuleActionButton(button, buttonType);
-
-                // Add hover effects
-                button.addEventListener('mouseenter', function () {
-                    SmartLists.styleRuleActionButton(this, buttonType);
-                }, listenerOptions);
-
-                button.addEventListener('mouseleave', function () {
-                    SmartLists.styleRuleActionButton(this, buttonType);
-                }, listenerOptions);
             }
         });
 
@@ -961,6 +985,10 @@
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
 
         rulesContainer.appendChild(logicGroupDiv);
+
+        // Add header with clone button
+        const header = SmartLists.createLogicGroupHeader();
+        logicGroupDiv.appendChild(header);
 
         // Add the first rule to this group
         SmartLists.addRuleToGroup(page, logicGroupDiv);
@@ -997,6 +1025,212 @@
         SmartLists.updateAllSortOptionsVisibility(page);
     };
 
+    // Extract rule configuration from a rule row element
+    // Returns { expression, similarityFields } where expression is the rule expression object
+    // and similarityFields is an array of selected similarity fields (or null for defaults)
+    SmartLists.extractRuleConfig = function (ruleRow) {
+        const fieldSelect = ruleRow.querySelector('.rule-field-select');
+        const operatorSelect = ruleRow.querySelector('.rule-operator-select');
+        const valueContainer = ruleRow.querySelector('.rule-value-container');
+
+        const fieldValue = fieldSelect ? fieldSelect.value : '';
+        const operatorValue = operatorSelect ? operatorSelect.value : '';
+
+        // Extract value - handle different input types
+        let targetValue = '';
+        const isMultiValueOperator = SmartLists.MULTI_VALUE_OPERATORS.indexOf(operatorValue) !== -1;
+        const isRelativeDateOperator = SmartLists.RELATIVE_DATE_OPERATORS.indexOf(operatorValue) !== -1;
+
+        if (isMultiValueOperator) {
+            // Tag-based input - get from hidden input
+            const hiddenInput = valueContainer.querySelector('input[type="hidden"].rule-value-input');
+            targetValue = hiddenInput ? hiddenInput.value : '';
+        } else if (isRelativeDateOperator) {
+            // Relative date - combine number:unit format
+            const valueInput = valueContainer.querySelector('.rule-value-input');
+            const unitSelect = valueContainer.querySelector('.rule-value-unit');
+            if (valueInput && unitSelect && valueInput.value && unitSelect.value) {
+                targetValue = valueInput.value + ':' + unitSelect.value;
+            } else if (valueInput) {
+                targetValue = valueInput.value;
+            }
+        } else {
+            // Regular input or select
+            const valueInput = valueContainer.querySelector('.rule-value-input');
+            targetValue = valueInput ? valueInput.value : '';
+        }
+
+        // Extract user selector value
+        const userSelect = ruleRow.querySelector('.rule-user-select');
+        const userId = userSelect ? userSelect.value : '';
+
+        // Extract NextUnwatched options
+        const nextUnwatchedSelect = ruleRow.querySelector('.rule-nextunwatched-select');
+        const nextUnwatchedValue = nextUnwatchedSelect ? nextUnwatchedSelect.value : '';
+
+        // Extract Collections options
+        const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
+        const collectionOnlyValue = collectionOnlySelect ? collectionOnlySelect.value : '';
+        const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
+        const collectionsValue = collectionsSelect ? collectionsSelect.value : '';
+
+        // Extract Tags, Studios, Genres, AudioLanguages options
+        const tagsSelect = ruleRow.querySelector('.rule-tags-select');
+        const tagsValue = tagsSelect ? tagsSelect.value : '';
+        const studiosSelect = ruleRow.querySelector('.rule-studios-select');
+        const studiosValue = studiosSelect ? studiosSelect.value : '';
+        const genresSelect = ruleRow.querySelector('.rule-genres-select');
+        const genresValue = genresSelect ? genresSelect.value : '';
+        const audioLanguagesSelect = ruleRow.querySelector('.rule-audiolanguages-select');
+        const audioLanguagesValue = audioLanguagesSelect ? audioLanguagesSelect.value : '';
+
+        // Extract Similarity options (checkboxes)
+        const similarityOptionsDiv = ruleRow.querySelector('.rule-similarity-options');
+        let similarityFields = null;
+        if (similarityOptionsDiv && similarityOptionsDiv.style.display !== 'none') {
+            const checkboxes = similarityOptionsDiv.querySelectorAll('.similarity-field-checkbox:checked');
+            const selectedFields = Array.from(checkboxes).map(function (cb) {
+                return cb.value;
+            });
+            // Store the selected fields (even if defaults, so we can restore the checkboxes correctly)
+            // The backend will use defaults if Genre + Tags, but we need to restore the UI state
+            if (selectedFields.length > 0) {
+                similarityFields = selectedFields;
+            }
+            // If no fields selected, similarityFields remains null (will use defaults in populateSimilarityFields)
+        }
+
+        // Extract People options
+        const peopleSelect = ruleRow.querySelector('.rule-people-select');
+        const peopleValue = peopleSelect ? peopleSelect.value : '';
+
+        // Determine actual member name (for people sub-fields)
+        let actualMemberName = fieldValue;
+        if (fieldValue === 'People' && peopleValue) {
+            actualMemberName = peopleValue;
+        }
+
+        // Build expression object
+        const expression = {
+            MemberName: actualMemberName,
+            Operator: operatorValue,
+            TargetValue: targetValue
+        };
+
+        // Add optional fields
+        if (userId) {
+            expression.UserId = userId;
+        }
+        if (fieldValue === 'NextUnwatched' && nextUnwatchedValue === 'false') {
+            expression.IncludeUnwatchedSeries = false;
+        }
+        if (fieldValue === 'Collections') {
+            if (collectionOnlyValue === 'true') {
+                expression.IncludeCollectionOnly = true;
+            }
+            if (collectionsValue === 'true') {
+                expression.IncludeEpisodesWithinSeries = true;
+            }
+        }
+        if (fieldValue === 'Tags' && tagsValue === 'true') {
+            expression.IncludeParentSeriesTags = true;
+        }
+        if (fieldValue === 'Studios' && studiosValue === 'true') {
+            expression.IncludeParentSeriesStudios = true;
+        }
+        if (fieldValue === 'Genres' && genresValue === 'true') {
+            expression.IncludeParentSeriesGenres = true;
+        }
+        if (fieldValue === 'AudioLanguages' && audioLanguagesValue === 'true') {
+            expression.OnlyDefaultAudioLanguage = true;
+        }
+
+        return {
+            expression: expression,
+            similarityFields: similarityFields
+        };
+    };
+
+    SmartLists.cloneRule = function (page, ruleRow) {
+        const logicGroup = ruleRow.closest('.logic-group');
+        if (!logicGroup) return;
+
+        // Extract rule configuration using shared helper
+        const ruleConfig = SmartLists.extractRuleConfig(ruleRow);
+
+        // Create a new rule using addRuleToGroup
+        // Clone to the bottom of the group
+        SmartLists.addRuleToGroup(page, logicGroup);
+        const newRuleRow = logicGroup.querySelector('.rule-row:last-child');
+
+        // Store similarity fields on page for populateRuleRow to access
+        // Store even if null (for defaults) so we know to show the options div
+        page._cloningPlaylistSimilarityFields = ruleConfig.similarityFields;
+
+        // Populate the new rule with extracted data
+        SmartLists.populateRuleRow(newRuleRow, ruleConfig.expression, page);
+
+        // Clear the cloning flag
+        page._cloningPlaylistSimilarityFields = null;
+
+        // Update button visibility
+        SmartLists.updateRuleButtonVisibility(page);
+
+        // Update sort options in case a Similar To rule was added
+        SmartLists.updateAllSortOptionsVisibility(page);
+    };
+
+    SmartLists.cloneLogicGroup = function (page, logicGroup) {
+        const rulesContainer = page.querySelector('#rules-container');
+        if (!rulesContainer) return;
+
+        // Extract all rules from the source logic group
+        const sourceRules = logicGroup.querySelectorAll('.rule-row');
+        const ruleConfigs = [];
+
+        // Extract configuration for each rule using shared helper
+        sourceRules.forEach(function (ruleRow) {
+            const ruleConfig = SmartLists.extractRuleConfig(ruleRow);
+            ruleConfigs.push(ruleConfig);
+        });
+
+        // Create a new logic group with OR separator
+        const orSeparator = SmartLists.createOrSeparator();
+        rulesContainer.appendChild(orSeparator);
+
+        const logicGroupId = 'logic-group-' + Date.now();
+        const newLogicGroupDiv = SmartLists.createStyledElement('div', 'logic-group', SmartLists.STYLES.logicGroup);
+        newLogicGroupDiv.setAttribute('data-group-id', logicGroupId);
+        rulesContainer.appendChild(newLogicGroupDiv);
+
+        // Add header with clone button
+        const header = SmartLists.createLogicGroupHeader();
+        newLogicGroupDiv.appendChild(header);
+
+        // Recreate each rule in the new group
+        ruleConfigs.forEach(function (ruleConfig, index) {
+            // Store similarity fields on page for populateRuleRow
+            // Store even if null (for defaults) so we know to show the options div
+            page._cloningPlaylistSimilarityFields = ruleConfig.similarityFields;
+
+            // Add rule to group
+            SmartLists.addRuleToGroup(page, newLogicGroupDiv);
+            const newRuleRow = newLogicGroupDiv.querySelector('.rule-row:last-child');
+
+            // Populate with extracted data
+            SmartLists.populateRuleRow(newRuleRow, ruleConfig.expression, page);
+
+            // Clear cloning flag
+            page._cloningPlaylistSimilarityFields = null;
+        });
+
+        // Update button visibility
+        SmartLists.updateRuleButtonVisibility(page);
+
+        // Update sort options in case Similar To rules were added
+        SmartLists.updateAllSortOptionsVisibility(page);
+    };
+
     SmartLists.cleanupRuleEventListeners = function (ruleElement) {
         // Abort all event listeners for this rule
         if (ruleElement._abortController) {
@@ -1018,6 +1252,11 @@
         if (allGroups.length === 1) {
             // This is the last group, clear it and add a new rule
             logicGroup.innerHTML = '';
+
+            // Re-add the header which was wiped out
+            const header = SmartLists.createLogicGroupHeader();
+            logicGroup.appendChild(header);
+
             SmartLists.addRuleToGroup(page, logicGroup);
         } else {
             // Remove the group and any adjacent separator
@@ -1048,6 +1287,7 @@
             rulesInGroup.forEach(function (rule, index) {
                 const andBtn = rule.querySelector('.and-btn');
                 const orBtn = rule.querySelector('.or-btn');
+                const cloneBtn = rule.querySelector('.clone-btn');
                 const deleteBtn = rule.querySelector('.delete-btn');
 
                 // Hide AND and OR buttons if this is not the last rule in the group
@@ -1059,7 +1299,8 @@
                     orBtn.style.display = 'inline-flex';
                 }
 
-                // Always show DELETE button
+                // Always show CLONE and DELETE buttons
+                if (cloneBtn) cloneBtn.style.display = 'inline-flex';
                 deleteBtn.style.display = 'inline-flex';
             });
         });
@@ -1155,6 +1396,7 @@
                     let buttonType;
                     if (button.classList.contains('and-btn')) buttonType = 'and';
                     else if (button.classList.contains('or-btn')) buttonType = 'or';
+                    else if (button.classList.contains('clone-btn')) buttonType = 'clone';
                     else if (button.classList.contains('delete-btn')) buttonType = 'delete';
 
                     if (buttonType) {
@@ -1727,7 +1969,16 @@
                 }
                 const operator = rule.querySelector('.rule-operator-select').value;
                 let targetValue;
-                if ((operator === 'NewerThan' || operator === 'OlderThan') && rule.querySelector('.rule-value-unit')) {
+                const valueContainer = rule.querySelector('.rule-value-container');
+                
+                // Check if this is a multi-value operator (IsIn, IsNotIn)
+                const isMultiValueOperator = SmartLists.MULTI_VALUE_OPERATORS.indexOf(operator) !== -1;
+                
+                if (isMultiValueOperator && valueContainer) {
+                    // For multi-value operators, get the value from the hidden input
+                    const hiddenInput = valueContainer.querySelector('input[type="hidden"].rule-value-input');
+                    targetValue = hiddenInput ? hiddenInput.value : '';
+                } else if ((operator === 'NewerThan' || operator === 'OlderThan') && rule.querySelector('.rule-value-unit')) {
                     // Serialize as number:unit
                     const num = rule.querySelector('.rule-value-input').value;
                     const unit = rule.querySelector('.rule-value-unit').value;
@@ -1881,6 +2132,15 @@
                 SmartLists.updateStudiosOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateGenresOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateAudioLanguagesOptionsVisibility(ruleRow, actualMemberName, page);
+                
+                // For SimilarTo field, get similarity fields from page state (set by clone/edit flows)
+                // and update visibility immediately so the options show up
+                if (actualMemberName === 'SimilarTo') {
+                    const similarityFields = page._editingPlaylistSimilarityFields || page._cloningPlaylistSimilarityFields;
+                    SmartLists.updateSimilarityOptionsVisibility(ruleRow, actualMemberName, similarityFields);
+                } else {
+                    SmartLists.updateSimilarityOptionsVisibility(ruleRow, actualMemberName);
+                }
             }
 
             if (operatorSelect && expression.Operator) {
@@ -1965,10 +2225,11 @@
                 // SimilarityComparisonFields is stored at the playlist/collection level, not per-expression
                 // The edit/clone flows set page._editingPlaylistSimilarityFields or page._cloningPlaylistSimilarityFields
                 // before calling populateRuleRow, so we read from the page state here
+                // Note: This is a fallback - the main call happens earlier when setting the field value
                 const similarityFields = page._editingPlaylistSimilarityFields || page._cloningPlaylistSimilarityFields;
-                if (similarityFields && Array.isArray(similarityFields) && similarityFields.length > 0) {
-                    SmartLists.updateSimilarityOptionsVisibility(ruleRow, expression.MemberName, similarityFields);
-                }
+                // Always call updateSimilarityOptionsVisibility for SimilarTo to ensure the div is shown
+                // populateSimilarityFields will handle null/undefined by using defaults
+                SmartLists.updateSimilarityOptionsVisibility(ruleRow, expression.MemberName, similarityFields);
             }
 
             // Update regex help if needed
