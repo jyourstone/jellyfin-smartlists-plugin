@@ -1173,8 +1173,6 @@
         // Clear the cloning flag
         page._cloningPlaylistSimilarityFields = null;
 
-
-
         // Update button visibility
         SmartLists.updateRuleButtonVisibility(page);
 
@@ -1212,9 +1210,8 @@
         // Recreate each rule in the new group
         ruleConfigs.forEach(function (ruleConfig, index) {
             // Store similarity fields on page for populateRuleRow
-            if (ruleConfig.similarityFields) {
-                page._cloningPlaylistSimilarityFields = ruleConfig.similarityFields;
-            }
+            // Store even if null (for defaults) so we know to show the options div
+            page._cloningPlaylistSimilarityFields = ruleConfig.similarityFields;
 
             // Add rule to group
             SmartLists.addRuleToGroup(page, newLogicGroupDiv);
