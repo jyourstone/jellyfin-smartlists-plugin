@@ -708,8 +708,8 @@
             const andBtn = target.closest('.and-btn');
             if (andBtn) {
                 const ruleRow = andBtn.closest('.rule-row');
-                const logicGroup = ruleRow.closest('.logic-group');
-                if (SmartLists.addRuleToGroup) {
+                const logicGroup = ruleRow ? ruleRow.closest('.logic-group') : null;
+                if (logicGroup && SmartLists.addRuleToGroup) {
                     SmartLists.addRuleToGroup(page, logicGroup);
                 }
             }

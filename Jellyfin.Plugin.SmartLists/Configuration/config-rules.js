@@ -962,15 +962,6 @@
             if (buttonType) {
                 // Apply base styles
                 SmartLists.styleRuleActionButton(button, buttonType);
-
-                // Add hover effects
-                button.addEventListener('mouseenter', function () {
-                    SmartLists.styleRuleActionButton(this, buttonType);
-                }, listenerOptions);
-
-                button.addEventListener('mouseleave', function () {
-                    SmartLists.styleRuleActionButton(this, buttonType);
-                }, listenerOptions);
             }
         });
 
@@ -1034,11 +1025,10 @@
         SmartLists.updateAllSortOptionsVisibility(page);
     };
 
-    SmartLists.cloneRule = function (page, ruleRow) {
-        const logicGroup = ruleRow.closest('.logic-group');
-        if (!logicGroup) return;
-
-        // Extract all rule data from the source rule
+    // Extract rule configuration from a rule row element
+    // Returns { expression, similarityFields } where expression is the rule expression object
+    // and similarityFields is an array of selected similarity fields (or null for defaults)
+    SmartLists.extractRuleConfig = function (ruleRow) {
         const fieldSelect = ruleRow.querySelector('.rule-field-select');
         const operatorSelect = ruleRow.querySelector('.rule-operator-select');
         const valueContainer = ruleRow.querySelector('.rule-value-container');
@@ -1120,14 +1110,7 @@
             actualMemberName = peopleValue;
         }
 
-        // Create a new rule using addRuleToGroup
-        // We need to insert it after the source rule, so we'll add it and then move it
-        SmartLists.addRuleToGroup(page, logicGroup);
-        const newRuleRow = logicGroup.querySelector('.rule-row:last-child');
-
-
-
-        // Build expression object for populateRuleRow
+        // Build expression object
         const expression = {
             MemberName: actualMemberName,
             Operator: operatorValue,
@@ -1162,12 +1145,30 @@
             expression.OnlyDefaultAudioLanguage = true;
         }
 
+        return {
+            expression: expression,
+            similarityFields: similarityFields
+        };
+    };
+
+    SmartLists.cloneRule = function (page, ruleRow) {
+        const logicGroup = ruleRow.closest('.logic-group');
+        if (!logicGroup) return;
+
+        // Extract rule configuration using shared helper
+        const ruleConfig = SmartLists.extractRuleConfig(ruleRow);
+
+        // Create a new rule using addRuleToGroup
+        // Clone to the bottom of the group
+        SmartLists.addRuleToGroup(page, logicGroup);
+        const newRuleRow = logicGroup.querySelector('.rule-row:last-child');
+
         // Store similarity fields on page for populateRuleRow to access
         // Store even if null (for defaults) so we know to show the options div
-        page._cloningPlaylistSimilarityFields = similarityFields;
+        page._cloningPlaylistSimilarityFields = ruleConfig.similarityFields;
 
         // Populate the new rule with extracted data
-        SmartLists.populateRuleRow(newRuleRow, expression, page);
+        SmartLists.populateRuleRow(newRuleRow, ruleConfig.expression, page);
 
         // Clear the cloning flag
         page._cloningPlaylistSimilarityFields = null;
@@ -1189,120 +1190,10 @@
         const sourceRules = logicGroup.querySelectorAll('.rule-row');
         const ruleConfigs = [];
 
-        // Extract configuration for each rule
+        // Extract configuration for each rule using shared helper
         sourceRules.forEach(function (ruleRow) {
-            const fieldSelect = ruleRow.querySelector('.rule-field-select');
-            const operatorSelect = ruleRow.querySelector('.rule-operator-select');
-            const valueContainer = ruleRow.querySelector('.rule-value-container');
-
-            const fieldValue = fieldSelect ? fieldSelect.value : '';
-            const operatorValue = operatorSelect ? operatorSelect.value : '';
-
-            // Extract value - handle different input types
-            let targetValue = '';
-            const isMultiValueOperator = SmartLists.MULTI_VALUE_OPERATORS.indexOf(operatorValue) !== -1;
-            const isRelativeDateOperator = SmartLists.RELATIVE_DATE_OPERATORS.indexOf(operatorValue) !== -1;
-
-            if (isMultiValueOperator) {
-                const hiddenInput = valueContainer.querySelector('input[type="hidden"].rule-value-input');
-                targetValue = hiddenInput ? hiddenInput.value : '';
-            } else if (isRelativeDateOperator) {
-                const valueInput = valueContainer.querySelector('.rule-value-input');
-                const unitSelect = valueContainer.querySelector('.rule-value-unit');
-                if (valueInput && unitSelect && valueInput.value && unitSelect.value) {
-                    targetValue = valueInput.value + ':' + unitSelect.value;
-                } else if (valueInput) {
-                    targetValue = valueInput.value;
-                }
-            } else {
-                const valueInput = valueContainer.querySelector('.rule-value-input');
-                targetValue = valueInput ? valueInput.value : '';
-            }
-
-            // Extract all optional fields
-            const userSelect = ruleRow.querySelector('.rule-user-select');
-            const userId = userSelect ? userSelect.value : '';
-
-            const nextUnwatchedSelect = ruleRow.querySelector('.rule-nextunwatched-select');
-            const nextUnwatchedValue = nextUnwatchedSelect ? nextUnwatchedSelect.value : '';
-
-            const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-            const collectionOnlyValue = collectionOnlySelect ? collectionOnlySelect.value : '';
-            const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
-            const collectionsValue = collectionsSelect ? collectionsSelect.value : '';
-
-            const tagsSelect = ruleRow.querySelector('.rule-tags-select');
-            const tagsValue = tagsSelect ? tagsSelect.value : '';
-            const studiosSelect = ruleRow.querySelector('.rule-studios-select');
-            const studiosValue = studiosSelect ? studiosSelect.value : '';
-            const genresSelect = ruleRow.querySelector('.rule-genres-select');
-            const genresValue = genresSelect ? genresSelect.value : '';
-            const audioLanguagesSelect = ruleRow.querySelector('.rule-audiolanguages-select');
-            const audioLanguagesValue = audioLanguagesSelect ? audioLanguagesSelect.value : '';
-
-            // Extract Similarity options
-            const similarityOptionsDiv = ruleRow.querySelector('.rule-similarity-options');
-            let similarityFields = null;
-            if (similarityOptionsDiv && similarityOptionsDiv.style.display !== 'none') {
-                const checkboxes = similarityOptionsDiv.querySelectorAll('.similarity-field-checkbox:checked');
-                const selectedFields = Array.from(checkboxes).map(function (cb) {
-                    return cb.value;
-                });
-                if (selectedFields.length === 2 &&
-                    selectedFields.indexOf('Genre') !== -1 &&
-                    selectedFields.indexOf('Tags') !== -1) {
-                    similarityFields = null;
-                } else if (selectedFields.length > 0) {
-                    similarityFields = selectedFields;
-                }
-            }
-
-            const peopleSelect = ruleRow.querySelector('.rule-people-select');
-            const peopleValue = peopleSelect ? peopleSelect.value : '';
-
-            let actualMemberName = fieldValue;
-            if (fieldValue === 'People' && peopleValue) {
-                actualMemberName = peopleValue;
-            }
-
-            // Build expression object
-            const expression = {
-                MemberName: actualMemberName,
-                Operator: operatorValue,
-                TargetValue: targetValue
-            };
-
-            if (userId) {
-                expression.UserId = userId;
-            }
-            if (fieldValue === 'NextUnwatched' && nextUnwatchedValue === 'false') {
-                expression.IncludeUnwatchedSeries = false;
-            }
-            if (fieldValue === 'Collections') {
-                if (collectionOnlyValue === 'true') {
-                    expression.IncludeCollectionOnly = true;
-                }
-                if (collectionsValue === 'true') {
-                    expression.IncludeEpisodesWithinSeries = true;
-                }
-            }
-            if (fieldValue === 'Tags' && tagsValue === 'true') {
-                expression.IncludeParentSeriesTags = true;
-            }
-            if (fieldValue === 'Studios' && studiosValue === 'true') {
-                expression.IncludeParentSeriesStudios = true;
-            }
-            if (fieldValue === 'Genres' && genresValue === 'true') {
-                expression.IncludeParentSeriesGenres = true;
-            }
-            if (fieldValue === 'AudioLanguages' && audioLanguagesValue === 'true') {
-                expression.OnlyDefaultAudioLanguage = true;
-            }
-
-            ruleConfigs.push({
-                expression: expression,
-                similarityFields: similarityFields
-            });
+            const ruleConfig = SmartLists.extractRuleConfig(ruleRow);
+            ruleConfigs.push(ruleConfig);
         });
 
         // Create a new logic group with OR separator

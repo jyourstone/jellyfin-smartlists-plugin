@@ -537,11 +537,6 @@
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: '500'
-                },
-                hover: {
-                    background: 'rgba(255, 255, 255, 0.12)',
-                    borderColor: '#777',
-                    color: '#ccc'
                 }
             },
             delete: {
