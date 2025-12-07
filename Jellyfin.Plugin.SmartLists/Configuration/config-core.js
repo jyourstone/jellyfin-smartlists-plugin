@@ -504,6 +504,16 @@
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
             position: 'relative'
         },
+        logicGroupHeader: {
+            position: 'absolute',
+            top: '-14px',
+            right: '12px',
+            padding: '0',
+            background: '#101010', // Match page background to "cut" the border
+            zIndex: '5',
+            display: 'flex',
+            gap: '4px'
+        },
         buttons: {
             action: {
                 base: {
@@ -515,6 +525,23 @@
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: '500'
+                }
+            },
+            clone: {
+                base: {
+                    padding: '0.3em 0.8em',
+                    fontSize: '0.8em',
+                    border: '1px solid #666',
+                    background: 'rgba(255, 255, 255, 0.07)',
+                    color: '#aaa',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                },
+                hover: {
+                    background: 'rgba(255, 255, 255, 0.12)',
+                    borderColor: '#777',
+                    color: '#ccc'
                 }
             },
             delete: {
