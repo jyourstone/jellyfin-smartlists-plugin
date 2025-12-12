@@ -699,7 +699,7 @@
         cloneBtn.type = 'button';
         cloneBtn.className = 'rule-action-btn clone-btn clone-group-btn';
         cloneBtn.title = 'Clone OR Block';
-        cloneBtn.innerHTML = '<span class="material-icons" style="font-size: 1em;">content_copy</span>';
+        cloneBtn.innerHTML = '<span class="material-icons" style="font-size: 1em; height: 31px; display: flex; justify-content: center; align-items: center;">content_copy</span>';
 
         // Style the clone button using the styling system
         SmartLists.styleRuleActionButton(cloneBtn, 'clone');
@@ -770,9 +770,9 @@
             '<input type="text" class="emby-input rule-value-input" placeholder="Value" style="width: 100%;">' +
             '</span>' +
             '<div class="rule-actions" style="display: flex; gap: 4px; align-items: center;">' +
-            '<button type="button" class="rule-action-btn and-btn" title="Add AND rule">And</button>' +
-            '<button type="button" class="rule-action-btn or-btn" title="Add OR group">Or</button>' +
-            '<button type="button" class="rule-action-btn clone-btn clone-rule-btn" title="Clone rule"><span class="material-icons" style="font-size: 1.2em;">content_copy</span></button>' +
+            '<button type="button" class="rule-action-btn and-btn" title="Add AND rule">AND</button>' +
+            '<button type="button" class="rule-action-btn or-btn" title="Add OR group">OR</button>' +
+            '<button type="button" class="rule-action-btn clone-btn clone-rule-btn" title="Clone rule"><span class="material-icons" style="font-size: 1.2em; height: 31px; display: flex; justify-content: center; align-items: center;">content_copy</span></button>' +
             '<button type="button" class="rule-action-btn delete-btn" title="Remove rule">×</button>' +
             '</div>' +
             '</div>' +

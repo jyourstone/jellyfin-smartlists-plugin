@@ -524,7 +524,11 @@
                     color: '#aaa',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontWeight: '500'
+                    fontWeight: '400',
+                    height: '29px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
                 }
             },
             clone: {
@@ -536,19 +540,28 @@
                     color: '#aaa',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontWeight: '500'
+                    fontWeight: '400',
+                    height: '29px',
+                    width: '34px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
                 }
             },
             delete: {
                 base: {
                     padding: '0.3em 0.8em',
-                    fontSize: '0.8em',
+                    fontSize: '1em',
                     border: '1px solid #666',
                     background: 'rgba(255, 255, 255, 0.07)',
                     color: '#aaa',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    fontWeight: '500'
+                    fontWeight: '400',
+                    height: '29px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
                 }
             }
         },
