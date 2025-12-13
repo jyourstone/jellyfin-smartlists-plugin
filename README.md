@@ -69,8 +69,12 @@ Complete guide with detailed field descriptions, operators, examples, advanced c
 
 </div>
 
-## 📦 How to Install
+## 💬 Support & Feedback
 
+- **🐛 Bug Reports & Feature Requests**: Please use the [Issues tab](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues) to report bugs or suggest new features.
+- **❓ Community Support & General Help**: For support questions or general help, please use [Discussions](https://github.com/jyourstone/jellyfin-smartlists-plugin/discussions).
+
+## 📦 How to Install
 
 ### From Repository
 Add this repository URL to your Jellyfin plugin catalog:
