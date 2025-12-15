@@ -19,17 +19,7 @@
      * Checks if the sidebar item already exists to prevent duplicates
      */
     function sidebarItemExists() {
-        // Always check parent window if in iframe
-        const isInIframe = window.self !== window.top;
-        const win = isInIframe ? window.top : window;
-        const doc = win.document;
-        
-        try {
-            return doc.getElementById(MENU_ITEM_ID) !== null;
-        } catch (e) {
-            // Cross-origin error, check current document
-            return document.getElementById(MENU_ITEM_ID) !== null;
-        }
+        return document.getElementById(MENU_ITEM_ID) !== null;
     }
 
     /**
@@ -103,12 +93,7 @@
      * Tries multiple common selectors used in Jellyfin
      */
     function findSidebarContainer() {
-        // Always use parent window if available (plugin pages are often in iframes)
-        const isInIframe = window.self !== window.top;
-        const win = isInIframe ? window.top : window;
-        const doc = win.document;
-        
-        return findSidebarContainerInDocument(doc);
+        return findSidebarContainerInDocument(document);
     }
     
     /**
@@ -204,6 +189,18 @@
     }
 
     /**
+     * Helper function to safely insert menuItem after a reference element
+     */
+    function insertAfterMenuItem(menuItem, referenceElement, parentList) {
+        const nextSibling = referenceElement.nextSibling;
+        if (nextSibling === null || nextSibling.parentElement === parentList) {
+            parentList.insertBefore(menuItem, nextSibling);
+        } else {
+            parentList.appendChild(menuItem);
+        }
+    }
+
+    /**
      * Injects the sidebar menu item
      */
     function injectSidebarItem() {
@@ -212,11 +209,6 @@
             return true;
         }
 
-        // Get the correct document context (parent if in iframe)
-        const isInIframe = window.self !== window.top;
-        const win = isInIframe ? window.top : window;
-        const doc = win.document;
-        
         const container = findSidebarContainer();
         if (!container) {
             return false;
@@ -227,25 +219,12 @@
         );
 
         if (allMenuItems.length === 0) {
-            if (container.classList.contains('scrollContainer') || container.classList.contains('mainDrawer-scrollContainer')) {
-                return false; // Will retry
-            }
             return false;
         }
 
         // Find the MUI List container
-        const muiList = allMenuItems.length > 0 
-            ? allMenuItems[0].closest('.MuiList-root') || container
-            : container;
-
-        // Check if we're dealing with MUI components
-        const isMUI = allMenuItems.length > 0 && 
-            (allMenuItems[0].classList.contains('MuiListItemButton') || 
-             allMenuItems[0].classList.contains('MuiListItem-root') ||
-             allMenuItems[0].classList.toString().includes('MuiListItem'));
-        
-        if (isMUI) {
-            const menuItem = createMUISidebarItem(doc);
+        const muiList = allMenuItems[0].closest('.MuiList-root') || container;
+        const menuItem = createMUISidebarItem(document);
             
             // Try to find "Plugins" menu item to insert after it
             const pluginsItem = Array.from(allMenuItems).find(item => {
@@ -261,14 +240,8 @@
                     
                     // If parent is a UL (nested list), insert after pluginsItem within that list
                     if (pluginsParent && pluginsParent.tagName === 'UL' && pluginsParent.classList.contains('MuiList-root')) {
-                        const nextSib = pluginsItem.nextSibling;
-                        if (nextSib === null || nextSib.parentElement === pluginsParent) {
-                            pluginsParent.insertBefore(menuItem, nextSib);
-                            return true;
-                        } else {
-                            pluginsParent.appendChild(menuItem);
-                            return true;
-                        }
+                        insertAfterMenuItem(menuItem, pluginsItem, pluginsParent);
+                        return true;
                     }
                     
                     if (pluginsParent && pluginsParent.tagName === 'DIV' && pluginsParent.classList.contains('MuiListItem-root')) {
@@ -277,49 +250,18 @@
                 }
                 
                 if (pluginsListItem) {
-                    const pluginsParent = pluginsListItem.parentElement;
-                    const nextSibling = pluginsListItem.nextSibling;
-                    
-                    if (pluginsParent === muiList) {
-                        if (nextSibling === null) {
-                            muiList.appendChild(menuItem);
-                        } else if (nextSibling.parentElement === muiList) {
-                            muiList.insertBefore(menuItem, nextSibling);
-                        } else {
-                            muiList.appendChild(menuItem);
-                        }
-                    } else if (pluginsParent) {
-                        if (nextSibling === null) {
-                            pluginsParent.appendChild(menuItem);
-                        } else if (nextSibling.parentElement === pluginsParent) {
-                            pluginsParent.insertBefore(menuItem, nextSibling);
-                        } else {
-                            pluginsParent.appendChild(menuItem);
-                        }
-                    } else {
-                        muiList.appendChild(menuItem);
-                    }
+                    const pluginsParent = pluginsListItem.parentElement || muiList;
+                    insertAfterMenuItem(menuItem, pluginsListItem, pluginsParent);
                 } else {
                     const pluginsParent = pluginsItem.parentElement;
                     
                     if (pluginsParent && pluginsParent.tagName === 'UL' && pluginsParent.classList.contains('MuiList-root')) {
-                        const nextSib = pluginsItem.nextSibling;
-                        if (nextSib === null || nextSib.parentElement === pluginsParent) {
-                            pluginsParent.insertBefore(menuItem, nextSib);
-                            return true;
-                        } else {
-                            pluginsParent.appendChild(menuItem);
-                            return true;
-                        }
+                        insertAfterMenuItem(menuItem, pluginsItem, pluginsParent);
+                        return true;
                     }
                     
                     if (pluginsParent && pluginsParent.parentElement === muiList) {
-                        const nextSib = pluginsParent.nextSibling;
-                        if (nextSib === null || nextSib.parentElement === muiList) {
-                            muiList.insertBefore(menuItem, nextSib);
-                        } else {
-                            muiList.appendChild(menuItem);
-                        }
+                        insertAfterMenuItem(menuItem, pluginsParent, muiList);
                     } else {
                         muiList.appendChild(menuItem);
                     }
@@ -338,7 +280,6 @@
                     muiList.appendChild(menuItem);
                 }
             }
-        }
 
         return true;
     }
@@ -417,12 +358,9 @@
             return;
         }
 
-        // If this is the first attempt and we found a scrollContainer, set up observer
+        // If this is the first attempt, set up observer
         if (retryCount === 0) {
-            const isInIframe = window.self !== window.top;
-            const win = isInIframe ? window.top : window;
-            const doc = win.document;
-            setupSidebarObserver(doc);
+            setupSidebarObserver(document);
         }
 
         // Retry if we haven't exceeded max retries
@@ -513,58 +451,36 @@
         }
 
 
-        // Also listen for navigation events (Jellyfin uses SPA navigation)
-        // Re-inject if the sidebar is re-rendered
-        // Use a flag to prevent multiple wrappers
+        // Helper function for navigation handlers
+        const handleNavigation = () => {
+            setTimeout(() => {
+                if (!sidebarItemExists()) {
+                    attemptInjection();
+                }
+            }, 500);
+        };
+
+        // Listen for navigation events (Jellyfin uses SPA navigation)
         if (!window.smartListsHistoryWrapped) {
             window.smartListsHistoryWrapped = true;
             
             const originalPushState = history.pushState;
             history.pushState = function() {
                 originalPushState.apply(history, arguments);
-                setTimeout(() => {
-                    if (!sidebarItemExists()) {
-                        attemptInjection();
-                    }
-                }, 500);
+                handleNavigation();
             };
 
             const originalReplaceState = history.replaceState;
             history.replaceState = function() {
                 originalReplaceState.apply(history, arguments);
-                setTimeout(() => {
-                    if (!sidebarItemExists()) {
-                        attemptInjection();
-                    }
-                }, 500);
+                handleNavigation();
             };
             
-            // Also listen for popstate (back/forward)
-            window.addEventListener('popstate', () => {
-                setTimeout(() => {
-                    if (!sidebarItemExists()) {
-                        attemptInjection();
-                    }
-                }, 500);
-            });
+            window.addEventListener('popstate', handleNavigation);
         }
 
-        // Also listen for Jellyfin's custom navigation events if they exist
-        document.addEventListener('pagebeforeshow', () => {
-            setTimeout(() => {
-                if (!sidebarItemExists()) {
-                    attemptInjection();
-                }
-            }, 500);
-        }, true);
-        
-        window.addEventListener('pageshow', () => {
-            setTimeout(() => {
-                if (!sidebarItemExists()) {
-                    attemptInjection();
-                }
-            }, 500);
-        });
+        document.addEventListener('pagebeforeshow', handleNavigation, true);
+        window.addEventListener('pageshow', handleNavigation);
     }
 
     // Start initialization
