@@ -429,6 +429,11 @@
                     }
                     // Store userIds to set after users are loaded (loadUsers is async)
                     page._pendingUserIds = userIds;
+                } else {
+                    // Collections: store the user ID to prevent setCurrentUserAsDefault from overwriting
+                    if (playlist.UserId) {
+                        page._pendingCollectionUserId = String(playlist.UserId);
+                    }
                 }
 
                 // Set list type
@@ -664,6 +669,11 @@
                     }
                     // Store userIds to set after users are loaded (loadUsers is async)
                     page._pendingUserIds = userIds;
+                } else {
+                    // Collections: store the source user ID to prevent setCurrentUserAsDefault from overwriting
+                    if (playlist.UserId) {
+                        page._pendingCollectionUserId = String(playlist.UserId);
+                    }
                 }
 
                 // Set playlist name FIRST (before switchToTab) to prevent populateFormDefaults from being called

@@ -1,6 +1,6 @@
 services:
   jellyfin:
-    image: jellyfin/jellyfin:10.11.4
+    image: jellyfin/jellyfin:10.11.5
     container_name: jellyfin
     user: 1000:1000
     environment:
