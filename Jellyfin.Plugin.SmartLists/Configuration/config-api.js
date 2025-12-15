@@ -127,10 +127,15 @@
             return Promise.resolve();
         }
 
-        // Don't overwrite if multi-select already has selections
-        const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
-        if (checkboxes.length > 0) {
-            return Promise.resolve();
+        // Don't overwrite if multi-select already has selections (playlists only)
+        // Note: Collections use single-select, so skip this check for collections
+        const listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
+        const isPlaylist = listType !== 'Collection';
+        if (isPlaylist) {
+            const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
+            if (checkboxes.length > 0) {
+                return Promise.resolve();
+            }
         }
 
         // Clear the value first (it might have been auto-selected by the browser)

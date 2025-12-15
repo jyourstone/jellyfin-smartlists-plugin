@@ -442,8 +442,14 @@
                         option.textContent = user.Name;
                         userSelect.appendChild(option);
                     });
-                    // Set current user as default if no user is selected
-                    SmartLists.setCurrentUserAsDefault(page);
+                    // Check for pending collection user ID (from edit/clone mode)
+                    if (page._pendingCollectionUserId) {
+                        SmartLists.setUserIdValueWithRetry(page, page._pendingCollectionUserId);
+                        page._pendingCollectionUserId = null; // Clear after use
+                    } else {
+                        // Set current user as default for new collections
+                        SmartLists.setCurrentUserAsDefault(page);
+                    }
                 }
             } else {
                 // Playlists: populate multi-select component
