@@ -790,7 +790,8 @@
         closeButton.className = 'notification-close-button';
         closeButton.innerHTML = '&#xE5CD;'; // Material Icons 'close' character
         closeButton.setAttribute('aria-label', 'Close notification');
-        
+        closeButton.type = 'button';
+
         // Style close button
         const closeButtonStyles = {
             position: 'absolute',
@@ -815,12 +816,9 @@
             fontStyle: 'normal',
             textRendering: 'optimizeLegibility'
         };
-        
-        Object.entries(closeButtonStyles).forEach(function (entry) {
-            const property = entry[0].replace(/([A-Z])/g, '-$1').toLowerCase();
-            closeButton.style.setProperty(property, entry[1], 'important');
-        });
-        
+
+        SmartLists.applyStyles(closeButton, closeButtonStyles);
+
         // Click handler to close notification
         closeButton.addEventListener('click', function (e) {
             e.preventDefault();
@@ -840,7 +838,7 @@
         } else {
             notificationElement.textContent = prefixedMessage;
         }
-        
+
         // Append close button to notification
         notificationElement.appendChild(closeButton);
 
@@ -884,10 +882,7 @@
         }
 
         // Apply styles
-        Object.entries(notificationStyles).forEach(function (entry) {
-            const property = entry[0].replace(/([A-Z])/g, '-$1').toLowerCase();
-            notificationElement.style.setProperty(property, entry[1], 'important');
-        });
+        SmartLists.applyStyles(notificationElement, notificationStyles);
 
         // Add to container (at the beginning, so newest appears at top)
         if (container.firstChild) {
