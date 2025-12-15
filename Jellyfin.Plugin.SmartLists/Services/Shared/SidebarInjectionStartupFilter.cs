@@ -20,7 +20,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
         {
-            _logger.LogInformation("Configuring sidebar injection middleware in HTTP pipeline");
+            _logger.LogDebug("Configuring sidebar injection middleware in HTTP pipeline");
             
             return app =>
             {
@@ -28,7 +28,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // This ensures we get uncompressed responses that we can modify
                 // UseMiddleware will resolve SidebarInjectionMiddleware from DI
                 app.UseMiddleware<SidebarInjectionMiddleware>();
-                _logger.LogInformation("Sidebar injection middleware registered early in pipeline (before compression)");
+                _logger.LogDebug("Sidebar injection middleware registered early in pipeline (before compression)");
                 
                 // Continue with the rest of the pipeline (including compression middleware)
                 next(app);

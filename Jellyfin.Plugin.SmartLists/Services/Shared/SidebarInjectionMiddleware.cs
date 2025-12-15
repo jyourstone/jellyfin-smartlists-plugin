@@ -86,7 +86,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 if (ShouldInjectScript(context, responseText))
                 {
                     responseText = InjectScript(responseText);
-                    _logger.LogInformation("Injected sidebar script into HTML response for path: {Path}", path);
+                    _logger.LogDebug("Injected sidebar script into HTML response for path: {Path}", path);
                 }
 
                 // Write the modified response (uncompressed)

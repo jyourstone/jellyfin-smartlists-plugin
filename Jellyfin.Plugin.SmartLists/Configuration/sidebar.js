@@ -488,153 +488,6 @@
     }
 
     /**
-     * Injects the sidebar script into the main document so it persists globally
-     * This ensures it runs on dashboard pages, not just the plugin configuration page
-     */
-    function injectIntoMainDocument() {
-        try {
-            // Check if we're in an iframe (plugin pages are often in iframes)
-            const isInIframe = window.self !== window.top;
-            const targetWindow = isInIframe ? window.top : window;
-            const targetDocument = targetWindow.document;
-            
-            if (targetDocument.getElementById('smartlists-sidebar-script')) {
-                setTimeout(() => {
-                    if (targetWindow.smartListsSidebarInitialized) {
-                        targetWindow.dispatchEvent(new Event('smartlists-trigger-injection'));
-                    }
-                }, 500);
-                return;
-            }
-
-            // Get the current script's URL - try multiple methods
-            let scriptUrl = '/web/configurationpage?name=sidebar.js';
-            
-            // Try document.currentScript first
-            if (document.currentScript && document.currentScript.src) {
-                scriptUrl = document.currentScript.src;
-            } else {
-                // Try to find the script tag
-                const scripts = document.getElementsByTagName('script');
-                for (let i = scripts.length - 1; i >= 0; i--) {
-                    const s = scripts[i];
-                    if (s.src && (s.src.includes('sidebar.js') || s.getAttribute('data-smartlists'))) {
-                        scriptUrl = s.src;
-                        break;
-                    }
-                }
-            }
-            
-            // Make sure it's an absolute URL
-            if (scriptUrl && !scriptUrl.startsWith('http') && !scriptUrl.startsWith('/')) {
-                scriptUrl = '/web/' + scriptUrl;
-            }
-            if (!scriptUrl || scriptUrl === '') {
-                scriptUrl = '/web/configurationpage?name=sidebar.js';
-            }
-
-            // Use direct code injection for more reliable execution
-            // This ensures the script runs immediately in the main window context
-            injectScriptCodeDirectly(targetWindow, targetDocument);
-            
-            // Also try the src-based approach as primary method
-            const script = targetDocument.createElement('script');
-            script.id = 'smartlists-sidebar-script-src';
-            script.src = scriptUrl;
-            script.setAttribute('data-smartlists', 'injected-src');
-            
-            script.onload = function() {
-                setTimeout(() => {
-                    if (targetWindow.smartListsSidebarInitialized) {
-                        targetWindow.dispatchEvent(new Event('smartlists-trigger-injection'));
-                    }
-                }, 1000);
-            };
-            
-            // Wait for main document to be ready
-            const injectSrcScript = () => {
-                if (!targetDocument.getElementById('smartlists-sidebar-script-src')) {
-                    targetDocument.head.appendChild(script);
-                }
-            };
-            
-            if (targetDocument.readyState === 'loading') {
-                targetDocument.addEventListener('DOMContentLoaded', injectSrcScript);
-            } else {
-                injectSrcScript();
-            }
-            
-        } catch (e) {
-            try {
-                const targetWindow = isInIframe ? window.top : window;
-                const targetDocument = targetWindow.document;
-                injectScriptCodeDirectly(targetWindow, targetDocument);
-            } catch (e2) {
-                // Fallback injection failed
-            }
-        }
-    }
-    
-    /**
-     * Injects the script code directly into the target window
-     * This ensures the script runs immediately in the main window context
-     * Uses a persistent injection mechanism via localStorage
-     */
-    function injectScriptCodeDirectly(targetWindow, targetDocument) {
-        // Check localStorage to see if we should inject
-        const injectionKey = 'smartlists-sidebar-injected';
-        const lastInjection = targetWindow.localStorage?.getItem(injectionKey);
-        const now = Date.now();
-        
-        if (lastInjection && (now - parseInt(lastInjection, 10)) < 3600000) {
-            setTimeout(() => {
-                if (targetWindow.smartListsSidebarInitialized) {
-                    targetWindow.dispatchEvent(new Event('smartlists-trigger-injection'));
-                }
-            }, 500);
-            return;
-        }
-        
-        if (targetDocument.getElementById('smartlists-sidebar-script')) {
-            setTimeout(() => {
-                if (targetWindow.smartListsSidebarInitialized) {
-                    targetWindow.dispatchEvent(new Event('smartlists-trigger-injection'));
-                }
-            }, 500);
-            return;
-        }
-        
-        // Mark as injected in localStorage
-        if (targetWindow.localStorage) {
-            targetWindow.localStorage.setItem(injectionKey, now.toString());
-        }
-        
-        // Create a script that will load and run the sidebar injection
-        const script = targetDocument.createElement('script');
-        script.id = 'smartlists-sidebar-script';
-        script.setAttribute('data-smartlists', 'injected');
-        script.src = '/web/configurationpage?name=sidebar.js';
-        
-        script.onerror = function() {
-            if (targetWindow.localStorage) {
-                targetWindow.localStorage.removeItem(injectionKey);
-            }
-        };
-        
-        const injectScript = () => {
-            if (!targetDocument.getElementById('smartlists-sidebar-script')) {
-                targetDocument.head.appendChild(script);
-            }
-        };
-        
-        if (targetDocument.readyState === 'loading') {
-            targetDocument.addEventListener('DOMContentLoaded', injectScript);
-        } else {
-            injectScript();
-        }
-    }
-
-    /**
      * Sets up MutationObserver to watch for sidebar changes
      */
     function setupMutationObserver() {
@@ -684,44 +537,9 @@
      * Initialize when DOM is ready
      */
     function init() {
-        // Check if we're in an iframe (plugin pages are often in iframes)
+        // Skip if running in iframe (middleware injects script in main window)
         const isInIframe = window.self !== window.top;
-        const isPluginPage = document.querySelector('.SmartListsConfigurationPage') !== null || 
-                            window.location.href.includes('configurationpage?name=SmartLists');
-        
-        if (isPluginPage) {
-            if (isInIframe) {
-                try {
-                    const parentWin = window.top;
-                    const parentDoc = parentWin.document;
-                    
-                    const attemptParentInjection = (retries = 0) => {
-                        if (retries > 20) {
-                            return;
-                        }
-                        
-                        const parentContainer = findSidebarContainerInDocument(parentDoc);
-                        if (parentContainer) {
-                            if (injectIntoContainer(parentContainer, parentDoc)) {
-                                return;
-                            }
-                        }
-                        
-                        setTimeout(() => attemptParentInjection(retries + 1), 500);
-                    };
-                    
-                    setTimeout(() => attemptParentInjection(0), 500);
-                } catch (e) {
-                    // Cannot access parent window
-                }
-            }
-            
-            injectIntoMainDocument();
-            return;
-        }
-        
         if (isInIframe) {
-            injectIntoMainDocument();
             return;
         }
 
@@ -730,7 +548,6 @@
         }
         window.smartListsSidebarInitialized = true;
 
-        // Function to attempt injection with retries
         const tryInjection = () => {
             const hasSidebar = findSidebarContainer() !== null;
             if (!hasSidebar) {
@@ -739,7 +556,6 @@
             }
             
             attemptInjection();
-            setupMutationObserver();
         };
 
         // Wait for DOM to be ready
@@ -752,9 +568,6 @@
             setTimeout(tryInjection, 1500);
         }
 
-        window.addEventListener('smartlists-trigger-injection', () => {
-            setTimeout(tryInjection, 200);
-        });
 
         // Also listen for navigation events (Jellyfin uses SPA navigation)
         // Re-inject if the sidebar is re-rendered
