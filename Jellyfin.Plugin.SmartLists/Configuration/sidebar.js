@@ -10,7 +10,7 @@
 
     // Configuration
     const PLUGIN_NAME = 'SmartLists';
-    const PLUGIN_URL = '/web/#/configurationpage?name=SmartLists&tab=create';
+    const PLUGIN_URL = '#/configurationpage?name=SmartLists&tab=create';
     const MENU_ITEM_ID = 'smartlists-sidebar-item';
     const MAX_RETRIES = 10; // Maximum attempts to find sidebar
     const RETRY_INTERVAL = 500; // Milliseconds between retries (reduced for faster injection)
