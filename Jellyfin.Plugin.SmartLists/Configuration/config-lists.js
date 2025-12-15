@@ -1390,12 +1390,10 @@
             '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Media Types</td>' +
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eMediaTypesDisplayText + '</td>' +
             '</tr>' +
-            (!isCollection ?
-                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Sort</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eSortName + '</td>' +
-                '</tr>' : ''
-            ) +
+            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Sort</td>' +
+            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eSortName + '</td>' +
+            '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Max Items</td>' +
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eMaxItems + '</td>' +

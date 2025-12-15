@@ -9,7 +9,7 @@
    - Choose whether to create a Playlist or Collection
    - Select the media type(s) you want to include
    - Add rules to filter your content
-   - Choose sorting options (playlists only - collections don't support sorting)
+   - Choose sorting options
    - Set the list owner (for playlists) or reference user (for collections)
    - Configure other settings as needed
 

@@ -550,6 +550,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 
                 // Set collection image if metadata refresh didn't generate one
                 await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
+                
+                // Set DisplayOrder to "Default" to respect the plugin's custom sort order
+                SetCollectionDisplayOrder(collectionAfterRefresh);
+                await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -827,6 +831,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     
                     // Set collection image if metadata refresh didn't generate one
                     await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    
+                    // Set DisplayOrder to "Default" to respect the plugin's custom sort order
+                    SetCollectionDisplayOrder(retrievedItem);
+                    await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");
@@ -1446,6 +1454,34 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating collage image for collection {CollectionName}", collection.Name);
+            }
+        }
+
+        /// <summary>
+        /// Sets the DisplayOrder property of a collection to "Default" using reflection.
+        /// This ensures that the collection respects the plugin's custom sort order.
+        /// "Default" corresponds to "Date Modified" in Jellyfin's internal logic for Collections,
+        /// which respects the order of items added to the collection.
+        /// </summary>
+        private void SetCollectionDisplayOrder(BaseItem collection)
+        {
+            try
+            {
+                // Use reflection to set DisplayOrder property to avoid hard dependency on specific Jellyfin versions
+                var displayOrderProperty = collection.GetType().GetProperty("DisplayOrder");
+                if (displayOrderProperty != null && displayOrderProperty.CanWrite)
+                {
+                    displayOrderProperty.SetValue(collection, "Default");
+                    _logger.LogDebug("Set DisplayOrder to 'Default' for collection {CollectionName}", collection.Name);
+                }
+                else
+                {
+                    _logger.LogWarning("Cannot set DisplayOrder property on collection {CollectionName} - property not found or not writable", collection.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to set DisplayOrder for collection {CollectionName}", collection.Name);
             }
         }
 

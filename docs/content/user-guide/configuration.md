@@ -31,7 +31,6 @@ Before creating your first list, it's important to understand the differences be
 
 ### Collections
 - **Server-wide**: Collections are visible to all users on the server (no individual ownership)
-- **No Sorting**: Collections do not support custom sorting
 - **No Max Playtime**: Collections cannot have a playtime limit
 - **User Reference**: While collections don't have an "owner" in the traditional sense, you must select a user whose context will be used when evaluating rules and filtering items. This user's library access permissions and user-specific data (like "Playback Status", "Is Favorite", etc.) are used to determine which items are included in the collection
 - **Automatic Image Generation**: Collections automatically generate cover images based on the media items they contain (see details below)
@@ -70,7 +69,7 @@ This is where you build new playlists and collections:
 
 - Choose whether to create a Playlist or Collection
 - Define the rules for including items
-- Choose the sort order (playlists only - collections don't support sorting)
+- Choose the sort order
 - Select which user(s) should be associated with the list:
   - **For Playlists**: You can select one or more users. Each selected user will get their own personalized Jellyfin playlist based on their playback data. This allows the same smart playlist to show different content for each user (e.g., "My Favorites" showing each user's actual favorites).
   - **For Collections**: Select a single reference user whose context will be used for rule evaluation and library access permissions
