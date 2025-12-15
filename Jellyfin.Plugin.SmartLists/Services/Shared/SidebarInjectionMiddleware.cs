@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Text.RegularExpressions.Generated;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +12,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
     /// <summary>
     /// Middleware that injects the sidebar script into HTML responses.
     /// </summary>
-    public class SidebarInjectionMiddleware
+    public partial class SidebarInjectionMiddleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<SidebarInjectionMiddleware> _logger;
@@ -20,7 +21,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             _next = next;
             _logger = logger;
-            logger.LogInformation("SidebarInjectionMiddleware initialized");
+            logger.LogDebug("SidebarInjectionMiddleware initialized");
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -39,7 +40,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Disable compression for this response by removing Accept-Encoding header
             // This ensures the response we receive is uncompressed
-            var originalAcceptEncoding = context.Request.Headers.AcceptEncoding.ToString();
             context.Request.Headers.Remove("Accept-Encoding");
 
             // Intercept the response body to modify HTML responses
@@ -53,12 +53,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Continue down the pipeline
                 // Since we removed Accept-Encoding, compression middleware won't compress
                 await _next(context);
-                
-                // Restore Accept-Encoding header if it was present
-                if (!string.IsNullOrEmpty(originalAcceptEncoding))
-                {
-                    context.Request.Headers.AcceptEncoding = originalAcceptEncoding;
-                }
 
                 // Check if this is actually an HTML response
                 var contentType = context.Response.ContentType ?? string.Empty;
@@ -77,7 +71,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
                 // Read the uncompressed response using the detected encoding
                 responseBody.Seek(0, SeekOrigin.Begin);
-                var responseText = await new StreamReader(responseBody, encoding, detectEncodingFromByteOrderMarks: true).ReadToEndAsync();
+                string responseText;
+                using (var reader = new StreamReader(responseBody, encoding, detectEncodingFromByteOrderMarks: true, leaveOpen: true))
+                {
+                    responseText = await reader.ReadToEndAsync();
+                }
 
                 // Inject the script if this is the main HTML page
                 if (ShouldInjectScript(responseText))
@@ -143,13 +141,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             return path.StartsWith("/api/", System.StringComparison.OrdinalIgnoreCase) ||
                    path.StartsWith("/web/configurationpage", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".js", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".css", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".json", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".ico", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".png", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".jpg", System.StringComparison.OrdinalIgnoreCase) ||
-                   path.Contains(".svg", System.StringComparison.OrdinalIgnoreCase);
+                   path.EndsWith(".js", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".css", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".ico", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".jpg", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.EndsWith(".svg", System.StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -165,7 +163,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
 
             // Match charset parameter: charset=utf-8, charset=ISO-8859-1, etc.
-            var charsetMatch = Regex.Match(contentType, @"charset\s*=\s*([^;,\s]+)", RegexOptions.IgnoreCase);
+            var charsetMatch = CharsetRegex().Match(contentType);
             if (charsetMatch.Success)
             {
                 var charsetName = charsetMatch.Groups[1].Value.Trim('"', '\'');
@@ -182,6 +180,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             return null;
         }
+
+        [GeneratedRegex(@"charset\s*=\s*([^;,\s]+)", RegexOptions.IgnoreCase)]
+        private static partial Regex CharsetRegex();
     }
 }
 

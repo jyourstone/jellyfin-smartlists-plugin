@@ -15,7 +15,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public SidebarInjectionStartupFilter(ILogger<SidebarInjectionStartupFilter> logger)
         {
             _logger = logger;
-            _logger.LogInformation("SidebarInjectionStartupFilter initialized - middleware will be registered");
+            _logger.LogDebug("SidebarInjectionStartupFilter initialized - middleware will be registered");
         }
 
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)

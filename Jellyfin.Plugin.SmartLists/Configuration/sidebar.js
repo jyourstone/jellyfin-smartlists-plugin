@@ -157,7 +157,7 @@
         }
         
         // Handle click for hash-based routing
-        const hashPath = PLUGIN_URL.replace('/web/#', '');
+        const hashPath = PLUGIN_URL.startsWith('#') ? PLUGIN_URL.substring(1) : PLUGIN_URL;
         cloned.addEventListener('click', (e) => {
             e.preventDefault();
             if (window.Dashboard?.navigate) {
@@ -270,13 +270,6 @@
 
         const target = scrollContainer || mainDrawer;
         
-        const triggerInjection = () => {
-            observer.disconnect();
-            docObserver.disconnect();
-            // Use requestAnimationFrame for faster response
-            requestAnimationFrame(() => attemptInjection(0));
-        };
-
         const observer = new MutationObserver(() => {
             if (target.querySelectorAll('.MuiListItemButton, .MuiList-root').length > 0) {
                 triggerInjection();
@@ -293,6 +286,13 @@
                 triggerInjection();
             }
         });
+
+        const triggerInjection = () => {
+            observer.disconnect();
+            docObserver.disconnect();
+            // Use requestAnimationFrame for faster response
+            requestAnimationFrame(() => attemptInjection(0));
+        };
 
         docObserver.observe(doc.body, {
             childList: true,
