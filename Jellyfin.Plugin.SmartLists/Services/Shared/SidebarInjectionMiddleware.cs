@@ -1,6 +1,8 @@
+using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -70,9 +72,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     return;
                 }
 
-                // Read the uncompressed response
+                // Detect encoding from Content-Type header, default to UTF-8
+                var encoding = GetEncodingFromContentType(contentType) ?? Encoding.UTF8;
+
+                // Read the uncompressed response using the detected encoding
                 responseBody.Seek(0, SeekOrigin.Begin);
-                var responseText = await new StreamReader(responseBody, Encoding.UTF8).ReadToEndAsync();
+                var responseText = await new StreamReader(responseBody, encoding, detectEncodingFromByteOrderMarks: true).ReadToEndAsync();
 
                 // Inject the script if this is the main HTML page
                 if (ShouldInjectScript(responseText))
@@ -81,10 +86,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     _logger.LogDebug("Injected sidebar script into HTML response for path: {Path}", path);
                 }
 
-                // Write the modified response (uncompressed)
-                var responseBytes = Encoding.UTF8.GetBytes(responseText);
+                // Write the modified response using the same encoding
+                var responseBytes = encoding.GetBytes(responseText);
                 context.Response.Body = originalBodyStream;
                 context.Response.ContentLength = responseBytes.Length;
+                
+                // Update Content-Type header to ensure charset matches the encoding we're using
+                if (!contentType.Contains("charset=", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.ContentType = contentType + "; charset=" + encoding.WebName;
+                }
+                
                 // Ensure compression headers are removed since we're sending uncompressed
                 context.Response.Headers.Remove("Content-Encoding");
                 // Also remove any transfer encoding
@@ -138,6 +150,37 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                    path.Contains(".png", System.StringComparison.OrdinalIgnoreCase) ||
                    path.Contains(".jpg", System.StringComparison.OrdinalIgnoreCase) ||
                    path.Contains(".svg", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Extracts the charset encoding from the Content-Type header.
+        /// </summary>
+        /// <param name="contentType">The Content-Type header value.</param>
+        /// <returns>The encoding if found, null otherwise.</returns>
+        private static Encoding? GetEncodingFromContentType(string contentType)
+        {
+            if (string.IsNullOrWhiteSpace(contentType))
+            {
+                return null;
+            }
+
+            // Match charset parameter: charset=utf-8, charset=ISO-8859-1, etc.
+            var charsetMatch = Regex.Match(contentType, @"charset\s*=\s*([^;,\s]+)", RegexOptions.IgnoreCase);
+            if (charsetMatch.Success)
+            {
+                var charsetName = charsetMatch.Groups[1].Value.Trim('"', '\'');
+                try
+                {
+                    return Encoding.GetEncoding(charsetName);
+                }
+                catch (ArgumentException)
+                {
+                    // Invalid encoding name, fall back to default
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 }
