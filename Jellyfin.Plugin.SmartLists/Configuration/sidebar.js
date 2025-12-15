@@ -204,37 +204,6 @@
     }
 
     /**
-     * Attempts to find an existing menu item to insert after
-     * Looks for common dashboard items like "Dashboard", "Libraries", "Playback Reporting", etc.
-     */
-    function findInsertionPoint(container) {
-        // Try to find after "Playback Reporting" if it exists
-        const playbackReporting = Array.from(container.querySelectorAll('a')).find(
-            item => item.textContent && item.textContent.includes('Playback Reporting')
-        );
-        if (playbackReporting && playbackReporting.parentElement) {
-            return playbackReporting.parentElement;
-        }
-
-        // Try to find after "Dashboard" or "Libraries"
-        const dashboard = Array.from(container.querySelectorAll('a')).find(
-            item => item.textContent && (item.textContent.includes('Dashboard') || item.textContent.includes('Libraries'))
-        );
-        if (dashboard && dashboard.parentElement) {
-            return dashboard.parentElement;
-        }
-
-        // Try to find any list item to insert after
-        const listItems = container.querySelectorAll('.listItem, li, [data-role="button"]');
-        if (listItems.length > 0) {
-            return listItems[listItems.length - 1].parentElement || container;
-        }
-
-        // Fallback: append to container
-        return container;
-    }
-
-    /**
      * Injects the sidebar menu item
      */
     function injectSidebarItem() {
@@ -264,28 +233,10 @@
             return false;
         }
 
-        // Find insertion point - look for the parent container of menu items
-        let insertionPoint = null;
-        
-        // Try to find the parent of existing items
-        if (allMenuItems.length > 0) {
-            const firstItem = allMenuItems[0];
-            insertionPoint = firstItem.parentElement;
-            
-            // If parent is a list item, go up one more level to get the <ul>
-            if (insertionPoint && insertionPoint.tagName === 'LI') {
-                insertionPoint = insertionPoint.parentElement;
-            }
-            
-            // If still not a good container, try going up more levels
-            if (!insertionPoint || (insertionPoint.tagName !== 'UL' && insertionPoint.tagName !== 'NAV' && !insertionPoint.classList.contains('navMenuSection'))) {
-                insertionPoint = firstItem.closest('ul, nav, .navMenuSection, .navMenu');
-            }
-        }
-
-        if (!insertionPoint) {
-            insertionPoint = container;
-        }
+        // Find the MUI List container
+        const muiList = allMenuItems.length > 0 
+            ? allMenuItems[0].closest('.MuiList-root') || container
+            : container;
 
         // Check if we're dealing with MUI components
         const isMUI = allMenuItems.length > 0 && 
@@ -295,11 +246,6 @@
         
         if (isMUI) {
             const menuItem = createMUISidebarItem(doc);
-            
-            // Find the MUI List container
-            const muiList = insertionPoint.querySelector('.MuiList-root') || 
-                           allMenuItems[0].closest('.MuiList-root') ||
-                           insertionPoint;
             
             // Try to find "Plugins" menu item to insert after it
             const pluginsItem = Array.from(allMenuItems).find(item => {
@@ -410,8 +356,8 @@
         }
 
         // Check if already has content anywhere
-        const hasContent = (scrollContainer?.querySelectorAll('.MuiListItemButton, .listItem').length || 0) > 0 ||
-                          (mainDrawer?.querySelectorAll('.MuiListItemButton, .listItem').length || 0) > 0;
+        const hasContent = (scrollContainer?.querySelectorAll('.MuiListItemButton').length || 0) > 0 ||
+                          (mainDrawer?.querySelectorAll('.MuiListItemButton').length || 0) > 0;
         if (hasContent) {
             return null;
         }
@@ -419,7 +365,7 @@
         const target = scrollContainer || mainDrawer;
         
         const observer = new MutationObserver(() => {
-            const nowHasContent = target.querySelectorAll('.MuiListItemButton, .listItem, .MuiList-root').length > 0;
+            const nowHasContent = target.querySelectorAll('.MuiListItemButton, .MuiList-root').length > 0;
             if (nowHasContent) {
                 observer.disconnect();
                 setTimeout(() => {
@@ -500,15 +446,13 @@
             let shouldCheck = false;
             mutations.forEach((mutation) => {
                 if (mutation.addedNodes.length > 0) {
-                    // Check if any added nodes might be sidebar-related
                     for (const node of mutation.addedNodes) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             const element = node;
                             if (element.classList && (
-                                element.classList.contains('drawerContent') ||
-                                element.classList.contains('navMenu') ||
-                                element.classList.contains('navMenuSection') ||
-                                element.querySelector('.drawerContent, .navMenu, .navMenuSection')
+                                element.classList.contains('MuiList-root') ||
+                                element.classList.contains('MuiListItemButton') ||
+                                element.querySelector('.MuiList-root, .MuiListItemButton')
                             )) {
                                 shouldCheck = true;
                                 break;
