@@ -12,8 +12,8 @@
     const PLUGIN_NAME = 'SmartLists';
     const PLUGIN_URL = '/web/#/configurationpage?name=SmartLists&tab=create';
     const MENU_ITEM_ID = 'smartlists-sidebar-item';
-    const MAX_RETRIES = 50; // Maximum attempts to find sidebar (5 seconds with 100ms intervals)
-    const RETRY_INTERVAL = 100; // Milliseconds between retries
+    const MAX_RETRIES = 50; // Maximum attempts to find sidebar
+    const RETRY_INTERVAL = 50; // Milliseconds between retries (reduced for faster injection)
 
     /**
      * Checks if the sidebar item already exists to prevent duplicates
@@ -273,7 +273,8 @@
         const triggerInjection = () => {
             observer.disconnect();
             docObserver.disconnect();
-            setTimeout(() => attemptInjection(0), 500);
+            // Use requestAnimationFrame for faster response
+            requestAnimationFrame(() => attemptInjection(0));
         };
 
         const observer = new MutationObserver(() => {
@@ -355,7 +356,7 @@
             );
             
             if (hasMUI && !sidebarItemExists()) {
-                setTimeout(attemptInjection, 200);
+                requestAnimationFrame(attemptInjection);
             }
         });
 
@@ -394,22 +395,31 @@
             attemptInjection();
         };
 
-        // Wait for DOM to be ready (delay to ensure sidebar is fully rendered)
-        const runInjection = () => setTimeout(tryInjection, 1500);
+        // Try immediate injection if DOM is ready, otherwise wait for DOMContentLoaded
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', runInjection);
+            // Try immediately when DOM loads
+            document.addEventListener('DOMContentLoaded', () => {
+                // Use requestAnimationFrame for better timing with browser rendering
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(tryInjection); // Double RAF ensures layout is complete
+                });
+            });
         } else {
-            runInjection();
+            // DOM already ready - try immediately with RAF
+            requestAnimationFrame(() => {
+                requestAnimationFrame(tryInjection);
+            });
         }
 
 
         // Helper function for navigation handlers
         const handleNavigation = () => {
-            setTimeout(() => {
+            // Use requestAnimationFrame for faster response to navigation
+            requestAnimationFrame(() => {
                 if (!sidebarItemExists()) {
                     attemptInjection();
                 }
-            }, 500);
+            });
         };
 
         // Listen for navigation events (Jellyfin uses SPA navigation)

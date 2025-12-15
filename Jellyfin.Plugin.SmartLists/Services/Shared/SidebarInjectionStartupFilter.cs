@@ -24,13 +24,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             
             return app =>
             {
-                // Register our middleware VERY early in the pipeline (before compression)
-                // This ensures we get uncompressed responses that we can modify
-                // UseMiddleware will resolve SidebarInjectionMiddleware from DI
+                // Register middleware early (before compression) to get uncompressed responses
                 app.UseMiddleware<SidebarInjectionMiddleware>();
                 _logger.LogDebug("Sidebar injection middleware registered early in pipeline (before compression)");
-                
-                // Continue with the rest of the pipeline (including compression middleware)
                 next(app);
             };
         }

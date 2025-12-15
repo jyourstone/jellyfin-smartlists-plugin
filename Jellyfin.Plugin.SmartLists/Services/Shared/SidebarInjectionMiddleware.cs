@@ -27,15 +27,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             var path = context.Request.Path.Value ?? string.Empty;
             
             // Skip API endpoints, static files, and plugin configuration pages
-            if (path.StartsWith("/api/", System.StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/web/configurationpage", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".js", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".css", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".json", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".ico", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".png", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".jpg", System.StringComparison.OrdinalIgnoreCase) ||
-                path.Contains(".svg", System.StringComparison.OrdinalIgnoreCase))
+            if (IsExcludedPath(path))
             {
                 await _next(context);
                 return;
@@ -60,7 +52,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Since we removed Accept-Encoding, compression middleware won't compress
                 await _next(context);
                 
-                // Restore Accept-Encoding header
+                // Restore Accept-Encoding header if it was present
                 if (!string.IsNullOrEmpty(originalAcceptEncoding))
                 {
                     context.Request.Headers.AcceptEncoding = originalAcceptEncoding;
@@ -83,7 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var responseText = await new StreamReader(responseBody, Encoding.UTF8).ReadToEndAsync();
 
                 // Inject the script if this is the main HTML page
-                if (ShouldInjectScript(context, responseText))
+                if (ShouldInjectScript(responseText))
                 {
                     responseText = InjectScript(responseText);
                     _logger.LogDebug("Injected sidebar script into HTML response for path: {Path}", path);
@@ -101,42 +93,51 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
         }
 
-        private static bool ShouldInjectScript(HttpContext context, string responseText)
+        private static bool ShouldInjectScript(string responseText)
         {
-            // Only inject into pages that have a <head> or <body> tag
-            // and don't already have our script
             if (string.IsNullOrWhiteSpace(responseText))
             {
                 return false;
             }
 
-            var hasHead = responseText.Contains("<head", System.StringComparison.OrdinalIgnoreCase);
-            var hasBody = responseText.Contains("<body", System.StringComparison.OrdinalIgnoreCase);
+            var hasHtmlStructure = responseText.Contains("<head", System.StringComparison.OrdinalIgnoreCase) ||
+                                   responseText.Contains("<body", System.StringComparison.OrdinalIgnoreCase);
             var alreadyInjected = responseText.Contains("smartlists-sidebar-script", System.StringComparison.OrdinalIgnoreCase) ||
                                   responseText.Contains("sidebar.js", System.StringComparison.OrdinalIgnoreCase);
 
-            return (hasHead || hasBody) && !alreadyInjected;
+            return hasHtmlStructure && !alreadyInjected;
         }
 
         private static string InjectScript(string html)
         {
+            const string scriptTag = "<script src=\"/web/configurationpage?name=sidebar.js\"></script>";
+            
             // Try to inject before </body> first (preferred location)
             if (html.Contains("</body>", System.StringComparison.OrdinalIgnoreCase))
             {
-                var scriptTag = "<script src=\"/web/configurationpage?name=sidebar.js\"></script>";
-                html = html.Replace("</body>", scriptTag + "\n</body>", System.StringComparison.OrdinalIgnoreCase);
-                return html;
+                return html.Replace("</body>", scriptTag + "\n</body>", System.StringComparison.OrdinalIgnoreCase);
             }
 
             // Fallback: inject before </head>
             if (html.Contains("</head>", System.StringComparison.OrdinalIgnoreCase))
             {
-                var scriptTag = "<script src=\"/web/configurationpage?name=sidebar.js\"></script>";
-                html = html.Replace("</head>", scriptTag + "\n</head>", System.StringComparison.OrdinalIgnoreCase);
-                return html;
+                return html.Replace("</head>", scriptTag + "\n</head>", System.StringComparison.OrdinalIgnoreCase);
             }
 
             return html;
+        }
+
+        private static bool IsExcludedPath(string path)
+        {
+            return path.StartsWith("/api/", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.StartsWith("/web/configurationpage", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".js", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".css", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".json", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".ico", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".png", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".jpg", System.StringComparison.OrdinalIgnoreCase) ||
+                   path.Contains(".svg", System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }
