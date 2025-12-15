@@ -79,6 +79,12 @@ namespace Jellyfin.Plugin.SmartLists
                     Name = Name,
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.config.html",
                 },
+                // Sidebar injection script (attempts to add menu item to dashboard sidebar)
+                new PluginPageInfo
+                {
+                    Name = "sidebar.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.sidebar.js",
+                },
                 // Core utilities and constants (must load first)
                 new PluginPageInfo
                 {

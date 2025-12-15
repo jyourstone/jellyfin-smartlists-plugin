@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Configuration\config.html" />
+    <!-- Sidebar injection script -->
+    <EmbeddedResource Include="Configuration\sidebar.js" />
     <!-- Core utilities and constants (must load first) -->
     <EmbeddedResource Include="Configuration\config-core.js" />
     <!-- Formatters and option generators -->

@@ -55,6 +55,12 @@ namespace Jellyfin.Plugin.SmartLists
             
             serviceCollection.AddHostedService<AutoRefreshHostedService>();
             serviceCollection.AddScoped<IManualRefreshService, ManualRefreshService>();
+            
+            // Register middleware in the HTTP pipeline using IStartupFilter
+            // The middleware disables compression by removing Accept-Encoding header
+            // This ensures we receive uncompressed responses that we can modify
+            // Note: Don't register SidebarInjectionMiddleware in DI - UseMiddleware handles that
+            serviceCollection.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, SidebarInjectionStartupFilter>();
         }
     }
 }
