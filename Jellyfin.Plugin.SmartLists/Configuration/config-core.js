@@ -785,16 +785,68 @@
         var notificationElement = document.createElement('div');
         notificationElement.className = 'floating-notification';
 
+        // Create close button
+        var closeButton = document.createElement('button');
+        closeButton.className = 'notification-close-button';
+        closeButton.innerHTML = '&#xE5CD;'; // Material Icons 'close' character
+        closeButton.setAttribute('aria-label', 'Close notification');
+        
+        // Style close button
+        const closeButtonStyles = {
+            position: 'absolute',
+            top: '50%',
+            right: '8px',
+            transform: 'translateY(-50%)',
+            background: 'transparent',
+            border: 'none',
+            color: 'rgba(255, 255, 255, 0.7)',
+            fontSize: '20px',
+            cursor: 'pointer',
+            padding: '4px',
+            lineHeight: '1',
+            width: '24px',
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '2px',
+            fontFamily: '"Material Icons", "MaterialIcons-Regular", sans-serif',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            textRendering: 'optimizeLegibility'
+        };
+        
+        Object.entries(closeButtonStyles).forEach(function (entry) {
+            const property = entry[0].replace(/([A-Z])/g, '-$1').toLowerCase();
+            closeButton.style.setProperty(property, entry[1], 'important');
+        });
+        
+        // Click handler to close notification
+        closeButton.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Find the notification data and remove it
+            for (var i = 0; i < activeNotifications.length; i++) {
+                if (activeNotifications[i].element === notificationElement) {
+                    removeNotification(notificationElement, activeNotifications[i].timeoutId);
+                    break;
+                }
+            }
+        });
+
         // Set content - support HTML or plain text
         if (options.html) {
             notificationElement.innerHTML = prefixedMessage;
         } else {
             notificationElement.textContent = prefixedMessage;
         }
+        
+        // Append close button to notification
+        notificationElement.appendChild(closeButton);
 
         // Apply notification styles
         const notificationStyles = {
-            padding: '16px 20px',
+            padding: '16px 40px 16px 20px', // Extra right padding for close button
             color: 'rgba(255, 255, 255, 0.95)',
             backgroundColor: type === 'success' ? 'rgba(40, 40, 40, 0.95)' :
                 type === 'warning' ? '#ff9800' :
@@ -815,7 +867,8 @@
             userSelect: 'text',
             WebkitUserSelect: 'text',
             MozUserSelect: 'text',
-            msUserSelect: 'text'
+            msUserSelect: 'text',
+            position: 'relative' // Required for absolute positioning of close button
         };
 
         // Style links within notifications
