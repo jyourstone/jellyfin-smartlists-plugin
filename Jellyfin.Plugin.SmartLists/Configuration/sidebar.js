@@ -158,12 +158,11 @@
         
         // Handle click for hash-based routing
         const hashPath = PLUGIN_URL.replace('/web/#', '');
-        cloned.addEventListener('click', function(e) {
-            if (window.Dashboard && window.Dashboard.navigate) {
-                e.preventDefault();
+        cloned.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (window.Dashboard?.navigate) {
                 window.Dashboard.navigate(hashPath);
             } else {
-                e.preventDefault();
                 window.location.hash = hashPath;
             }
         });
@@ -210,55 +209,42 @@
         const menuItem = createMUISidebarItem(document);
         
         // Try to find "Plugins" menu item to insert after it
-            const pluginsItem = Array.from(allMenuItems).find(item => {
-                const text = item.textContent?.trim() || '';
-                return text === 'Plugins' || text.includes('Plugins');
-            });
+        const pluginsItem = Array.from(allMenuItems).find(item => {
+            const text = item.textContent?.trim() || '';
+            return text === 'Plugins' || text.includes('Plugins');
+        });
+        
+        if (pluginsItem) {
+            const pluginsParent = pluginsItem.parentElement;
+            const isNestedList = pluginsParent && pluginsParent.tagName === 'UL' && pluginsParent.classList.contains('MuiList-root');
             
-            if (pluginsItem) {
-                let pluginsListItem = pluginsItem.closest('.MuiListItem-root');
-                
-                if (!pluginsListItem) {
-                    const pluginsParent = pluginsItem.parentElement;
-                    
-                    // If parent is a UL (nested list), insert after pluginsItem within that list
-                    if (pluginsParent && pluginsParent.tagName === 'UL' && pluginsParent.classList.contains('MuiList-root')) {
-                        insertAfterMenuItem(menuItem, pluginsItem, pluginsParent);
-                        return true;
-                    }
-                    
-                    if (pluginsParent && pluginsParent.tagName === 'DIV' && pluginsParent.classList.contains('MuiListItem-root')) {
-                        pluginsListItem = pluginsParent;
-                    }
-                }
-                
-                if (pluginsListItem) {
-                    const pluginsParent = pluginsListItem.parentElement || muiList;
-                    insertAfterMenuItem(menuItem, pluginsListItem, pluginsParent);
-                } else {
-                    const pluginsParent = pluginsItem.parentElement;
-                    
-                    if (pluginsParent && pluginsParent.tagName === 'UL' && pluginsParent.classList.contains('MuiList-root')) {
-                        insertAfterMenuItem(menuItem, pluginsItem, pluginsParent);
-                        return true;
-                    }
-                    
-                    if (pluginsParent && pluginsParent.parentElement === muiList) {
-                        insertAfterMenuItem(menuItem, pluginsParent, muiList);
-                    } else {
-                        muiList.appendChild(menuItem);
-                    }
-                }
-            } else {
-                // Insert after the last MUI item
-                const lastItem = allMenuItems[allMenuItems.length - 1];
-                const lastListItem = lastItem.closest('.MuiListItem-root');
-                if (lastListItem && lastListItem.parentElement === muiList) {
-                    insertAfterMenuItem(menuItem, lastListItem, muiList);
-                } else {
-                    muiList.appendChild(menuItem);
-                }
+            if (isNestedList) {
+                insertAfterMenuItem(menuItem, pluginsItem, pluginsParent);
+                return true;
             }
+            
+            let pluginsListItem = pluginsItem.closest('.MuiListItem-root');
+            if (!pluginsListItem && pluginsParent && pluginsParent.tagName === 'DIV' && pluginsParent.classList.contains('MuiListItem-root')) {
+                pluginsListItem = pluginsParent;
+            }
+            
+            if (pluginsListItem) {
+                insertAfterMenuItem(menuItem, pluginsListItem, pluginsListItem.parentElement || muiList);
+            } else if (pluginsParent && pluginsParent.parentElement === muiList) {
+                insertAfterMenuItem(menuItem, pluginsParent, muiList);
+            } else {
+                muiList.appendChild(menuItem);
+            }
+        } else {
+            // Insert after the last MUI item
+            const lastItem = allMenuItems[allMenuItems.length - 1];
+            const lastListItem = lastItem.closest('.MuiListItem-root');
+            if (lastListItem && lastListItem.parentElement === muiList) {
+                insertAfterMenuItem(menuItem, lastListItem, muiList);
+            } else {
+                muiList.appendChild(menuItem);
+            }
+        }
 
         return true;
     }
@@ -357,26 +343,18 @@
         window.smartListsObserverSetup = true;
 
         const observer = new MutationObserver((mutations) => {
-            let shouldCheck = false;
-            mutations.forEach((mutation) => {
-                if (mutation.addedNodes.length > 0) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const element = node;
-                            if (element.classList && (
-                                element.classList.contains('MuiList-root') ||
-                                element.classList.contains('MuiListItemButton') ||
-                                element.querySelector('.MuiList-root, .MuiListItemButton')
-                            )) {
-                                shouldCheck = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            });
-
-            if (shouldCheck && !sidebarItemExists()) {
+            const hasMUI = mutations.some(mutation => 
+                Array.from(mutation.addedNodes).some(node => 
+                    node.nodeType === Node.ELEMENT_NODE &&
+                    node.classList && (
+                        node.classList.contains('MuiList-root') ||
+                        node.classList.contains('MuiListItemButton') ||
+                        node.querySelector('.MuiList-root, .MuiListItemButton')
+                    )
+                )
+            );
+            
+            if (hasMUI && !sidebarItemExists()) {
                 setTimeout(attemptInjection, 200);
             }
         });
@@ -416,14 +394,12 @@
             attemptInjection();
         };
 
-        // Wait for DOM to be ready
+        // Wait for DOM to be ready (delay to ensure sidebar is fully rendered)
+        const runInjection = () => setTimeout(tryInjection, 1500);
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(tryInjection, 1500); // Longer delay to ensure sidebar is fully rendered
-            });
+            document.addEventListener('DOMContentLoaded', runInjection);
         } else {
-            // DOM already ready
-            setTimeout(tryInjection, 1500);
+            runInjection();
         }
 
 
