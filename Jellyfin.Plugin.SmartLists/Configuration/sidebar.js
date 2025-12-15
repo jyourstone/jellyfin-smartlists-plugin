@@ -89,14 +89,6 @@
     }
     
     /**
-     * Attempts to find the sidebar navigation container
-     * Tries multiple common selectors used in Jellyfin
-     */
-    function findSidebarContainer() {
-        return findSidebarContainerInDocument(document);
-    }
-    
-    /**
      * Creates a Material-UI compatible sidebar menu item
      */
     function createMUISidebarItem(doc) {
@@ -106,13 +98,11 @@
         
         if (existingItems.length > 0) {
             // Prefer Plugins item, fallback to Dashboard or Libraries
-            templateItem = Array.from(existingItems).find(item => {
+            const findItem = (texts) => Array.from(existingItems).find(item => {
                 const text = item.textContent?.trim() || '';
-                return text === 'Plugins';
-            }) || Array.from(existingItems).find(item => {
-                const text = item.textContent?.trim() || '';
-                return text === 'Dashboard' || text === 'Libraries';
-            }) || existingItems[0];
+                return texts.includes(text);
+            });
+            templateItem = findItem(['Plugins']) || findItem(['Dashboard', 'Libraries']) || existingItems[0];
         }
         
         if (!templateItem) {
@@ -160,29 +150,22 @@
         }
         
         // Update the text
-        const textSpan = cloned.querySelector('.MuiTypography-root.MuiListItemText-primary, .MuiListItemText-root .MuiTypography-root');
+        const textSpan = cloned.querySelector('.MuiTypography-root.MuiListItemText-primary, .MuiListItemText-root .MuiTypography-root') ||
+                         cloned.querySelector('.MuiTypography-root, .MuiListItemText-root span');
         if (textSpan) {
             textSpan.textContent = PLUGIN_NAME;
-        } else {
-            // Fallback: find any text element
-            const textElements = cloned.querySelectorAll('.MuiTypography-root, .MuiListItemText-root span');
-            if (textElements.length > 0) {
-                textElements[0].textContent = PLUGIN_NAME;
-            }
         }
         
         // Handle click for hash-based routing
+        const hashPath = PLUGIN_URL.replace('/web/#', '');
         cloned.addEventListener('click', function(e) {
-            // Check if Jellyfin's router is available
             if (window.Dashboard && window.Dashboard.navigate) {
                 e.preventDefault();
-                window.Dashboard.navigate(PLUGIN_URL.replace('/web/#', ''));
-            } else if (window.location.hash) {
-                // Use hash-based navigation
+                window.Dashboard.navigate(hashPath);
+            } else {
                 e.preventDefault();
-                window.location.hash = PLUGIN_URL.replace('/web/#', '');
+                window.location.hash = hashPath;
             }
-            // If neither works, let the default href behavior handle it
         });
         
         return cloned;
@@ -209,7 +192,7 @@
             return true;
         }
 
-        const container = findSidebarContainer();
+        const container = findSidebarContainerInDocument(document);
         if (!container) {
             return false;
         }
@@ -225,8 +208,8 @@
         // Find the MUI List container
         const muiList = allMenuItems[0].closest('.MuiList-root') || container;
         const menuItem = createMUISidebarItem(document);
-            
-            // Try to find "Plugins" menu item to insert after it
+        
+        // Try to find "Plugins" menu item to insert after it
             const pluginsItem = Array.from(allMenuItems).find(item => {
                 const text = item.textContent?.trim() || '';
                 return text === 'Plugins' || text.includes('Plugins');
@@ -271,11 +254,7 @@
                 const lastItem = allMenuItems[allMenuItems.length - 1];
                 const lastListItem = lastItem.closest('.MuiListItem-root');
                 if (lastListItem && lastListItem.parentElement === muiList) {
-                    try {
-                        muiList.insertBefore(menuItem, lastListItem.nextSibling);
-                    } catch (e) {
-                        muiList.appendChild(menuItem);
-                    }
+                    insertAfterMenuItem(menuItem, lastListItem, muiList);
                 } else {
                     muiList.appendChild(menuItem);
                 }
@@ -305,13 +284,15 @@
 
         const target = scrollContainer || mainDrawer;
         
+        const triggerInjection = () => {
+            observer.disconnect();
+            docObserver.disconnect();
+            setTimeout(() => attemptInjection(0), 500);
+        };
+
         const observer = new MutationObserver(() => {
-            const nowHasContent = target.querySelectorAll('.MuiListItemButton, .MuiList-root').length > 0;
-            if (nowHasContent) {
-                observer.disconnect();
-                setTimeout(() => {
-                    attemptInjection(0);
-                }, 500);
+            if (target.querySelectorAll('.MuiListItemButton, .MuiList-root').length > 0) {
+                triggerInjection();
             }
         });
 
@@ -321,13 +302,8 @@
         });
 
         const docObserver = new MutationObserver(() => {
-            const muiItems = doc.querySelectorAll('.MuiListItemButton');
-            if (muiItems.length >= 2) {
-                docObserver.disconnect();
-                observer.disconnect();
-                setTimeout(() => {
-                    attemptInjection(0);
-                }, 500);
+            if (doc.querySelectorAll('.MuiListItemButton').length >= 2) {
+                triggerInjection();
             }
         });
 
@@ -336,11 +312,11 @@
             subtree: true
         });
 
-        // Also set a timeout to stop observing after a while
+        // Stop observing after 30 seconds
         setTimeout(() => {
             observer.disconnect();
             docObserver.disconnect();
-        }, 30000); // Stop after 30 seconds
+        }, 30000);
 
         return observer;
     }
@@ -431,7 +407,7 @@
         window.smartListsSidebarInitialized = true;
 
         const tryInjection = () => {
-            const hasSidebar = findSidebarContainer() !== null;
+            const hasSidebar = findSidebarContainerInDocument(document) !== null;
             if (!hasSidebar) {
                 setupMutationObserver();
                 return;
