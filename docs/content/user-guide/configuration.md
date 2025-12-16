@@ -1,6 +1,6 @@
 # Configuration
 
-SmartLists features a modern web-based configuration interface through the plugin settings page!
+SmartLists features a modern web-based configuration interface through the plugin settings page! You can access it by clicking "SmartLists" in the main sidebar under "Plugins", or via Dashboard → My Plugins → SmartLists.
 
 <div align="center" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 1000px; margin: 0 auto;">
     <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_create.png" target="_blank" style="cursor: pointer;">

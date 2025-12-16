@@ -29,7 +29,7 @@ This plugin allows you to create dynamic playlists and collections based on a se
 ## 🚀 Quick Start
 
 1. **Install the Plugin**: [See installation instructions](#-how-to-install)
-2. **Access Plugin Settings**: Go to Dashboard → My Plugins → SmartLists
+2. **Access Plugin Settings**: Click on "SmartLists" in the main sidebar under "Plugins" (or via Dashboard → My Plugins → SmartLists)
 3. **Create Your First List**: Use the "Create List" tab
 4. **Example**: Create a playlist or collection for "Unwatched Action Movies" with:
    - Media type: "Movie"

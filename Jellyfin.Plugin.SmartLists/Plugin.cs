@@ -78,6 +78,7 @@ namespace Jellyfin.Plugin.SmartLists
                 {
                     Name = Name,
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.config.html",
+                    EnableInMainMenu = true
                 },
                 // Core utilities and constants (must load first)
                 new PluginPageInfo
