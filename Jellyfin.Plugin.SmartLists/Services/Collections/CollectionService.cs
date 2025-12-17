@@ -1495,7 +1495,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             if (!hasIncludeOnly)
             {
-                return new List<BaseItem>();
+                return [];
             }
 
             _logger.LogDebug("Include{FieldName}Only is enabled - querying {ItemType}s for lookup", fieldName, itemTypeName);
