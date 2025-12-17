@@ -42,6 +42,22 @@ Here are some popular playlist and collection types you can create:
 - Creates a single collection that organizes multiple collections together (e.g., a "Superhero Universes" collection containing your Marvel, DC, and other superhero collections)
 - **Important**: The smart collection will never include itself in the results, even if its name matches the rule. So you can safely name your meta-collection "Superhero Universes" and use rules that match "Marvel" without worrying about it including itself
 
+### Combine Multiple Playlists
+- **Playlists** is in "Favorites;Top Rated;Recent Additions"
+- **List Type**: Playlist
+- **Note**: For playlists, this fetches all media items from within the specified playlists and combines them into a single "super playlist"
+- Creates a playlist that merges content from multiple existing playlists
+- Perfect for creating aggregated playlists like "Best of All Time" that combines your various curated playlists
+- **Important**: Only playlists you own or that are marked as public are accessible. The smart playlist will never include itself in the results.
+
+### Playlist Organization Collection
+- **Playlists** contains "workout" with "Include playlist only" enabled
+- **List Type**: Collection
+- **Note**: When "Include playlist only" is enabled, the collection contains the actual playlist objects (not the media items within them)
+- Creates a collection that organizes your playlists by category (e.g., a "Workout Playlists" collection containing all your workout-related playlists)
+- Useful for managing large numbers of playlists by grouping them into categories
+- **Important**: The smart collection will never include itself, and only playlists you own or that are public are accessible
+
 ### Unplayed Sitcom Episodes
 - **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
 

@@ -813,6 +813,17 @@
             '</select>' +
             '</div>' +
             '</div>' +
+            '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-playlists-playlist-only" style="margin-bottom: 0.75em;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            'Include playlist only:' +
+            '</label>' +
+            '<select is="emby-select" class="emby-select rule-playlists-playlist-only-select" style="width: 100%;">' +
+            '<option value="false">No - Include media items from the playlist</option>' +
+            '<option value="true">Yes - Only include the playlist itself</option>' +
+            '</select>' +
+            '</div>' +
+            '</div>' +
             '<div class="rule-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
             'Include parent series tags:' +
@@ -897,6 +908,9 @@
         // Initialize Collections options visibility
         SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
+        // Initialize Playlists options visibility
+        SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
+
         // Initialize Tags options visibility
         SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
@@ -920,6 +934,7 @@
             SmartLists.updateUserSelectorVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
+            SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateStudiosOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateGenresOptionsVisibility(newRuleRow, fieldSelect.value, page);
@@ -947,6 +962,17 @@
                 const fieldSelect = newRuleRow.querySelector('.rule-field-select');
                 const fieldValue = fieldSelect ? fieldSelect.value : '';
                 SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldValue, page);
+            }, listenerOptions);
+        }
+
+        // Add change listener for Playlists playlist-only option
+        const playlistOnlySelect = newRuleRow.querySelector('.rule-playlists-playlist-only-select');
+        if (playlistOnlySelect) {
+            playlistOnlySelect.addEventListener('change', function () {
+                // Use the centralized visibility function to ensure consistency
+                const fieldSelect = newRuleRow.querySelector('.rule-field-select');
+                const fieldValue = fieldSelect ? fieldSelect.value : '';
+                SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldValue, page);
             }, listenerOptions);
         }
 
@@ -1345,6 +1371,7 @@
                     SmartLists.updateUserSelectorVisibility(ruleRow, currentFieldValue);
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentFieldValue, page);
+                    SmartLists.updatePlaylistsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, currentFieldValue, page);
@@ -1360,6 +1387,7 @@
                     SmartLists.updateUserSelectorVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldSelect.value, page);
+                    SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, fieldSelect.value, page);
@@ -1387,6 +1415,17 @@
                         const fieldSelect = ruleRow.querySelector('.rule-field-select');
                         const fieldValue = fieldSelect ? fieldSelect.value : '';
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldValue, page);
+                    }, listenerOptions);
+                }
+
+                // Add event listener for playlist-only select
+                const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
+                if (playlistOnlySelect) {
+                    playlistOnlySelect.addEventListener('change', function () {
+                        // Use the centralized visibility function to ensure consistency
+                        const fieldSelect = ruleRow.querySelector('.rule-field-select');
+                        const fieldValue = fieldSelect ? fieldSelect.value : '';
+                        SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldValue, page);
                     }, listenerOptions);
                 }
 
@@ -1514,6 +1553,7 @@
                     if (page) {
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, '', page);
+                        SmartLists.updatePlaylistsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateStudiosOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateGenresOptionsVisibility(ruleRow, '', page);
@@ -1704,6 +1744,36 @@
     // Update visibility of Collections options for all rules when media types change
     SmartLists.updateAllCollectionsOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateCollectionsOptionsVisibility);
+    };
+
+    SmartLists.updatePlaylistsOptionsVisibility = function (ruleRow, fieldValue, page) {
+        const isPlaylistsField = fieldValue === 'Playlists';
+        const playlistsOptionsDiv = ruleRow.querySelector('.rule-playlists-options');
+
+        if (playlistsOptionsDiv) {
+            if (isPlaylistsField) {
+                // Get list type to determine visibility
+                const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
+                const isCollection = listType === 'Collection';
+
+                // Show/hide playlist-only option based on list type (only for Collections)
+                const playlistOnlyDiv = ruleRow.querySelector('.rule-playlists-playlist-only');
+                if (playlistOnlyDiv) {
+                    playlistOnlyDiv.style.display = isCollection ? 'block' : 'none';
+                }
+
+                // Only show the container if we're creating a collection
+                playlistsOptionsDiv.style.display = isCollection ? 'block' : 'none';
+            } else {
+                // Hide but preserve user's selection - don't reset value
+                playlistsOptionsDiv.style.display = 'none';
+            }
+        }
+    };
+
+    // Update visibility of Playlists options for all rules when media types change
+    SmartLists.updateAllPlaylistsOptionsVisibility = function (page) {
+        SmartLists.updateAllRules(page, SmartLists.updatePlaylistsOptionsVisibility);
     };
 
     SmartLists.updateTagsOptionsVisibility = function (ruleRow, fieldValue, page) {
@@ -2039,6 +2109,19 @@
                         }
                     }
 
+                    // Check for Playlists specific options
+                    if (memberName === 'Playlists') {
+                        // Check for playlist-only option (only for Collections type)
+                        const playlistOnlySelect = rule.querySelector('.rule-playlists-playlist-only-select');
+                        if (playlistOnlySelect) {
+                            const includePlaylistOnly = playlistOnlySelect.value === 'true';
+                            if (includePlaylistOnly) {
+                                expression.IncludePlaylistOnly = true;
+                            }
+                            // If false (default), don't include the parameter to save space
+                        }
+                    }
+
                     // Handle Tags-specific options (only if Episode is selected)
                     const tagsSelect = rule.querySelector('.rule-tags-select');
                     if (tagsSelect && memberName === 'Tags' && hasEpisode) {
@@ -2128,6 +2211,7 @@
                 SmartLists.updateUserSelectorVisibility(ruleRow, actualMemberName);
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
+                SmartLists.updatePlaylistsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateTagsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateStudiosOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateGenresOptionsVisibility(ruleRow, actualMemberName, page);
@@ -2190,6 +2274,14 @@
                 if (collectionsSelect) {
                     const includeValue = expression.IncludeEpisodesWithinSeries === true ? 'true' : 'false';
                     collectionsSelect.value = includeValue;
+                }
+            }
+            if (expression.MemberName === 'Playlists') {
+                // Restore playlist-only option
+                const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
+                if (playlistOnlySelect) {
+                    const includePlaylistOnlyValue = expression.IncludePlaylistOnly === true ? 'true' : 'false';
+                    playlistOnlySelect.value = includePlaylistOnlyValue;
                 }
             }
             if (expression.MemberName === 'Tags') {

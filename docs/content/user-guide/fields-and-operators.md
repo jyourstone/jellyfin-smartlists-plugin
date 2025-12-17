@@ -82,7 +82,8 @@ The web interface provides access to all available fields for creating list rule
 
 ### Collection Fields
 
-- **Collections** - All Jellyfin collections that contain the media item
+- **Collections** - Jellyfin collections
+- **Playlists** - Jellyfin playlists
 - **Genres** - Content genres
 - **Studios** - Production studios
 - **Tags** - Custom tags assigned to media items
@@ -152,6 +153,45 @@ The **Collections** field allows you to filter items based on which Jellyfin col
     - ❌ **Exclude itself** from the results, even though it technically matches the pattern
     
     The system compares the base names (after removing any configured prefix/suffix) to detect and prevent self-reference. This means you can safely create smart collections with names that match your collection rules without worrying about them including themselves.
+
+### Playlists Options
+
+The **Playlists** field allows you to filter items based on which Jellyfin playlists they belong to. The behavior differs depending on whether you're creating a Playlist or a Collection:
+
+**For Playlists:**
+- Items *from within* the specified playlists are always fetched and added to the playlist
+- This allows you to create "super playlists" that combine content from multiple existing playlists
+- Example: A playlist with "Playlists contains favorite" will include all items from any playlist whose name contains "favorite"
+
+**For Collections:**
+- By default, items *from within* the specified playlists are fetched (same as playlists)
+- Optionally, you can include the playlist objects themselves instead (see options below)
+- Example: A collection with "Playlists contains favorite" can either contain the media items from those playlists, or the playlist objects themselves
+
+**Available Options:**
+
+- **Include playlist only** (Collections only, default: No) - When enabled, the playlist object itself is included instead of its contents. This allows you to create collections that organize your playlists (meta-collections of playlists). **Important:** When this option is enabled, your selected media types are ignored for this rule, since you're fetching playlist objects rather than media items.
+
+!!! important "User Permissions"
+    The Playlists field respects Jellyfin's user permissions:
+    
+    - Only playlists **owned by the user** or marked as **public** are accessible
+    - Private playlists belonging to other users are automatically filtered out
+    - This prevents unauthorized access to other users' private playlists
+    
+    **Example:** If user "Alice" creates a smart playlist with "Playlists contains music", she will only see:
+    - ✅ Her own playlists (both public and private)
+    - ✅ Other users' public playlists
+    - ❌ Other users' private playlists
+
+!!! important "Self-Reference Prevention"
+    A smart playlist will **never include itself** in its results, even if it matches the rule criteria. This prevents circular references and infinite loops.
+    
+    **Example:** If you create a smart playlist called "Best Tracks" (or "My Best Tracks - Smart" with a prefix/suffix) and use the rule "Playlists contains Best", the system will:
+    - ✅ Include other playlists that match "Best" (e.g., a regular Jellyfin playlist named "Best of 2024")
+    - ❌ **Exclude itself** from the results, even though it technically matches the pattern
+    
+    The system compares the base names (after removing any configured prefix/suffix) to detect and prevent self-reference. This means you can safely create smart playlists with names that match your playlist rules without worrying about them including themselves.
 
 ### Episode-Specific Collection Field Options
 

@@ -80,6 +80,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Collections field - indicates which collections this item belongs to
         public List<string> Collections { get; set; } = [];
 
+        // Playlists field - indicates which playlists this item belongs to
+        public List<string> Playlists { get; set; } = [];
+
         // Series name field - for episodes, contains the name of the parent series
         public string SeriesName { get; set; } = string.Empty;
 

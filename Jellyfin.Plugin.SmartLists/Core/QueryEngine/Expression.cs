@@ -24,6 +24,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeCollectionOnly { get; set; } = null;
 
+        // Playlists-specific option - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludePlaylistOnly { get; set; } = null;
+
         // Tags-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesTags { get; set; } = null;
