@@ -224,6 +224,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     _logger.LogDebug("Found {CollectionCount} collections for lookup", allCollections.Count);
                 }
 
+                // Check if IncludePlaylistOnly is enabled
+                var hasPlaylistsIncludePlaylistOnly = dto.ExpressionSets?.Any(set =>
+                    set.Expressions?.Any(expr =>
+                        expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true) == true) == true;
+
+                // If IncludePlaylistOnly is enabled, also query for playlists to include in lookup
+                var allPlaylists = new List<BaseItem>();
+                if (hasPlaylistsIncludePlaylistOnly)
+                {
+                    _logger.LogDebug("IncludePlaylistOnly is enabled - querying playlists for lookup");
+                    var playlistQuery = new InternalItemsQuery(ownerUser)
+                    {
+                        IncludeItemTypes = [BaseItemKind.Playlist],
+                        Recursive = true,
+                    };
+                    allPlaylists = _libraryManager.GetItemsResult(playlistQuery).Items.ToList();
+                    _logger.LogDebug("Found {PlaylistCount} playlists for lookup", allPlaylists.Count);
+                }
+
                 // Log the collection rules
                 _logger.LogDebug("Processing collection {CollectionName} with {RuleSetCount} rule sets (Owner: {OwnerUser})", 
                     dto.Name, dto.ExpressionSets?.Count ?? 0, ownerUser.Username);
@@ -237,13 +256,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     dto.Name, newItems.Length, allMedia.Length);
 
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
-                // Include both media items and collections (if IncludeCollectionOnly is enabled)
+                // Include both media items and collections (if IncludeCollectionOnly is enabled) and playlists (if IncludePlaylistOnly is enabled)
                 var mediaLookup = allMedia.ToDictionary(m => m.Id, m => m);
                 if (hasCollectionsIncludeCollectionOnly)
                 {
                     foreach (var collection in allCollections)
                     {
                         mediaLookup[collection.Id] = collection;
+                    }
+                }
+                if (hasPlaylistsIncludePlaylistOnly)
+                {
+                    foreach (var playlist in allPlaylists)
+                    {
+                        mediaLookup[playlist.Id] = playlist;
                     }
                 }
                 var newLinkedChildren = newItems

@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using RefreshQueueServiceRefreshCache = Jellyfin.Plugin.SmartLists.Services.Shared.RefreshQueueService.RefreshCache;
 using CategorizedPeople = Jellyfin.Plugin.SmartLists.Services.Shared.RefreshQueueService.CategorizedPeople;
 
@@ -30,6 +31,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool ExtractVideoQuality { get; set; } = false;
         public bool ExtractPeople { get; set; } = false;
         public bool ExtractCollections { get; set; } = false;
+        public bool ExtractPlaylists { get; set; } = false;
         public bool ExtractNextUnwatched { get; set; } = false;
         public bool ExtractSeriesName { get; set; } = false;
         public bool ExtractParentSeriesTags { get; set; } = false;
@@ -37,6 +39,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool ExtractParentSeriesGenres { get; set; } = false;
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
+        public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
     }
 
     internal sealed class OperandFactory
@@ -2224,6 +2227,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.Collections = [];
             }
 
+            // Extract playlists - only when needed for performance
+            if (options.ExtractPlaylists)
+            {
+                operand.Playlists = ExtractPlaylists(baseItem, user, libraryManager, cache, logger, options.OriginListName);
+            }
+            else
+            {
+                operand.Playlists = [];
+            }
+
             // Extract parent series tags for episodes - only when needed for performance
             // This is an expensive operation (database lookup), so we use caching
             if (extractParentSeriesTags)
@@ -2761,6 +2774,270 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Cache the result
             cache.ItemCollections[baseItem.Id] = collections;
             return collections;
+        }
+
+        /// <summary>
+        /// Extracts the playlists that a media item belongs to, with caching for performance.
+        /// </summary>
+        /// <param name="baseItem">The media item to check</param>
+        /// <param name="user">The user context for playlist access</param>
+        /// <param name="libraryManager">Library manager to query playlists</param>
+        /// <param name="cache">Per-refresh cache to avoid repeated queries</param>
+        /// <param name="logger">Logger for debugging</param>
+        /// <param name="originListName">Name of the playlist/collection being built (to prevent self-reference)</param>
+        /// <returns>List of playlist names this item belongs to</returns>
+        private static List<string> ExtractPlaylists(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, string? originListName)
+        {
+            // Check if we already have the result cached for this item
+            if (cache.ItemPlaylists.TryGetValue(baseItem.Id, out var cachedPlaylists))
+            {
+                return cachedPlaylists;
+            }
+
+            var playlists = new List<string>();
+
+            try
+            {
+                // Load all playlists once and cache them
+                if (cache.AllPlaylists == null)
+                {
+                    logger?.LogDebug("Loading all playlists for user {UserId} (cache miss)", user.Id);
+                    var playlistQuery = new InternalItemsQuery(user)
+                    {
+                        IncludeItemTypes = [BaseItemKind.Playlist],
+                        Recursive = true,
+                    };
+
+                    var allPlaylists = libraryManager.GetItemsResult(playlistQuery).Items;
+                    
+                    // Filter playlists to only include those the user owns or that are public
+                    var accessiblePlaylists = new List<BaseItem>();
+                    foreach (var playlist in allPlaylists)
+                    {
+                        // Check if user owns the playlist
+                        bool isOwner = playlist.GetType().GetProperty("OwnerUserId")?.GetValue(playlist) is Guid ownerId 
+                            && ownerId == user.Id;
+                        
+                        // Check if playlist is public
+                        bool isPublic = false;
+                        var openAccessProperty = playlist.GetType().GetProperty("OpenAccess");
+                        if (openAccessProperty != null)
+                        {
+                            isPublic = (bool)(openAccessProperty.GetValue(playlist) ?? false);
+                        }
+                        else
+                        {
+                            // Fallback to Shares check using reflection
+                            var sharesProperty = playlist.GetType().GetProperty("Shares");
+                            if (sharesProperty != null)
+                            {
+                                var sharesValue = sharesProperty.GetValue(playlist);
+                                if (sharesValue is System.Collections.IEnumerable shares)
+                                {
+                                    isPublic = shares.Cast<object>().Any();
+                                }
+                            }
+                        }
+                        
+                        if (isOwner || isPublic)
+                        {
+                            accessiblePlaylists.Add(playlist);
+                            logger?.LogDebug("Playlist '{PlaylistName}' accessible: Owner={IsOwner}, Public={IsPublic}", 
+                                playlist.Name, isOwner, isPublic);
+                        }
+                        else
+                        {
+                            logger?.LogDebug("Playlist '{PlaylistName}' filtered out: not owned by user and not public", 
+                                playlist.Name);
+                        }
+                    }
+                    
+                    cache.AllPlaylists = [.. accessiblePlaylists];
+                    logger?.LogDebug("Cached {PlaylistCount} accessible playlists for user {UserId} (filtered from {TotalCount})", 
+                        cache.AllPlaylists.Length, user.Id, allPlaylists.Count);
+
+                    // Debug: Log playlist names (only if debug level logging)
+                    if (cache.AllPlaylists.Length <= 10) // Only log if reasonable number
+                    {
+                        foreach (var pl in cache.AllPlaylists)
+                        {
+                            logger?.LogDebug("Found playlist: '{PlaylistName}' (ID: {PlaylistId})", pl.Name, pl.Id);
+                        }
+                    }
+                }
+
+                // Build the reverse lookup cache if it's empty (one-time expensive operation per refresh)
+                if (cache.PlaylistMembershipCache.Count == 0 && cache.AllPlaylists.Length > 0)
+                {
+                    logger?.LogDebug("Building playlist membership cache for {PlaylistCount} playlists", cache.AllPlaylists.Length);
+
+                    foreach (var playlist in cache.AllPlaylists)
+                    {
+                        try
+                        {
+                            // Try multiple approaches to get playlist items
+                            BaseItem[]? itemsInPlaylist = null;
+
+                            // Approach 1: Try GetChildren method using reflection (similar to collections)
+                            try
+                            {
+                                var getChildrenMethod = playlist.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
+                                if (getChildrenMethod != null)
+                                {
+                                    var children = getChildrenMethod.Invoke(playlist, [user, true]);
+                                    if (children is IEnumerable<BaseItem> childrenEnumerable)
+                                    {
+                                        itemsInPlaylist = [.. childrenEnumerable];
+                                        logger?.LogDebug("Playlist '{PlaylistName}' GetChildren() returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogDebug(ex, "GetChildren method failed for playlist '{PlaylistName}'", playlist.Name);
+                            }
+
+                            // Approach 2: Try GetLinkedChildren method using reflection
+                            if (itemsInPlaylist == null || itemsInPlaylist.Length == 0)
+                            {
+                                try
+                                {
+                                    var getLinkedChildrenMethod = playlist.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
+                                    if (getLinkedChildrenMethod != null)
+                                    {
+                                        var linkedChildren = getLinkedChildrenMethod.Invoke(playlist, null);
+                                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
+                                        {
+                                            itemsInPlaylist = [.. linkedEnumerable];
+                                            logger?.LogDebug("Playlist '{PlaylistName}' GetLinkedChildren() returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger?.LogDebug(ex, "GetLinkedChildren method failed for playlist '{PlaylistName}'", playlist.Name);
+                                }
+                            }
+
+                            // Approach 3: Try accessing LinkedChildren property directly
+                            if (itemsInPlaylist == null || itemsInPlaylist.Length == 0)
+                            {
+                                try
+                                {
+                                    var linkedChildrenProp = playlist.GetType().GetProperty("LinkedChildren");
+                                    if (linkedChildrenProp != null)
+                                    {
+                                        var linkedChildrenValue = linkedChildrenProp.GetValue(playlist);
+                                        if (linkedChildrenValue is Array linkedChildrenArray)
+                                        {
+                                            // LinkedChildren returns LinkedChild objects, not BaseItem directly
+                                            // We need to extract ItemId from each LinkedChild
+                                            var itemIds = new List<Guid>();
+                                            foreach (var linkedChild in linkedChildrenArray)
+                                            {
+                                                var itemIdProp = linkedChild.GetType().GetProperty("ItemId");
+                                                if (itemIdProp != null)
+                                                {
+                                                    var itemIdValue = itemIdProp.GetValue(linkedChild);
+                                                    if (itemIdValue is Guid? && itemIdValue != null)
+                                                    {
+                                                        var nullableGuid = (Guid?)itemIdValue;
+                                                        if (nullableGuid.HasValue)
+                                                        {
+                                                            itemIds.Add(nullableGuid.Value);
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Convert ItemIds to BaseItems
+                                            itemsInPlaylist = itemIds
+                                                .Select(id => libraryManager.GetItemById(id))
+                                                .Where(item => item != null)
+                                                .Cast<BaseItem>()
+                                                .ToArray();
+                                            
+                                            logger?.LogDebug("Playlist '{PlaylistName}' LinkedChildren property returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger?.LogDebug(ex, "LinkedChildren property access failed for playlist '{PlaylistName}'", playlist.Name);
+                                }
+                            }
+
+                            // Build the reverse lookup set for this playlist (O(1) lookups)
+                            var membershipSet = new HashSet<Guid>();
+                            if (itemsInPlaylist != null)
+                            {
+                                foreach (var item in itemsInPlaylist)
+                                {
+                                    membershipSet.Add(item.Id);
+                                }
+                            }
+
+                            cache.PlaylistMembershipCache[playlist.Id] = membershipSet;
+
+                            // Debug: Log first few items in playlist (only for small playlists)
+                            if (itemsInPlaylist != null && itemsInPlaylist.Length <= 5 && itemsInPlaylist.Length > 0)
+                            {
+                                foreach (var playlistItem in itemsInPlaylist.Take(3))
+                                {
+                                    logger?.LogDebug("  Playlist item: '{ItemName}' (ID: {ItemId})", playlistItem.Name, playlistItem.Id);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogDebug(ex, "Error building membership cache for playlist '{PlaylistName}'", playlist.Name);
+                            // Create empty set for failed playlists to avoid repeated attempts
+                            cache.PlaylistMembershipCache[playlist.Id] = [];
+                        }
+                    }
+
+                    logger?.LogDebug("Playlist membership cache built with {CacheCount} playlists", cache.PlaylistMembershipCache.Count);
+                }
+
+                // Use the reverse lookup cache for O(1) membership checks (fast!)
+                foreach (var playlist in cache.AllPlaylists)
+                {
+                    if (cache.PlaylistMembershipCache.TryGetValue(playlist.Id, out var membershipSet) &&
+                        membershipSet.Contains(baseItem.Id))
+                    {
+                        // Skip if this playlist matches the origin list (prevent self-reference)
+                        if (!string.IsNullOrEmpty(originListName))
+                        {
+                            var playlistBaseName = NameFormatter.StripPrefixAndSuffix(playlist.Name);
+                            var originBaseName = NameFormatter.StripPrefixAndSuffix(originListName);
+                            if (playlistBaseName.Equals(originBaseName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                logger?.LogDebug("Skipping playlist '{PlaylistName}' for item '{ItemName}' - matches origin list '{OriginName}' (preventing self-reference)",
+                                    playlist.Name, baseItem.Name, originListName);
+                                continue;
+                            }
+                        }
+                        
+                        playlists.Add(playlist.Name);
+                        logger?.LogDebug("Item '{ItemName}' is in playlist '{PlaylistName}'", baseItem.Name, playlist.Name);
+                    }
+                }
+
+                if (playlists.Count == 0)
+                {
+                    logger?.LogDebug("Item '{ItemName}' is not in any playlists", baseItem.Name);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract playlists for item {Name}", baseItem.Name);
+            }
+
+            // Cache the result
+            cache.ItemPlaylists[baseItem.Id] = playlists;
+            logger?.LogDebug("Cached {Count} playlists for item '{ItemName}'", playlists.Count, baseItem.Name);
+            return playlists;
         }
 
         /// <summary>

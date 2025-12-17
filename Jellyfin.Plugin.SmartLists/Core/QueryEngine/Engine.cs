@@ -1107,13 +1107,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 logger?.LogDebug("SmartLists applying collection Equal to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
                 var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
                 
-                // Use special method for Collections that handles prefix/suffix stripping
+                // Use special method for Collections and Playlists that handles prefix/suffix stripping
                 // For other fields, use the standard AnyItemEquals method
                 System.Reflection.MethodInfo? method;
                 if (r.MemberName == "Collections")
                 {
                     method = typeof(Engine).GetMethod("AnyCollectionEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     if (method == null) throw new InvalidOperationException("Engine.AnyCollectionEquals method not found");
+                }
+                else if (r.MemberName == "Playlists")
+                {
+                    method = typeof(Engine).GetMethod("AnyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.AnyPlaylistEquals method not found");
                 }
                 else
                 {
@@ -1124,11 +1129,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return System.Linq.Expressions.Expression.Call(method, left, right);
             }
 
-            // For Collections field, only support operators in LimitedMultiValuedFieldOperators
+            // For Collections and Playlists fields, only support operators in LimitedMultiValuedFieldOperators
             // This excludes NotContains and IsNotIn to match the documented operator list
-            if (r.MemberName == "Collections")
+            if (r.MemberName == "Collections" || r.MemberName == "Playlists")
             {
-                // Collections only supports: Equal, Contains, IsIn, MatchRegex
+                // Collections and Playlists only support: Equal, Contains, IsIn, MatchRegex
                 if (r.Operator == "Contains")
                 {
                     var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
@@ -1343,6 +1348,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// This handles cases where collections have prefix/suffix applied but users enter base name.
         /// </summary>
         internal static bool AnyCollectionEquals(IEnumerable<string> list, string value)
+        {
+            if (list == null) return false;
+            return list.Any(s => 
+                s != null && 
+                (s.Equals(value, StringComparison.OrdinalIgnoreCase) ||
+                 (NameFormatter.StripPrefixAndSuffix(s) is string stripped && stripped.Equals(value, StringComparison.OrdinalIgnoreCase))));
+        }
+
+        /// <summary>
+        /// Checks if any item in the playlist list equals the target value.
+        /// For Playlists field, this also checks items without prefix/suffix.
+        /// This handles cases where playlists have prefix/suffix applied but users enter base name.
+        /// </summary>
+        internal static bool AnyPlaylistEquals(IEnumerable<string> list, string value)
         {
             if (list == null) return false;
             return list.Any(s => 

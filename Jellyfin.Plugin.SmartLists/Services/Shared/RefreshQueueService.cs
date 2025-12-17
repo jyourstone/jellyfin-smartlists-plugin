@@ -642,6 +642,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, List<string>> ItemCollections { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> CollectionMembershipCache { get; } = new();
+            public ConcurrentDictionary<Guid, List<string>> ItemPlaylists { get; } = new();
+            public BaseItem[]? AllPlaylists { get; set; } = null;
+            public ConcurrentDictionary<Guid, HashSet<Guid>> PlaylistMembershipCache { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesNameById { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesSortNameById { get; } = new();
             public ConcurrentDictionary<Guid, List<string>> SeriesTagsById { get; } = new();
