@@ -1070,25 +1070,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Checks if playlists match Playlists rules.
-        /// </summary>
-        /// <param name="playlists">The playlist names to check</param>
-        /// <returns>True if playlists match any Playlists rule, false otherwise</returns>
-        private bool DoPlaylistsMatchRules(List<string> playlists)
-        {
-            if (playlists == null || playlists.Count == 0)
-                return false;
-
-            // Check if any playlist matches any Playlists rule
-            // Skip rules with IncludePlaylistOnly=true since those are handled separately
-            return ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    expr.MemberName == "Playlists" &&
-                    expr.IncludePlaylistOnly != true && // Skip IncludePlaylistOnly rules
-                    DoesPlaylistMatchRule(playlists, expr)) == true) == true;
-        }
-
-        /// <summary>
         /// Checks if collections match a specific Collections rule.
         /// </summary>
         /// <param name="collections">The collections data to check</param>
