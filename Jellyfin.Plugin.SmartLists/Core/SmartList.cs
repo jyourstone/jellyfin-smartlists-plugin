@@ -211,7 +211,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 // Skip Playlists expressions with IncludePlaylistOnly=true - they're handled separately
                                 if (expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true)
                                 {
-                                    logger?.LogDebug("Skipping Playlists expression with IncludePlaylistOnly=true at set {SetIndex}, index {ExprIndex} for collection '{CollectionName}' - handled separately", setIndex, exprIndex, Name);
+                                    logger?.LogDebug("Skipping Playlists expression with IncludePlaylistOnly=true at set {SetIndex}, index {ExprIndex} for playlist '{PlaylistName}' - handled separately", setIndex, exprIndex, Name);
                                     continue;
                                 }
 
@@ -410,6 +410,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(expr.IncludeParentSeriesStudios?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesGenres?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeCollectionOnly?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludePlaylistOnly?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.OnlyDefaultAudioLanguage?.ToString() ?? "null");
                         hashBuilder.Append(':');

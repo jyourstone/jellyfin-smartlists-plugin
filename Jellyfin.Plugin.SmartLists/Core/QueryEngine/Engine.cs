@@ -1338,8 +1338,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         internal static bool AnyItemEquals(IEnumerable<string> list, string value)
         {
-            if (list == null) return false;
-            return list.Any(s => s != null && s.Equals(value, StringComparison.OrdinalIgnoreCase));
+            return AnyEqualsWithOptionalStripping(list, value, stripPrefixSuffix: false);
         }
 
         /// <summary>

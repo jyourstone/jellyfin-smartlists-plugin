@@ -1484,12 +1484,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             User user,
             string itemTypeName)
         {
-            var includeOnlyPropertyName = fieldName == "Collections" ? "IncludeCollectionOnly" : "IncludePlaylistOnly";
-            
             var hasIncludeOnly = dto.ExpressionSets?.Any(set =>
                 set.Expressions?.Any(expr =>
-                    expr.MemberName == fieldName && 
-                    (bool?)expr.GetType().GetProperty(includeOnlyPropertyName)?.GetValue(expr) == true) == true) == true;
+                    expr.MemberName == fieldName &&
+                    (fieldName == "Collections"
+                        ? expr.IncludeCollectionOnly == true
+                        : expr.IncludePlaylistOnly == true)) == true) == true;
 
             if (!hasIncludeOnly)
             {
