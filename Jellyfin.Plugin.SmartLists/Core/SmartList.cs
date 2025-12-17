@@ -1066,7 +1066,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Checks if playlists match Collections rules.
+        /// Checks if playlists match Playlists rules.
         /// </summary>
         /// <param name="playlists">The playlist names to check</param>
         /// <returns>True if playlists match any Playlists rule, false otherwise</returns>
@@ -1233,7 +1233,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
                     if (playlistBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
                     {
-                        logger?.LogDebug("Skipping playlist '{PlaylistName}' - matches current collection being built (preventing self-reference)", playlist.Name);
+                        logger?.LogDebug("Skipping playlist '{PlaylistName}' - matches current list being built (preventing self-reference)", playlist.Name);
                         continue;
                     }
 

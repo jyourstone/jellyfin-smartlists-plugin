@@ -205,43 +205,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     UserManager = _userManager // Set UserManager for Jellyfin 10.11+ user resolution
                 };
 
-                // Check if IncludeCollectionOnly is enabled
-                var hasCollectionsIncludeCollectionOnly = dto.ExpressionSets?.Any(set =>
-                    set.Expressions?.Any(expr =>
-                        expr.MemberName == "Collections" && expr.IncludeCollectionOnly == true) == true) == true;
+                // Query for collections if IncludeCollectionOnly is enabled
+                var allCollections = QueryIncludeOnlyItems(dto, "Collections", BaseItemKind.BoxSet, ownerUser, "collection");
 
-                // If IncludeCollectionOnly is enabled, also query for collections to include in lookup
-                var allCollections = new List<BaseItem>();
-                if (hasCollectionsIncludeCollectionOnly)
-                {
-                    _logger.LogDebug("IncludeCollectionOnly is enabled - querying collections for lookup");
-                    var collectionQuery = new InternalItemsQuery(ownerUser)
-                    {
-                        IncludeItemTypes = [BaseItemKind.BoxSet],
-                        Recursive = true,
-                    };
-                    allCollections = _libraryManager.GetItemsResult(collectionQuery).Items.ToList();
-                    _logger.LogDebug("Found {CollectionCount} collections for lookup", allCollections.Count);
-                }
-
-                // Check if IncludePlaylistOnly is enabled
-                var hasPlaylistsIncludePlaylistOnly = dto.ExpressionSets?.Any(set =>
-                    set.Expressions?.Any(expr =>
-                        expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true) == true) == true;
-
-                // If IncludePlaylistOnly is enabled, also query for playlists to include in lookup
-                var allPlaylists = new List<BaseItem>();
-                if (hasPlaylistsIncludePlaylistOnly)
-                {
-                    _logger.LogDebug("IncludePlaylistOnly is enabled - querying playlists for lookup");
-                    var playlistQuery = new InternalItemsQuery(ownerUser)
-                    {
-                        IncludeItemTypes = [BaseItemKind.Playlist],
-                        Recursive = true,
-                    };
-                    allPlaylists = _libraryManager.GetItemsResult(playlistQuery).Items.ToList();
-                    _logger.LogDebug("Found {PlaylistCount} playlists for lookup", allPlaylists.Count);
-                }
+                // Query for playlists if IncludePlaylistOnly is enabled
+                var allPlaylists = QueryIncludeOnlyItems(dto, "Playlists", BaseItemKind.Playlist, ownerUser, "playlist");
 
                 // Log the collection rules
                 _logger.LogDebug("Processing collection {CollectionName} with {RuleSetCount} rule sets (Owner: {OwnerUser})", 
@@ -258,20 +226,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
                 // Include both media items and collections (if IncludeCollectionOnly is enabled) and playlists (if IncludePlaylistOnly is enabled)
                 var mediaLookup = allMedia.ToDictionary(m => m.Id, m => m);
-                if (hasCollectionsIncludeCollectionOnly)
-                {
-                    foreach (var collection in allCollections)
-                    {
-                        mediaLookup[collection.Id] = collection;
-                    }
-                }
-                if (hasPlaylistsIncludePlaylistOnly)
-                {
-                    foreach (var playlist in allPlaylists)
-                    {
-                        mediaLookup[playlist.Id] = playlist;
-                    }
-                }
+                AddIncludeOnlyItemsToLookup(mediaLookup, allCollections);
+                AddIncludeOnlyItemsToLookup(mediaLookup, allPlaylists);
                 var newLinkedChildren = newItems
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
                     .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
@@ -1508,6 +1464,61 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to set DisplayOrder for collection {CollectionName}", collection.Name);
+            }
+        }
+
+        /// <summary>
+        /// Queries for items when IncludeOnly option is enabled for a field.
+        /// This is a shared helper for both Collections and Playlists fields.
+        /// </summary>
+        /// <param name="dto">The collection DTO containing expression sets</param>
+        /// <param name="fieldName">The field name to check (e.g., "Collections", "Playlists")</param>
+        /// <param name="itemKind">The item kind to query (e.g., BoxSet, Playlist)</param>
+        /// <param name="user">The user context for the query</param>
+        /// <param name="itemTypeName">Human-readable item type name for logging (e.g., "collection", "playlist")</param>
+        /// <returns>List of items if IncludeOnly is enabled, otherwise empty list</returns>
+        private List<BaseItem> QueryIncludeOnlyItems(
+            SmartCollectionDto dto,
+            string fieldName,
+            BaseItemKind itemKind,
+            User user,
+            string itemTypeName)
+        {
+            var includeOnlyPropertyName = fieldName == "Collections" ? "IncludeCollectionOnly" : "IncludePlaylistOnly";
+            
+            var hasIncludeOnly = dto.ExpressionSets?.Any(set =>
+                set.Expressions?.Any(expr =>
+                    expr.MemberName == fieldName && 
+                    (bool?)expr.GetType().GetProperty(includeOnlyPropertyName)?.GetValue(expr) == true) == true) == true;
+
+            if (!hasIncludeOnly)
+            {
+                return new List<BaseItem>();
+            }
+
+            _logger.LogDebug("Include{FieldName}Only is enabled - querying {ItemType}s for lookup", fieldName, itemTypeName);
+            var query = new InternalItemsQuery(user)
+            {
+                IncludeItemTypes = [itemKind],
+                Recursive = true,
+            };
+            var items = _libraryManager.GetItemsResult(query).Items.ToList();
+            _logger.LogDebug("Found {ItemCount} {ItemType}s for lookup", items.Count, itemTypeName);
+            
+            return items;
+        }
+
+        /// <summary>
+        /// Adds IncludeOnly items to the media lookup dictionary.
+        /// This is a shared helper for adding both collections and playlists to the lookup.
+        /// </summary>
+        /// <param name="mediaLookup">The lookup dictionary to add items to</param>
+        /// <param name="items">The items to add</param>
+        private static void AddIncludeOnlyItemsToLookup(Dictionary<Guid, BaseItem> mediaLookup, List<BaseItem> items)
+        {
+            foreach (var item in items)
+            {
+                mediaLookup[item.Id] = item;
             }
         }
 

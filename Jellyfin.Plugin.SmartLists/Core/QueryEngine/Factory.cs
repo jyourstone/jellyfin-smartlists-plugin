@@ -2939,13 +2939,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                                 if (itemIdProp != null)
                                                 {
                                                     var itemIdValue = itemIdProp.GetValue(linkedChild);
-                                                    if (itemIdValue is Guid? && itemIdValue != null)
+                                                    if (itemIdValue is Guid guidValue)
                                                     {
-                                                        var nullableGuid = (Guid?)itemIdValue;
-                                                        if (nullableGuid.HasValue)
-                                                        {
-                                                            itemIds.Add(nullableGuid.Value);
-                                                        }
+                                                        itemIds.Add(guidValue);
                                                     }
                                                 }
                                             }

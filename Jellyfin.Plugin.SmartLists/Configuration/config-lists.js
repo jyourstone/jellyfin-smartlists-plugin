@@ -1110,6 +1110,12 @@
                             }
                         }
 
+                        // Add Playlists configuration info
+                        let playlistsInfo = '';
+                        if (rule.MemberName === 'Playlists' && rule.IncludePlaylistOnly === true) {
+                            playlistsInfo = ' (playlist only)';
+                        }
+
                         // Add Tags configuration info
                         let tagsInfo = '';
                         if (rule.MemberName === 'Tags' && rule.IncludeParentSeriesTags === true) {
@@ -1145,7 +1151,7 @@
                         }
 
                         rulesHtml += '<span style="font-family: monospace; background: #232323; padding: 4px 4px; border-radius: 3px;">';
-                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
+                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
                         rulesHtml += '</span>';
                     }
                     rulesHtml += '</div>';
