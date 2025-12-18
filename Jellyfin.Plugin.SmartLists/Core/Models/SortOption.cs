@@ -1,4 +1,4 @@
-using Jellyfin.Plugin.SmartLists.Core.Enums;
+using Jellyfin.Database.Implementations.Enums;
 
 namespace Jellyfin.Plugin.SmartLists.Core.Models
 {
