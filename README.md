@@ -65,7 +65,7 @@ SmartLists features a modern web-based configuration interface with four main ta
 
 ### 📖 **[View Full Documentation →](https://jellyfin-smartlists-plugin.dinsten.se)**
 
-Complete guide with detailed field descriptions, operators, examples, advanced configuration, and more!
+Complete guide with installation instructions, detailed field descriptions, operators, examples, advanced configuration, and more!
 
 </div>
 
@@ -76,22 +76,14 @@ Complete guide with detailed field descriptions, operators, examples, advanced c
 
 ## 📦 How to Install
 
-### From Repository
-Add this repository URL to your Jellyfin plugin catalog:
+1. Add this repository URL to your Jellyfin plugin catalog:
 ```
 https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/main/manifest.json
 ```
+2. Install the plugin
+3. Restart Jellyfin
 
-### Manual Installation
-Download the latest release from the [Releases page](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases) and extract it to a subfolder in your Jellyfin plugins directory (for example `/config/plugins/SmartLists`).
-
-### Try RC Releases (Unstable)
-Want to test the latest features before they're officially released? You can try release candidate (RC) versions using the unstable manifest:
-```
-https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/unstable/manifest.json
-```
-
-**⚠️ Warning**: RC releases are pre-release versions that may contain bugs or incomplete features. Use at your own risk and consider backing up your smart list configurations before upgrading.
+Complete installation instructions can be found [in the documentation](https://jellyfin-smartlists-plugin.dinsten.se/getting-started/installation/).
 
 ## 📋 Overview
 
