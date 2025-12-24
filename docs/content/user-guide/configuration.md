@@ -41,17 +41,26 @@ Before creating your first list, it's important to understand the differences be
 
 SmartLists automatically generates cover images for collections based on the media items they contain. This feature works as follows:
 
+**Primary Images (Vertical Posters)**
 - **Single Item**: If a collection contains only one item with an image, that item's primary image is used directly as the collection cover
 - **Multiple Items**: If a collection contains two or more items with images, a 4-image collage is automatically created using the first items from the collection
 - **Image Selection**: The plugin prioritizes Movies and Series with images, falling back to any items with images if needed
-- **Automatic Updates**: Collection images are automatically regenerated when the collection is refreshed to reflect the current items
+
+**Thumb Images (Horizontal/Landscape)**
+- **Automatically Generated**: In addition to the primary poster, the plugin also generates 16:9 thumb images perfect for landscape-oriented views in Jellyfin's UI
+- **Single Item**: Uses the item's thumb image directly
+- **Multiple Items**: Creates a 2x2 grid collage (1920x1080) from thumb images of the first 4 items
+- **Requires Thumb Images**: Thumb generation only occurs if the media items have actual thumb images available. If no thumb images exist, only the primary poster is generated
+
+**Automatic Updates**
+- Collection images are automatically regenerated when the collection is refreshed to reflect the current items
 
 !!! important "Custom Images Are Preserved"
     Automatic image generation **only occurs** when a collection doesn't already have a custom image in place. Custom images can be set through:
     - **Metadata cover downloads**: Images downloaded by Jellyfin's metadata providers
     - **User image uploads**: Images manually uploaded through Jellyfin's interface
     
-    If a custom image exists, the plugin will preserve it and skip automatic generation. This ensures that any images you specifically set or download are never overwritten.
+    If a custom image exists, the plugin will preserve it and skip automatic generation. This ensures that any images you specifically set or download are never overwritten. This applies to both primary and thumb images independently.
 
 !!! note "User Selection for Collections"
     When creating a collection, the user you select is used as a **reference** for rule evaluation, not as an owner. The collection itself is server-wide and visible to everyone. This user's context is important for:

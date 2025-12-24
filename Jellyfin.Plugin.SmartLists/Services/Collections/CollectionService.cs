@@ -897,11 +897,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
                         if (primaryImage != null)
                         {
-                            // Remove the image
+                            // Remove the primary image
                             collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Primary).ToArray();
                             await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
                             
-                            // Also delete the auto-generated collage file if it exists
+                            // Also delete the auto-generated primary collage file if it exists
                             if (!string.IsNullOrEmpty(primaryImage.Path))
                             {
                                 var fileName = System.IO.Path.GetFileName(primaryImage.Path);
@@ -923,6 +923,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             }
                             
                             _logger.LogDebug("Cleared cover image for empty collection {CollectionName}", collection.Name);
+                        }
+                        
+                        // Also clear and delete thumb image
+                        var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
+                        if (thumbImage != null)
+                        {
+                            // Remove the thumb image
+                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Thumb).ToArray();
+                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                            
+                            // Also delete the auto-generated thumb collage file if it exists
+                            if (!string.IsNullOrEmpty(thumbImage.Path))
+                            {
+                                var fileName = System.IO.Path.GetFileName(thumbImage.Path);
+                                if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    try
+                                    {
+                                        if (System.IO.File.Exists(thumbImage.Path))
+                                        {
+                                            System.IO.File.Delete(thumbImage.Path);
+                                            _logger.LogDebug("Deleted auto-generated thumb collage image file for empty collection {CollectionName}", collection.Name);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "Failed to delete thumb collage image file for empty collection {CollectionName}", collection.Name);
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -1027,17 +1057,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         collection.Name,
                         string.Join(", ", items.Select(i => i.Name)));
                     
-                    // Clear the image by removing it
+                    // Clear the primary image by removing it
                     if (collection.ImageInfos != null)
                     {
                         var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
                         if (primaryImage != null)
                         {
-                            // Remove the image
+                            // Remove the primary image
                             collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Primary).ToArray();
                             await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
                             
-                            // Also delete the auto-generated collage file if it exists
+                            // Also delete the auto-generated primary collage file if it exists
                             if (!string.IsNullOrEmpty(primaryImage.Path))
                             {
                                 var fileName = System.IO.Path.GetFileName(primaryImage.Path);
@@ -1060,12 +1090,49 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             
                             _logger.LogDebug("Cleared cover image for collection {CollectionName} (no items with images)", collection.Name);
                         }
+                        
+                        // Also clear and delete thumb image
+                        var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
+                        if (thumbImage != null)
+                        {
+                            // Remove the thumb image
+                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Thumb).ToArray();
+                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                            
+                            // Also delete the auto-generated thumb collage file if it exists
+                            if (!string.IsNullOrEmpty(thumbImage.Path))
+                            {
+                                var fileName = System.IO.Path.GetFileName(thumbImage.Path);
+                                if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    try
+                                    {
+                                        if (System.IO.File.Exists(thumbImage.Path))
+                                        {
+                                            System.IO.File.Delete(thumbImage.Path);
+                                            _logger.LogDebug("Deleted auto-generated thumb collage image file for collection {CollectionName} (no items with images)", collection.Name);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "Failed to delete thumb collage image file for collection {CollectionName}", collection.Name);
+                                    }
+                                }
+                            }
+                        }
                     }
                     return;
                 }
 
-                // Create image: single for 1 item, collage for 2+ items
+                // Create primary image: single for 1 item, collage for 2+ items
                 await CreateCollectionImageAsync(collection, itemsWithImages, cancellationToken).ConfigureAwait(false);
+                
+                // Also create thumb image for landscape views
+                var itemsWithThumbImages = GetItemsWithThumbImages(items);
+                if (itemsWithThumbImages.Count > 0)
+                {
+                    await CreateCollectionThumbAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -1079,9 +1146,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// A manually uploaded image is one that:
         /// 1. Exists in the collection's metadata directory
         /// 2. Is NOT one of the collection items' images
-        /// 3. Is NOT our auto-generated collage (smartlist-collage.jpg)
+        /// 3. Is NOT our auto-generated collage (smartlist-collage.jpg or smartlist-thumb-collage.jpg)
         /// 
-        /// Note: Our auto-generated collage (smartlist-collage.jpg) will be regenerated to match current items.
+        /// Note: Our auto-generated collages will be regenerated to match current items.
         /// </summary>
         private async Task<bool> HasManuallyUploadedImageAsync(BaseItem collection, CancellationToken cancellationToken = default)
         {
@@ -1090,11 +1157,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 return false;
             }
 
+            // Check both Primary and Thumb images
             var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
-            if (primaryImage == null || string.IsNullOrEmpty(primaryImage.Path))
-            {
-                return false;
-            }
+            var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
 
             var collectionPath = collection.Path;
             if (string.IsNullOrEmpty(collectionPath))
@@ -1102,9 +1167,35 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 return false;
             }
 
-            // Normalize paths for comparison
             var normalizedCollectionPath = System.IO.Path.GetFullPath(collectionPath);
-            var normalizedImagePath = System.IO.Path.GetFullPath(primaryImage.Path);
+
+            // Check Primary image
+            if (primaryImage != null && !string.IsNullOrEmpty(primaryImage.Path))
+            {
+                if (await IsManuallyUploadedImageAsync(primaryImage, normalizedCollectionPath, collection, ImageType.Primary, cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+
+            // Check Thumb image
+            if (thumbImage != null && !string.IsNullOrEmpty(thumbImage.Path))
+            {
+                if (await IsManuallyUploadedImageAsync(thumbImage, normalizedCollectionPath, collection, ImageType.Thumb, cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Helper method to check if a specific image is manually uploaded.
+        /// </summary>
+        private async Task<bool> IsManuallyUploadedImageAsync(ItemImageInfo imageInfo, string normalizedCollectionPath, BaseItem collection, ImageType imageType, CancellationToken cancellationToken)
+        {
+            var normalizedImagePath = System.IO.Path.GetFullPath(imageInfo.Path);
 
             // Check if image is in the collection's metadata directory
             if (!normalizedImagePath.StartsWith(normalizedCollectionPath, StringComparison.OrdinalIgnoreCase))
@@ -1117,7 +1208,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Image is in collection's metadata directory
             // Check if it's our auto-generated collage
             var fileName = System.IO.Path.GetFileName(normalizedImagePath);
-            if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
             {
                 // This is our auto-generated collage - safe to overwrite (will regenerate to match current items)
                 return false;
@@ -1127,14 +1219,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             try
             {
                 var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
-                var itemsWithImages = GetItemsWithImages(items);
+                
+                // Get the appropriate items list based on image type
+                var itemsWithImages = imageType == ImageType.Thumb 
+                    ? GetItemsWithThumbImages(items) 
+                    : GetItemsWithImages(items);
                 
                 // Check if any item uses this exact image path
                 foreach (var item in itemsWithImages)
                 {
                     if (item.ImageInfos != null)
                     {
-                        var itemImage = item.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
+                        var itemImage = item.ImageInfos.FirstOrDefault(i => i.Type == imageType);
                         if (itemImage != null && !string.IsNullOrEmpty(itemImage.Path))
                         {
                             var normalizedItemPath = System.IO.Path.GetFullPath(itemImage.Path);
@@ -1150,14 +1246,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 
                 // Image is in collection's metadata directory but doesn't match any item's image
                 // and is not our auto-generated collage - this is likely a manually uploaded image
-                _logger.LogDebug("Collection {CollectionName} has image '{ImagePath}' in metadata directory that doesn't match any item's image - treating as manually uploaded", 
-                    collection.Name, fileName);
+                _logger.LogDebug("Collection {CollectionName} has {ImageType} image '{ImagePath}' in metadata directory that doesn't match any item's image - treating as manually uploaded", 
+                    collection.Name, imageType, fileName);
                 return true;
             }
             catch (Exception ex)
             {
                 // If we can't check, be conservative and preserve the image
-                _logger.LogWarning(ex, "Could not verify if collection {CollectionName} has manually uploaded image, preserving existing image", collection.Name);
+                _logger.LogWarning(ex, "Could not verify if collection {CollectionName} has manually uploaded {ImageType} image, preserving existing image", collection.Name, imageType);
                 return true;
             }
         }
@@ -1254,6 +1350,76 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         /// <summary>
+        /// Filters items to those with thumb images, preferring Movies and Series.
+        /// For Episodes, fetches and returns their parent Series instead.
+        /// Returns items in their original order (first items first).
+        /// Returns empty list if no thumb images are available.
+        /// </summary>
+        private List<BaseItem> GetItemsWithThumbImages(List<BaseItem> items)
+        {
+            // First, try to get Movies and Series with thumb images (preserving order)
+            var mediaItemsWithThumbImages = items
+                .Where(item => (item is Movie || item is Series) &&
+                               item.ImageInfos != null &&
+                               item.ImageInfos.Any(i => i.Type == ImageType.Thumb))
+                .ToList();
+
+            // If we have media items with thumb images, use those
+            if (mediaItemsWithThumbImages.Count > 0)
+            {
+                return mediaItemsWithThumbImages;
+            }
+
+            // Check if we have episodes - if so, fetch their parent series with thumb images
+            var episodes = items.OfType<Episode>().ToList();
+            if (episodes.Count > 0)
+            {
+                _logger.LogDebug("Collection contains {EpisodeCount} episodes, fetching parent series for thumb generation", episodes.Count);
+                
+                var seriesItems = new List<BaseItem>();
+                var seenSeriesIds = new HashSet<Guid>();
+                
+                foreach (var episode in episodes)
+                {
+                    if (episode.SeriesId != Guid.Empty && !seenSeriesIds.Contains(episode.SeriesId))
+                    {
+                        var parentSeries = _libraryManager.GetItemById(episode.SeriesId);
+                        if (parentSeries is Series series &&
+                            series.ImageInfos != null &&
+                            series.ImageInfos.Any(i => i.Type == ImageType.Thumb))
+                        {
+                            seriesItems.Add(series);
+                            seenSeriesIds.Add(episode.SeriesId);
+                            _logger.LogDebug("Added parent series '{SeriesName}' with thumb for episode '{EpisodeName}'", 
+                                series.Name, episode.Name);
+                        }
+                    }
+                }
+                
+                if (seriesItems.Count > 0)
+                {
+                    _logger.LogDebug("Using {SeriesCount} unique parent series with thumbs for collection thumb", seriesItems.Count);
+                    return seriesItems;
+                }
+            }
+
+            // Fallback: try any items with thumb images (preserving order)
+            var anyItemsWithThumb = items
+                .Where(item => item.ImageInfos != null &&
+                               item.ImageInfos.Any(i => i.Type == ImageType.Thumb))
+                .ToList();
+
+            if (anyItemsWithThumb.Count > 0)
+            {
+                return anyItemsWithThumb;
+            }
+
+            // No thumb images found - return empty list (don't generate thumb if no thumbs exist)
+            _logger.LogDebug("No thumb images found in collection, skipping thumb generation");
+            return [];
+        }
+
+        /// <summary>
         /// Creates and sets the collection image: single image for 1 item, 4-image collage for 2+ items.
         /// Always uses the first item(s) with images from the collection.
         /// </summary>
@@ -1310,6 +1476,66 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 // 2+ items: create 4-image collage using the first items
                 await CreateImageCollageAsync(collection, itemsWithImages, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Creates and sets the collection thumb image: single image for 1 item, 4-image collage for 2+ items.
+        /// Only uses actual thumb images from the collection items (no fallback to primary images).
+        /// </summary>
+        private async Task CreateCollectionThumbAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, CancellationToken cancellationToken)
+        {
+            if (itemsWithThumbImages.Count == 0)
+            {
+                return;
+            }
+
+            if (itemsWithThumbImages.Count == 1)
+            {
+                // Single item: use the first (and only) item's thumb image directly
+                // First, remove any existing auto-generated thumb collage image file if it exists
+                var collectionPath = collection.Path;
+                if (!string.IsNullOrEmpty(collectionPath))
+                {
+                    var oldThumbCollagePath = System.IO.Path.Combine(collectionPath, "smartlist-thumb-collage.jpg");
+                    if (System.IO.File.Exists(oldThumbCollagePath))
+                    {
+                        try
+                        {
+                            System.IO.File.Delete(oldThumbCollagePath);
+                            _logger.LogDebug("Deleted old auto-generated thumb collage image file for collection {CollectionName}", collection.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete old thumb collage image file for collection {CollectionName}", collection.Name);
+                        }
+                    }
+                }
+
+                var item = itemsWithThumbImages[0];
+                var thumbImageInfo = item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb);
+
+                if (thumbImageInfo != null && !string.IsNullOrEmpty(thumbImageInfo.Path))
+                {
+                    collection.SetImage(new ItemImageInfo
+                    {
+                        Path = thumbImageInfo.Path,
+                        Type = ImageType.Thumb
+                    }, 0);
+
+                    await _libraryManager.UpdateItemAsync(
+                        collection,
+                        collection.GetParent(),
+                        ItemUpdateType.ImageUpdate,
+                        cancellationToken);
+                    _logger.LogInformation("Successfully set single thumb image for collection {CollectionName} from first item: {ItemName}",
+                        collection.Name, item.Name);
+                }
+            }
+            else
+            {
+                // 2+ items: create 4-image thumb collage using the first items
+                await CreateThumbCollageAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -1436,6 +1662,133 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating collage image for collection {CollectionName}", collection.Name);
+            }
+        }
+
+        /// <summary>
+        /// Creates a 4-image thumb collage from collection items and sets it as the collection's thumb image.
+        /// Uses the first items with valid thumb images (duplicates if needed to fill 4 slots).
+        /// Creates a 16:9 aspect ratio image suitable for landscape views.
+        /// </summary>
+        private async Task CreateThumbCollageAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Select up to 4 items from the first items with images (duplicate if needed to fill 4 slots)
+                var selectedItems = new List<BaseItem>();
+                for (int i = 0; i < 4; i++)
+                {
+                    selectedItems.Add(itemsWithThumbImages[i % itemsWithThumbImages.Count]);
+                }
+
+                _logger.LogDebug("Creating 4-image thumb collage for collection {CollectionName} from {ItemCount} items (using first items: {ItemNames})", 
+                    collection.Name, itemsWithThumbImages.Count,
+                    string.Join(", ", selectedItems.Take(Math.Min(4, itemsWithThumbImages.Count)).Select(i => i.Name)));
+
+                // Get thumb image paths only
+                var imagePaths = new List<string>();
+                foreach (var item in selectedItems)
+                {
+                    var thumbImageInfo = item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb);
+                    if (thumbImageInfo != null && !string.IsNullOrEmpty(thumbImageInfo.Path) && System.IO.File.Exists(thumbImageInfo.Path))
+                    {
+                        imagePaths.Add(thumbImageInfo.Path);
+                    }
+                }
+
+                if (imagePaths.Count == 0)
+                {
+                    _logger.LogWarning("No valid image paths found for thumb collage creation for collection {CollectionName}", collection.Name);
+                    return;
+                }
+
+                // Get collection's metadata directory
+                var collectionPath = collection.Path;
+                if (string.IsNullOrEmpty(collectionPath))
+                {
+                    _logger.LogWarning("Collection {CollectionName} has no path, cannot save thumb collage image", collection.Name);
+                    return;
+                }
+
+                // Use a specific filename for our auto-generated thumb collage
+                var metadataPath = System.IO.Path.Combine(collectionPath, "smartlist-thumb-collage.jpg");
+                var metadataDir = System.IO.Path.GetDirectoryName(metadataPath);
+                if (metadataDir != null && !System.IO.Directory.Exists(metadataDir))
+                {
+                    System.IO.Directory.CreateDirectory(metadataDir);
+                }
+
+                // Create thumb collage: 2x2 grid in 16:9 aspect ratio
+                // Standard 1080p resolution: 1920x1080 (each quadrant is 960x540)
+                const int collageWidth = 1920;
+                const int collageHeight = 1080;
+                const int quadrantWidth = 960;
+                const int quadrantHeight = 540;
+
+                using (var collage = new Image<Rgba32>(collageWidth, collageHeight))
+                {
+                    // Fill background with black
+                    collage.Mutate(x => x.BackgroundColor(Color.Black));
+
+                    // Position images in 2x2 grid
+                    var positions = new[]
+                    {
+                        new { X = 0, Y = 0 },           // Top-left
+                        new { X = quadrantWidth, Y = 0 }, // Top-right
+                        new { X = 0, Y = quadrantHeight }, // Bottom-left
+                        new { X = quadrantWidth, Y = quadrantHeight } // Bottom-right
+                    };
+
+                    for (int i = 0; i < 4 && i < imagePaths.Count; i++)
+                    {
+                        try
+                        {
+                            using (var sourceImage = await Image.LoadAsync(imagePaths[i], cancellationToken).ConfigureAwait(false))
+                            {
+                                // Resize image to fit quadrant while maintaining aspect ratio
+                                // Crop to 16:9 aspect ratio for consistency
+                                var resizeOptions = new ResizeOptions
+                                {
+                                    Size = new Size(quadrantWidth, quadrantHeight),
+                                    Mode = ResizeMode.Crop,
+                                    Position = AnchorPositionMode.Center
+                                };
+
+                                sourceImage.Mutate(x => x.Resize(resizeOptions));
+
+                                // Draw image at position
+                                var point = new Point(positions[i].X, positions[i].Y);
+                                collage.Mutate(ctx => ctx.DrawImage(sourceImage, point, 1.0f));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to load image {ImagePath} for thumb collage, skipping", imagePaths[i]);
+                        }
+                    }
+
+                    // Save collage
+                    await collage.SaveAsync(metadataPath, new JpegEncoder { Quality = 90 }, cancellationToken).ConfigureAwait(false);
+                    _logger.LogDebug("Created thumb collage image at {ImagePath}", metadataPath);
+                }
+
+                // Set the collage as the collection's thumb image
+                collection.SetImage(new ItemImageInfo
+                {
+                    Path = metadataPath,
+                    Type = ImageType.Thumb
+                }, 0);
+
+                await _libraryManager.UpdateItemAsync(
+                    collection,
+                    collection.GetParent(),
+                    ItemUpdateType.ImageUpdate,
+                    cancellationToken);
+                _logger.LogInformation("Successfully set 4-image thumb collage for collection {CollectionName}", collection.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating thumb collage image for collection {CollectionName}", collection.Name);
             }
         }
 
