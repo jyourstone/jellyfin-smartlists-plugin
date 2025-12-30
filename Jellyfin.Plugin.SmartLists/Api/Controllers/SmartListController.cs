@@ -955,15 +955,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingPlaylist.FileName; // Keep the same filename
                         collectionDto.JellyfinCollectionId = null; // Clear old Jellyfin ID
                         
-                        // Save to collection store first (before enqueuing)
-                        var newCollectionStore = GetCollectionStore();
-                        await newCollectionStore.SaveAsync(collectionDto);
-                        
-                        // Only delete the old playlist after successful conversion
+                        // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
                         
+                        // Delete old playlist configuration from store
                         await playlistStore.DeleteAsync(guidId);
+                        
+                        // Save new collection configuration (only after successful cleanup)
+                        var newCollectionStore = GetCollectionStore();
+                        await newCollectionStore.SaveAsync(collectionDto);
                         
                         // Enqueue refresh operation for the converted collection only if enabled
                         if (collectionDto.Enabled)
@@ -1024,14 +1025,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             playlistDto.UserId = existingCollection.UserId; // Carry over from collection
                         }
                         
-                        // Save to playlist store first (before enqueuing)
-                        var newPlaylistStore = GetPlaylistStore();
-                        await newPlaylistStore.SaveAsync(playlistDto);
-                        
-                        // Only delete the old collection after successful conversion
+                        // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var collectionService = GetCollectionService();
                         await collectionService.DeleteAsync(existingCollection);
+                        
+                        // Delete old collection configuration from store
                         await collectionStore.DeleteAsync(guidId);
+                        
+                        // Save new playlist configuration (only after successful cleanup)
+                        var newPlaylistStore = GetPlaylistStore();
+                        await newPlaylistStore.SaveAsync(playlistDto);
                         
                         // Enqueue refresh operation for the converted playlist only if enabled
                         if (playlistDto.Enabled)
@@ -1272,20 +1275,21 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         try
                         {
                             await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
-                            
-                            // Clear the Jellyfin playlist IDs since they no longer exist
-                            playlist.JellyfinPlaylistId = null;
-                            if (playlist.UserPlaylists != null)
-                            {
-                                foreach (var userMapping in playlist.UserPlaylists)
-                                {
-                                    userMapping.JellyfinPlaylistId = null;
-                                }
-                            }
                         }
                         catch (Exception ex)
                         {
                             logger.LogWarning(ex, "Failed to delete Jellyfin playlists when disabling playlist '{PlaylistName}', continuing", existingPlaylist.Name);
+                        }
+                        
+                        // Always clear the Jellyfin playlist IDs regardless of deletion success
+                        // This ensures consistency: disabled playlists should not have Jellyfin IDs
+                        playlist.JellyfinPlaylistId = null;
+                        if (playlist.UserPlaylists != null)
+                        {
+                            foreach (var userMapping in playlist.UserPlaylists)
+                            {
+                                userMapping.JellyfinPlaylistId = null;
+                            }
                         }
                     }
                 }
@@ -1545,14 +1549,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         {
                             var collectionService = GetCollectionService();
                             await collectionService.DeleteAsync(existingCollection);
-                            
-                            // Clear the Jellyfin collection ID since it no longer exists
-                            collection.JellyfinCollectionId = null;
                         }
                         catch (Exception ex)
                         {
                             logger.LogWarning(ex, "Failed to delete Jellyfin collection when disabling collection '{CollectionName}', continuing", existingCollection.Name);
                         }
+                        
+                        // Always clear the Jellyfin collection ID regardless of deletion success
+                        // This ensures consistency: disabled collections should not have Jellyfin IDs
+                        collection.JellyfinCollectionId = null;
                     }
                 }
 
