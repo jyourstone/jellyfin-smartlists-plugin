@@ -156,6 +156,10 @@
 
             // Collect schedules from the new schedule boxes
             const schedules = SmartLists.collectSchedulesFromForm(page);
+
+            // Collect visibility schedules from the new visibility schedule boxes
+            const visibilitySchedules = SmartLists.collectVisibilitySchedulesFromForm(page);
+
             // Handle maxItems with validation using helper function
             // Empty string means no limit (0), consistent with UI text "Set to 0 for no limit"
             const maxItemsInput = SmartLists.getElementValue(page, '#playlistMaxItems');
@@ -220,7 +224,8 @@
                 MaxItems: maxItems,
                 MaxPlayTimeMinutes: maxPlayTimeMinutes,
                 AutoRefresh: autoRefreshMode,
-                Schedules: schedules.length > 0 ? schedules : []
+                Schedules: schedules.length > 0 ? schedules : [],
+                VisibilitySchedules: visibilitySchedules.length > 0 ? visibilitySchedules : []
             };
 
             // Add type-specific fields
@@ -287,13 +292,19 @@
                 }
 
                 // Success - show success notification first
-                const message = editState.editMode ?
-                    listTypeName + ' "' + playlistName + '" updated successfully.' :
-                    listTypeName + ' "' + playlistName + '" created. The ' + listTypeName.toLowerCase() + ' will now be generated.';
+                let message;
+                if (editState.editMode) {
+                    message = listTypeName + ' "' + playlistName + '" updated successfully.';
+                } else {
+                    message = listTypeName + ' "' + playlistName + '" created successfully.';
+                }
                 SmartLists.showNotification(message, 'success');
 
-                // Then show notification that refresh has started (refresh happens automatically on backend)
-                SmartLists.notifyRefreshQueued(listTypeName, playlistName);
+                // Only show refresh notification if the list is enabled
+                if (isEnabled) {
+                    // Then show notification that refresh has started (refresh happens automatically on backend)
+                    SmartLists.notifyRefreshQueued(listTypeName, playlistName);
+                }
 
                 // Exit edit mode and redirect after successful API call
                 if (editState.editMode) {
@@ -461,6 +472,9 @@
 
                 // Handle schedule settings with backward compatibility
                 SmartLists.loadSchedulesIntoUI(page, playlist);
+
+                // Handle visibility schedule settings
+                SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
 
                 // Handle MaxItems with backward compatibility for existing playlists
                 // Default to 0 (unlimited) for old playlists that didn't have this setting
@@ -711,6 +725,9 @@
 
                 // Handle schedule settings with backward compatibility (same as editPlaylist)
                 SmartLists.loadSchedulesIntoUI(page, playlist);
+
+                // Handle visibility schedule settings (same as editPlaylist)
+                SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
 
                 // Handle MaxItems
                 const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
@@ -1179,6 +1196,7 @@
             autoRefreshMode === 'OnLibraryChanges' ? 'On library changes - When new items are added' :
                 autoRefreshMode === 'OnAllChanges' ? 'On all changes - Including playback status' : autoRefreshMode;
         const scheduleDisplay = SmartLists.formatScheduleDisplay(playlist);
+        const visibilityScheduleDisplay = SmartLists.formatVisibilityScheduleDisplay(playlist);
 
         // Format last scheduled refresh display
         const lastRefreshDisplay = SmartLists.formatRelativeTimeFromIso(playlist.LastRefreshed, 'N/A') || 'N/A';
@@ -1234,6 +1252,7 @@
         const eMaxPlayTime = SmartLists.escapeHtml(maxPlayTimeDisplay);
         const eAutoRefreshDisplay = SmartLists.escapeHtml(autoRefreshDisplay);
         const eScheduleDisplay = SmartLists.escapeHtml(scheduleDisplay);
+        const eVisibilityScheduleDisplay = SmartLists.escapeHtml(visibilityScheduleDisplay);
         const eLastRefreshDisplay = SmartLists.escapeHtml(lastRefreshDisplay);
         const eDateCreatedDisplay = SmartLists.escapeHtml(dateCreatedDisplay);
         const eStatusDisplayText = SmartLists.escapeHtml(statusDisplayText);
@@ -1415,8 +1434,12 @@
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eAutoRefreshDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Schedule</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Refresh Schedule</td>' +
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eScheduleDisplay + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Visibility Schedule</td>' +
+            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eVisibilityScheduleDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created</td>' +

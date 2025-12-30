@@ -53,6 +53,11 @@
 
     // Helper functions to generate common option sets (DRY principle)
     SmartLists.generateTimeOptions = function (defaultValue) {
+        // Strip seconds from defaultValue if present (e.g., "16:45:00" -> "16:45")
+        if (defaultValue && defaultValue.length > 5) {
+            defaultValue = defaultValue.substring(0, 5);
+        }
+        
         var options = [];
         for (var hour = 0; hour < 24; hour++) {
             for (var minute = 0; minute < 60; minute += 15) {
@@ -388,7 +393,23 @@
         }
 
         // No schedules configured
-        return 'No schedule';
+        return 'None';
+    };
+
+    // Format visibility schedule display text
+    SmartLists.formatVisibilityScheduleDisplay = function (list) {
+        // Check if VisibilitySchedules array exists and has items
+        if (list.VisibilitySchedules && list.VisibilitySchedules.length > 0) {
+            var scheduleTexts = list.VisibilitySchedules.map(function (schedule) {
+                var action = schedule.Action === 'Enable' ? 'Enable' : 'Disable';
+                var timing = SmartLists.formatSingleSchedule(schedule);
+                return action + ': ' + timing;
+            });
+            return scheduleTexts.join(' • ');
+        }
+
+        // No visibility schedules configured
+        return 'None';
     };
 
     // Helper function to format sort display text

@@ -407,7 +407,7 @@
         scheduleField: {
             display: 'flex',
             flexDirection: 'column',
-            minWidth: '150px',
+            minWidth: '120px',
             flex: '0 1 auto'
         },
         scheduleFieldLabel: {

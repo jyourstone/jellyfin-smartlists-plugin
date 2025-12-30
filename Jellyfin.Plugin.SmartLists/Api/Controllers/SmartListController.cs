@@ -652,28 +652,36 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after creating playlist '{PlaylistName}'", playlist.Name);
 
-                // Enqueue refresh operation - consumer will process all users from UserPlaylists
-                logger.LogDebug("Enqueuing refresh for newly created playlist {PlaylistName} with {UserCount} users", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
-                var listId = createdPlaylist.Id ?? Guid.NewGuid().ToString();
-                
-                var queueItem = new RefreshQueueItem
+                // Enqueue refresh operation only if the playlist is enabled
+                if (createdPlaylist.Enabled)
                 {
-                    ListId = listId,
-                    ListName = createdPlaylist.Name,
-                    ListType = Core.Enums.SmartListType.Playlist,
-                    OperationType = RefreshOperationType.Create,
-                    ListData = createdPlaylist,
-                    UserId = createdPlaylist.UserPlaylists?.FirstOrDefault()?.UserId ?? createdPlaylist.UserId,
-                    TriggerType = Core.Enums.RefreshTriggerType.Manual
-                };
+                    // Enqueue refresh operation - consumer will process all users from UserPlaylists
+                    logger.LogDebug("Enqueuing refresh for newly created playlist {PlaylistName} with {UserCount} users", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                    var listId = createdPlaylist.Id ?? Guid.NewGuid().ToString();
+                    
+                    var queueItem = new RefreshQueueItem
+                    {
+                        ListId = listId,
+                        ListName = createdPlaylist.Name,
+                        ListType = Core.Enums.SmartListType.Playlist,
+                        OperationType = RefreshOperationType.Create,
+                        ListData = createdPlaylist,
+                        UserId = createdPlaylist.UserPlaylists?.FirstOrDefault()?.UserId ?? createdPlaylist.UserId,
+                        TriggerType = Core.Enums.RefreshTriggerType.Manual
+                    };
 
-                _refreshQueueService.EnqueueOperation(queueItem);
-                logger.LogDebug("Enqueued refresh for playlist {PlaylistName}", playlist.Name);
+                    _refreshQueueService.EnqueueOperation(queueItem);
+                    logger.LogDebug("Enqueued refresh for playlist {PlaylistName}", playlist.Name);
+                    logger.LogInformation("Created smart playlist '{PlaylistName}' with {UserCount} users and enqueued for refresh", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                }
+                else
+                {
+                    logger.LogInformation("Created disabled smart playlist '{PlaylistName}' with {UserCount} users (not enqueued for refresh)", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                }
 
-                // Return the created playlist immediately (refresh will happen in background)
+                // Return the created playlist immediately (refresh will happen in background if enabled)
                 // Note: JellyfinPlaylistId will be populated after the queue processes the refresh
                 stopwatch.Stop();
-                logger.LogInformation("Created smart playlist '{PlaylistName}' with {UserCount} users and enqueued for refresh", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
 
                 return CreatedAtAction(nameof(GetSmartList), new { id = createdPlaylist.Id }, createdPlaylist);
             }
@@ -862,26 +870,33 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after creating collection '{CollectionName}'", collection.Name);
 
-                // Enqueue refresh operation instead of direct refresh
-                logger.LogDebug("Enqueuing refresh for newly created collection {CollectionName}", collection.Name);
-                var listId = createdCollection.Id ?? Guid.NewGuid().ToString();
-                var queueItem = new RefreshQueueItem
+                // Enqueue refresh operation only if the collection is enabled
+                if (createdCollection.Enabled)
                 {
-                    ListId = listId,
-                    ListName = createdCollection.Name,
-                    ListType = Core.Enums.SmartListType.Collection,
-                    OperationType = RefreshOperationType.Create,
-                    ListData = createdCollection,
-                    UserId = createdCollection.UserId,
-                    TriggerType = Core.Enums.RefreshTriggerType.Manual
-                };
+                    logger.LogDebug("Enqueuing refresh for newly created collection {CollectionName}", collection.Name);
+                    var listId = createdCollection.Id ?? Guid.NewGuid().ToString();
+                    var queueItem = new RefreshQueueItem
+                    {
+                        ListId = listId,
+                        ListName = createdCollection.Name,
+                        ListType = Core.Enums.SmartListType.Collection,
+                        OperationType = RefreshOperationType.Create,
+                        ListData = createdCollection,
+                        UserId = createdCollection.UserId,
+                        TriggerType = Core.Enums.RefreshTriggerType.Manual
+                    };
 
-                _refreshQueueService.EnqueueOperation(queueItem);
+                    _refreshQueueService.EnqueueOperation(queueItem);
+                    logger.LogInformation("Created smart collection '{CollectionName}' and enqueued for refresh", collection.Name);
+                }
+                else
+                {
+                    logger.LogInformation("Created disabled smart collection '{CollectionName}' (not enqueued for refresh)", collection.Name);
+                }
 
-                // Return the created collection immediately (refresh will happen in background)
+                // Return the created collection immediately (refresh will happen in background if enabled)
                 // Note: JellyfinCollectionId will be populated after the queue processes the refresh
                 stopwatch.Stop();
-                logger.LogInformation("Created smart collection '{CollectionName}' and enqueued for refresh", collection.Name);
 
                 return CreatedAtAction(nameof(GetSmartList), new { id = createdCollection.Id }, createdCollection);
             }
@@ -945,35 +960,42 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         await newCollectionStore.SaveAsync(collectionDto);
                         
                         // Only delete the old playlist after successful conversion
-                        await DeleteAllPlaylistsAsync(existingPlaylist);
+                        var playlistService = GetPlaylistService();
+                        await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
                         
                         await playlistStore.DeleteAsync(guidId);
                         
-                        // Enqueue refresh operation for the converted collection (after successful save)
-                        try
+                        // Enqueue refresh operation for the converted collection only if enabled
+                        if (collectionDto.Enabled)
                         {
-                            var listId = collectionDto.Id ?? Guid.NewGuid().ToString();
-                            var queueItem = new RefreshQueueItem
+                            try
                             {
-                                ListId = listId,
-                                ListName = collectionDto.Name,
-                                ListType = Core.Enums.SmartListType.Collection,
-                                OperationType = RefreshOperationType.Create,
-                                ListData = collectionDto,
-                                UserId = collectionDto.UserId,
-                                TriggerType = Core.Enums.RefreshTriggerType.Manual
-                            };
+                                var listId = collectionDto.Id ?? Guid.NewGuid().ToString();
+                                var queueItem = new RefreshQueueItem
+                                {
+                                    ListId = listId,
+                                    ListName = collectionDto.Name,
+                                    ListType = Core.Enums.SmartListType.Collection,
+                                    OperationType = RefreshOperationType.Create,
+                                    ListData = collectionDto,
+                                    UserId = collectionDto.UserId,
+                                    TriggerType = Core.Enums.RefreshTriggerType.Manual
+                                };
 
-                            _refreshQueueService.EnqueueOperation(queueItem);
+                                _refreshQueueService.EnqueueOperation(queueItem);
+                                logger.LogInformation("Successfully converted playlist to collection '{Name}' and enqueued for refresh", collectionDto.Name);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                // Log but don't fail the conversion - the collection is already saved
+                                logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted collection '{Name}', but conversion succeeded", collectionDto.Name);
+                            }
                         }
-                        catch (Exception enqueueEx)
+                        else
                         {
-                            // Log but don't fail the conversion - the collection is already saved
-                            logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted collection '{Name}', but conversion succeeded", collectionDto.Name);
+                            logger.LogInformation("Successfully converted playlist to disabled collection '{Name}' (not enqueued for refresh)", collectionDto.Name);
                         }
                         
-                        logger.LogInformation("Successfully converted playlist to collection '{Name}' (JellyfinCollectionId: {Id})", 
-                            collectionDto.Name, collectionDto.JellyfinCollectionId);
                         return Ok(collectionDto);
                     }
                     
@@ -1011,31 +1033,37 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         await collectionService.DeleteAsync(existingCollection);
                         await collectionStore.DeleteAsync(guidId);
                         
-                        // Enqueue refresh operation for the converted playlist (after successful save)
-                        try
+                        // Enqueue refresh operation for the converted playlist only if enabled
+                        if (playlistDto.Enabled)
                         {
-                            var listId = playlistDto.Id ?? Guid.NewGuid().ToString();
-                            var queueItem = new RefreshQueueItem
+                            try
                             {
-                                ListId = listId,
-                                ListName = playlistDto.Name,
-                                ListType = Core.Enums.SmartListType.Playlist,
-                                OperationType = RefreshOperationType.Create,
-                                ListData = playlistDto,
-                                UserId = playlistDto.UserId,
-                                TriggerType = Core.Enums.RefreshTriggerType.Manual
-                            };
+                                var listId = playlistDto.Id ?? Guid.NewGuid().ToString();
+                                var queueItem = new RefreshQueueItem
+                                {
+                                    ListId = listId,
+                                    ListName = playlistDto.Name,
+                                    ListType = Core.Enums.SmartListType.Playlist,
+                                    OperationType = RefreshOperationType.Create,
+                                    ListData = playlistDto,
+                                    UserId = playlistDto.UserId,
+                                    TriggerType = Core.Enums.RefreshTriggerType.Manual
+                                };
 
-                            _refreshQueueService.EnqueueOperation(queueItem);
+                                _refreshQueueService.EnqueueOperation(queueItem);
+                                logger.LogInformation("Successfully converted collection to playlist '{Name}' and enqueued for refresh", playlistDto.Name);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                // Log but don't fail the conversion - the playlist is already saved
+                                logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted playlist '{Name}', but conversion succeeded", playlistDto.Name);
+                            }
                         }
-                        catch (Exception enqueueEx)
+                        else
                         {
-                            // Log but don't fail the conversion - the playlist is already saved
-                            logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted playlist '{Name}', but conversion succeeded", playlistDto.Name);
+                            logger.LogInformation("Successfully converted collection to disabled playlist '{Name}' (not enqueued for refresh)", playlistDto.Name);
                         }
                         
-                        logger.LogInformation("Successfully converted collection to playlist '{Name}' (JellyfinPlaylistId: {Id})", 
-                            playlistDto.Name, playlistDto.JellyfinPlaylistId);
                         return Ok(playlistDto);
                     }
                     
@@ -1290,15 +1318,35 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after updating playlist '{PlaylistName}'", playlist.Name);
 
-                // Enqueue refresh operation(s) - one per user for multi-user playlists
-                logger.LogDebug("Enqueuing refresh for updated playlist {PlaylistName} with {UserCount} users", playlist.Name, updatedPlaylist.UserPlaylists?.Count ?? 1);
-                var listId = updatedPlaylist.Id ?? Guid.NewGuid().ToString();
-                
-                if (updatedPlaylist.UserPlaylists != null && updatedPlaylist.UserPlaylists.Count > 0)
+                // Enqueue refresh operation(s) only if playlist is enabled
+                if (updatedPlaylist.Enabled)
                 {
-                    // Queue refresh for each user
-                    foreach (var userMapping in updatedPlaylist.UserPlaylists)
+                    logger.LogDebug("Enqueuing refresh for updated playlist {PlaylistName} with {UserCount} users", playlist.Name, updatedPlaylist.UserPlaylists?.Count ?? 1);
+                    var listId = updatedPlaylist.Id ?? Guid.NewGuid().ToString();
+                    
+                    if (updatedPlaylist.UserPlaylists != null && updatedPlaylist.UserPlaylists.Count > 0)
                     {
+                        // Queue refresh for each user
+                        foreach (var userMapping in updatedPlaylist.UserPlaylists)
+                        {
+                            var queueItem = new RefreshQueueItem
+                            {
+                                ListId = listId,
+                                ListName = updatedPlaylist.Name,
+                                ListType = Core.Enums.SmartListType.Playlist,
+                                OperationType = RefreshOperationType.Edit,
+                                ListData = updatedPlaylist,
+                                UserId = userMapping.UserId,
+                                TriggerType = Core.Enums.RefreshTriggerType.Manual
+                            };
+
+                            _refreshQueueService.EnqueueOperation(queueItem);
+                            logger.LogDebug("Enqueued refresh for user {UserId} in playlist {PlaylistName}", userMapping.UserId, playlist.Name);
+                        }
+                    }
+                    else
+                    {
+                        // Fallback to single user (backwards compatibility)
                         var queueItem = new RefreshQueueItem
                         {
                             ListId = listId,
@@ -1306,33 +1354,21 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             ListType = Core.Enums.SmartListType.Playlist,
                             OperationType = RefreshOperationType.Edit,
                             ListData = updatedPlaylist,
-                            UserId = userMapping.UserId,
+                            UserId = updatedPlaylist.UserId,
                             TriggerType = Core.Enums.RefreshTriggerType.Manual
                         };
 
                         _refreshQueueService.EnqueueOperation(queueItem);
-                        logger.LogDebug("Enqueued refresh for user {UserId} in playlist {PlaylistName}", userMapping.UserId, playlist.Name);
                     }
+                    
+                    logger.LogInformation("Updated SmartList: {PlaylistName} and enqueued for refresh in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
                 }
                 else
                 {
-                    // Fallback to single user (backwards compatibility)
-                    var queueItem = new RefreshQueueItem
-                    {
-                        ListId = listId,
-                        ListName = updatedPlaylist.Name,
-                        ListType = Core.Enums.SmartListType.Playlist,
-                        OperationType = RefreshOperationType.Edit,
-                        ListData = updatedPlaylist,
-                        UserId = updatedPlaylist.UserId,
-                        TriggerType = Core.Enums.RefreshTriggerType.Manual
-                    };
-
-                    _refreshQueueService.EnqueueOperation(queueItem);
+                    logger.LogInformation("Updated disabled SmartList: {PlaylistName} (not enqueued for refresh) in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
                 }
 
                 stopwatch.Stop();
-                logger.LogInformation("Updated SmartList: {PlaylistName} and enqueued for refresh in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
 
                 return Ok(updatedPlaylist);
             }
@@ -1509,24 +1545,31 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after updating collection '{CollectionName}'", collection.Name);
 
-                // Enqueue refresh operation instead of direct refresh
-                logger.LogDebug("Enqueuing refresh for updated collection {CollectionName}", collection.Name);
-                var listId = updatedCollection.Id ?? Guid.NewGuid().ToString();
-                var queueItem = new RefreshQueueItem
+                // Enqueue refresh operation only if collection is enabled
+                if (updatedCollection.Enabled)
                 {
-                    ListId = listId,
-                    ListName = updatedCollection.Name,
-                    ListType = Core.Enums.SmartListType.Collection,
-                    OperationType = RefreshOperationType.Edit,
-                    ListData = updatedCollection,
-                    UserId = updatedCollection.UserId,
-                    TriggerType = Core.Enums.RefreshTriggerType.Manual
-                };
+                    logger.LogDebug("Enqueuing refresh for updated collection {CollectionName}", collection.Name);
+                    var listId = updatedCollection.Id ?? Guid.NewGuid().ToString();
+                    var queueItem = new RefreshQueueItem
+                    {
+                        ListId = listId,
+                        ListName = updatedCollection.Name,
+                        ListType = Core.Enums.SmartListType.Collection,
+                        OperationType = RefreshOperationType.Edit,
+                        ListData = updatedCollection,
+                        UserId = updatedCollection.UserId,
+                        TriggerType = Core.Enums.RefreshTriggerType.Manual
+                    };
 
-                _refreshQueueService.EnqueueOperation(queueItem);
+                    _refreshQueueService.EnqueueOperation(queueItem);
+                    logger.LogInformation("Updated SmartList: {CollectionName} and enqueued for refresh in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
+                }
+                else
+                {
+                    logger.LogInformation("Updated disabled SmartList: {CollectionName} (not enqueued for refresh) in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
+                }
 
                 stopwatch.Stop();
-                logger.LogInformation("Updated SmartList: {CollectionName} and enqueued for refresh in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
 
                 return Ok(updatedCollection);
             }
@@ -1568,7 +1611,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     if (deleteJellyfinList)
                     {
-                        await DeleteAllPlaylistsAsync(playlist);
+                        var playlistService = GetPlaylistService();
+                        await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
                         logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
                     }
                     else
@@ -2026,8 +2070,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     try
                     {
-                        // Remove all Jellyfin playlists FIRST
-                        await DisableAllPlaylistsAsync(playlist);
+                        // Remove all Jellyfin playlists FIRST using service method
+                        var playlistService = GetPlaylistService();
+                        await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
 
                         // Clear the Jellyfin playlist IDs since the playlists no longer exist
                         playlist.JellyfinPlaylistId = null;
@@ -2928,55 +2973,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// Deletes all Jellyfin playlists for all users in a smart playlist.
         /// Handles both UserPlaylists array and legacy JellyfinPlaylistId field.
         /// </summary>
-        private async Task DeleteAllPlaylistsAsync(SmartPlaylistDto playlist)
-        {
-            var playlistService = GetPlaylistService();
-            
-            // Delete all Jellyfin playlists for all users
-            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
-            {
-                logger.LogDebug("Deleting {Count} Jellyfin playlists for multi-user playlist {PlaylistName}", playlist.UserPlaylists.Count, playlist.Name);
-                foreach (var userMapping in playlist.UserPlaylists)
-                {
-                    if (!string.IsNullOrEmpty(userMapping.JellyfinPlaylistId))
-                    {
-                        try
-                        {
-                            // Create a temporary DTO for deletion
-                            var tempDto = new SmartPlaylistDto
-                            {
-                                Id = playlist.Id,
-                                Name = playlist.Name,
-                                UserId = userMapping.UserId,
-                                JellyfinPlaylistId = userMapping.JellyfinPlaylistId
-                            };
-                            await playlistService.DeleteAsync(tempDto);
-                            logger.LogDebug("Deleted Jellyfin playlist {JellyfinPlaylistId} for user {UserId}", userMapping.JellyfinPlaylistId, userMapping.UserId);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Failed to delete Jellyfin playlist {JellyfinPlaylistId} for user {UserId}, continuing", userMapping.JellyfinPlaylistId, userMapping.UserId);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Fallback to single playlist deletion (backwards compatibility)
-                await playlistService.DeleteAsync(playlist);
-            }
-        }
-
-        /// <summary>
-        /// Disables all Jellyfin playlists for all users in a smart playlist.
-        /// Note: Disabling a playlist deletes it from Jellyfin (same as DeleteAllPlaylistsAsync).
-        /// </summary>
-        private async Task DisableAllPlaylistsAsync(SmartPlaylistDto playlist)
-        {
-            // DisableAsync just calls DeleteAsync, so we can reuse the same logic
-            await DeleteAllPlaylistsAsync(playlist);
-        }
-
         /// <summary>
         /// Removes smart suffix from all Jellyfin playlists for all users in a smart playlist.
         /// Handles both UserPlaylists array and legacy JellyfinPlaylistId field.
