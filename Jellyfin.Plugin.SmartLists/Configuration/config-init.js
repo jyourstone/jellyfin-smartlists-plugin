@@ -356,6 +356,9 @@
         // Reinitialize schedule system
         SmartLists.initializeScheduleSystem(page);
 
+        // Reinitialize visibility schedule system
+        SmartLists.initializeVisibilityScheduleSystem(page);
+
         // Apply default schedule if configured
         if (SmartLists.applyDefaultScheduleFromConfig) {
             SmartLists.applyDefaultScheduleFromConfig(page, config);
@@ -388,6 +391,9 @@
 
         // Reinitialize schedule system with fallback defaults
         SmartLists.initializeScheduleSystem(page);
+
+        // Reinitialize visibility schedule system with fallback defaults
+        SmartLists.initializeVisibilityScheduleSystem(page);
 
         // Reinitialize sort system with fallback defaults
         SmartLists.initializeSortSystem(page);

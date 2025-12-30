@@ -38,6 +38,53 @@ Configure individual lists with their own refresh schedules:
 !!! tip "Multiple Schedules"
     You can add multiple schedules to a single list. For example, you could set both a Daily schedule at 6:00 AM and an Interval schedule every 4 hours to refresh the list both at a specific time and at regular intervals throughout the day.
 
+## Visibility Scheduling
+
+Control when lists appear and disappear in Jellyfin automatically:
+
+- **Seasonal Lists**: Show Christmas movies only in December, Halloween collections only in October
+- **Event-Based**: Display special collections for specific dates or events
+- **Time-Based Visibility**: Make playlists visible only on certain days of the week or times of year
+
+### How It Works
+
+Visibility schedules use Enable and Disable actions to automatically show or hide lists:
+
+- **Enable**: Makes the list visible in Jellyfin at the scheduled time
+- **Disable**: Hides the list from Jellyfin at the scheduled time
+- **Schedule Types**: Same as refresh schedules (Daily, Weekly, Monthly, Yearly, Interval)
+- **Automatic Refresh**: When a list is enabled by schedule, it automatically refreshes its content
+- **Multiple Schedules**: Add multiple visibility schedules to control complex visibility patterns
+
+### Visibility Schedule Examples
+
+- **Christmas Movies**: 
+  - Enable: Yearly on December 1st at 00:00
+  - Disable: Yearly on January 2nd at 00:00
+- **Halloween Collection**:
+  - Enable: Yearly on October 25th at 00:00
+  - Disable: Yearly on November 1st at 06:00
+- **Weekend Playlist**:
+  - Enable: Weekly on Friday at 18:00
+  - Disable: Weekly on Sunday at 23:59
+- **Summer Movies**:
+  - Enable: Yearly on June 1st at 00:00
+  - Disable: Yearly on September 1st at 00:00
+
+### Combining Refresh and Visibility Schedules
+
+You can use both types of schedules together:
+
+- **Visibility Schedule**: Controls when the list appears/disappears
+- **Refresh Schedule**: Updates content while the list is visible
+
+**Example**: A Christmas movies collection could have:
+- Visibility: Enable December 1st, Disable January 2nd
+- Refresh: Daily at 3:00 AM (keeps content fresh during December)
+
+!!! tip "Enable Takes Priority"
+    If multiple visibility schedules trigger at the same time with conflicting actions (e.g., one Enable and one Disable), the Enable action takes priority. This ensures lists are shown when you want them visible.
+
 ## Legacy Scheduled Tasks
 
 !!! warning "Deprecated and Removed"

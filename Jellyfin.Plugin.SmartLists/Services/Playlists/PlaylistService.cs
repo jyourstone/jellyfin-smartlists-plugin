@@ -556,7 +556,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             try
             {
                 _logger.LogDebug("Disabling smart playlist: {PlaylistName}", dto.Name);
-                await DeleteAsync(dto, cancellationToken);
+                // Use the helper method to delete all Jellyfin playlists for all users
+                await DeleteAllJellyfinPlaylistsForUsersAsync(dto);
                 _logger.LogInformation("Successfully disabled smart playlist: {PlaylistName}", dto.Name);
             }
             catch (Exception ex)
@@ -573,8 +574,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
             // Update the playlist items
             playlist.LinkedChildren = linkedChildren;
-
-            // Note: Jellyfin defaults playlist MediaType to "Audio" regardless of content - this is a known Jellyfin limitation
 
             // Update the public status by setting the OpenAccess property
             var openAccessProperty = playlist.GetType().GetProperty("OpenAccess");
@@ -892,6 +891,64 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error setting playlist {PlaylistName} MediaType to {MediaType}", playlist.Name, mediaType);
+            }
+        }
+
+        /// <summary>
+        /// Helper method to delete all Jellyfin playlists for a smart playlist across all users.
+        /// Handles both multi-user playlists (UserPlaylists array) and legacy single-user playlists.
+        /// This centralizes the deletion logic used by disable, delete, and visibility schedule operations.
+        /// </summary>
+        /// <param name="playlistDto">The smart playlist DTO containing Jellyfin playlist IDs to delete</param>
+        public async Task DeleteAllJellyfinPlaylistsForUsersAsync(SmartPlaylistDto playlistDto)
+        {
+            ArgumentNullException.ThrowIfNull(playlistDto);
+
+            // Delete all Jellyfin playlists for all users
+            if (playlistDto.UserPlaylists != null && playlistDto.UserPlaylists.Count > 0)
+            {
+                _logger.LogDebug("Deleting {Count} Jellyfin playlists for multi-user playlist '{PlaylistName}'",
+                    playlistDto.UserPlaylists.Count, playlistDto.Name);
+                    
+                foreach (var userMapping in playlistDto.UserPlaylists)
+                {
+                    if (!string.IsNullOrEmpty(userMapping.JellyfinPlaylistId))
+                    {
+                        try
+                        {
+                            // Create a temporary DTO for deletion
+                            var tempDto = new SmartPlaylistDto
+                            {
+                                Id = playlistDto.Id,
+                                Name = playlistDto.Name,
+                                UserId = userMapping.UserId,
+                                JellyfinPlaylistId = userMapping.JellyfinPlaylistId
+                            };
+                            await DeleteAsync(tempDto);
+                            _logger.LogDebug("Deleted Jellyfin playlist {JellyfinPlaylistId} for user {UserId}",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete Jellyfin playlist {JellyfinPlaylistId} for user {UserId}, continuing",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                    }
+                }
+            }
+            else if (!string.IsNullOrEmpty(playlistDto.JellyfinPlaylistId))
+            {
+                // Fallback to single playlist deletion (backwards compatibility)
+                _logger.LogDebug("Deleting Jellyfin playlist {JellyfinPlaylistId} for playlist '{PlaylistName}'",
+                    playlistDto.JellyfinPlaylistId, playlistDto.Name);
+                try
+                {
+                    await DeleteAsync(playlistDto);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete Jellyfin playlist for '{PlaylistName}'", playlistDto.Name);
+                }
             }
         }
 

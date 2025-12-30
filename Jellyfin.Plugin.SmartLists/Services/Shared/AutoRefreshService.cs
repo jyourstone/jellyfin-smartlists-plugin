@@ -1570,6 +1570,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         c.Schedules != null && c.Schedules.Any(s => s?.Trigger != null)
                     ).ToList();
 
+                // Check visibility schedules first (independent of refresh schedules)
+                await CheckVisibilitySchedules(now).ConfigureAwait(false);
+
                 if (!scheduledPlaylists.Any() && !scheduledCollections.Any())
                 {
                     _logger.LogDebug("No lists with custom schedules found");
@@ -2131,6 +2134,246 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 _logger.LogError(ex, "Failed to refresh scheduled collections");
                 return Task.CompletedTask;
+            }
+        }
+
+        // Visibility schedule checking methods
+
+        /// <summary>
+        /// Check and process visibility schedules for all lists
+        /// </summary>
+        private async Task CheckVisibilitySchedules(DateTime now)
+        {
+            try
+            {
+                _logger.LogDebug("Checking visibility schedules at {CurrentTime}", now);
+
+                // Get playlists with visibility schedules
+                var allPlaylists = await _playlistStore.GetAllAsync().ConfigureAwait(false);
+                var playlistsWithVisibility = allPlaylists
+                    .Where(p => p.VisibilitySchedules != null && p.VisibilitySchedules.Any(s => s?.Trigger != null && s.Action != null))
+                    .ToList();
+
+                // Get collections with visibility schedules
+                var allCollections = await _collectionStore.GetAllAsync().ConfigureAwait(false);
+                var collectionsWithVisibility = allCollections
+                    .Where(c => c.VisibilitySchedules != null && c.VisibilitySchedules.Any(s => s?.Trigger != null && s.Action != null))
+                    .ToList();
+
+                if (!playlistsWithVisibility.Any() && !collectionsWithVisibility.Any())
+                {
+                    _logger.LogDebug("No lists with visibility schedules found");
+                    return;
+                }
+
+                if (playlistsWithVisibility.Any())
+                {
+                    _logger.LogDebug("Found {Count} playlists with visibility schedules: {PlaylistNames}",
+                        playlistsWithVisibility.Count,
+                        string.Join(", ", playlistsWithVisibility.Select(p => $"'{p.Name}'")));
+                }
+
+                if (collectionsWithVisibility.Any())
+                {
+                    _logger.LogDebug("Found {Count} collections with visibility schedules: {CollectionNames}",
+                        collectionsWithVisibility.Count,
+                        string.Join(", ", collectionsWithVisibility.Select(c => $"'{c.Name}'")));
+                }
+
+                // Process visibility schedules for playlists
+                foreach (var playlist in playlistsWithVisibility)
+                {
+                    await ProcessPlaylistVisibilitySchedule(playlist, now).ConfigureAwait(false);
+                }
+
+                // Process visibility schedules for collections
+                foreach (var collection in collectionsWithVisibility)
+                {
+                    await ProcessCollectionVisibilitySchedule(collection, now).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking visibility schedules");
+            }
+        }
+
+        /// <summary>
+        /// Process visibility schedule for a playlist with Enable-wins conflict resolution
+        /// </summary>
+        private async Task ProcessPlaylistVisibilitySchedule(SmartPlaylistDto playlist, DateTime now)
+        {
+            try
+            {
+                bool hasEnableAction = false;
+                bool hasDisableAction = false;
+
+                // Check all visibility schedules that are due
+                foreach (var schedule in playlist.VisibilitySchedules.Where(s => s?.Trigger != null && s.Action != null))
+                {
+                    if (IsScheduleDue(schedule, now, playlist.Name))
+                    {
+                        _logger.LogDebug("Visibility schedule due for playlist '{Name}': {Trigger} → {Action}",
+                            playlist.Name, schedule.Trigger, schedule.Action);
+
+                        if (schedule.Action == ScheduleAction.Enable)
+                        {
+                            hasEnableAction = true;
+                        }
+                        else if (schedule.Action == ScheduleAction.Disable)
+                        {
+                            hasDisableAction = true;
+                        }
+                    }
+                }
+
+                // Enable takes priority over Disable
+                if (hasEnableAction && !playlist.Enabled)
+                {
+                    _logger.LogInformation("Visibility schedule: Enabling playlist '{Name}'", playlist.Name);
+                    playlist.Enabled = true;
+                    await _playlistStore.SaveAsync(playlist).ConfigureAwait(false);
+
+                    // Enqueue refresh when enabling (same as manual enable)
+                    try
+                    {
+                        var queueItem = new RefreshQueueItem
+                        {
+                            ListId = playlist.Id ?? Guid.NewGuid().ToString(),
+                            ListName = playlist.Name,
+                            ListType = Core.Enums.SmartListType.Playlist,
+                            OperationType = RefreshOperationType.Refresh,
+                            ListData = playlist,
+                            UserId = playlist.UserId,
+                            TriggerType = Core.Enums.RefreshTriggerType.Scheduled
+                        };
+                        _refreshQueueService.EnqueueOperation(queueItem);
+                        _logger.LogDebug("Enqueued refresh for enabled playlist '{Name}'", playlist.Name);
+                    }
+                    catch (Exception enqueueEx)
+                    {
+                        _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled playlist '{Name}'", playlist.Name);
+                    }
+                }
+                else if (hasDisableAction && !hasEnableAction && playlist.Enabled)
+                {
+                    _logger.LogInformation("Visibility schedule: Disabling playlist '{Name}'", playlist.Name);
+                    
+                    // Delete all Jellyfin playlists for all users using service method
+                    // Cast to PlaylistService to access the helper method
+                    if (_playlistService is Jellyfin.Plugin.SmartLists.Services.Playlists.PlaylistService playlistServiceImpl)
+                    {
+                        await playlistServiceImpl.DeleteAllJellyfinPlaylistsForUsersAsync(playlist).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Unable to cast playlist service to PlaylistService implementation");
+                    }
+                    
+                    // Clear Jellyfin IDs and disable (same as manual disable)
+                    playlist.Enabled = false;
+                    playlist.JellyfinPlaylistId = null;
+                    if (playlist.UserPlaylists != null)
+                    {
+                        foreach (var userMapping in playlist.UserPlaylists)
+                        {
+                            userMapping.JellyfinPlaylistId = null;
+                        }
+                    }
+                    
+                    await _playlistStore.SaveAsync(playlist).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing visibility schedule for playlist '{Name}'", playlist.Name);
+            }
+        }
+
+        /// <summary>
+        /// Process visibility schedule for a collection with Enable-wins conflict resolution
+        /// </summary>
+        private async Task ProcessCollectionVisibilitySchedule(SmartCollectionDto collection, DateTime now)
+        {
+            try
+            {
+                bool hasEnableAction = false;
+                bool hasDisableAction = false;
+
+                // Check all visibility schedules that are due
+                foreach (var schedule in collection.VisibilitySchedules.Where(s => s?.Trigger != null && s.Action != null))
+                {
+                    if (IsScheduleDue(schedule, now, collection.Name))
+                    {
+                        _logger.LogDebug("Visibility schedule due for collection '{Name}': {Trigger} → {Action}",
+                            collection.Name, schedule.Trigger, schedule.Action);
+
+                        if (schedule.Action == ScheduleAction.Enable)
+                        {
+                            hasEnableAction = true;
+                        }
+                        else if (schedule.Action == ScheduleAction.Disable)
+                        {
+                            hasDisableAction = true;
+                        }
+                    }
+                }
+
+                // Enable takes priority over Disable
+                if (hasEnableAction && !collection.Enabled)
+                {
+                    _logger.LogInformation("Visibility schedule: Enabling collection '{Name}'", collection.Name);
+                    collection.Enabled = true;
+                    await _collectionStore.SaveAsync(collection).ConfigureAwait(false);
+
+                    // Enqueue refresh when enabling (same as manual enable)
+                    try
+                    {
+                        var queueItem = new RefreshQueueItem
+                        {
+                            ListId = collection.Id ?? Guid.NewGuid().ToString(),
+                            ListName = collection.Name,
+                            ListType = Core.Enums.SmartListType.Collection,
+                            OperationType = RefreshOperationType.Refresh,
+                            ListData = collection,
+                            UserId = collection.UserId,
+                            TriggerType = Core.Enums.RefreshTriggerType.Scheduled
+                        };
+                        _refreshQueueService.EnqueueOperation(queueItem);
+                        _logger.LogDebug("Enqueued refresh for enabled collection '{Name}'", collection.Name);
+                    }
+                    catch (Exception enqueueEx)
+                    {
+                        _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled collection '{Name}'", collection.Name);
+                    }
+                }
+                else if (hasDisableAction && !hasEnableAction && collection.Enabled)
+                {
+                    _logger.LogInformation("Visibility schedule: Disabling collection '{Name}'", collection.Name);
+                    
+                    // Delete Jellyfin collection before disabling
+                    if (!string.IsNullOrEmpty(collection.JellyfinCollectionId))
+                    {
+                        try
+                        {
+                            await _collectionService.DeleteAsync(collection).ConfigureAwait(false);
+                            _logger.LogDebug("Deleted Jellyfin collection {JellyfinCollectionId} for collection '{Name}' via visibility schedule", collection.JellyfinCollectionId, collection.Name);
+                        }
+                        catch (Exception deleteEx)
+                        {
+                            _logger.LogWarning(deleteEx, "Failed to delete Jellyfin collection for '{Name}'", collection.Name);
+                        }
+                    }
+                    
+                    // Clear Jellyfin ID and disable (same as manual disable)
+                    collection.Enabled = false;
+                    collection.JellyfinCollectionId = null;
+                    await _collectionStore.SaveAsync(collection).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing visibility schedule for collection '{Name}'", collection.Name);
             }
         }
 

@@ -56,7 +56,7 @@
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'emby-button raised add-schedule-btn';
-        addBtn.textContent = '+ Add Schedule';
+        addBtn.textContent = '+ Add Refresh Schedule';
         addBtn.addEventListener('click', function() {
             SmartLists.addScheduleBox(page, null);
         });
@@ -422,5 +422,263 @@
         }
     };
     
+    // ============================================
+    // Visibility Schedule Functions
+    // ============================================
+    
+    SmartLists.initializeVisibilityScheduleSystem = function(page) {
+        const schedulesContainer = page.querySelector('#visibility-schedules-container');
+        if (!schedulesContainer) return;
+        
+        // Clear any existing content
+        schedulesContainer.innerHTML = '';
+        
+        // Add the "Add Visibility Schedule" button
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'emby-button raised add-visibility-schedule-btn';
+        addBtn.textContent = '+ Add Visibility Schedule';
+        addBtn.addEventListener('click', function() {
+            SmartLists.addVisibilityScheduleBox(page, null);
+        });
+        schedulesContainer.appendChild(addBtn);
+    };
+    
+    SmartLists.createVisibilityScheduleBox = function(page, scheduleData) {
+        const scheduleId = 'visibility-schedule-' + Date.now() + '-' + Math.random();
+        
+        // Create box container with inline styles
+        const box = SmartLists.createStyledElement('div', 'schedule-box', SmartLists.STYLES.scheduleBox);
+        box.setAttribute('data-schedule-id', scheduleId);
+        
+        // Create fields container with inline styles
+        const fieldsContainer = SmartLists.createStyledElement('div', 'schedule-fields', SmartLists.STYLES.scheduleFields);
+        
+        // Action field (Enable/Disable)
+        const actionField = SmartLists.createScheduleField('Action', 'visibility-action-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(actionField.input, [
+            { value: 'Enable', label: 'Enable list', selected: (!scheduleData || scheduleData.Action === 'Enable') },
+            { value: 'Disable', label: 'Disable list', selected: (scheduleData && scheduleData.Action === 'Disable') }
+        ]);
+        fieldsContainer.appendChild(actionField.container);
+        
+        // Trigger field
+        const triggerField = SmartLists.createScheduleField('Trigger', 'visibility-trigger-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(triggerField.input, SmartLists.generateScheduleTriggerOptions(scheduleData ? scheduleData.Trigger : '', false));
+        fieldsContainer.appendChild(triggerField.container);
+        
+        // Month field (for Yearly)
+        const monthField = SmartLists.createScheduleField('Month', 'visibility-month-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(monthField.input, SmartLists.generateMonthOptions(scheduleData && scheduleData.Month ? scheduleData.Month.toString() : '1'));
+        monthField.container.style.display = 'none';
+        fieldsContainer.appendChild(monthField.container);
+        
+        // Day of Month field (for Monthly/Yearly)
+        const dayOfMonthField = SmartLists.createScheduleField('Day of Month', 'visibility-dayofmonth-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(dayOfMonthField.input, SmartLists.generateDayOfMonthOptions(scheduleData && scheduleData.DayOfMonth ? scheduleData.DayOfMonth.toString() : '1'));
+        dayOfMonthField.container.style.display = 'none';
+        fieldsContainer.appendChild(dayOfMonthField.container);
+        
+        // Day of Week field (for Weekly)
+        const dayOfWeekField = SmartLists.createScheduleField('Weekday', 'visibility-dayofweek-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(dayOfWeekField.input, SmartLists.generateDayOfWeekOptions(scheduleData && scheduleData.DayOfWeek !== undefined ? scheduleData.DayOfWeek.toString() : '0'));
+        dayOfWeekField.container.style.display = 'none';
+        fieldsContainer.appendChild(dayOfWeekField.container);
+        
+        // Time field (for Daily/Weekly/Monthly/Yearly)
+        const timeField = SmartLists.createScheduleField('Time', 'visibility-time-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(timeField.input, SmartLists.generateTimeOptions(scheduleData && scheduleData.Time ? scheduleData.Time : '00:00:00'));
+        timeField.container.style.display = 'none';
+        fieldsContainer.appendChild(timeField.container);
+        
+        // Interval field (for Interval)
+        const intervalField = SmartLists.createScheduleField('Interval', 'visibility-interval-' + scheduleId, 'select');
+        SmartLists.populateSelectElement(intervalField.input, SmartLists.generateIntervalOptions(scheduleData && scheduleData.Interval ? scheduleData.Interval : '1.00:00:00'));
+        intervalField.container.style.display = 'none';
+        fieldsContainer.appendChild(intervalField.container);
+        
+        // Helper function to show/hide visibility schedule fields based on trigger
+        var toggleVisibilityFields = function(trigger) {
+            // Hide all conditional fields first
+            monthField.container.style.display = 'none';
+            dayOfMonthField.container.style.display = 'none';
+            dayOfWeekField.container.style.display = 'none';
+            timeField.container.style.display = 'none';
+            intervalField.container.style.display = 'none';
+            
+            // Show fields based on trigger type
+            if (trigger === 'Daily') {
+                timeField.container.style.display = '';
+            } else if (trigger === 'Weekly') {
+                dayOfWeekField.container.style.display = '';
+                timeField.container.style.display = '';
+            } else if (trigger === 'Monthly') {
+                dayOfMonthField.container.style.display = '';
+                timeField.container.style.display = '';
+            } else if (trigger === 'Yearly') {
+                monthField.container.style.display = '';
+                dayOfMonthField.container.style.display = '';
+                timeField.container.style.display = '';
+            } else if (trigger === 'Interval') {
+                intervalField.container.style.display = '';
+            }
+        };
+        
+        // Create remove button (X icon at end of fields row) - matches refresh schedule styling
+        const removeBtn = SmartLists.createStyledElement('button', 'visibility-schedule-remove-btn', SmartLists.STYLES.scheduleRemoveBtn);
+        removeBtn.type = 'button';
+        removeBtn.textContent = '×';
+        removeBtn.title = 'Remove visibility schedule';
+        removeBtn.addEventListener('click', function() {
+            SmartLists.removeVisibilityScheduleBox(page, box);
+        });
+        fieldsContainer.appendChild(removeBtn);
+        
+        box.appendChild(fieldsContainer);
+        
+        // Add event listener to trigger select to show/hide fields
+        triggerField.input.addEventListener('change', function() {
+            toggleVisibilityFields(this.value);
+        });
+        
+        // Set initial visibility based on actual selected value in dropdown
+        var initialTrigger = triggerField.input.value;
+        if (initialTrigger) {
+            toggleVisibilityFields(initialTrigger);
+        }
+        
+        return box;
+    };
+    
+    SmartLists.addVisibilityScheduleBox = function(page, scheduleData) {
+        const schedulesContainer = page.querySelector('#visibility-schedules-container');
+        if (!schedulesContainer) return;
+        
+        // Find the add button (it's always the last child)
+        const addBtn = schedulesContainer.querySelector('.add-visibility-schedule-btn');
+        
+        // Create and insert the new box before the add button
+        const newBox = SmartLists.createVisibilityScheduleBox(page, scheduleData);
+        if (addBtn) {
+            schedulesContainer.insertBefore(newBox, addBtn);
+            // Change button text after first schedule is added
+            addBtn.textContent = '+ Add Another Visibility Schedule';
+        } else {
+            schedulesContainer.appendChild(newBox);
+        }
+    };
+    
+    SmartLists.removeVisibilityScheduleBox = function(page, box) {
+        const schedulesContainer = page.querySelector('#visibility-schedules-container');
+        if (!schedulesContainer) return;
+        
+        box.remove();
+        
+        // Update button text if no schedules left
+        const boxes = schedulesContainer.querySelectorAll('.schedule-box');
+        const addBtn = schedulesContainer.querySelector('.add-visibility-schedule-btn');
+        if (boxes.length === 0 && addBtn) {
+            addBtn.textContent = '+ Add Visibility Schedule';
+        }
+    };
+    
+    SmartLists.collectVisibilitySchedulesFromForm = function(page) {
+        const schedulesContainer = page.querySelector('#visibility-schedules-container');
+        if (!schedulesContainer) return [];
+        
+        const boxes = schedulesContainer.querySelectorAll('.schedule-box');
+        const schedules = [];
+        
+        boxes.forEach(function(box) {
+            const actionSelect = box.querySelector('[id^="visibility-action-"]');
+            const triggerSelect = box.querySelector('[id^="visibility-trigger-"]');
+            if (!actionSelect || !triggerSelect) return;
+            
+            const action = actionSelect.value;
+            const trigger = triggerSelect.value;
+            if (!action || !trigger) return; // Skip incomplete schedules
+            
+            const schedule = {
+                Action: action,
+                Trigger: trigger
+            };
+            
+            // Collect fields based on trigger type
+            if (trigger === 'Daily') {
+                const timeSelect = box.querySelector('[id^="visibility-time-"]');
+                if (timeSelect && timeSelect.value) {
+                    schedule.Time = timeSelect.value + ':00';
+                }
+            } else if (trigger === 'Weekly') {
+                const dayOfWeekSelect = box.querySelector('[id^="visibility-dayofweek-"]');
+                const timeSelect = box.querySelector('[id^="visibility-time-"]');
+                if (dayOfWeekSelect && dayOfWeekSelect.value !== '') {
+                    schedule.DayOfWeek = parseInt(dayOfWeekSelect.value, 10);
+                }
+                if (timeSelect && timeSelect.value) {
+                    schedule.Time = timeSelect.value + ':00';
+                }
+            } else if (trigger === 'Monthly') {
+                const dayOfMonthSelect = box.querySelector('[id^="visibility-dayofmonth-"]');
+                const timeSelect = box.querySelector('[id^="visibility-time-"]');
+                if (dayOfMonthSelect && dayOfMonthSelect.value) {
+                    schedule.DayOfMonth = parseInt(dayOfMonthSelect.value, 10);
+                }
+                if (timeSelect && timeSelect.value) {
+                    schedule.Time = timeSelect.value + ':00';
+                }
+            } else if (trigger === 'Yearly') {
+                const monthSelect = box.querySelector('[id^="visibility-month-"]');
+                const dayOfMonthSelect = box.querySelector('[id^="visibility-dayofmonth-"]');
+                const timeSelect = box.querySelector('[id^="visibility-time-"]');
+                if (monthSelect && monthSelect.value) {
+                    schedule.Month = parseInt(monthSelect.value, 10);
+                }
+                if (dayOfMonthSelect && dayOfMonthSelect.value) {
+                    schedule.DayOfMonth = parseInt(dayOfMonthSelect.value, 10);
+                }
+                if (timeSelect && timeSelect.value) {
+                    schedule.Time = timeSelect.value + ':00';
+                }
+            } else if (trigger === 'Interval') {
+                const intervalSelect = box.querySelector('[id^="visibility-interval-"]');
+                if (intervalSelect && intervalSelect.value) {
+                    schedule.Interval = intervalSelect.value;
+                }
+            }
+            
+            schedules.push(schedule);
+        });
+        
+        return schedules;
+    };
+    
+    SmartLists.loadVisibilitySchedulesIntoUI = function(page, list) {
+        const schedulesContainer = page.querySelector('#visibility-schedules-container');
+        if (!schedulesContainer) return;
+        
+        schedulesContainer.innerHTML = '';
+        
+        var schedulesToLoad = list.VisibilitySchedules || [];
+        
+        // Add schedule boxes for each schedule (if any exist)
+        if (schedulesToLoad.length > 0) {
+            schedulesToLoad.forEach(function(schedule) {
+                SmartLists.addVisibilityScheduleBox(page, schedule);
+            });
+        }
+        
+        // Re-add the "Add Visibility Schedule" button
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'emby-button raised add-visibility-schedule-btn';
+        addBtn.textContent = schedulesToLoad.length > 0 ? '+ Add Another Visibility Schedule' : '+ Add Visibility Schedule';
+        addBtn.addEventListener('click', function() {
+            SmartLists.addVisibilityScheduleBox(page, null);
+        });
+        schedulesContainer.appendChild(addBtn);
+    };
+    
 })(window.SmartLists = window.SmartLists || {});
+
 

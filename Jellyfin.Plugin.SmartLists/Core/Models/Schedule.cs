@@ -47,6 +47,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TimeSpan? Interval { get; set; }
+
+        /// <summary>
+        /// Action to perform when this schedule triggers (for visibility schedules).
+        /// Null for refresh schedules (backward compatibility).
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ScheduleAction? Action { get; set; }
     }
 }
 

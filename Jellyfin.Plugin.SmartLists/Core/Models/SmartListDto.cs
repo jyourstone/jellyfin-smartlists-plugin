@@ -75,6 +75,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<Schedule> Schedules { get; set; } = [];
 
+        // Visibility Scheduling
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<Schedule> VisibilitySchedules { get; set; } = [];
+
         // Timestamps
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public DateTime? LastRefreshed { get; set; }
