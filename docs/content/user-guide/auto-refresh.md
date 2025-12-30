@@ -59,17 +59,17 @@ Visibility schedules use Enable and Disable actions to automatically show or hid
 ### Visibility Schedule Examples
 
 - **Christmas Movies**: 
-    - Enable: Yearly on December 1st at 00:00
-    - Disable: Yearly on January 2nd at 00:00
+  - Enable: Yearly on December 1st at 00:00
+  - Disable: Yearly on January 2nd at 00:00
 - **Halloween Collection**:
-    - Enable: Yearly on October 25th at 00:00
-    - Disable: Yearly on November 1st at 06:00
+  - Enable: Yearly on October 25th at 00:00
+  - Disable: Yearly on November 1st at 06:00
 - **Weekend Playlist**:
-    - Enable: Weekly on Friday at 18:00
-    - Disable: Weekly on Sunday at 23:59
+  - Enable: Weekly on Friday at 18:00
+  - Disable: Weekly on Sunday at 23:59
 - **Summer Movies**:
-    - Enable: Yearly on June 1st at 00:00
-    - Disable: Yearly on September 1st at 00:00
+  - Enable: Yearly on June 1st at 00:00
+  - Disable: Yearly on September 1st at 00:00
 
 ### Combining Refresh and Visibility Schedules
 

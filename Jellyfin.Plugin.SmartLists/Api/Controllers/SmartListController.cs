@@ -1321,45 +1321,27 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Enqueue refresh operation(s) only if playlist is enabled
                 if (updatedPlaylist.Enabled)
                 {
-                    logger.LogDebug("Enqueuing refresh for updated playlist {PlaylistName} with {UserCount} users", playlist.Name, updatedPlaylist.UserPlaylists?.Count ?? 1);
+                    logger.LogDebug("Enqueuing refresh for updated playlist {PlaylistName}", playlist.Name);
                     var listId = updatedPlaylist.Id ?? Guid.NewGuid().ToString();
                     
-                    if (updatedPlaylist.UserPlaylists != null && updatedPlaylist.UserPlaylists.Count > 0)
+                    // Enqueue a single refresh operation for the list
+                    // Note: We enqueue a single item with deprecated UserId field, but the
+                    // queue consumer (RefreshQueueService.ProcessPlaylistRefreshAsync) ignores
+                    // this field and instead processes all users from ListData.UserPlaylists.
+                    // The first user's ID is used for backwards compatibility with legacy single-user playlists.
+                    var queueItem = new RefreshQueueItem
                     {
-                        // Queue refresh for each user
-                        foreach (var userMapping in updatedPlaylist.UserPlaylists)
-                        {
-                            var queueItem = new RefreshQueueItem
-                            {
-                                ListId = listId,
-                                ListName = updatedPlaylist.Name,
-                                ListType = Core.Enums.SmartListType.Playlist,
-                                OperationType = RefreshOperationType.Edit,
-                                ListData = updatedPlaylist,
-                                UserId = userMapping.UserId,
-                                TriggerType = Core.Enums.RefreshTriggerType.Manual
-                            };
+                        ListId = listId,
+                        ListName = updatedPlaylist.Name,
+                        ListType = Core.Enums.SmartListType.Playlist,
+                        OperationType = RefreshOperationType.Edit,
+                        ListData = updatedPlaylist,
+                        // DEPRECATED: UserId is for backwards compatibility - ignored by queue consumer for multi-user playlists
+                        UserId = updatedPlaylist.UserPlaylists?.FirstOrDefault()?.UserId ?? updatedPlaylist.UserId,
+                        TriggerType = Core.Enums.RefreshTriggerType.Manual
+                    };
 
-                            _refreshQueueService.EnqueueOperation(queueItem);
-                            logger.LogDebug("Enqueued refresh for user {UserId} in playlist {PlaylistName}", userMapping.UserId, playlist.Name);
-                        }
-                    }
-                    else
-                    {
-                        // Fallback to single user (backwards compatibility)
-                        var queueItem = new RefreshQueueItem
-                        {
-                            ListId = listId,
-                            ListName = updatedPlaylist.Name,
-                            ListType = Core.Enums.SmartListType.Playlist,
-                            OperationType = RefreshOperationType.Edit,
-                            ListData = updatedPlaylist,
-                            UserId = updatedPlaylist.UserId,
-                            TriggerType = Core.Enums.RefreshTriggerType.Manual
-                        };
-
-                        _refreshQueueService.EnqueueOperation(queueItem);
-                    }
+                    _refreshQueueService.EnqueueOperation(queueItem);
                     
                     logger.LogInformation("Updated SmartList: {PlaylistName} and enqueued for refresh in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
                 }

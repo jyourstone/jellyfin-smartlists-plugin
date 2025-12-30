@@ -575,8 +575,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             // Update the playlist items
             playlist.LinkedChildren = linkedChildren;
 
-            // Note: Jellyfin defaults playlist MediaType to "Audio" regardless of content - this is a known Jellyfin limitation
-
             // Update the public status by setting the OpenAccess property
             var openAccessProperty = playlist.GetType().GetProperty("OpenAccess");
             if (openAccessProperty != null && openAccessProperty.CanWrite)
@@ -904,6 +902,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// <param name="playlistDto">The smart playlist DTO containing Jellyfin playlist IDs to delete</param>
         public async Task DeleteAllJellyfinPlaylistsForUsersAsync(SmartPlaylistDto playlistDto)
         {
+            ArgumentNullException.ThrowIfNull(playlistDto);
+
             // Delete all Jellyfin playlists for all users
             if (playlistDto.UserPlaylists != null && playlistDto.UserPlaylists.Count > 0)
             {

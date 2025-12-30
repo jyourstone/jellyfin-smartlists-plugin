@@ -607,7 +607,7 @@
             if (trigger === 'Daily') {
                 const timeSelect = box.querySelector('[id^="visibility-time-"]');
                 if (timeSelect && timeSelect.value) {
-                    schedule.Time = timeSelect.value;
+                    schedule.Time = timeSelect.value + ':00';
                 }
             } else if (trigger === 'Weekly') {
                 const dayOfWeekSelect = box.querySelector('[id^="visibility-dayofweek-"]');
@@ -616,7 +616,7 @@
                     schedule.DayOfWeek = parseInt(dayOfWeekSelect.value, 10);
                 }
                 if (timeSelect && timeSelect.value) {
-                    schedule.Time = timeSelect.value;
+                    schedule.Time = timeSelect.value + ':00';
                 }
             } else if (trigger === 'Monthly') {
                 const dayOfMonthSelect = box.querySelector('[id^="visibility-dayofmonth-"]');
@@ -625,7 +625,7 @@
                     schedule.DayOfMonth = parseInt(dayOfMonthSelect.value, 10);
                 }
                 if (timeSelect && timeSelect.value) {
-                    schedule.Time = timeSelect.value;
+                    schedule.Time = timeSelect.value + ':00';
                 }
             } else if (trigger === 'Yearly') {
                 const monthSelect = box.querySelector('[id^="visibility-month-"]');
@@ -638,7 +638,7 @@
                     schedule.DayOfMonth = parseInt(dayOfMonthSelect.value, 10);
                 }
                 if (timeSelect && timeSelect.value) {
-                    schedule.Time = timeSelect.value;
+                    schedule.Time = timeSelect.value + ':00';
                 }
             } else if (trigger === 'Interval') {
                 const intervalSelect = box.querySelector('[id^="visibility-interval-"]');
