@@ -1264,6 +1264,30 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         existingPlaylist.Enabled ? "enabled" : "disabled",
                         playlist.Enabled ? "enabled" : "disabled",
                         existingPlaylist.Name);
+                    
+                    // If disabling the playlist, delete all Jellyfin playlists
+                    if (existingPlaylist.Enabled && !playlist.Enabled)
+                    {
+                        logger.LogInformation("Disabling playlist '{PlaylistName}', deleting Jellyfin playlists", existingPlaylist.Name);
+                        try
+                        {
+                            await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
+                            
+                            // Clear the Jellyfin playlist IDs since they no longer exist
+                            playlist.JellyfinPlaylistId = null;
+                            if (playlist.UserPlaylists != null)
+                            {
+                                foreach (var userMapping in playlist.UserPlaylists)
+                                {
+                                    userMapping.JellyfinPlaylistId = null;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to delete Jellyfin playlists when disabling playlist '{PlaylistName}', continuing", existingPlaylist.Name);
+                        }
+                    }
                 }
 
                 if (nameChanging)
@@ -1502,6 +1526,34 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     collection.JellyfinCollectionId = existingCollection.JellyfinCollectionId;
                     logger.LogDebug("Preserved Jellyfin collection ID {JellyfinCollectionId} from existing collection", existingCollection.JellyfinCollectionId);
+                }
+
+                // Check if enabled status is changing
+                bool enabledStatusChanging = existingCollection.Enabled != collection.Enabled;
+                if (enabledStatusChanging)
+                {
+                    logger.LogDebug("Collection enabled status changing from {OldStatus} to {NewStatus} for collection '{CollectionName}'",
+                        existingCollection.Enabled ? "enabled" : "disabled",
+                        collection.Enabled ? "enabled" : "disabled",
+                        existingCollection.Name);
+                    
+                    // If disabling the collection, delete the Jellyfin collection
+                    if (existingCollection.Enabled && !collection.Enabled)
+                    {
+                        logger.LogInformation("Disabling collection '{CollectionName}', deleting Jellyfin collection", existingCollection.Name);
+                        try
+                        {
+                            var collectionService = GetCollectionService();
+                            await collectionService.DeleteAsync(existingCollection);
+                            
+                            // Clear the Jellyfin collection ID since it no longer exists
+                            collection.JellyfinCollectionId = null;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to delete Jellyfin collection when disabling collection '{CollectionName}', continuing", existingCollection.Name);
+                        }
+                    }
                 }
 
                 // Preserve statistics from existing collection to avoid N/A display until refresh completes
