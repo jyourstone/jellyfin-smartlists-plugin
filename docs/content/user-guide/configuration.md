@@ -149,6 +149,33 @@ When deleting a smart list, you can choose whether to also delete the correspond
 
 This is useful when you want to populate a list automatically once, then manage it manually.
 
+## Enable List
+
+The **Enable List** setting controls whether the smart list is active and visible in Jellyfin:
+
+- **Enabled**: The smart list is active, the corresponding Jellyfin playlist/collection exists and is visible to users
+- **Disabled**: The smart list configuration is preserved, but the Jellyfin playlist/collection is deleted from Jellyfin
+
+You can toggle this setting when creating or editing a list, or use bulk operations in the Manage Lists tab to enable/disable multiple lists at once.
+
+!!! warning "Disabling Lists Deletes Jellyfin Playlists/Collections"
+    When you **disable** a smart list, the corresponding Jellyfin playlist or collection is **permanently deleted** from Jellyfin. This means:
+    
+    - **Custom images** you manually uploaded will be removed
+    - **Custom metadata** (descriptions, tags, etc.) will be lost
+    - All customizations are permanently erased
+
+### Use Cases for Disabling Lists
+
+Disabling lists can be useful for:
+
+- **Seasonal content**: Manually disable off-season lists (though [Visibility Scheduling](auto-refresh.md#visibility-scheduling) is better for this)
+- **Testing**: Temporarily hide a list while you work on its rules
+- **Cleanup**: Keep the configuration but remove the list from Jellyfin temporarily
+
+!!! tip "Use Visibility Scheduling Instead"
+    For seasonal or time-based list visibility, consider using [Visibility Scheduling](auto-refresh.md#visibility-scheduling) instead of manually enabling/disabling lists. This automates the process and ensures lists appear and disappear exactly when you want them to.
+
 ## Custom List Naming
 
 You can customize how smart list names appear in Jellyfin by configuring a prefix and/or suffix in the Settings tab:

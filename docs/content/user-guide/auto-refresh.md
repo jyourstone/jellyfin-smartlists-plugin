@@ -56,6 +56,14 @@ Visibility schedules use Enable and Disable actions to automatically show or hid
 - **Automatic Refresh**: When a list is enabled by schedule, it automatically refreshes its content
 - **Multiple Schedules**: Add multiple visibility schedules to control complex visibility patterns
 
+!!! warning "Disable Action Deletes Jellyfin Playlists/Collections"
+    When a visibility schedule **disables** a smart list (or when you manually disable it), the corresponding Jellyfin playlist or collection is **permanently deleted** from Jellyfin, including:
+    
+    - **Custom images** you manually uploaded
+    - **Custom metadata** (descriptions, tags, etc.)
+    
+    When the list is re-enabled (either by schedule or manually), it will be recreated as a brand new playlist/collection without any of the previous customizations. See the [Enable List](configuration.md#enable-list) setting documentation for more details.
+
 ### Visibility Schedule Examples
 
 - **Christmas Movies**: 
