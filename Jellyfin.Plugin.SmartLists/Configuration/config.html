@@ -62,6 +62,26 @@
                                 suffix/prefix provided in Settings will always be added.</div>
                         </div>
 
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="customImage">Custom Image (Optional)</label>
+                            <div style="margin-bottom: 0.5em;">
+                                <input type="file" id="customImage" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display: none;">
+                                <button type="button" id="customImageBtn" class="emby-button raised" style="margin-right: 0.5em;">
+                                    <span class="material-icons" aria-hidden="true" style="vertical-align: middle; margin-right: 0.3em;">image</span>
+                                    Choose Image
+                                </button>
+                                <button type="button" id="customImageRemoveBtn" class="emby-button raised button-alt" style="display: none;">
+                                    <span class="material-icons" aria-hidden="true" style="vertical-align: middle; margin-right: 0.3em;">delete</span>
+                                    Remove Image
+                                </button>
+                                <span id="customImageFileName" style="margin-left: 0.5em; color: #888;"></span>
+                            </div>
+                            <div id="customImagePreview" style="display: none; margin-bottom: 0.5em;">
+                                <img id="customImagePreviewImg" src="" alt="Preview" style="max-width: 300px; max-height: 450px; border: 1px solid #444; border-radius: 4px;">
+                            </div>
+                            <div class="fieldDescription">Upload a custom image for this list (JPG, PNG, WebP, or GIF). Max 20MB, 50x50 to 10000x10000 pixels. If not uploaded, collections will auto-generate a collage.</div>
+                        </div>
+
                         <div class="inputContainer">
                             <label class="inputLabel" style="display: flex; align-items: center;">
                                 Media Types

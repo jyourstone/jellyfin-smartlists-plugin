@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
@@ -17,6 +19,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Playlists;
 using Microsoft.Extensions.Logging;
@@ -88,6 +91,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 dto.LastRefreshed = DateTime.UtcNow;
                 _logger.LogDebug("Updated LastRefreshed timestamp for cached playlist: {PlaylistName}", dto.Name);
+                
+                // Update the DTO with the Jellyfin playlist ID if it was created/updated
+                if (!string.IsNullOrEmpty(jellyfinPlaylistId))
+                {
+                    // For multi-user playlists, update the user mapping
+                    if (dto.UserPlaylists != null && dto.UserPlaylists.Count > 0)
+                    {
+                        var userMapping = dto.UserPlaylists.FirstOrDefault(up => up != null && up.UserId == user.Id.ToString("N"));
+                        if (userMapping != null)
+                        {
+                            userMapping.JellyfinPlaylistId = jellyfinPlaylistId;
+                        }
+                        dto.JellyfinPlaylistId = dto.UserPlaylists[0]?.JellyfinPlaylistId;
+                    }
+                    else
+                    {
+                        dto.JellyfinPlaylistId = jellyfinPlaylistId;
+                    }
+                }
                 
                 // Call save callback if provided to persist the LastRefreshed timestamp
                 if (saveCallback != null)
@@ -617,7 +639,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 playlist.Name, isFinallyPublic, playlist.Shares?.Count ?? 0);
 
             // Refresh metadata to generate cover images
-            await RefreshPlaylistMetadataAsync(playlist, cancellationToken).ConfigureAwait(false);
+            await RefreshPlaylistMetadataAsync(playlist, dto, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<string> CreateNewPlaylistAsync(string playlistName, Guid userId, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
@@ -653,7 +675,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     newPlaylist.Name, newPlaylist.Shares?.Count ?? 0, (newPlaylist.Shares?.Any() ?? false));
 
                 // Refresh metadata to generate cover images
-                await RefreshPlaylistMetadataAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
+                await RefreshPlaylistMetadataAsync(newPlaylist, dto, cancellationToken).ConfigureAwait(false);
 
                 return newPlaylist.Id.ToString("N");
             }
@@ -724,11 +746,95 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             return _libraryManager.GetItemsResult(query).Items;
         }
 
-        private async Task RefreshPlaylistMetadataAsync(Playlist playlist, CancellationToken cancellationToken)
+        private async Task RefreshPlaylistMetadataAsync(Playlist playlist, SmartPlaylistDto dto, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             try
             {
+                // Reload the DTO from storage to get the latest CustomImagePath
+                // (it may have been updated by the upload endpoint running in parallel)
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    var dataPath = JellyfinPathHelper.GetJellyfinDataPath(_libraryManager, _logger, BaseItemKind.Playlist);
+                    if (!string.IsNullOrEmpty(dataPath))
+                    {
+                        var dtoFilePath = Path.Combine(dataPath, "smartlists", $"{dto.Id}.json");
+                        if (File.Exists(dtoFilePath))
+                        {
+                            var json = await File.ReadAllTextAsync(dtoFilePath, cancellationToken);
+                            var latestDto = JsonSerializer.Deserialize<SmartPlaylistDto>(json, Services.Shared.SmartListFileSystem.SharedJsonOptions);
+                            if (latestDto != null)
+                            {
+                                dto = latestDto;
+                                _logger.LogDebug("Reloaded playlist DTO from storage for {PlaylistName}, CustomImagePath: {CustomImagePath}", 
+                                    playlist.Name, dto.CustomImagePath ?? "(none)");
+                            }
+                        }
+                    }
+                }
+                
+                // Check if a custom image has been uploaded
+                if (!string.IsNullOrEmpty(dto.CustomImagePath) && !string.IsNullOrEmpty(dto.Id))
+                {
+                    var dataPath = JellyfinPathHelper.GetJellyfinDataPath(_libraryManager, _logger, BaseItemKind.Playlist);
+                    if (!string.IsNullOrEmpty(dataPath))
+                    {
+                        var imageStorageService = new ImageStorageService(dataPath, _logger);
+                        var customImagePath = imageStorageService.GetCustomImagePath(dto.Id);
+                        
+                        if (!string.IsNullOrEmpty(customImagePath) && File.Exists(customImagePath))
+                        {
+                            _logger.LogDebug("Copying custom uploaded image for playlist {PlaylistName} from {ImagePath}", playlist.Name, customImagePath);
+                            
+                            // For playlists, we need to copy the custom image into the playlist's folder
+                            // Jellyfin will automatically detect and use it (takes priority over auto-generated)
+                            // Playlist directory is: {DataPath}/data/playlists/{PlaylistName}/
+                            
+                            // Construct the playlist directory path
+                            var playlistsRoot = Path.Combine(dataPath, "playlists");
+                            var playlistDir = Path.Combine(playlistsRoot, playlist.Name);
+                            
+                            _logger.LogDebug("Playlist directory path: {PlaylistDir}", playlistDir);
+                            
+                            if (Directory.Exists(playlistDir))
+                            {
+                                // Use poster.jpg as the filename (Jellyfin standard)
+                                var ext = Path.GetExtension(customImagePath).ToLowerInvariant();
+                                var targetFileName = ext == ".png" ? "poster.png" : "poster.jpg";
+                                var targetPath = Path.Combine(playlistDir, targetFileName);
+                                
+                                // Copy the custom image to the playlist folder
+                                File.Copy(customImagePath, targetPath, overwrite: true);
+                                _logger.LogInformation("Copied custom image to playlist folder: {TargetPath}", targetPath);
+                                
+                                // Set the image directly on the playlist entity to point to the copied file
+                                playlist.SetImage(new MediaBrowser.Controller.Entities.ItemImageInfo
+                                {
+                                    Path = targetPath,
+                                    Type = ImageType.Primary
+                                }, 0);
+                                
+                                // Update the repository to save the image reference
+                                await playlist.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                                
+                                _logger.LogInformation("Set custom image on playlist entity: {TargetPath}", targetPath);
+                                
+                                stopwatch.Stop();
+                                _logger.LogDebug("Custom image applied for playlist {PlaylistName} in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
+                                return;
+                            }
+                            else
+                            {
+                                _logger.LogWarning("Playlist directory not found: {PlaylistDir}", playlistDir);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Custom image path specified but file not found: {ImagePath}", customImagePath);
+                        }
+                    }
+                }
+                
                 var directoryService = new Services.Shared.BasicDirectoryService();
 
                 // Check if playlist is empty
@@ -910,6 +1016,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 _logger.LogDebug("Deleting {Count} Jellyfin playlists for multi-user playlist '{PlaylistName}'",
                     playlistDto.UserPlaylists.Count, playlistDto.Name);
                     
+                    
                 foreach (var userMapping in playlistDto.UserPlaylists)
                 {
                     if (!string.IsNullOrEmpty(userMapping.JellyfinPlaylistId))
@@ -954,3 +1061,4 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
     }
 }
+

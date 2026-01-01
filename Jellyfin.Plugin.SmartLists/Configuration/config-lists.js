@@ -291,12 +291,56 @@
                     });
                 }
 
+                // Parse response to get the created/updated list ID
+                return response.json().then(function (data) {
+                    // Get the list ID from response (could be in data.id or data.Id or just the ID string)
+                    const listId = data.id || data.Id || (editState.editMode ? editState.editingPlaylistId : data);
+                    
+                    // Check if user selected a custom image
+                    const customImageInput = page.querySelector('#customImage');
+                    if (customImageInput && customImageInput.files && customImageInput.files.length > 0) {
+                        const imageFile = customImageInput.files[0];
+                        
+                        // Upload the custom image using fetch (same pattern as import)
+                        const formData = new FormData();
+                        formData.append('file', imageFile);
+                        
+                        const url = apiClient.getUrl(SmartLists.ENDPOINTS.base + '/' + listId + '/image');
+                        
+                        return fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+                            },
+                            body: formData
+                        }).then(function (imageResponse) {
+                            if (!imageResponse.ok) {
+                                console.warn('Failed to upload custom image, but ' + listTypeName.toLowerCase() + ' was created successfully');
+                                SmartLists.showNotification('Custom image upload failed, but ' + listTypeName.toLowerCase() + ' was created.', 'warning');
+                            } else {
+                                console.log('Custom image uploaded successfully');
+                            }
+                            return { listId: listId, imageUploaded: imageResponse.ok };
+                        }).catch(function (imgErr) {
+                            console.warn('Error uploading custom image:', imgErr);
+                            SmartLists.showNotification('Custom image upload failed, but ' + listTypeName.toLowerCase() + ' was created.', 'warning');
+                            return { listId: listId, imageUploaded: false };
+                        });
+                    }
+                    
+                    return { listId: listId, imageUploaded: false };
+                });
+            }).then(function (result) {
                 // Success - show success notification first
                 let message;
                 if (editState.editMode) {
                     message = listTypeName + ' "' + playlistName + '" updated successfully.';
                 } else {
                     message = listTypeName + ' "' + playlistName + '" created successfully.';
+                }
+                
+                if (result && result.imageUploaded) {
+                    message += ' Custom image uploaded.';
                 }
                 SmartLists.showNotification(message, 'success');
 
@@ -365,6 +409,29 @@
         // Only handle form clearing - edit mode management should be done by caller
 
         SmartLists.setElementValue(page, '#playlistName', '');
+
+        // Clear custom image input
+        const customImageInput = page.querySelector('#customImage');
+        const customImageFileName = page.querySelector('#customImageFileName');
+        const customImagePreview = page.querySelector('#customImagePreview');
+        const customImagePreviewImg = page.querySelector('#customImagePreviewImg');
+        const customImageRemoveBtn = page.querySelector('#customImageRemoveBtn');
+        
+        if (customImageInput) {
+            customImageInput.value = '';
+        }
+        if (customImageFileName) {
+            customImageFileName.textContent = '';
+        }
+        if (customImagePreview) {
+            customImagePreview.style.display = 'none';
+        }
+        if (customImagePreviewImg) {
+            customImagePreviewImg.src = '';
+        }
+        if (customImageRemoveBtn) {
+            customImageRemoveBtn.style.display = 'none';
+        }
 
         // Clean up all existing event listeners before clearing rules
         const rulesContainer = page.querySelector('#rules-container');

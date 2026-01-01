@@ -19,10 +19,12 @@ using AutoRefreshService = Jellyfin.Plugin.SmartLists.Services.Shared.AutoRefres
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -3050,6 +3052,169 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             else
             {
                 await playlistService.RemoveSmartSuffixAsync(playlist);
+            }
+        }
+
+        /// <summary>
+        /// Upload a custom image for a smart list (playlist or collection).
+        /// </summary>
+        /// <param name="id">The list ID</param>
+        /// <param name="file">The image file</param>
+        /// <returns>Success message with image path</returns>
+        [HttpPost("{id}/image")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "ID is validated as GUID before use, preventing path injection")]
+        public async Task<ActionResult> UploadCustomImage([FromRoute, Required] string id, [FromForm] IFormFile file)
+        {
+            try
+            {
+                logger.LogDebug("UploadCustomImage called with id: {Id}, file is null: {FileIsNull}", id, file == null);
+                
+                if (!Guid.TryParse(id, out var guidId))
+                {
+                    logger.LogWarning("Invalid list ID format: {Id}", id);
+                    return BadRequest("Invalid list ID format");
+                }
+
+                if (file == null || file.Length == 0)
+                {
+                    logger.LogWarning("No image file provided or file is empty. File is null: {FileIsNull}, Length: {Length}", 
+                        file == null, file?.Length ?? 0);
+                    return BadRequest("No image file provided");
+                }
+
+                // Initialize image storage service
+                var imageStorageService = new ImageStorageService(_applicationPaths.DataPath, logger);
+
+                // Validate the image
+                using var stream = file.OpenReadStream();
+                var (isValid, errorMessage, format) = imageStorageService.ValidateImage(
+                    stream,
+                    file.FileName,
+                    file.ContentType);
+
+                if (!isValid)
+                {
+                    return BadRequest(new { message = errorMessage });
+                }
+
+                if (format == null)
+                {
+                    return BadRequest(new { message = "Unable to determine image format" });
+                }
+
+                // Save the custom image
+                stream.Position = 0;
+                var relativePath = imageStorageService.SaveCustomImage(id, stream, format);
+
+                // Update the list DTO with the custom image path
+                var playlistStore = GetPlaylistStore();
+                var collectionStore = GetCollectionStore();
+
+                var playlist = await playlistStore.GetByIdAsync(guidId);
+                if (playlist != null)
+                {
+                    playlist.CustomImagePath = relativePath;
+                    await playlistStore.SaveAsync(playlist);
+                    AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+                    
+                    logger.LogInformation("Uploaded custom image for playlist {PlaylistName} (ID: {ListId}). Image will be applied on next refresh.", 
+                        playlist.Name, id);
+                    return Ok(new
+                    {
+                        message = $"Custom image uploaded successfully for playlist '{playlist.Name}'. Refresh the playlist to apply the image.",
+                        imagePath = relativePath
+                    });
+                }
+
+                var collection = await collectionStore.GetByIdAsync(guidId);
+                if (collection != null)
+                {
+                    collection.CustomImagePath = relativePath;
+                    await collectionStore.SaveAsync(collection);
+                    AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+                    
+                    logger.LogInformation("Uploaded custom image for collection {CollectionName} (ID: {ListId}). Image will be applied on next refresh.", 
+                        collection.Name, id);
+                    return Ok(new
+                    {
+                        message = $"Custom image uploaded successfully for collection '{collection.Name}'. Refresh the collection to apply the image.",
+                        imagePath = relativePath
+                    });
+                }
+
+                return NotFound("Smart list not found");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error uploading custom image for list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error uploading custom image");
+            }
+        }
+
+        /// <summary>
+        /// Delete the custom image for a smart list (playlist or collection).
+        /// </summary>
+        /// <param name="id">The list ID</param>
+        /// <returns>Success message</returns>
+        [HttpDelete("{id}/image")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "ID is validated as GUID before use, preventing path injection")]
+        public async Task<ActionResult> DeleteCustomImage([FromRoute, Required] string id)
+        {
+            try
+            {
+                if (!Guid.TryParse(id, out var guidId))
+                {
+                    return BadRequest("Invalid list ID format");
+                }
+
+                // Initialize image storage service
+                var imageStorageService = new ImageStorageService(_applicationPaths.DataPath, logger);
+
+                // Delete the custom image file
+                var deleted = imageStorageService.DeleteCustomImage(id);
+
+                if (!deleted)
+                {
+                    return NotFound("No custom image found for this list");
+                }
+
+                // Clear the custom image path from the list DTO
+                var playlistStore = GetPlaylistStore();
+                var collectionStore = GetCollectionStore();
+
+                var playlist = await playlistStore.GetByIdAsync(guidId);
+                if (playlist != null)
+                {
+                    playlist.CustomImagePath = null;
+                    await playlistStore.SaveAsync(playlist);
+                    AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+                    
+                    logger.LogInformation("Deleted custom image for playlist {PlaylistName} (ID: {ListId})", playlist.Name, id);
+                    return Ok(new { message = $"Custom image deleted successfully for playlist '{playlist.Name}'" });
+                }
+
+                var collection = await collectionStore.GetByIdAsync(guidId);
+                if (collection != null)
+                {
+                    collection.CustomImagePath = null;
+                    await collectionStore.SaveAsync(collection);
+                    AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+                    
+                    logger.LogInformation("Deleted custom image for collection {CollectionName} (ID: {ListId})", collection.Name, id);
+                    return Ok(new { message = $"Custom image deleted successfully for collection '{collection.Name}'" });
+                }
+
+                // Image was deleted but list not found - this is okay (maybe list was deleted)
+                logger.LogWarning("Deleted custom image for list {ListId} but list configuration not found", id);
+                return Ok(new { message = "Custom image deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error deleting custom image for list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error deleting custom image");
             }
         }
 

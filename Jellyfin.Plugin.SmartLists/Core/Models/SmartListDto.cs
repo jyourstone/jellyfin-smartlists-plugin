@@ -95,6 +95,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string> SimilarityComparisonFields { get; set; } = [];
 
+        // Custom image
+        /// <summary>
+        /// Relative path to a custom user-uploaded image (relative to smartlists directory).
+        /// If set, this image will be used instead of auto-generated collages.
+        /// Example: "images/{list-id}/primary.jpg"
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CustomImagePath { get; set; }
+
         /// <summary>
         /// Migrates legacy IsPlayed rules to PlaybackStatus.
         /// Called after deserialization.

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
@@ -108,6 +110,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 dto.LastRefreshed = DateTime.UtcNow;
                 _logger.LogDebug("Updated LastRefreshed timestamp for cached collection: {CollectionName}", dto.Name);
+                
+                // Update the DTO with the Jellyfin collection ID if it was created/updated
+                if (!string.IsNullOrEmpty(collectionId))
+                {
+                    dto.JellyfinCollectionId = collectionId;
+                }
                 
                 // Call save callback if provided
                 if (saveCallback != null)
@@ -531,7 +539,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 
                 // Set collection image if metadata refresh didn't generate one
-                await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
+                await SetPhotoForCollection(collectionAfterRefresh, dto, cancellationToken).ConfigureAwait(false);
                 
                 // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                 SetCollectionDisplayOrder(collectionAfterRefresh);
@@ -812,7 +820,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                     
                     // Set collection image if metadata refresh didn't generate one
-                    await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    await SetPhotoForCollection(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
                     
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
@@ -986,22 +994,87 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// <summary>
         /// Sets a photo/image for a collection from items within the collection.
         /// Creates a single image for 1 item, or a 4-image collage for 2+ items.
-        /// Skips if the collection has a manually uploaded image.
+        /// Skips if the collection has a manually uploaded image or custom uploaded image.
         /// </summary>
         /// <param name="collection">The collection to set the image for</param>
+        /// <param name="dto">The collection DTO (for accessing custom image path)</param>
         /// <param name="cancellationToken">Cancellation token</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "File path comes from Jellyfin's internal ItemImageInfo.Path property, which is validated by Jellyfin")]
-        private async Task SetPhotoForCollection(BaseItem collection, CancellationToken cancellationToken)
+        private async Task SetPhotoForCollection(BaseItem collection, SmartCollectionDto dto, CancellationToken cancellationToken)
         {
             try
             {
-                // Check if collection has a manually uploaded image (don't overwrite)
+                // Reload the DTO from storage to get the latest CustomImagePath
+                // (it may have been updated by the upload endpoint running in parallel)
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    var dataPath = JellyfinPathHelper.GetJellyfinDataPath(_libraryManager, _logger, BaseItemKind.BoxSet);
+                    if (!string.IsNullOrEmpty(dataPath))
+                    {
+                        var dtoFilePath = Path.Combine(dataPath, "smartlists", $"{dto.Id}.json");
+                        if (System.IO.File.Exists(dtoFilePath))
+                        {
+                            var json = await System.IO.File.ReadAllTextAsync(dtoFilePath, cancellationToken);
+                            var latestDto = System.Text.Json.JsonSerializer.Deserialize<SmartCollectionDto>(json, Services.Shared.SmartListFileSystem.SharedJsonOptions);
+                            if (latestDto != null)
+                            {
+                                dto = latestDto;
+                                _logger.LogDebug("Reloaded collection DTO from storage for {CollectionName}, CustomImagePath: {CustomImagePath}", 
+                                    collection.Name, dto.CustomImagePath ?? "(none)");
+                            }
+                        }
+                    }
+                }
+                
+                // Priority 1: Check for custom uploaded image from our plugin
+                if (!string.IsNullOrEmpty(dto.CustomImagePath) && !string.IsNullOrEmpty(dto.Id))
+                {
+                    // Get the Jellyfin data path by going up from a known collection path
+                    // Collection paths are like: {DataPath}/data/collections/{name}/
+                    // We need: {DataPath}/data/smartlists/images/{id}/
+                    var dataPath = JellyfinPathHelper.GetJellyfinDataPath(_libraryManager, _logger, BaseItemKind.BoxSet);
+                    if (!string.IsNullOrEmpty(dataPath))
+                    {
+                        var imageStorageService = new ImageStorageService(dataPath, _logger);
+                        var customImagePath = imageStorageService.GetCustomImagePath(dto.Id);
+                        
+                        if (!string.IsNullOrEmpty(customImagePath) && System.IO.File.Exists(customImagePath))
+                        {
+                            _logger.LogDebug("Applying custom uploaded image for collection {CollectionName}: {ImagePath}", collection.Name, customImagePath);
+                            
+                            // Apply the custom image
+                            collection.SetImage(new ItemImageInfo
+                            {
+                                Path = customImagePath,
+                                Type = ImageType.Primary
+                            }, 0);
+                            
+                            await _libraryManager.UpdateItemAsync(
+                                collection,
+                                collection.GetParent(),
+                                ItemUpdateType.ImageUpdate,
+                                cancellationToken);
+                            
+                            _logger.LogInformation("Successfully applied custom uploaded image for collection {CollectionName}", collection.Name);
+                            return;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Custom image path is set but file not found for collection {CollectionName}: {Path}", 
+                                collection.Name, dto.CustomImagePath);
+                            // Continue to auto-generation fallback
+                        }
+                    }
+                }
+
+                // Priority 2: Check if collection has a manually uploaded image via Jellyfin UI (don't overwrite)
                 if (await HasManuallyUploadedImageAsync(collection, cancellationToken).ConfigureAwait(false))
                 {
                     _logger.LogDebug("Collection {CollectionName} has a manually uploaded image, skipping automatic image generation", collection.Name);
                     return;
                 }
 
+                // Priority 3: Auto-generate collage from collection items
                 // Get collection items
                 var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
                 
@@ -1879,4 +1952,5 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
     }
 }
+
 

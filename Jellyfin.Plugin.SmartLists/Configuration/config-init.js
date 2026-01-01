@@ -899,6 +899,80 @@
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
 
+        // Setup custom image upload handlers
+        const customImageInput = page.querySelector('#customImage');
+        const customImageBtn = page.querySelector('#customImageBtn');
+        const customImageRemoveBtn = page.querySelector('#customImageRemoveBtn');
+        const customImageFileName = page.querySelector('#customImageFileName');
+        const customImagePreview = page.querySelector('#customImagePreview');
+        const customImagePreviewImg = page.querySelector('#customImagePreviewImg');
+
+        if (customImageBtn && customImageInput) {
+            customImageBtn.addEventListener('click', function () {
+                customImageInput.click();
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
+        if (customImageInput) {
+            customImageInput.addEventListener('change', function (e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validate file size (20MB max)
+                    if (file.size > 20 * 1024 * 1024) {
+                        SmartLists.showNotification('Image file is too large. Maximum size is 20MB.', 'error');
+                        customImageInput.value = '';
+                        return;
+                    }
+
+                    // Validate file type
+                    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+                    if (!validTypes.includes(file.type)) {
+                        SmartLists.showNotification('Invalid image format. Supported: JPG, PNG, WebP, GIF.', 'error');
+                        customImageInput.value = '';
+                        return;
+                    }
+
+                    // Show file name
+                    if (customImageFileName) {
+                        customImageFileName.textContent = file.name;
+                    }
+
+                    // Show remove button
+                    if (customImageRemoveBtn) {
+                        customImageRemoveBtn.style.display = 'inline-block';
+                    }
+
+                    // Show preview
+                    if (customImagePreview && customImagePreviewImg) {
+                        const reader = new FileReader();
+                        reader.onload = function (e) {
+                            customImagePreviewImg.src = e.target.result;
+                            customImagePreview.style.display = 'block';
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
+        if (customImageRemoveBtn) {
+            customImageRemoveBtn.addEventListener('click', function () {
+                if (customImageInput) {
+                    customImageInput.value = '';
+                }
+                if (customImageFileName) {
+                    customImageFileName.textContent = '';
+                }
+                if (customImagePreview) {
+                    customImagePreview.style.display = 'none';
+                }
+                if (customImagePreviewImg) {
+                    customImagePreviewImg.src = '';
+                }
+                customImageRemoveBtn.style.display = 'none';
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
         // Add search input event listener
         const searchInput = page.querySelector('#playlistSearchInput');
         const clearSearchBtn = page.querySelector('#clearSearchBtn');
