@@ -1168,7 +1168,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                     logger?.LogDebug("Rule group {GroupIndex} has {Count} matching items before limit", groupIndex, groupItems.Count);
 
-                    // Apply sorting to this group's items (using the playlist's sort orders)
+                    // Apply sorting to this group's items (using the playlist's sort orders).
+                    // NOTE: This sort happens BEFORE the global sort later in the pipeline.
+                    // For Rule Block ordering: this applies secondary sorts within each block,
+                    //   then the global sort applies the Rule Block order while preserving these secondary sorts.
+                    // For non-Rule Block ordering: this creates a minor redundancy (items sorted twice),
+                    //   but per-group limits are primarily designed for Rule Block scenarios.
                     var sortedGroupItems = ApplyMultipleOrders(groupItems, user, userDataManager, logger, refreshCache).ToList();
 
                     // Apply per-group limit if configured
@@ -1773,11 +1778,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return ApplyInterleavedOrderWithSecondarySorts(items, user, userDataManager, logger, refreshCache);
             }
 
-            // For multiple orders, we need to group by the sort key and apply secondary sorts within groups
-            // This is complex, so we'll use a different approach: create a composite sort key
-            // We'll convert to list and use OrderBy/ThenBy pattern dynamically
-            var itemsList = items.ToList();
-            if (itemsList.Count == 0)
+            // Use the common sorting helper for multi-sort scenarios
+            return ApplySortingCore(items.ToList(), Orders, user, userDataManager, logger, refreshCache);
+        }
+
+        /// <summary>
+        /// Core sorting logic shared by ApplyMultipleOrders and ApplySecondarySorts.
+        /// Creates composite sort keys for all items and applies multi-level sorting.
+        /// </summary>
+        private static IEnumerable<BaseItem> ApplySortingCore(
+            List<BaseItem> itemsList, 
+            List<Order> orders, 
+            User user, 
+            IUserDataManager? userDataManager, 
+            ILogger? logger, 
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            if (orders == null || orders.Count == 0 || itemsList.Count == 0)
             {
                 return itemsList;
             }
@@ -1787,7 +1804,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var itemRandomKeys = new Dictionary<Guid, int>();
 
             // Pre-generate random keys for items if any RandomOrder is present
-            if (Orders.Any(o => o is RandomOrder))
+            if (orders.Any(o => o is RandomOrder))
             {
                 logger?.LogDebug("RandomOrder detected in multi-sort, pre-generating random keys with seed: {Seed}", randomSeed);
                 // Suppress CA5394: Random is acceptable here - we're not using it for security purposes, just for shuffling playlist items
@@ -1805,15 +1822,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var itemsWithKeys = itemsList.Select(item => new
             {
                 Item = item,
-                SortKeys = Orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
+                SortKeys = orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
             }).ToList();
 
             // Sort using the composite keys
             IOrderedEnumerable<dynamic>? orderedItems = null;
-            for (int i = 0; i < Orders.Count; i++)
+            for (int i = 0; i < orders.Count; i++)
             {
                 var index = i; // Capture for lambda
-                var order = Orders[i];
+                var order = orders[i];
 
                 if (i == 0)
                 {
@@ -1847,7 +1864,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             if (orderedItems == null)
             {
-                return items;
+                return itemsList;
             }
 
             return orderedItems.Select(x => (BaseItem)x.Item);
@@ -1988,78 +2005,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private static IEnumerable<BaseItem> ApplySecondarySorts(List<BaseItem> items, List<Order> orders, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
         {
-            if (orders == null || orders.Count == 0 || items.Count == 0)
-            {
-                return items;
-            }
-
-            // Create a random seed for this sort operation
-            var randomSeed = (int)(DateTime.Now.Ticks & 0x7FFFFFFF);
-            var itemRandomKeys = new Dictionary<Guid, int>();
-
-            // Pre-generate random keys for items if any RandomOrder is present
-            if (orders.Any(o => o is RandomOrder))
-            {
-                // Suppress CA5394: Random is acceptable here - we're not using it for security purposes
-#pragma warning disable CA5394
-                var random = new Random(randomSeed);
-                foreach (var item in items)
-                {
-                    itemRandomKeys[item.Id] = random.Next();
-                }
-#pragma warning restore CA5394
-            }
-
-            // Create sort keys for each item based on all orders
-            var itemsWithKeys = items.Select(item => new
-            {
-                Item = item,
-                SortKeys = orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
-            }).ToList();
-
-            // Sort using the composite keys
-            IOrderedEnumerable<dynamic>? orderedItems = null;
-            for (int i = 0; i < orders.Count; i++)
-            {
-                var index = i; // Capture for lambda
-                var order = orders[i];
-
-                if (i == 0)
-                {
-                    // First sort
-                    if (IsDescendingOrder(order))
-                    {
-                        orderedItems = itemsWithKeys.OrderByDescending(x => x.SortKeys[index]);
-                    }
-                    else
-                    {
-                        orderedItems = itemsWithKeys.OrderBy(x => x.SortKeys[index]);
-                    }
-                }
-                else
-                {
-                    // Secondary sorts
-                    if (orderedItems == null)
-                    {
-                        throw new InvalidOperationException("orderedItems is null when applying secondary sort");
-                    }
-                    if (IsDescendingOrder(order))
-                    {
-                        orderedItems = orderedItems.ThenByDescending(x => x.SortKeys[index]);
-                    }
-                    else
-                    {
-                        orderedItems = orderedItems.ThenBy(x => x.SortKeys[index]);
-                    }
-                }
-            }
-
-            if (orderedItems == null)
-            {
-                return items;
-            }
-
-            return orderedItems.Select(x => (BaseItem)x.Item);
+            // Delegate to the shared sorting core logic
+            return ApplySortingCore(items, orders, user, userDataManager, logger, refreshCache);
         }
 
 
@@ -2084,6 +2031,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is SeasonNumberOrderDesc ||
                    order is EpisodeNumberOrderDesc ||
                    order is TrackNumberOrderDesc ||
+                   order is Orders.RuleBlockOrderDesc ||
+                   order is Orders.RuleBlockOrderInterleavedDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -2595,8 +2544,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
                                 else
                                 {
-                                    // Check if we need per-group tracking for limits
-                                    bool needsGroupTracking = HasPerGroupLimits();
+                                    // Check if we need per-group tracking for limits or Rule Block Order sorting
+                                    bool needsGroupTracking = NeedsGroupTracking();
                                     
                                     if (needsGroupTracking)
                                     {
@@ -2745,8 +2694,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         }
                         else
                         {
-                            // Check if we need per-group tracking for limits
-                            bool needsGroupTracking = HasPerGroupLimits();
+                            // Check if we need per-group tracking for limits or Rule Block Order sorting
+                            bool needsGroupTracking = NeedsGroupTracking();
                             
                             if (needsGroupTracking)
                             {

@@ -735,11 +735,6 @@
         input.min = '0';
         input.style.cssText = 'width: 120px; display: inline-block;';
 
-        const help = document.createElement('span');
-        help.className = 'fieldDescription';
-        help.textContent = '(Leave empty or 0 for unlimited)';
-        help.style.cssText = 'margin-left: 8px; font-size: 0.85em; color: #999;';
-
         const infoLink = document.createElement('a');
         infoLink.href = 'https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#per-group-max-items';
         infoLink.target = '_blank';
@@ -757,7 +752,6 @@
 
         container.appendChild(label);
         container.appendChild(input);
-        container.appendChild(help);
         container.appendChild(infoLink);
 
         return container;
