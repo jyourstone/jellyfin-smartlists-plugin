@@ -4,63 +4,153 @@
 
 You can add up to **3 sorting options** for both playlists and collections to create cascading sorts. Items are first sorted by the first option, then items with equal values are sorted by the second option, and so on.
 
-### Example Use Cases
+**Example**: Sort by "Production Year" descending, then "Community Rating" descending to group movies by year with highest-rated movies first within each year.
 
-- **Best Movies by Year**: Sort by "Production Year" descending, then "Community Rating" descending - Groups movies by year, with highest-rated movies first within each year
-- **Least Played Mix**: Sort by "Play Count (owner)" ascending, then "Random" - Prioritizes less-played items, while shuffling tracks with the same play count to prevent album grouping
+## Sort Fields
 
-## Available Sort Fields
+### No Order
+Items appear in library order without any specific sorting applied.
 
-- **No Order** - Items appear in library order
-- **Name** - Sort by title
-- **Name (Ignore 'The')** - Sort by name while ignoring leading article 'The'
-- **Release Date** - Sort by release date
-- **Production Year** - Sort by production year
-- **Season Number** - Sort by TV season number
-- **Episode Number** - Sort by TV episode number
-- **Series Name** - Sort by series name (for TV episodes)
-- **Community Rating** - Sort by user ratings
-- **Date Created** - Sort by when added to library
-- **Play Count (owner)** - Sort by how many times the list owner has played each item
-- **Last Played (owner)** - Sort by when the list owner last played each item
-- **Runtime** - Sort by duration/runtime in minutes
-- **Album Name** - Sort by album name (for music and music videos)
-- **Artist** - Sort by artist name (for music and music videos)
-- **Track Number** - Sort by album name, disc number, then track number (designed for music)
-- **Similarity** - Sort by similarity score (highest first) - only available when using the "Similar To" field
-- **Random** - Randomize the order of items
+### Name
+Sort alphabetically by the item's title. Respects Jellyfin's **Sort Title** metadata field when set.
 
-!!! tip "Sort Title Metadata Support"
-    All **Name** and **Series Name** sort options (including "Ignore Articles" variants) automatically respect Jellyfin's **Sort Title** metadata field. When you set a custom Sort Title for a media item in Jellyfin's metadata editor:
-    
-    - The plugin will use the Sort Title **as-is** for sorting (without any modifications)
-    - This applies to both regular and "Ignore Articles" sorting options
-    - If Sort Title is not set, the plugin falls back to the regular title (and strips "The" for "Ignore Articles" options)
-    
-    This allows you to control the exact sort order without changing the displayed title.
+### Name (Ignore 'The')
+Sort alphabetically by title, ignoring the leading article "The". Respects Jellyfin's **Sort Title** metadata field when set.
 
-## Max Items
+### Production Year
+Sort by the year the content was produced or released.
 
-You can optionally set a maximum number of items for your smart list. This is useful for:
+### Release Date
+Sort by the specific release date of the content.
 
-- Limiting large lists to a manageable size
-- Creating "Top 10" or "Best of" style playlists or collections
-- Improving performance for very large libraries
+### Date Created
+Sort by when the item was added to your Jellyfin library.
 
-!!! note "Collections and Sorting"
-    For both playlists and collections, the max items limit applies after sorting is applied.
+### Community Rating
+Sort by user ratings. Higher ratings first when descending.
+
+### Play Count (owner)
+Sort by how many times the playlist/collection owner has played each item. Useful for finding least-played or most-played content.
+
+### Last Played (owner)
+Sort by when the playlist/collection owner last played each item. Great for rediscovering content or finding recently watched items.
+
+### Runtime
+Sort by the duration or runtime of items in minutes.
+
+### Series Name
+Sort TV episodes by their series name. Respects Jellyfin's **Sort Title** metadata field when set.
+
+### Season Number
+Sort TV episodes by season number.
+
+### Episode Number
+Sort TV episodes by episode number.
+
+### Album Name
+Sort music and music videos by album name.
+
+### Artist
+Sort music and music videos by artist name.
+
+### Track Number
+Sort by album name, disc number, then track number. Designed specifically for music to maintain proper album order.
+
+### Similarity
+Sort by similarity score (highest first). Only available when using the "Similar To" filter field in your rules.
+
+### Random
+Randomize the order of items. Each refresh generates a new random order.
+
+### Rule Block Order
+Preserves the natural grouping from OR blocks by keeping items from each block together.
+
+**How it works**:
+
+- Items from OR Block 1 appear first
+- Then items from OR Block 2
+- Then OR Block 3, and so on
+
+**When to use**: Perfect for creating playlists with distinct sections from different rule groups, especially when combined with [Per-Group Max Items](#per-group-max-items).
+
+**Works with secondary sorts**: Items within each block are sorted by your secondary sort options.
+
+!!! note "Requires Multiple OR Blocks"
+    This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
+
+### Rule Block Order Interleaved
+Distributes items from OR blocks in a round-robin alternating pattern.
+
+**How it works**:
+
+- Takes one item from Block 1, then one from Block 2, then one from Block 3, and repeats
+- **Ascending**: Starts from the beginning of each block (position 0, 1, 2...)
+- **Descending**: Starts from the end of each block and processes blocks in reverse order
+
+**When to use**: Perfect for playlists where you want variety throughout instead of distinct sections (e.g., alternating bumpers and episodes, rotating between music genres).
+
+**Works with secondary sorts**: Items within each block are sorted first using your secondary sort options, then the sorted blocks are interleaved.
+
+**Example**: With bumpers and episodes, sorted by "Rule Block Order Interleaved" then "Runtime Ascending", you get: shortest bumper, shortest episode, 2nd shortest bumper, 2nd shortest episode... (alternating pattern, shortest to longest)
+
+!!! note "Interleaved vs Regular Rule Block Order"
+    - **Rule Block Order**: Creates distinct sections (all items from Block 1, then all from Block 2)
+    - **Rule Block Order Interleaved**: Mixes items throughout (alternating between blocks)
+
+!!! note "Requires Multiple OR Blocks"
+    This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
+
+## Limits
+
+### Max Items
+
+Set a maximum number of items for your smart list. The limit applies **after sorting** is applied.
+
+**Common uses**:
+
+- Create "Top 10" or "Best of" style lists
+- Limit large lists to a manageable size
+- Improve performance for very large libraries
 
 !!! warning "Performance"
-    Setting this to unlimited (0) might cause performance issues or even crashes for very large lists.
+    Setting this to unlimited (0) might cause performance issues for very large lists.
 
-## Max Playtime
+### Per-Group Max Items
 
-You can optionally set a maximum playtime in minutes for your smart playlist (this option is only available for playlists, not collections). This is useful for:
+When using multiple OR blocks, you can set a **Max Items limit for each individual OR block**. This allows precise control over your smart list composition.
 
-- Creating workout playlists that match your exercise duration
-- Setting up Pomodoro-style work sessions with music
-- Ensuring playlists fit within specific time constraints
+**How it works**:
 
-**How it works**: The plugin calculates the total runtime of items in the playlist and stops adding items when the time limit is reached. The last item that would exceed the limit is not included, ensuring the playlist stays within your specified duration.
+1. Items matching each OR block's rules are collected separately
+2. Each group is sorted using the playlist's sort options
+3. The MaxItems limit is applied to each group independently
+4. The limited results from all groups are combined
+5. The global Max Items limit (if set) is applied to the final combined result
 
-This feature works with all media types (movies, TV shows, music) and uses the actual runtime of each item.
+**Configuration**:
+
+1. Create your rule(s) within an OR block
+2. At the bottom of each OR block, enter a value in **"Max Items for this OR block"**
+3. Leave empty or set to 0 for unlimited items from that group
+
+**Example**: Create a balanced playlist with 50 trailers and 50 episodes by setting MaxItems to 50 on each OR block.
+
+!!! tip "Combining with Global Limits"
+    Per-group limits are applied first, then the global Max Items limit. Example: 3 blocks × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
+
+!!! info "See Examples"
+    For detailed examples using per-group limits and interleaved sorting, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).
+
+### Max Playtime
+
+Set a maximum playtime in minutes for your smart playlist (playlists only, not collections).
+
+**How it works**: The plugin calculates the total runtime and stops adding items when the time limit is reached. The last item that would exceed the limit is excluded.
+
+**Common uses**:
+
+- Workout playlists matching your exercise duration
+- Pomodoro-style work sessions with music
+- Playlists that fit within specific time constraints
+
+Works with all media types (movies, TV shows, music) using the actual runtime of each item.

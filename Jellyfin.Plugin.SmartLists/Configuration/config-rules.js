@@ -719,6 +719,50 @@
         return headerDiv;
     };
 
+    SmartLists.createGroupMaxItemsField = function () {
+        const container = document.createElement('div');
+        container.className = 'group-max-items-container';
+        container.style.cssText = 'margin: 10px 0 5px 0; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;';
+
+        const label = document.createElement('label');
+        label.textContent = 'Max Items for this OR block: ';
+        label.style.cssText = 'font-size: 0.9em; color: #888; margin-right: 8px;';
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'group-max-items-input emby-input';
+        input.placeholder = 'Unlimited';
+        input.min = '0';
+        input.style.cssText = 'width: 120px; display: inline-block;';
+
+        const help = document.createElement('span');
+        help.className = 'fieldDescription';
+        help.textContent = '(Leave empty or 0 for unlimited)';
+        help.style.cssText = 'margin-left: 8px; font-size: 0.85em; color: #999;';
+
+        const infoLink = document.createElement('a');
+        infoLink.href = 'https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#per-group-max-items';
+        infoLink.target = '_blank';
+        infoLink.rel = 'noopener noreferrer';
+        infoLink.title = 'Documentation';
+        infoLink.style.cssText = 'text-decoration: none; color: #888; display: inline-flex; align-items: center; margin-left: 8px;';
+
+        const infoIcon = document.createElement('span');
+        infoIcon.className = 'material-icons';
+        infoIcon.setAttribute('aria-hidden', 'true');
+        infoIcon.textContent = 'info_outline';
+        infoIcon.style.cssText = 'font-size: 1.1em; line-height: 0;';
+
+        infoLink.appendChild(infoIcon);
+
+        container.appendChild(label);
+        container.appendChild(input);
+        container.appendChild(help);
+        container.appendChild(infoLink);
+
+        return container;
+    };
+
     SmartLists.createInitialLogicGroup = function (page) {
         const rulesContainer = page.querySelector('#rules-container');
         const logicGroupId = 'logic-group-' + Date.now();
@@ -735,6 +779,10 @@
         // Add the first rule to this group
         SmartLists.addRuleToGroup(page, logicGroupDiv);
 
+        // Add MaxItems field for this group
+        const maxItemsField = SmartLists.createGroupMaxItemsField();
+        logicGroupDiv.appendChild(maxItemsField);
+
         return logicGroupDiv;
     };
 
@@ -744,7 +792,14 @@
         // Add AND separator if this isn't the first rule in the group
         if (existingRules.length > 0) {
             const andSeparator = SmartLists.createAndSeparator();
-            logicGroup.appendChild(andSeparator);
+            
+            // Insert before MaxItems field if it exists, otherwise append
+            const maxItemsContainer = logicGroup.querySelector('.group-max-items-container');
+            if (maxItemsContainer) {
+                logicGroup.insertBefore(andSeparator, maxItemsContainer);
+            } else {
+                logicGroup.appendChild(andSeparator);
+            }
         }
 
         const ruleDiv = document.createElement('div');
@@ -878,9 +933,17 @@
             '</div>';
 
         ruleDiv.innerHTML = fieldsHtml;
-        logicGroup.appendChild(ruleDiv);
+        
+        // Insert before MaxItems field if it exists, otherwise append
+        const maxItemsContainer = logicGroup.querySelector('.group-max-items-container');
+        if (maxItemsContainer) {
+            logicGroup.insertBefore(ruleDiv, maxItemsContainer);
+        } else {
+            logicGroup.appendChild(ruleDiv);
+        }
 
-        const newRuleRow = logicGroup.lastElementChild;
+        // Use the ruleDiv we just created instead of querying for it
+        const newRuleRow = ruleDiv;
         const fieldSelect = newRuleRow.querySelector('.rule-field-select');
         const operatorSelect = newRuleRow.querySelector('.rule-operator-select');
         const valueContainer = newRuleRow.querySelector('.rule-value-container');
@@ -1018,6 +1081,10 @@
 
         // Add the first rule to this group
         SmartLists.addRuleToGroup(page, logicGroupDiv);
+
+        // Add MaxItems field for this group
+        const maxItemsField = SmartLists.createGroupMaxItemsField();
+        logicGroupDiv.appendChild(maxItemsField);
 
         return logicGroupDiv;
     };
@@ -1220,6 +1287,10 @@
             ruleConfigs.push(ruleConfig);
         });
 
+        // Extract MaxItems value from source group
+        const sourceMaxItemsInput = logicGroup.querySelector('.group-max-items-input');
+        const sourceMaxItems = sourceMaxItemsInput ? sourceMaxItemsInput.value : '';
+
         // Create a new logic group with OR separator
         const orSeparator = SmartLists.createOrSeparator();
         rulesContainer.appendChild(orSeparator);
@@ -1249,6 +1320,14 @@
             // Clear cloning flag
             page._cloningPlaylistSimilarityFields = null;
         });
+
+        // Add MaxItems field for this group and set the cloned value
+        const maxItemsField = SmartLists.createGroupMaxItemsField();
+        newLogicGroupDiv.appendChild(maxItemsField);
+        const newMaxItemsInput = maxItemsField.querySelector('.group-max-items-input');
+        if (newMaxItemsInput && sourceMaxItems) {
+            newMaxItemsInput.value = sourceMaxItems;
+        }
 
         // Update button visibility
         SmartLists.updateRuleButtonVisibility(page);
@@ -1284,6 +1363,10 @@
             logicGroup.appendChild(header);
 
             SmartLists.addRuleToGroup(page, logicGroup);
+            
+            // Re-add the MaxItems field which was wiped out
+            const maxItemsField = SmartLists.createGroupMaxItemsField();
+            logicGroup.appendChild(maxItemsField);
         } else {
             // Remove the group and any adjacent separator
             const nextSibling = logicGroup.nextElementSibling;
@@ -2169,8 +2252,20 @@
                     expressions.push(expression);
                 }
             });
+            
             if (expressions.length > 0) {
-                expressionSets.push({ Expressions: expressions });
+                const expressionSet = { Expressions: expressions };
+                
+                // Collect MaxItems for this group
+                const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
+                if (maxItemsInput && maxItemsInput.value) {
+                    const maxItems = parseInt(maxItemsInput.value, 10);
+                    if (!isNaN(maxItems) && maxItems > 0) {
+                        expressionSet.MaxItems = maxItems;
+                    }
+                }
+                
+                expressionSets.push(expressionSet);
             }
         });
 

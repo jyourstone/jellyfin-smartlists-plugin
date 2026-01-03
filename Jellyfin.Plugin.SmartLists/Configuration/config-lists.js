@@ -584,6 +584,14 @@
                                 SmartLists.populateRuleRow(currentRule, expression, page);
                             });
                         }
+
+                        // Populate MaxItems for this group if it exists
+                        if (expressionSet.MaxItems) {
+                            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
+                            if (maxItemsInput) {
+                                maxItemsInput.value = expressionSet.MaxItems;
+                            }
+                        }
                     });
                 } else {
                     // No rules exist - create an initial logic group with a placeholder rule
@@ -809,6 +817,14 @@
                                     }
                                 }
                             });
+                        }
+
+                        // Populate MaxItems for this group if it exists
+                        if (expressionSet.MaxItems) {
+                            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
+                            if (maxItemsInput) {
+                                maxItemsInput.value = expressionSet.MaxItems;
+                            }
                         }
                     });
                 } else {
@@ -1171,6 +1187,12 @@
                         rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
                         rulesHtml += '</span>';
                     }
+
+                    // Add MaxItems indicator if this group has a limit
+                    if (expressionSet.MaxItems) {
+                        rulesHtml += '<br><span style="color: #888; font-size: 0.9em;">↳ Max ' + SmartLists.escapeHtml(expressionSet.MaxItems.toString()) + ' items from this group</span>';
+                    }
+
                     rulesHtml += '</div>';
                 }
             }
