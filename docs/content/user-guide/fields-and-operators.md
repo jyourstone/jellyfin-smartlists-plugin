@@ -355,6 +355,9 @@ This matches items that are:
 
 An item matches if it's either an unwatched action movie OR an unwatched comedy.
 
+!!! tip "Per-Group Item Limits"
+    Each OR rule group can have its own **Max Items** limit to control how many items are selected from that specific group. This allows you to create balanced playlists with precise control over the composition. For example, you could limit each genre group to exactly 20 items. See [Per-Group Max Items](sorting-and-limits.md#per-group-max-items) for details.
+
 ### Complex Example
 
 Here's a more complex example to illustrate both concepts:

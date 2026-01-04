@@ -55,6 +55,8 @@
         { value: 'Similarity', label: 'Similarity (requires Similar To rule)' },
         { value: 'TrackNumber', label: 'Track Number' },
         { value: 'Resolution', label: 'Resolution' },
+        { value: 'Rule Block Order', label: 'Rule Block Order' },
+        { value: 'Rule Block Order Interleaved', label: 'Rule Block Order Interleaved' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'No Order' }
     ];

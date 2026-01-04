@@ -36,6 +36,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // Similarity scores for sorting (populated during filtering when SimilarTo rules are active)
         private readonly ConcurrentDictionary<Guid, float> _similarityScores = new();
 
+        // Item-to-group mappings for per-group limiting (populated during filtering when per-group MaxItems are set)
+        private readonly ConcurrentDictionary<Guid, List<int>> _itemGroupMappings = new();
+
         // OPTIMIZATION: Static cache for compiled rules to avoid recompilation
         private static readonly ConcurrentDictionary<string, List<List<Func<Operand, bool>>>> _ruleCache = new();
 
@@ -432,17 +435,22 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
         }
 
-        private bool EvaluateLogicGroups(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
+        /// <summary>
+        /// Returns all rule group indices that match the given operand.
+        /// Used for per-group limiting - allows tracking which groups each item matches.
+        /// </summary>
+        private List<int> GetMatchingGroupIndices(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
         {
+            var matchingGroups = new List<int>();
+
             try
             {
                 if (compiledRules == null || operand == null)
                 {
-                    return false;
+                    return matchingGroups;
                 }
 
                 // Each ExpressionSet is a logic group
-                // Groups are combined with OR logic (any group can match)
                 // Rules within each group always use AND logic
                 for (int groupIndex = 0; groupIndex < ExpressionSets.Count && groupIndex < compiledRules.Count; groupIndex++)
                 {
@@ -486,7 +494,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         if (groupMatches)
                         {
-                            return true; // This group matches, so the item matches overall,
+                            matchingGroups.Add(groupIndex);
                         }
                     }
                     catch (Exception)
@@ -495,14 +503,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         continue;
                     }
                 }
-
-                return false; // No groups matched,
             }
             catch (Exception)
             {
-                // If we can't evaluate any groups, conservative approach is to exclude item
-                return false;
+                // If we can't evaluate any groups, return empty list
+                return matchingGroups;
             }
+
+            return matchingGroups;
+        }
+
+        private bool EvaluateLogicGroups(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
+        {
+            // For backward compatibility and simple OR logic, check if any group matches
+            var matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+            return matchingGroups.Count > 0;
         }
 
         private bool EvaluateLogicGroupsForEpisode(List<List<Func<Operand, bool>>> compiledRules, Operand operand, Series? parentSeries, ILogger? logger)
@@ -626,6 +641,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             // Clear similarity scores from any previous runs
             _similarityScores.Clear();
+            
+            // Clear item-group mappings from any previous runs
+            _itemGroupMappings.Clear();
 
             try
             {
@@ -973,10 +991,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Playlist '{PlaylistName}' expanded from {OriginalCount} items to {ExpandedCount} items after Collections processing",
                     Name, results.Count, expandedResults.Count);
 
+                // Apply per-group limits if configured (before sorting and global limits)
+                if (HasPerGroupLimits())
+                {
+                    expandedResults = ApplyPerGroupLimits(expandedResults, user, userDataManager, logger, refreshCache);
+                    logger?.LogDebug("Playlist '{PlaylistName}' limited to {Count} items after per-group MaxItems applied", Name, expandedResults.Count);
+                }
+
                 // Apply ordering and limits with error handling
                 try
                 {
                     // If using Similarity order, set the scores before sorting
+                    // If using RuleBlock order, set the group mappings before sorting
                     foreach (var order in Orders)
                     {
                         if (order is SimilarityOrder similarityOrder)
@@ -986,6 +1012,22 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         else if (order is SimilarityOrderAsc similarityOrderAsc)
                         {
                             similarityOrderAsc.Scores = _similarityScores;
+                        }
+                        else if (order is Orders.RuleBlockOrder ruleBlockOrder)
+                        {
+                            ruleBlockOrder.GroupMappings = _itemGroupMappings;
+                        }
+                        else if (order is Orders.RuleBlockOrderDesc ruleBlockOrderDesc)
+                        {
+                            ruleBlockOrderDesc.GroupMappings = _itemGroupMappings;
+                        }
+                        else if (order is Orders.RuleBlockOrderInterleaved ruleBlockOrderInterleaved)
+                        {
+                            ruleBlockOrderInterleaved.GroupMappings = _itemGroupMappings;
+                        }
+                        else if (order is Orders.RuleBlockOrderInterleavedDesc ruleBlockOrderInterleavedDesc)
+                        {
+                            ruleBlockOrderInterleavedDesc.GroupMappings = _itemGroupMappings;
                         }
                     }
 
@@ -1048,6 +1090,121 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     expr.MemberName == "Collections" && expr.IncludeEpisodesWithinSeries == true) == true) == true;
 
             return isEpisodesMediaType && hasCollectionsEpisodeExpansion;
+        }
+
+        /// <summary>
+        /// Checks if any expression set has a per-group MaxItems limit defined.
+        /// </summary>
+        private bool HasPerGroupLimits()
+        {
+            return ExpressionSets?.Any(set => set.MaxItems.HasValue && set.MaxItems.Value > 0) == true;
+        }
+
+        private bool UsesRuleBlockOrdering()
+        {
+            return Orders?.Any(order => 
+                order is Orders.RuleBlockOrder || 
+                order is Orders.RuleBlockOrderDesc ||
+                order is Orders.RuleBlockOrderInterleaved ||
+                order is Orders.RuleBlockOrderInterleavedDesc) == true;
+        }
+
+        private bool NeedsGroupTracking()
+        {
+            return HasPerGroupLimits() || UsesRuleBlockOrdering();
+        }
+
+        /// <summary>
+        /// Applies per-group MaxItems limits to items before global sorting and limits.
+        /// Items are organized by rule group, limited per group, then combined.
+        /// </summary>
+        private List<BaseItem> ApplyPerGroupLimits(List<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        {
+            try
+            {
+                if (items == null || items.Count == 0)
+                {
+                    return items ?? new List<BaseItem>();
+                }
+
+                // Group items by their matching rule groups
+                var itemsByGroup = new Dictionary<int, List<BaseItem>>();
+                
+                // Initialize all groups (even empty ones)
+                for (int i = 0; i < ExpressionSets.Count; i++)
+                {
+                    itemsByGroup[i] = new List<BaseItem>();
+                }
+
+                // Organize items into groups
+                foreach (var item in items)
+                {
+                    if (_itemGroupMappings.TryGetValue(item.Id, out var groups))
+                    {
+                        foreach (var groupIndex in groups)
+                        {
+                            if (groupIndex >= 0 && groupIndex < ExpressionSets.Count)
+                            {
+                                itemsByGroup[groupIndex].Add(item);
+                            }
+                        }
+                    }
+                }
+
+                // Apply sorting and limits per group, then combine
+                var limitedItems = new HashSet<Guid>(); // Track which items to include (prevent duplicates)
+                var resultList = new List<BaseItem>();
+
+                for (int groupIndex = 0; groupIndex < ExpressionSets.Count; groupIndex++)
+                {
+                    var group = ExpressionSets[groupIndex];
+                    var groupItems = itemsByGroup[groupIndex];
+
+                    if (groupItems.Count == 0)
+                    {
+                        logger?.LogDebug("Rule group {GroupIndex} has no matching items", groupIndex);
+                        continue;
+                    }
+
+                    logger?.LogDebug("Rule group {GroupIndex} has {Count} matching items before limit", groupIndex, groupItems.Count);
+
+                    // Apply sorting to this group's items (using the playlist's sort orders).
+                    // NOTE: This sort happens BEFORE the global sort later in the pipeline.
+                    // For Rule Block ordering: this applies secondary sorts within each block,
+                    //   then the global sort applies the Rule Block order while preserving these secondary sorts.
+                    // For non-Rule Block ordering: this creates a minor redundancy (items sorted twice),
+                    //   but per-group limits are primarily designed for Rule Block scenarios.
+                    var sortedGroupItems = ApplyMultipleOrders(groupItems, user, userDataManager, logger, refreshCache).ToList();
+
+                    // Apply per-group limit if configured
+                    var groupMaxItems = group.MaxItems ?? 0;
+                    if (groupMaxItems > 0 && sortedGroupItems.Count > groupMaxItems)
+                    {
+                        sortedGroupItems = sortedGroupItems.Take(groupMaxItems).ToList();
+                        logger?.LogDebug("Rule group {GroupIndex} limited from {Original} to {Limited} items", 
+                            groupIndex, groupItems.Count, sortedGroupItems.Count);
+                    }
+
+                    // Add items to result (avoiding duplicates if an item matched multiple groups)
+                    foreach (var item in sortedGroupItems)
+                    {
+                        if (limitedItems.Add(item.Id))
+                        {
+                            resultList.Add(item);
+                        }
+                    }
+                }
+
+                logger?.LogDebug("Per-group limiting: {Original} items → {Limited} items across {Groups} groups",
+                    items.Count, resultList.Count, ExpressionSets.Count);
+
+                return resultList;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Error applying per-group limits for playlist '{PlaylistName}'. Returning all items.", Name);
+                return items;
+            }
         }
 
         /// <summary>
@@ -1613,11 +1770,31 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return Orders[0].OrderBy(items, user, userDataManager, logger, refreshCache);
             }
 
-            // For multiple orders, we need to group by the sort key and apply secondary sorts within groups
-            // This is complex, so we'll use a different approach: create a composite sort key
-            // We'll convert to list and use OrderBy/ThenBy pattern dynamically
-            var itemsList = items.ToList();
-            if (itemsList.Count == 0)
+            // Special handling: If the first order is Rule Block Order Interleaved, 
+            // apply secondary sorts within each block before interleaving
+            if (Orders[0] is Orders.RuleBlockOrderInterleaved || Orders[0] is Orders.RuleBlockOrderInterleavedDesc)
+            {
+                logger?.LogDebug("Rule Block Order Interleaved detected as primary sort with {SecondaryCount} secondary sorts", Orders.Count - 1);
+                return ApplyInterleavedOrderWithSecondarySorts(items, user, userDataManager, logger, refreshCache);
+            }
+
+            // Use the common sorting helper for multi-sort scenarios
+            return ApplySortingCore(items.ToList(), Orders, user, userDataManager, logger, refreshCache);
+        }
+
+        /// <summary>
+        /// Core sorting logic shared by ApplyMultipleOrders and ApplySecondarySorts.
+        /// Creates composite sort keys for all items and applies multi-level sorting.
+        /// </summary>
+        private static IEnumerable<BaseItem> ApplySortingCore(
+            List<BaseItem> itemsList, 
+            List<Order> orders, 
+            User user, 
+            IUserDataManager? userDataManager, 
+            ILogger? logger, 
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            if (orders == null || orders.Count == 0 || itemsList.Count == 0)
             {
                 return itemsList;
             }
@@ -1627,7 +1804,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var itemRandomKeys = new Dictionary<Guid, int>();
 
             // Pre-generate random keys for items if any RandomOrder is present
-            if (Orders.Any(o => o is RandomOrder))
+            if (orders.Any(o => o is RandomOrder))
             {
                 logger?.LogDebug("RandomOrder detected in multi-sort, pre-generating random keys with seed: {Seed}", randomSeed);
                 // Suppress CA5394: Random is acceptable here - we're not using it for security purposes, just for shuffling playlist items
@@ -1645,15 +1822,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var itemsWithKeys = itemsList.Select(item => new
             {
                 Item = item,
-                SortKeys = Orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
+                SortKeys = orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
             }).ToList();
 
             // Sort using the composite keys
             IOrderedEnumerable<dynamic>? orderedItems = null;
-            for (int i = 0; i < Orders.Count; i++)
+            for (int i = 0; i < orders.Count; i++)
             {
                 var index = i; // Capture for lambda
-                var order = Orders[i];
+                var order = orders[i];
 
                 if (i == 0)
                 {
@@ -1687,10 +1864,129 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             if (orderedItems == null)
             {
-                return items;
+                return itemsList;
             }
 
             return orderedItems.Select(x => (BaseItem)x.Item);
+        }
+
+        /// <summary>
+        /// Applies Rule Block Order Interleaved with secondary sorts.
+        /// Secondary sorts are applied within each block before interleaving.
+        /// This creates a properly interleaved result where items from each block are sorted.
+        /// 
+        /// Performance note: This method performs N separate sort operations (one per group).
+        /// For typical playlists (2-5 groups, hundreds of items), this is efficient.
+        /// If performance becomes an issue with many groups, consider profiling and optimization.
+        /// </summary>
+        private IEnumerable<BaseItem> ApplyInterleavedOrderWithSecondarySorts(IEnumerable<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        {
+            var interleavedOrder = Orders[0]; // First order is Rule Block Order Interleaved (already validated)
+            var secondaryOrders = Orders.Skip(1).ToList();
+
+            logger?.LogDebug("Applying Rule Block Order Interleaved with {Count} secondary sorts within each block", secondaryOrders.Count);
+
+            if (_itemGroupMappings.Count == 0)
+            {
+                logger?.LogWarning("No group mappings available for interleaved sorting, returning unsorted items");
+                return items;
+            }
+
+            // Group items by their lowest matching group index
+            var itemsByGroup = new Dictionary<int, List<BaseItem>>();
+            
+            foreach (var item in items)
+            {
+                if (_itemGroupMappings.TryGetValue(item.Id, out var groups) && groups.Count > 0)
+                {
+                    var lowestGroup = groups.Min();
+                    if (!itemsByGroup.TryGetValue(lowestGroup, out var groupList))
+                    {
+                        groupList = new List<BaseItem>();
+                        itemsByGroup[lowestGroup] = groupList;
+                    }
+                    groupList.Add(item);
+                }
+            }
+
+            // Apply secondary sorts within each group
+            var sortedItemsByGroup = new Dictionary<int, List<BaseItem>>();
+            foreach (var kvp in itemsByGroup)
+            {
+                var groupIndex = kvp.Key;
+                var groupItems = kvp.Value;
+
+                if (secondaryOrders.Count > 0)
+                {
+                    logger?.LogDebug("Applying {Count} secondary sorts to {ItemCount} items in group {GroupIndex}",
+                        secondaryOrders.Count, groupItems.Count, groupIndex);
+
+                    // Apply secondary sorts using the existing multi-sort logic
+                    var sortedItems = ApplySecondarySorts(groupItems, secondaryOrders, user, userDataManager, logger, refreshCache);
+                    sortedItemsByGroup[groupIndex] = sortedItems.ToList();
+                }
+                else
+                {
+                    // No secondary sorts, keep original order
+                    sortedItemsByGroup[groupIndex] = groupItems;
+                }
+            }
+
+            // Determine group order based on ascending vs descending
+            bool isDescending = interleavedOrder is Orders.RuleBlockOrderInterleavedDesc;
+            var sortedGroupIndices = isDescending 
+                ? sortedItemsByGroup.Keys.OrderByDescending(k => k).ToList()
+                : sortedItemsByGroup.Keys.OrderBy(k => k).ToList();
+
+            logger?.LogDebug("Interleaving {GroupCount} groups in {Direction} order",
+                sortedGroupIndices.Count, isDescending ? "descending" : "ascending");
+
+            // Interleave items from each group in round-robin fashion
+            var result = new List<BaseItem>();
+            var groupIterators = new Dictionary<int, int>();
+            
+            // Initialize iterators - always start from the beginning to respect secondary sort order
+            // The "descending" only affects the order of blocks, not the iteration within blocks
+            foreach (var groupIndex in sortedGroupIndices)
+            {
+                groupIterators[groupIndex] = 0;
+            }
+
+            // Keep going until all groups are exhausted
+            var hasMoreItems = true;
+            while (hasMoreItems)
+            {
+                hasMoreItems = false;
+                
+                // Take one item from each group in order
+                foreach (var groupIndex in sortedGroupIndices)
+                {
+                    var groupItems = sortedItemsByGroup[groupIndex];
+                    var iterator = groupIterators[groupIndex];
+                    
+                    if (iterator < groupItems.Count)
+                    {
+                        result.Add(groupItems[iterator]);
+                        groupIterators[groupIndex]++;
+                        hasMoreItems = true;
+                    }
+                }
+            }
+
+            logger?.LogDebug("Interleaving complete: {ResultCount} items from {GroupCount} groups",
+                result.Count, sortedGroupIndices.Count);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Applies secondary sorts to a collection of items.
+        /// Used by interleaved ordering to sort within each block.
+        /// </summary>
+        private static IEnumerable<BaseItem> ApplySecondarySorts(List<BaseItem> items, List<Order> orders, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        {
+            // Delegate to the shared sorting core logic
+            return ApplySortingCore(items, orders, user, userDataManager, logger, refreshCache);
         }
 
 
@@ -1715,6 +2011,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is SeasonNumberOrderDesc ||
                    order is EpisodeNumberOrderDesc ||
                    order is TrackNumberOrderDesc ||
+                   order is Orders.RuleBlockOrderDesc ||
+                   order is Orders.RuleBlockOrderInterleavedDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -1957,6 +2255,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
 
                                 bool matches = false;
+                                List<int>? matchingGroups = null;
+                                
                                 if (!hasAnyRules)
                                 {
                                     matches = true;
@@ -1969,7 +2269,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
                                 else
                                 {
-                                    matches = EvaluateLogicGroups(compiledRules, operand);
+                                    // Check if we need per-group tracking for limits or Rule Block Order sorting
+                                    bool needsGroupTracking = NeedsGroupTracking();
+                                    
+                                    if (needsGroupTracking)
+                                    {
+                                        matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+                                        matches = matchingGroups.Count > 0;
+                                    }
+                                    else
+                                    {
+                                        matches = EvaluateLogicGroups(compiledRules, operand);
+                                    }
                                 }
 
                                 // Apply similarity filter
@@ -1978,6 +2289,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 if (matches)
                                 {
                                     results.Add(item);
+                                    
+                                    // Track which groups this item matched for per-group limiting
+                                    if (matchingGroups != null && matchingGroups.Count > 0)
+                                    {
+                                        _itemGroupMappings[item.Id] = matchingGroups;
+                                    }
                                 }
                                 // Note: Series expansion logic is now handled in ExpandCollectionsBasedOnMediaType based on media type selection
                             }
@@ -2193,6 +2510,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
 
                                 bool matches = false;
+                                List<int>? matchingGroups = null;
+                                
                                 if (!hasAnyRules)
                                 {
                                     matches = true;
@@ -2205,7 +2524,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
                                 else
                                 {
-                                    matches = EvaluateLogicGroups(compiledRules, fullOperand);
+                                    // Check if we need per-group tracking for limits or Rule Block Order sorting
+                                    bool needsGroupTracking = NeedsGroupTracking();
+                                    
+                                    if (needsGroupTracking)
+                                    {
+                                        matchingGroups = GetMatchingGroupIndices(compiledRules, fullOperand);
+                                        matches = matchingGroups.Count > 0;
+                                    }
+                                    else
+                                    {
+                                        matches = EvaluateLogicGroups(compiledRules, fullOperand);
+                                    }
                                 }
 
                                 // Apply similarity filter
@@ -2214,6 +2544,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 if (matches)
                                 {
                                     results.Add(item);
+                                    
+                                    // Track which groups this item matched for per-group limiting
+                                    if (matchingGroups != null && matchingGroups.Count > 0)
+                                    {
+                                        _itemGroupMappings[item.Id] = matchingGroups;
+                                    }
                                 }
                                 // Note: Series expansion logic is now handled in ExpandCollectionsBasedOnMediaType based on media type selection
                             }
@@ -2324,6 +2660,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         }
 
                         bool matches = false;
+                        List<int>? matchingGroups = null;
+                        
                         if (!hasAnyRules)
                         {
                             matches = true;
@@ -2336,7 +2674,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         }
                         else
                         {
-                            matches = EvaluateLogicGroups(compiledRules, operand);
+                            // Check if we need per-group tracking for limits or Rule Block Order sorting
+                            bool needsGroupTracking = NeedsGroupTracking();
+                            
+                            if (needsGroupTracking)
+                            {
+                                matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+                                matches = matchingGroups.Count > 0;
+                            }
+                            else
+                            {
+                                matches = EvaluateLogicGroups(compiledRules, operand);
+                            }
                         }
 
                         // Apply similarity filter
@@ -2345,6 +2694,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         if (matches)
                         {
                             results.Add(item);
+                            
+                            // Track which groups this item matched for per-group limiting
+                            if (matchingGroups != null && matchingGroups.Count > 0)
+                            {
+                                _itemGroupMappings[item.Id] = matchingGroups;
+                            }
                         }
                         else if (item is Series series && ShouldExpandEpisodesForCollections())
                         {
@@ -2439,6 +2794,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "EpisodeNumber Ascending", () => new EpisodeNumberOrder() },
             { "EpisodeNumber Descending", () => new EpisodeNumberOrderDesc() },
             { "Random", () => new RandomOrder() },
+            { "Rule Block Order Ascending", () => new Orders.RuleBlockOrder() },
+            { "Rule Block Order Descending", () => new Orders.RuleBlockOrderDesc() },
+            { "Rule Block Order Interleaved Ascending", () => new Orders.RuleBlockOrderInterleaved() },
+            { "Rule Block Order Interleaved Descending", () => new Orders.RuleBlockOrderInterleavedDesc() },
             { "NoOrder", () => new NoOrder() },
         };
 

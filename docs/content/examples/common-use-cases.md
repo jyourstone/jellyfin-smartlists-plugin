@@ -61,6 +61,115 @@ Here are some popular playlist and collection types you can create:
 ### Unplayed Sitcom Episodes
 - **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
 
+## Balanced Mix with Per-Group Limits
+
+These examples use the **Max Items for this OR block** feature to create perfectly balanced playlists:
+
+### Movie Trailer & Episode Mix
+Create a playlist with exactly 50% bumpers and 50% episodes:
+
+- **OR Block 1**: 
+  - **Media Type** = Trailer
+  - **Max Items for this OR block**: 50
+- **OR Block 2**: 
+  - **Media Type** = Episode
+  - **Max Items for this OR block**: 50
+- **Sort by**: Random
+- Result: 50 random trailers mixed with 50 random episodes (100 items total)
+
+### Multi-Genre Top Hits
+Get the top-rated content from different genres equally:
+
+- **OR Block 1**: 
+  - **Genre** is in "Action;Thriller"
+  - **Max Items for this OR block**: 20
+- **OR Block 2**: 
+  - **Genre** is in "Comedy;Romance"
+  - **Max Items for this OR block**: 20
+- **OR Block 3**: 
+  - **Genre** is in "Sci-Fi;Fantasy"
+  - **Max Items for this OR block**: 20
+- **Sort by**: Community Rating (descending)
+- Result: Top 20 highest-rated items from each genre group (60 items total)
+
+### Balanced Continue Watching
+Mix next episodes from different show types:
+
+- **OR Block 1**: 
+  - **Next Unwatched** = True
+  - **Genre** contains "Drama"
+  - **Max Items for this OR block**: 5
+- **OR Block 2**: 
+  - **Next Unwatched** = True
+  - **Genre** contains "Comedy"
+  - **Max Items for this OR block**: 5
+- **OR Block 3**: 
+  - **Next Unwatched** = True
+  - **Genre** contains "Documentary"
+  - **Max Items for this OR block**: 3
+- Result: Your next 5 drama episodes, 5 comedy episodes, and 3 documentaries to watch
+
+### Mixed Era Playlist
+Create a time-traveling playlist with content from different decades:
+
+- **OR Block 1**: 
+  - **Production Year** between 1980-1989
+  - **Max Items for this OR block**: 15
+- **OR Block 2**: 
+  - **Production Year** between 1990-1999
+  - **Max Items for this OR block**: 15
+- **OR Block 3**: 
+  - **Production Year** between 2000-2009
+  - **Max Items for this OR block**: 15
+- **OR Block 4**: 
+  - **Production Year** after 2010
+  - **Max Items for this OR block**: 15
+- **Sort by**: Random
+- Result: 15 items from each decade, shuffled together
+
+### Genre-Grouped Movie Night
+Create distinct sections for different genres in one playlist:
+
+- **OR Block 1**: 
+  - **Genre** contains "Action"
+  - **Max Items for this OR block**: 10
+- **OR Block 2**: 
+  - **Genre** contains "Comedy"
+  - **Max Items for this OR block**: 10
+- **OR Block 3**: 
+  - **Genre** contains "Horror"
+  - **Max Items for this OR block**: 10
+- **Sort by**: Rule Block Order (primary), Community Rating descending (secondary)
+- Result: 10 top-rated action movies, then 10 top-rated comedies, then 10 top-rated horror movies - all in separate sections
+
+### Interleaved Genre Mix
+Create a playlist where genres alternate throughout instead of being in sections:
+
+- **OR Block 1**: 
+  - **Genre** contains "Action"
+  - **Max Items for this OR block**: 10
+- **OR Block 2**: 
+  - **Genre** contains "Comedy"
+  - **Max Items for this OR block**: 10
+- **OR Block 3**: 
+  - **Genre** contains "Drama"
+  - **Max Items for this OR block**: 10
+- **Sort by**: Rule Block Order Interleaved (primary), Community Rating descending (secondary)
+- Result: Best action, best comedy, best drama, 2nd best action, 2nd best comedy, 2nd best drama... (alternating pattern with top-rated items from each genre)
+
+### Bumper & Episode Playlist
+Create the perfect alternating pattern of bumpers and episodes:
+
+- **OR Block 1**: 
+  - **Media Type** = Trailer
+  - **Max Items for this OR block**: 20
+- **OR Block 2**: 
+  - **Media Type** = Episode
+  - **Series Name** = "Your Favorite Show"
+  - **Max Items for this OR block**: 20
+- **Sort by**: Rule Block Order Interleaved (Ascending), Runtime (Ascending)
+- Result: Shortest bumper, shortest episode, 2nd shortest bumper, 2nd shortest episode... (perfect alternation, shortest to longest)
+
 ## Music
 
 ### Workout Mix
