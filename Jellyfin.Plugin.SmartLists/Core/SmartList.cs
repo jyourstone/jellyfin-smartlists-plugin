@@ -1945,19 +1945,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var result = new List<BaseItem>();
             var groupIterators = new Dictionary<int, int>();
             
-            // Initialize iterators based on ascending vs descending
+            // Initialize iterators - always start from the beginning to respect secondary sort order
+            // The "descending" only affects the order of blocks, not the iteration within blocks
             foreach (var groupIndex in sortedGroupIndices)
             {
-                if (isDescending)
-                {
-                    // Start from the end for descending
-                    groupIterators[groupIndex] = sortedItemsByGroup[groupIndex].Count - 1;
-                }
-                else
-                {
-                    // Start from the beginning for ascending
-                    groupIterators[groupIndex] = 0;
-                }
+                groupIterators[groupIndex] = 0;
             }
 
             // Keep going until all groups are exhausted
@@ -1972,23 +1964,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     var groupItems = sortedItemsByGroup[groupIndex];
                     var iterator = groupIterators[groupIndex];
                     
-                    if (isDescending)
+                    if (iterator < groupItems.Count)
                     {
-                        if (iterator >= 0)
-                        {
-                            result.Add(groupItems[iterator]);
-                            groupIterators[groupIndex]--;
-                            hasMoreItems = true;
-                        }
-                    }
-                    else
-                    {
-                        if (iterator < groupItems.Count)
-                        {
-                            result.Add(groupItems[iterator]);
-                            groupIterators[groupIndex]++;
-                            hasMoreItems = true;
-                        }
+                        result.Add(groupItems[iterator]);
+                        groupIterators[groupIndex]++;
+                        hasMoreItems = true;
                     }
                 }
             }

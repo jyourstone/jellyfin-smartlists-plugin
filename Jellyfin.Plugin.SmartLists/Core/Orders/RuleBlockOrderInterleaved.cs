@@ -125,9 +125,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
     }
 
     /// <summary>
-    /// Interleaves items from different rule blocks in a round-robin pattern, starting from the end of each block.
-    /// Items are distributed evenly in descending order: last from block 1, last from block 2, last from block 3, repeat.
-    /// Perfect for creating reverse-ordered playlists where you want content from different groups to alternate.
+    /// Interleaves items from different rule blocks in a round-robin pattern, starting from the last block.
+    /// Items are distributed evenly in reverse block order: one from last block, one from second-to-last, etc.
+    /// The order of items within each block is preserved (respects secondary sorts).
+    /// Perfect for creating playlists where you want later rule blocks to have priority while maintaining alternation.
     /// </summary>
     public class RuleBlockOrderInterleavedDesc : Order
     {
@@ -167,14 +168,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             // Sort group indices in descending order (reverse of block order)
             var sortedGroupIndices = itemsByGroup.Keys.OrderByDescending(k => k).ToList();
 
-            // Interleave items from each group in round-robin fashion, starting from the end
+            // Interleave items from each group in round-robin fashion
+            // Note: "Descending" only affects block order, not iteration within blocks
             var result = new List<BaseItem>();
             var groupIterators = new Dictionary<int, int>();
             
-            // Initialize iterators for each group to point to the last item
+            // Initialize iterators for each group to start from the beginning
             foreach (var groupIndex in sortedGroupIndices)
             {
-                groupIterators[groupIndex] = itemsByGroup[groupIndex].Count - 1;
+                groupIterators[groupIndex] = 0;
             }
 
             // Keep going until all groups are exhausted
@@ -183,16 +185,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             {
                 hasMoreItems = false;
                 
-                // Take one item from each group in order, starting from the end
+                // Take one item from each group in order
                 foreach (var groupIndex in sortedGroupIndices)
                 {
                     var groupItems = itemsByGroup[groupIndex];
                     var iterator = groupIterators[groupIndex];
                     
-                    if (iterator >= 0)
+                    if (iterator < groupItems.Count)
                     {
                         result.Add(groupItems[iterator]);
-                        groupIterators[groupIndex]--;
+                        groupIterators[groupIndex]++;
                         hasMoreItems = true;
                     }
                 }
