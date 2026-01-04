@@ -125,14 +125,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             if (GroupMappings.TryGetValue(item.Id, out var groups) && groups.Count > 0)
             {
-                // For descending order in multi-sort, we negate the value.
-                // This ensures higher group indices sort first when used with OrderByDescending.
-                // Example: group 0 → 0, group 1 → -1, group 2 → -2
-                // With OrderByDescending: 0 > -1 > -2, so group 0 appears first (descending behavior).
-                return -groups.Min();
+                // Return the lowest group index for items matching multiple groups.
+                // ApplySortingCore will apply OrderByDescending to get descending order.
+                // Example: group 0 → 0, group 1 → 1, group 2 → 2
+                // With OrderByDescending: 2 > 1 > 0, so group 2 appears first (correct descending behavior).
+                return groups.Min();
             }
-            // Items with no group mapping get int.MinValue (-2147483648), which is lower than
-            // any negated group index, ensuring they sort last when OrderByDescending is applied.
+            // Items with no group mapping get int.MinValue, ensuring they sort last with OrderByDescending.
             return int.MinValue;
         }
     }

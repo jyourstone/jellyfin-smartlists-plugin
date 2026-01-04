@@ -586,7 +586,7 @@
                         }
 
                         // Populate MaxItems for this group if it exists
-                        if (expressionSet.MaxItems) {
+                        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
                             const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
                             if (maxItemsInput) {
                                 maxItemsInput.value = expressionSet.MaxItems;
@@ -820,7 +820,7 @@
                         }
 
                         // Populate MaxItems for this group if it exists
-                        if (expressionSet.MaxItems) {
+                        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
                             const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
                             if (maxItemsInput) {
                                 maxItemsInput.value = expressionSet.MaxItems;
@@ -1189,7 +1189,7 @@
                     }
 
                     // Add MaxItems indicator if this group has a limit
-                    if (expressionSet.MaxItems) {
+                    if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
                         rulesHtml += '<br><span style="color: #888; font-size: 0.9em;">↳ Max ' + SmartLists.escapeHtml(expressionSet.MaxItems.toString()) + ' items from this group</span>';
                     }
 
