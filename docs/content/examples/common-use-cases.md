@@ -142,34 +142,6 @@ Create distinct sections for different genres in one playlist:
 - **Sort by**: Rule Block Order (primary), Community Rating descending (secondary)
 - Result: 10 top-rated action movies, then 10 top-rated comedies, then 10 top-rated horror movies - all in separate sections
 
-### Interleaved Genre Mix
-Create a playlist where genres alternate throughout instead of being in sections:
-
-- **OR Block 1**: 
-  - **Genre** contains "Action"
-  - **Max Items for this OR block**: 10
-- **OR Block 2**: 
-  - **Genre** contains "Comedy"
-  - **Max Items for this OR block**: 10
-- **OR Block 3**: 
-  - **Genre** contains "Drama"
-  - **Max Items for this OR block**: 10
-- **Sort by**: Rule Block Order Interleaved (primary), Community Rating descending (secondary)
-- Result: Best action, best comedy, best drama, 2nd best action, 2nd best comedy, 2nd best drama... (alternating pattern with top-rated items from each genre)
-
-### Bumper & Episode Playlist
-Create the perfect alternating pattern of bumpers and episodes:
-
-- **OR Block 1**: 
-  - **Media Type** = Trailer
-  - **Max Items for this OR block**: 20
-- **OR Block 2**: 
-  - **Media Type** = Episode
-  - **Series Name** = "Your Favorite Show"
-  - **Max Items for this OR block**: 20
-- **Sort by**: Rule Block Order Interleaved (Ascending), Runtime (Ascending)
-- Result: Shortest bumper, shortest episode, 2nd shortest bumper, 2nd shortest episode... (perfect alternation, shortest to longest)
-
 ## Music
 
 ### Workout Mix

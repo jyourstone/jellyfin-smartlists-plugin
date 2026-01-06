@@ -78,28 +78,6 @@ Preserves the natural grouping from OR blocks by keeping items from each block t
 !!! note "Requires Multiple OR Blocks"
     This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
 
-### Rule Block Order Interleaved
-Distributes items from OR blocks in a round-robin alternating pattern.
-
-**How it works**:
-
-- Takes one item from Block 1, then one from Block 2, then one from Block 3, and repeats
-- **Ascending**: Starts from the beginning of each block (position 0, 1, 2...)
-- **Descending**: Starts from the end of each block and processes blocks in reverse order
-
-**When to use**: Perfect for playlists where you want variety throughout instead of distinct sections (e.g., alternating bumpers and episodes, rotating between music genres).
-
-**Works with secondary sorts**: Items within each block are sorted first using your secondary sort options, then the sorted blocks are interleaved.
-
-**Example**: With bumpers and episodes, sorted by "Rule Block Order Interleaved" then "Runtime Ascending", you get: shortest bumper, shortest episode, 2nd shortest bumper, 2nd shortest episode... (alternating pattern, shortest to longest)
-
-!!! note "Interleaved vs Regular Rule Block Order"
-    - **Rule Block Order**: Creates distinct sections (all items from Block 1, then all from Block 2)
-    - **Rule Block Order Interleaved**: Mixes items throughout (alternating between blocks)
-
-!!! note "Requires Multiple OR Blocks"
-    This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
-
 ## Limits
 
 ### Max Items
@@ -139,7 +117,7 @@ When using multiple OR blocks, you can set a **Max Items limit for each individu
     Per-group limits are applied first, then the global Max Items limit. Example: 3 blocks × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
 
 !!! info "See Examples"
-    For detailed examples using per-group limits and interleaved sorting, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).
+    For detailed examples using per-group limits, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).
 
 ### Max Playtime
 
