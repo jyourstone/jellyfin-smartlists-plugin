@@ -1142,7 +1142,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 }
 
                 // Apply sorting and limits per group, then combine
-                var limitedItems = new HashSet<Guid>(); // Track which items to include (prevent duplicates)
+                // Track globally consumed items so duplicate blocks pull different items from the same pool
+                // Example: Two "crowd" blocks with MaxItems=1 each get the 1st and 2nd crowd episode
+                var consumedItems = new HashSet<Guid>();
                 var resultList = new List<BaseItem>();
 
                 for (int groupIndex = 0; groupIndex < ExpressionSets.Count; groupIndex++)
@@ -1166,23 +1168,41 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     //   but per-group limits are primarily designed for Rule Block scenarios.
                     var sortedGroupItems = ApplyMultipleOrders(groupItems, user, userDataManager, logger, refreshCache).ToList();
 
+                    // Filter out items that were already consumed by previous blocks
+                    // This allows duplicate blocks to pull the "next" items from the same pool
+                    var availableItems = sortedGroupItems.Where(item => !consumedItems.Contains(item.Id)).ToList();
+
+                    logger?.LogDebug("Rule group {GroupIndex} has {Available} available items after filtering consumed items ({Consumed} already used)",
+                        groupIndex, availableItems.Count, sortedGroupItems.Count - availableItems.Count);
+
                     // Apply per-group limit if configured
                     var groupMaxItems = group.MaxItems ?? 0;
-                    if (groupMaxItems > 0 && sortedGroupItems.Count > groupMaxItems)
+                    List<BaseItem> selectedItems;
+                    if (groupMaxItems > 0 && availableItems.Count > groupMaxItems)
                     {
-                        sortedGroupItems = sortedGroupItems.Take(groupMaxItems).ToList();
-                        logger?.LogDebug("Rule group {GroupIndex} limited from {Original} to {Limited} items", 
-                            groupIndex, groupItems.Count, sortedGroupItems.Count);
+                        selectedItems = availableItems.Take(groupMaxItems).ToList();
+                        logger?.LogDebug("Rule group {GroupIndex} limited from {Available} to {Limited} items", 
+                            groupIndex, availableItems.Count, selectedItems.Count);
+                    }
+                    else
+                    {
+                        selectedItems = availableItems;
                     }
 
-                    // Add items to result (avoiding duplicates if an item matched multiple groups)
-                    foreach (var item in sortedGroupItems)
+                    // Mark these items as consumed and add to result
+                    // Update group mappings to reflect which block contributed this item
+                    // This ensures Rule Block Order sorts correctly after per-group limiting
+                    foreach (var item in selectedItems)
                     {
-                        if (limitedItems.Add(item.Id))
-                        {
-                            resultList.Add(item);
-                        }
+                        consumedItems.Add(item.Id);
+                        resultList.Add(item);
+                        
+                        // Update the group mapping to show this item was contributed by this specific block
+                        // This overrides the original multi-group mapping (e.g., item matching both "crowd" and "german")
+                        _itemGroupMappings[item.Id] = new List<int> { groupIndex };
                     }
+
+                    logger?.LogDebug("Rule group {GroupIndex} contributed {Count} items to result", groupIndex, selectedItems.Count);
                 }
 
                 logger?.LogDebug("Per-group limiting: {Original} items → {Limited} items across {Groups} groups",
