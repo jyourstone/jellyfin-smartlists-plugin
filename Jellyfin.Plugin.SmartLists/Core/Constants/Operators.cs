@@ -39,10 +39,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
 
         /// <summary>
         /// Operators for multi-valued fields (collections, lists, etc.).
-        /// Note: Equal/NotEqual are not supported for multi-valued fields as they would check if the entire list matches.
-        /// Use Contains for partial matching or IsIn for exact matching of individual items.
+        /// Supports Equal/NotEqual which check if any item in the list matches.
+        /// Use Contains for partial matching or IsIn for matching against multiple values.
         /// </summary>
-        public static readonly string[] MultiValuedFieldOperators = ["Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
+        public static readonly string[] MultiValuedFieldOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
 
         /// <summary>
         /// Operators for string fields (text-based fields like Name, Album, etc).
@@ -53,12 +53,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// Operators for SimilarTo field (excludes negative operators to prevent matching entire library).
         /// </summary>
         public static readonly string[] SimilarToFieldOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
-
-        /// <summary>
-        /// Operators for multi-valued fields with special handling (Collections has limited operators).
-        /// Note: Equal for Collections has special semantics — it matches when any collection's name equals the target (case-insensitive) or when the collection name without configured prefix/suffix equals the target.
-        /// </summary>
-        public static readonly string[] LimitedMultiValuedFieldOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
 
         /// <summary>
         /// Operators for simple single-choice fields.
@@ -104,9 +98,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 "Genres" or "Studios" or "Tags" or "Artists" or "AlbumArtists" or "AudioLanguages"
                     => MultiValuedFieldOperators,
 
-                // Multi-valued fields with limited operators (Collections)
-                "Collections"
-                    => LimitedMultiValuedFieldOperators,
+                // Multi-valued fields - Collections and Playlists now support all operators including NotContains and IsNotIn
+                "Collections" or "Playlists"
+                    => MultiValuedFieldOperators,
 
                 // Simple fields
                 "ItemType"
@@ -156,8 +150,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             var dictionary = new Dictionary<string, string[]>
             {
                 // List fields - multi-valued fields
-                // Note: IsNotIn and NotContains excluded from Collections to avoid confusion with series expansion logic
-                ["Collections"] = LimitedMultiValuedFieldOperators,
+                // Collections and Playlists now support full operator set including NotContains and IsNotIn
+                ["Collections"] = MultiValuedFieldOperators,
+                ["Playlists"] = MultiValuedFieldOperators,
                 ["Genres"] = MultiValuedFieldOperators,
                 ["Studios"] = MultiValuedFieldOperators,
                 ["Tags"] = MultiValuedFieldOperators,
