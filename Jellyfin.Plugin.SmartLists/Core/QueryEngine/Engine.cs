@@ -1102,9 +1102,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         private static System.Linq.Expressions.Expression BuildStringEnumerableExpression(Expression r, MemberExpression left, ILogger? logger)
         {
-            if (r.Operator == "Equal")
+            if (r.Operator == "Equal" || r.Operator == "NotEqual")
             {
-                logger?.LogDebug("SmartLists applying collection Equal to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
+                logger?.LogDebug("SmartLists applying collection {Operator} to {Field} with value '{Value}'", r.Operator, r.MemberName, r.TargetValue);
                 var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
                 
                 // Use special method for Collections and Playlists that handles prefix/suffix stripping
@@ -1126,74 +1126,48 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     if (method == null) throw new InvalidOperationException("Engine.AnyItemEquals method not found");
                 }
                 
+                var equalsCall = System.Linq.Expressions.Expression.Call(method, left, right);
+                if (r.Operator == "Equal") return equalsCall;
+                if (r.Operator == "NotEqual") return System.Linq.Expressions.Expression.Not(equalsCall);
+            }
+
+            // All multi-valued fields (including Collections and Playlists) support the full operator set
+            // Support all operators including NotEqual, NotContains and IsNotIn
+            if (r.Operator == "Contains" || r.Operator == "NotContains")
+            {
+                var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
+                var method = typeof(Engine).GetMethod("AnyItemContains", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (method == null) throw new InvalidOperationException("Engine.AnyItemContains method not found");
+                var containsCall = System.Linq.Expressions.Expression.Call(method, left, right);
+                if (r.Operator == "Contains") return containsCall;
+                if (r.Operator == "NotContains") return System.Linq.Expressions.Expression.Not(containsCall);
+            }
+
+            if (r.Operator == "IsIn")
+            {
+                logger?.LogDebug("SmartLists applying collection IsIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
+                var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
+                var method = typeof(Engine).GetMethod("AnyItemIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (method == null)
+                {
+                    logger?.LogError("SmartLists AnyItemIsInList method not found!");
+                    throw new InvalidOperationException("AnyItemIsInList method not found");
+                }
                 return System.Linq.Expressions.Expression.Call(method, left, right);
             }
 
-            // For Collections and Playlists fields, only support operators in LimitedMultiValuedFieldOperators
-            // This excludes NotContains and IsNotIn to match the documented operator list
-            if (r.MemberName == "Collections" || r.MemberName == "Playlists")
+            if (r.Operator == "IsNotIn")
             {
-                // Collections and Playlists only support: Equal, Contains, IsIn, MatchRegex
-                if (r.Operator == "Contains")
+                logger?.LogDebug("SmartLists applying collection IsNotIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
+                var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
+                var method = typeof(Engine).GetMethod("AnyItemIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (method == null)
                 {
-                    var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                    var method = typeof(Engine).GetMethod("AnyItemContains", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyItemContains method not found");
-                    return System.Linq.Expressions.Expression.Call(method, left, right);
+                    logger?.LogError("SmartLists AnyItemIsInList method not found!");
+                    throw new InvalidOperationException("AnyItemIsInList method not found");
                 }
-
-                if (r.Operator == "IsIn")
-                {
-                    logger?.LogDebug("SmartLists applying collection IsIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
-                    var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                    var method = typeof(Engine).GetMethod("AnyItemIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null)
-                    {
-                        logger?.LogError("SmartLists AnyItemIsInList method not found!");
-                        throw new InvalidOperationException("AnyItemIsInList method not found");
-                    }
-                    return System.Linq.Expressions.Expression.Call(method, left, right);
-                }
-            }
-            else
-            {
-                // For other multi-valued fields, support all operators including NotContains and IsNotIn
-                if (r.Operator == "Contains" || r.Operator == "NotContains")
-                {
-                    var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                    var method = typeof(Engine).GetMethod("AnyItemContains", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyItemContains method not found");
-                    var containsCall = System.Linq.Expressions.Expression.Call(method, left, right);
-                    if (r.Operator == "Contains") return containsCall;
-                    if (r.Operator == "NotContains") return System.Linq.Expressions.Expression.Not(containsCall);
-                }
-
-                if (r.Operator == "IsIn")
-                {
-                    logger?.LogDebug("SmartLists applying collection IsIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
-                    var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                    var method = typeof(Engine).GetMethod("AnyItemIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null)
-                    {
-                        logger?.LogError("SmartLists AnyItemIsInList method not found!");
-                        throw new InvalidOperationException("AnyItemIsInList method not found");
-                    }
-                    return System.Linq.Expressions.Expression.Call(method, left, right);
-                }
-
-                if (r.Operator == "IsNotIn")
-                {
-                    logger?.LogDebug("SmartLists applying collection IsNotIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
-                    var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                    var method = typeof(Engine).GetMethod("AnyItemIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null)
-                    {
-                        logger?.LogError("SmartLists AnyItemIsInList method not found!");
-                        throw new InvalidOperationException("AnyItemIsInList method not found");
-                    }
-                    var isNotInCall = System.Linq.Expressions.Expression.Call(method, left, right);
-                    return System.Linq.Expressions.Expression.Not(isNotInCall);
-                }
+                var isNotInCall = System.Linq.Expressions.Expression.Call(method, left, right);
+                return System.Linq.Expressions.Expression.Not(isNotInCall);
             }
 
             if (r.Operator == "MatchRegex")
