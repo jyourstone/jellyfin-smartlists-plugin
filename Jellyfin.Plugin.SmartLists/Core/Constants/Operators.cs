@@ -55,12 +55,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         public static readonly string[] SimilarToFieldOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
 
         /// <summary>
-        /// Operators for multi-valued fields with special handling (Collections has limited operators).
-        /// Note: Equal for Collections has special semantics — it matches when any collection's name equals the target (case-insensitive) or when the collection name without configured prefix/suffix equals the target.
-        /// </summary>
-        public static readonly string[] LimitedMultiValuedFieldOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
-
-        /// <summary>
         /// Operators for simple single-choice fields.
         /// </summary>
         public static readonly string[] SimpleFieldOperators = ["Equal", "NotEqual"];
