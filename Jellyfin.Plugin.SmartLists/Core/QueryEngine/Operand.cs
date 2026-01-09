@@ -33,6 +33,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public List<string> DefaultAudioLanguages { get; set; } = [];
         public List<string> People { get; set; } = [];
         public List<string> Actors { get; set; } = [];
+        public List<string> ActorRoles { get; set; } = []; // Character/role names (e.g., "Jake Sully")
         public List<string> Directors { get; set; } = [];
         public List<string> Composers { get; set; } = [];
         public List<string> Writers { get; set; } = [];

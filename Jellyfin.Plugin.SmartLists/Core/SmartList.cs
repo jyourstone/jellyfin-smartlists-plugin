@@ -54,7 +54,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         {
             "AudioLanguages", "AudioBitrate", "AudioSampleRate", "AudioBitDepth", "AudioCodec", "AudioProfile", "AudioChannels",
             "Resolution", "Framerate", "VideoCodec", "VideoProfile", "VideoRange", "VideoRangeType",
-            "People", "Actors", "Directors", "Composers", "Writers", "GuestStars", "Producers", "Conductors",
+            "People", "Actors", "ActorRoles", "Directors", "Composers", "Writers", "GuestStars", "Producers", "Conductors",
             "Lyricists", "Arrangers", "SoundEngineers", "Mixers", "Remixers", "Creators", "PersonArtists",
             "PersonAlbumArtists", "Authors", "Illustrators", "Pencilers", "Inkers", "Colorists", "Letterers",
             "CoverArtists", "Editors", "Translators",

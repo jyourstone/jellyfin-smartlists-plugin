@@ -75,6 +75,7 @@ The web interface provides access to all available fields for creating list rule
 
 - **People (All)** - All cast and crew
 - **Actors** - Actors in the movie or TV show
+- **Actor Roles** - Character names/roles
 - **Directors** - Directors of the movie or TV show
 - **Writers** - Writers/screenwriters
 - **Producers** - Producers
@@ -240,6 +241,7 @@ When using the **People** field, you can select a specific person type to filter
 
 - **People (All)** - Matches any cast or crew member (default)
 - **Actors** - Only actors
+- **Actor Roles (Character Names)** - Character names
 - **Directors** - Only directors
 - **Writers** - Only writers/screenwriters
 - **Producers** - Only producers
