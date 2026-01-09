@@ -30,6 +30,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             "AudioLanguages",
             "People",
             "Actors",
+            "ActorRoles",
             "Directors",
             "Composers",
             "Writers",
@@ -69,6 +70,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             "People",
             "Actors",
+            "ActorRoles",
             "Directors",
             "Composers",
             "Writers",

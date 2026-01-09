@@ -2055,7 +2055,7 @@
     // Returns a map where keys are people field names and values are 'People' (indicating they're people fields)
     SmartLists.getPeopleFieldMap = function () {
         return {
-            'People': 'People', 'Actors': 'People', 'Directors': 'People', 'Composers': 'People',
+            'People': 'People', 'Actors': 'People', 'ActorRoles': 'People', 'Directors': 'People', 'Composers': 'People',
             'Writers': 'People', 'GuestStars': 'People', 'Producers': 'People', 'Conductors': 'People',
             'Lyricists': 'People', 'Arrangers': 'People', 'SoundEngineers': 'People', 'Mixers': 'People',
             'Remixers': 'People', 'Creators': 'People', 'PersonArtists': 'People', 'PersonAlbumArtists': 'People',

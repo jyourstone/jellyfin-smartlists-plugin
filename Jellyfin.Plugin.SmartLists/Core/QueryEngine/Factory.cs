@@ -487,6 +487,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     // Add to all people (only if not already present)
                     allPeopleNames.Add(name);
 
+                    // Extract Role property (character name)
+                    var roleProperty = person.GetType().GetProperty("Role");
+                    if (roleProperty != null)
+                    {
+                        var roleValue = roleProperty.GetValue(person) as string;
+                        if (!string.IsNullOrEmpty(roleValue))
+                        {
+                            logger?.LogDebug("SmartLists found role '{Role}' for person '{Name}'", roleValue, name);
+                            if (!categorized.ActorRoles.Contains(roleValue))
+                            {
+                                categorized.ActorRoles.Add(roleValue);
+                            }
+                        }
+                    }
+
                     // Extract Type property to categorize
                     var typeProperty = person.GetType().GetProperty("Type");
                     if (typeProperty != null)
@@ -1558,6 +1573,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Initialize all people fields
             operand.People = [];
             operand.Actors = [];
+            operand.ActorRoles = [];
             operand.Directors = [];
             operand.Composers = [];
             operand.Writers = [];
@@ -1587,6 +1603,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 operand.People = new List<string>(cachedPeople.AllPeople);
                 operand.Actors = new List<string>(cachedPeople.Actors);
+                operand.ActorRoles = new List<string>(cachedPeople.ActorRoles);
                 operand.Directors = new List<string>(cachedPeople.Directors);
                 operand.Composers = new List<string>(cachedPeople.Composers);
                 operand.Writers = new List<string>(cachedPeople.Writers);
@@ -1649,6 +1666,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                         operand.People = categorized.AllPeople;
                         operand.Actors = categorized.Actors;
+                        operand.ActorRoles = categorized.ActorRoles;
                         operand.Directors = categorized.Directors;
                         operand.Composers = categorized.Composers;
                         operand.Writers = categorized.Writers;
@@ -1675,8 +1693,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     }
 
                     stopwatch.Stop();
-                    logger?.LogDebug("People query for item {ItemId} completed in {Ms}ms ({PeopleCount} people, {ActorCount} actors, {DirectorCount} directors)",
-                        baseItem.Id, stopwatch.ElapsedMilliseconds, operand.People.Count, operand.Actors.Count, operand.Directors.Count);
+                    logger?.LogDebug("People query for item {ItemId} completed in {Ms}ms ({PeopleCount} people, {ActorCount} actors, {DirectorCount} directors, {RoleCount} roles)",
+                        baseItem.Id, stopwatch.ElapsedMilliseconds, operand.People.Count, operand.Actors.Count, operand.Directors.Count, operand.ActorRoles.Count);
 
                     // Store in cache for future use
                     if (cache != null)
@@ -1685,6 +1703,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                         {
                             AllPeople = new List<string>(operand.People),
                             Actors = new List<string>(operand.Actors),
+                            ActorRoles = new List<string>(operand.ActorRoles),
                             Directors = new List<string>(operand.Directors),
                             Composers = new List<string>(operand.Composers),
                             Writers = new List<string>(operand.Writers),
@@ -2191,6 +2210,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 operand.People = [];
                 operand.Actors = [];
+                operand.ActorRoles = [];
                 operand.Directors = [];
                 operand.Composers = [];
                 operand.Writers = [];
@@ -3106,6 +3126,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             public List<string> Genres { get; set; } = [];
             public List<string> Tags { get; set; } = [];
             public List<string> Actors { get; set; } = [];
+            public List<string> ActorRoles { get; set; } = [];
             public List<string> Directors { get; set; } = [];
             public List<string> Composers { get; set; } = [];
             public List<string> Writers { get; set; } = [];
@@ -3140,6 +3161,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             public IReadOnlyDictionary<string, int> GenreFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public IReadOnlyDictionary<string, int> TagFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public IReadOnlyDictionary<string, int> ActorFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            public IReadOnlyDictionary<string, int> ActorRoleFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public IReadOnlyDictionary<string, int> DirectorFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public IReadOnlyDictionary<string, int> WriterFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public IReadOnlyDictionary<string, int> ProducerFreq { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -3324,6 +3346,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                         case "people":
                         case "actors":
+                        case "actorroles":
                         case "directors":
                         case "composers":
                         case "writers":
@@ -3354,6 +3377,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 {
                                     "people" => categorizedPeople.AllPeople,
                                     "actors" => categorizedPeople.Actors,
+                                    "actorroles" => categorizedPeople.ActorRoles,
                                     "directors" => categorizedPeople.Directors,
                                     "composers" => categorizedPeople.Composers,
                                     "writers" => categorizedPeople.Writers,
@@ -3384,6 +3408,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 {
                                     "people" => referenceMetadata.Actors, // Note: "People (All)" aggregates all person types, using Actors as proxy for SimilarTo
                                     "actors" => referenceMetadata.Actors,
+                                    "actorroles" => referenceMetadata.ActorRoles,
                                     "directors" => referenceMetadata.Directors,
                                     "composers" => referenceMetadata.Composers,
                                     "writers" => referenceMetadata.Writers,
@@ -3486,6 +3511,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 .GroupBy(a => a, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(a => a.Key, a => a.Count(), StringComparer.OrdinalIgnoreCase);
 
+            referenceMetadata.ActorRoleFreq = referenceMetadata.ActorRoles
+                .GroupBy(r => r, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(r => r.Key, r => r.Count(), StringComparer.OrdinalIgnoreCase);
+
             referenceMetadata.WriterFreq = referenceMetadata.Writers
                 .GroupBy(w => w, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(w => w.Key, w => w.Count(), StringComparer.OrdinalIgnoreCase);
@@ -3550,6 +3579,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var genreFrequencies = referenceMetadata.GenreFreq;
             var tagFrequencies = referenceMetadata.TagFreq;
             var actorFrequencies = referenceMetadata.ActorFreq;
+            var actorRoleFrequencies = referenceMetadata.ActorRoleFreq;
             var writerFrequencies = referenceMetadata.WriterFreq;
             var producerFrequencies = referenceMetadata.ProducerFreq;
             var directorFrequencies = referenceMetadata.DirectorFreq;
@@ -3609,6 +3639,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                             foreach (var actor in operand.Actors.Distinct(StringComparer.OrdinalIgnoreCase))
                             {
                                 if (actorFrequencies.TryGetValue(actor, out int frequency))
+                                {
+                                    fieldMatchCount++;
+                                    score += frequency;
+                                }
+                            }
+                        }
+                        break;
+
+                    case "actorroles":
+                        // Frequency-based matching for actor roles/characters (O(1) dictionary lookup)
+                        if (operand.ActorRoles != null && actorRoleFrequencies.Count > 0)
+                        {
+                            foreach (var role in operand.ActorRoles.Distinct(StringComparer.OrdinalIgnoreCase))
+                            {
+                                if (actorRoleFrequencies.TryGetValue(role, out int frequency))
                                 {
                                     fieldMatchCount++;
                                     score += frequency;

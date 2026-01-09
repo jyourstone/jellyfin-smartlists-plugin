@@ -1768,6 +1768,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     new { Value = "People", Label = "People (All)" },
                     new { Value = "Actors", Label = "Actors" },
+                    new { Value = "ActorRoles", Label = "Actor Roles (Character Names)" },
                     new { Value = "Directors", Label = "Directors" },
                     new { Value = "Composers", Label = "Composers" },
                     new { Value = "Writers", Label = "Writers" },
@@ -1808,6 +1809,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     new { Value = "Genre", Label = "Genre" },
                     new { Value = "Tags", Label = "Tags" },
                     new { Value = "Actors", Label = "Actors" },
+                    new { Value = "ActorRoles", Label = "Actor Roles (Character Names)" },
                     new { Value = "Writers", Label = "Writers" },
                     new { Value = "Producers", Label = "Producers" },
                     new { Value = "Directors", Label = "Directors" },

@@ -666,6 +666,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             public List<string> AllPeople { get; set; } = [];
             public List<string> Actors { get; set; } = [];
+            public List<string> ActorRoles { get; set; } = []; // Character/role names
             public List<string> Directors { get; set; } = [];
             public List<string> Composers { get; set; } = [];
             public List<string> Writers { get; set; } = [];
