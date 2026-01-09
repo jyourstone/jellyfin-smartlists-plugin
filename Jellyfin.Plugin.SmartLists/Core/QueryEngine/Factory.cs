@@ -470,6 +470,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             var categorized = new CategorizedPeople();
             var allPeopleNames = new HashSet<string>(); // Use HashSet to avoid duplicates
+            var actorRolesSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // Case-insensitive deduplication for roles
 
             foreach (var person in peopleEnumerable)
             {
@@ -487,21 +488,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     // Add to all people (only if not already present)
                     allPeopleNames.Add(name);
 
-                    // Extract Role property (character name)
-                    var roleProperty = person.GetType().GetProperty("Role");
-                    if (roleProperty != null)
-                    {
-                        var roleValue = roleProperty.GetValue(person) as string;
-                        if (!string.IsNullOrEmpty(roleValue))
-                        {
-                            logger?.LogDebug("SmartLists found role '{Role}' for person '{Name}'", roleValue, name);
-                            if (!categorized.ActorRoles.Contains(roleValue))
-                            {
-                                categorized.ActorRoles.Add(roleValue);
-                            }
-                        }
-                    }
-
                     // Extract Type property to categorize
                     var typeProperty = person.GetType().GetProperty("Type");
                     if (typeProperty != null)
@@ -518,6 +504,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                     if (!categorized.Actors.Contains(name))
                                     {
                                         categorized.Actors.Add(name);
+                                    }
+                                    // Extract Role property for actors (character name)
+                                    var actorRoleProperty = person.GetType().GetProperty("Role");
+                                    if (actorRoleProperty != null)
+                                    {
+                                        var roleValue = actorRoleProperty.GetValue(person) as string;
+                                        if (!string.IsNullOrWhiteSpace(roleValue))
+                                        {
+                                            var trimmedRole = roleValue.Trim();
+                                            actorRolesSet.Add(trimmedRole);
+                                        }
                                     }
                                     break;
                                 case "Director":
@@ -542,6 +539,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                     if (!categorized.GuestStars.Contains(name))
                                     {
                                         categorized.GuestStars.Add(name);
+                                    }
+                                    // Extract Role property for guest stars (character name)
+                                    var guestRoleProperty = person.GetType().GetProperty("Role");
+                                    if (guestRoleProperty != null)
+                                    {
+                                        var roleValue = guestRoleProperty.GetValue(person) as string;
+                                        if (!string.IsNullOrWhiteSpace(roleValue))
+                                        {
+                                            var trimmedRole = roleValue.Trim();
+                                            actorRolesSet.Add(trimmedRole);
+                                        }
                                     }
                                     break;
                                 case "Producer":
@@ -673,6 +681,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             categorized.AllPeople = allPeopleNames.ToList();
+            categorized.ActorRoles = actorRolesSet.ToList();
+            
+            if (logger != null && actorRolesSet.Count > 0)
+            {
+                logger.LogDebug("SmartLists extracted {RoleCount} unique actor roles from cast", actorRolesSet.Count);
+            }
+            
             return categorized;
         }
 
