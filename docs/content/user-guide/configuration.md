@@ -150,6 +150,8 @@ View and edit your smart playlists and collections:
 
 !!! info "User Page Differences"
     On the **User Page**, you can only see and manage lists you own. Admins can see and manage all lists server-wide.
+    
+    Additionally, **multi-user playlists are hidden** from the user page. When an admin creates a playlist with multiple users selected, those playlists will not appear in the manage tab for regular users. This prevents users from accidentally editing playlists that would affect other users. Multi-user playlists can only be viewed and managed by administrators.
 
 ### 3. Status
 

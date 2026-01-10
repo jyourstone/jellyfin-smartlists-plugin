@@ -1578,6 +1578,16 @@
                 processedPlaylists = [];
             }
 
+            // On user pages, filter out multi-user playlists to prevent users from
+            // editing playlists that would affect other users
+            if (SmartLists.IS_USER_PAGE) {
+                processedPlaylists = processedPlaylists.filter(function (playlist) {
+                    // Only show playlists that have 0 or 1 user
+                    // Multi-user playlists (created by admins) should only be visible/editable by admins
+                    return !playlist.UserPlaylists || playlist.UserPlaylists.length <= 1;
+                });
+            }
+
             // Store playlists data for filtering
             page._allPlaylists = processedPlaylists;
 
