@@ -47,7 +47,7 @@ Playlists also have a **"Make playlist public"** option:
 !!! warning "Multi-User Playlists and User Page Access"
     Multi-user playlists are **only visible and editable by administrators**. Regular users accessing the SmartLists user page will not see multi-user playlists in their list, even if they are one of the selected users.
     
-    This is a safety measure to prevent users from accidentally modifying playlists that would affect other users. If a user needs to edit their own version of a multi-user playlist, an administrator (or user) should create separate single-user playlists instead.
+    This is a safety measure to prevent users from accidentally modifying playlists that would affect other users. If a user needs their own version of a multi-user playlist, an administrator should create separate single-user playlists instead (one for each user).
 
 ## Collections: Reference User
 

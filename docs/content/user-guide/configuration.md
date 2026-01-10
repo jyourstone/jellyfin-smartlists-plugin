@@ -14,12 +14,12 @@ Regular users can access SmartLists directly from their Jellyfin home screen:
   - Create server-wide collections (requires Jellyfin "Manage Collections" permission)
   - Edit and clone their own lists
   - Refresh their lists manually
-  - View refresh status for their lists
 - **Limitations**:
   - Can only see and manage lists they own
   - Cannot access other users' playlists
   - Cannot modify global plugin settings
   - Cannot export/import list configurations
+  - No Status tab (refresh happens in background)
 
 !!! note "Collection Permissions"
     To create collections as a regular user, you must have the **"Manage Collections"** permission in Jellyfin. This permission can be granted by an administrator in:

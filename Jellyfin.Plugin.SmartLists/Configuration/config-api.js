@@ -122,6 +122,11 @@
             return Promise.resolve();
         }
 
+        // Don't overwrite if we have a pending collection user ID (from edit/clone mode for collections)
+        if (page._pendingCollectionUserId) {
+            return Promise.resolve();
+        }
+
         // Don't overwrite if a value is already set AND we're editing/cloning
         if (userSelect && userSelect.value && (editState.editMode || editState.cloneMode)) {
             return Promise.resolve();
@@ -233,6 +238,9 @@
             return;
         }
 
+        // Normalize user ID by removing hyphens (API returns IDs without hyphens, but stored IDs may have them)
+        const normalizedUserId = userIdString.replace(/-/g, '');
+
         // Check if element exists before proceeding
         const userSelect = page.querySelector('#playlistUser');
         if (!userSelect) {
@@ -252,11 +260,11 @@
 
             // Check if the option exists in the dropdown
             const optionExists = Array.from(userSelect.options).some(function (opt) {
-                return opt.value === userIdString;
+                return opt.value === normalizedUserId;
             });
             if (optionExists) {
-                SmartLists.setElementValue(page, '#playlistUser', userIdString);
-                userSelect.value = userIdString;
+                SmartLists.setElementValue(page, '#playlistUser', normalizedUserId);
+                userSelect.value = normalizedUserId;
                 return true;
             }
             return false;

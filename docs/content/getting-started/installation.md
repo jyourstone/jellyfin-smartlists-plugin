@@ -34,7 +34,7 @@ For regular users to access SmartLists from their home screen, the following plu
    - Go to **Dashboard** → **Plugins** → **All/Available**
    - Click **SmartLists** in the list of available plugins
    - Click **Install**
-   - Restart Jellyfin
+   - Restart Jellyfin after the plugin installation completes
 
 ## Manual Installation
 

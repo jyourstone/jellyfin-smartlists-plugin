@@ -195,13 +195,16 @@
                 // User page: always use the current logged-in user
                 const apiClient = SmartLists.getApiClient();
                 const currentUserId = apiClient.getCurrentUserId();
-                userIds = currentUserId ? [currentUserId] : [];
+                // Normalize user ID by removing hyphens
+                userIds = currentUserId ? [currentUserId.replace(/-/g, '')] : [];
             } else if (isCollection) {
                 // Admin page - Collections: single user
                 const userId = SmartLists.getElementValue(page, '#playlistUser');
+                // User ID from dropdown is already normalized (no hyphens from API)
                 userIds = userId ? [userId] : [];
             } else {
                 // Admin page - Playlists: potentially multiple users
+                // User IDs from dropdown are already normalized (no hyphens from API)
                 userIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
             }
 
@@ -1143,8 +1146,9 @@
                         }
 
                         // Check if this rule has a specific user and resolve username
+                        // Skip showing user info on user pages since users only see their own playlists
                         let userInfo = '';
-                        if (rule.UserId && rule.UserId !== '00000000-0000-0000-0000-000000000000') {
+                        if (!SmartLists.IS_USER_PAGE && rule.UserId && rule.UserId !== '00000000-0000-0000-0000-000000000000') {
                             try {
                                 const userName = await SmartLists.resolveUserIdToName(apiClient, rule.UserId);
                                 userInfo = ' for ' + (userName || 'Unknown User');
@@ -1607,6 +1611,11 @@
                         url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
                         contentType: 'application/json'
                     });
+                    
+                    if (!usersResponse.ok) {
+                        throw new Error('HTTP ' + usersResponse.status + ': ' + usersResponse.statusText);
+                    }
+                    
                     const users = await usersResponse.json();
 
                     // Build cache from all users for user name resolution

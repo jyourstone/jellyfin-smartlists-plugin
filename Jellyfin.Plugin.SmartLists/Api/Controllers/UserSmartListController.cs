@@ -47,6 +47,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly IProviderManager _providerManager;
         private readonly ISessionManager _sessionManager;
         private readonly Services.Shared.RefreshQueueService _refreshQueueService;
+        private readonly ILoggerFactory _loggerFactory;
 
         public UserSmartListController(
             ILogger<UserSmartListController> logger,
@@ -58,7 +59,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             IUserDataManager userDataManager,
             IProviderManager providerManager,
             ISessionManager sessionManager,
-            Services.Shared.RefreshQueueService refreshQueueService)
+            Services.Shared.RefreshQueueService refreshQueueService,
+            ILoggerFactory loggerFactory)
         {
             _logger = logger;
             _applicationPaths = applicationPaths;
@@ -70,6 +72,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             _providerManager = providerManager;
             _sessionManager = sessionManager;
             _refreshQueueService = refreshQueueService;
+            _loggerFactory = loggerFactory;
         }
 
         private PlaylistStore GetPlaylistStore()
@@ -86,8 +89,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
         private PlaylistService GetPlaylistService()
         {
-            var loggerFactory = new LoggerFactory();
-            var playlistServiceLogger = loggerFactory.CreateLogger<PlaylistService>();
+            var playlistServiceLogger = _loggerFactory.CreateLogger<PlaylistService>();
             return new PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _providerManager);
         }
 
@@ -155,9 +157,19 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             // If list is populated, check if current user is in it
             if (allowedUsers != null && allowedUsers.Count > 0)
             {
-                // Format GUID without dashes to match how it's stored in configuration
-                var userId = GetCurrentUserId().ToString("N");
-                if (!allowedUsers.Contains(userId))
+                // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
+                var currentUserId = GetCurrentUserId();
+                bool isAllowed = false;
+                foreach (var allowedUserStr in allowedUsers)
+                {
+                    if (Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == currentUserId)
+                    {
+                        isAllowed = true;
+                        break;
+                    }
+                }
+                
+                if (!isAllowed)
                 {
                     return StatusCode(StatusCodes.Status403Forbidden, new 
                     { 
@@ -260,12 +272,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Override user selection - always use current user
-                list.UserId = userId.ToString();
+                // Use "N" format to exclude hyphens (consistent with admin page and API responses)
+                list.UserId = userId.ToString("N");
                 list.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
                 {
                     new SmartPlaylistDto.UserPlaylistMapping
                     {
-                        UserId = userId.ToString(),
+                        UserId = userId.ToString("N"),
                         JellyfinPlaylistId = null
                     }
                 };
@@ -296,7 +309,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         Id = list.Id,
                         Name = list.Name,
                         Type = Core.Enums.SmartListType.Collection,
-                        UserId = userId.ToString(),
+                        UserId = userId.ToString("N"),
                         MediaTypes = list.MediaTypes,
                         ExpressionSets = list.ExpressionSets,
                         Order = list.Order,
@@ -310,6 +323,25 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     };
 
                     var collectionStore = GetCollectionStore();
+
+                    // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
+                    var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
+                    var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                    var duplicateCollection = allCollections.FirstOrDefault(c => 
+                        c.Id != collectionDto.Id && 
+                        string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (duplicateCollection != null)
+                    {
+                        _logger.LogWarning("User {UserId} cannot create collection '{CollectionName}' - a collection with this name already exists", userId, collectionDto.Name);
+                        return BadRequest(new ProblemDetails
+                        {
+                            Title = "Validation Error",
+                            Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
+                            Status = StatusCodes.Status400BadRequest
+                        });
+                    }
+
                     var createdCollection = await collectionStore.SaveAsync(collectionDto).ConfigureAwait(false);
 
                     // Update the auto-refresh cache with the new collection
@@ -341,7 +373,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         _logger.LogInformation("User {UserId} created disabled smart collection '{Name}' (not enqueued for refresh)", userId, createdCollection.Name);
                     }
 
-                    return CreatedAtAction(nameof(GetUserPlaylists), new { id = createdCollection.Id }, createdCollection);
+                    return CreatedAtAction(nameof(GetSmartList), new { id = createdCollection.Id }, createdCollection);
                 }
                 else
                 {
@@ -380,7 +412,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         _logger.LogInformation("User {UserId} created disabled smart playlist '{Name}' (not enqueued for refresh)", userId, createdPlaylist.Name);
                     }
 
-                    return CreatedAtAction(nameof(GetUserPlaylists), new { id = createdPlaylist.Id }, createdPlaylist);
+                    return CreatedAtAction(nameof(GetSmartList), new { id = createdPlaylist.Id }, createdPlaylist);
                 }
             }
             catch (Exception ex)
@@ -607,7 +639,34 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var store = GetPlaylistStore();
                 await store.SaveAsync(smartPlaylistDto).ConfigureAwait(false);
 
-                _logger.LogInformation("User {UserId} created smart playlist '{Name}'", userId, request.Name);
+                // Update the auto-refresh cache with the new playlist
+                Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(smartPlaylistDto);
+
+                // Clear the rule cache
+                SmartList.ClearRuleCache(_logger);
+
+                // Enqueue refresh operation to actually create the Jellyfin playlist
+                if (smartPlaylistDto.Enabled)
+                {
+                    _logger.LogDebug("Enqueuing refresh for newly created playlist {PlaylistName}", smartPlaylistDto.Name);
+                    var queueItem = new Services.Shared.RefreshQueueItem
+                    {
+                        ListId = smartPlaylistDto.Id ?? Guid.NewGuid().ToString(),
+                        ListName = smartPlaylistDto.Name,
+                        ListType = Core.Enums.SmartListType.Playlist,
+                        OperationType = Services.Shared.RefreshOperationType.Create,
+                        ListData = smartPlaylistDto,
+                        UserId = userId.ToString(),
+                        TriggerType = Core.Enums.RefreshTriggerType.Manual
+                    };
+
+                    _refreshQueueService.EnqueueOperation(queueItem);
+                    _logger.LogInformation("User {UserId} created smart playlist '{Name}' and enqueued for refresh", userId, smartPlaylistDto.Name);
+                }
+                else
+                {
+                    _logger.LogInformation("User {UserId} created disabled smart playlist '{Name}' (not enqueued for refresh)", userId, smartPlaylistDto.Name);
+                }
 
                 return CreatedAtAction(nameof(GetUserPlaylists), new { id = smartPlaylistDto.Id }, smartPlaylistDto);
             }
@@ -718,11 +777,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
         /// <summary>
         /// Simple rule group model for user input.
+        /// Rules within a group are combined with AND.
+        /// Groups are combined with OR.
         /// </summary>
         public class SimpleRuleGroup
         {
             public List<SimpleRule> Rules { get; set; } = new();
-            public string GroupOperator { get; set; } = "And";
         }
 
         /// <summary>
@@ -1107,6 +1167,30 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingCollection.FileName;
                         collectionDto.UserId = existingCollection.UserId;
 
+                        // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
+                        // Only check if the name is changing
+                        bool nameChanging = !string.Equals(existingCollection.Name, collectionDto.Name, StringComparison.OrdinalIgnoreCase);
+                        if (nameChanging)
+                        {
+                            var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
+                            var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                            var duplicateCollection = allCollections.FirstOrDefault(c => 
+                                c.Id != collectionDto.Id && 
+                                string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
+                            
+                            if (duplicateCollection != null)
+                            {
+                                _logger.LogWarning("User {UserId} cannot update collection '{OldName}' to '{NewName}' - a collection with this name already exists", 
+                                    userId, existingCollection.Name, collectionDto.Name);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Validation Error",
+                                    Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+                        }
+
                         // Save updated collection
                         await collectionStore.SaveAsync(collectionDto);
                         
@@ -1338,10 +1422,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         private void EnqueueRefreshOperation(string? listId, string listName, Core.Enums.SmartListType listType, SmartListDto? listData, string? userId)
         {
-#pragma warning disable CS8601 // Possible null reference assignment
+            // Ensure listId is never null by generating a fallback
+            var effectiveListId = listId ?? $"{userId ?? "unknown"}-{listName ?? "Unknown"}-{Guid.NewGuid()}";
+            
             var queueItem = new RefreshQueueItem
             {
-                ListId = listId,
+                ListId = effectiveListId,
                 ListName = listName ?? "Unknown",
                 ListType = listType,
                 OperationType = RefreshOperationType.Refresh,
@@ -1350,15 +1436,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 TriggerType = RefreshTriggerType.Manual,
                 QueuedAt = DateTime.UtcNow
             };
-#pragma warning restore CS8601
 
             _refreshQueueService.EnqueueOperation(queueItem);
         }
 
         private Services.Collections.CollectionService GetCollectionService()
         {
-            var loggerFactory = new LoggerFactory();
-            var collectionServiceLogger = loggerFactory.CreateLogger<Services.Collections.CollectionService>();
+            var collectionServiceLogger = _loggerFactory.CreateLogger<Services.Collections.CollectionService>();
             return new Services.Collections.CollectionService(
                 _libraryManager,
                 _collectionManager,

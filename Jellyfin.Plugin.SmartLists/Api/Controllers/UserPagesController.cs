@@ -59,9 +59,18 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var allowedUsers = config?.AllowedUserPageUsers;
                 if (allowedUsers != null && allowedUsers.Count > 0)
                 {
-                    // Format GUID without dashes to match how it's stored in configuration
-                    var userIdString = userId.ToString("N");
-                    if (!allowedUsers.Contains(userIdString))
+                    // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
+                    bool isAllowed = false;
+                    foreach (var allowedUserStr in allowedUsers)
+                    {
+                        if (Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == userId)
+                        {
+                            isAllowed = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isAllowed)
                     {
                         return GetFeatureDisabledPage();
                     }
@@ -173,7 +182,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             <h2>What can I do?</h2>
             <p>
                 Please contact your Jellyfin administrator to request access to SmartLists. 
-                Administrators can manage accesss in the SmartLists plugin settings.
+                Administrators can manage access in the SmartLists plugin settings.
             </p>
         </div>
 
@@ -182,7 +191,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 </body>
 </html>";
             
-            return Content(html, "text/html");
+            return Content(html, "text/html; charset=utf-8");
         }
     }
 }

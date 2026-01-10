@@ -369,12 +369,6 @@
                         // User can only create playlists - hide the selector and set to Playlist
                         listTypeContainer.style.display = 'none';
                         listTypeSelect.value = 'Playlist';
-                        
-                        // Update labels to say "Playlist" instead of generic "List"
-                        var playlistNameLabel = document.getElementById('playlistNameLabel');
-                        var playlistNameDesc = document.getElementById('playlistNameDesc');
-                        if (playlistNameLabel) playlistNameLabel.textContent = 'Playlist';
-                        if (playlistNameDesc) playlistNameDesc.textContent = 'playlist';
                     }
                 } catch (error) {
                     console.error('Error loading user capabilities:', error);

@@ -50,86 +50,88 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             @"%2e%2e\\",
         };
 
+        // Dangerous characters for file names
+        private static readonly char[] DangerousFileNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0' };
+
         /// <summary>
         /// Validates a smart list name.
         /// </summary>
-        public static ValidationResult ValidateName(string? name)
+        public static SmartListValidationResult ValidateName(string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
-                return ValidationResult.Failure("List name cannot be empty");
+                return SmartListValidationResult.Failure("List name cannot be empty");
             }
 
             if (name.Length > MaxNameLength)
             {
-                return ValidationResult.Failure($"List name cannot exceed {MaxNameLength} characters");
+                return SmartListValidationResult.Failure($"List name cannot exceed {MaxNameLength} characters");
             }
 
             // Check for path traversal attempts
             if (ContainsPathTraversal(name))
             {
-                return ValidationResult.Failure("List name contains invalid characters");
+                return SmartListValidationResult.Failure("List name contains invalid characters");
             }
 
             // Check for control characters (except normal whitespace)
             if (name.Any(c => char.IsControl(c) && c != '\t' && c != '\n' && c != '\r'))
             {
-                return ValidationResult.Failure("List name contains invalid control characters");
+                return SmartListValidationResult.Failure("List name contains invalid control characters");
             }
 
             // Check for potentially dangerous characters that could cause issues with file systems
-            var dangerousChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0' };
-            if (name.Any(c => dangerousChars.Contains(c)))
+            if (name.Any(c => DangerousFileNameChars.Contains(c)))
             {
-                return ValidationResult.Failure("List name contains invalid characters: < > : \" / \\ | ? *");
+                return SmartListValidationResult.Failure("List name contains invalid characters: < > : \" / \\ | ? *");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates a string value (used in expressions).
         /// </summary>
-        public static ValidationResult ValidateStringValue(string? value, string fieldName = "Value")
+        public static SmartListValidationResult ValidateStringValue(string? value, string fieldName = "Value")
         {
             if (value == null)
             {
-                return ValidationResult.Success(); // Null values are allowed
+                return SmartListValidationResult.Success(); // Null values are allowed
             }
 
             if (value.Length > MaxStringValueLength)
             {
-                return ValidationResult.Failure($"{fieldName} cannot exceed {MaxStringValueLength} characters");
+                return SmartListValidationResult.Failure($"{fieldName} cannot exceed {MaxStringValueLength} characters");
             }
 
             // Check for SQL injection patterns
             if (ContainsSqlInjection(value))
             {
-                return ValidationResult.Failure($"{fieldName} contains potentially dangerous SQL patterns");
+                return SmartListValidationResult.Failure($"{fieldName} contains potentially dangerous SQL patterns");
             }
 
             // Check for XSS patterns
             if (ContainsXss(value))
             {
-                return ValidationResult.Failure($"{fieldName} contains potentially dangerous script patterns");
+                return SmartListValidationResult.Failure($"{fieldName} contains potentially dangerous script patterns");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates a regex pattern to prevent ReDoS attacks.
         /// </summary>
-        public static ValidationResult ValidateRegexPattern(string? pattern)
+        public static SmartListValidationResult ValidateRegexPattern(string? pattern)
         {
             if (string.IsNullOrWhiteSpace(pattern))
             {
-                return ValidationResult.Failure("Regex pattern cannot be empty");
+                return SmartListValidationResult.Failure("Regex pattern cannot be empty");
             }
 
             if (pattern.Length > MaxRegexPatternLength)
             {
-                return ValidationResult.Failure($"Regex pattern cannot exceed {MaxRegexPatternLength} characters");
+                return SmartListValidationResult.Failure($"Regex pattern cannot exceed {MaxRegexPatternLength} characters");
             }
 
             // Try to compile the regex with a timeout to detect ReDoS vulnerabilities
@@ -141,95 +143,95 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
             catch (ArgumentException ex)
             {
-                return ValidationResult.Failure($"Invalid regex pattern: {ex.Message}");
+                return SmartListValidationResult.Failure($"Invalid regex pattern: {ex.Message}");
             }
             catch (RegexMatchTimeoutException)
             {
-                return ValidationResult.Failure("Regex pattern is too complex and may cause performance issues");
+                return SmartListValidationResult.Failure("Regex pattern is too complex and may cause performance issues");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates a field name.
         /// </summary>
-        public static ValidationResult ValidateFieldName(string? fieldName)
+        public static SmartListValidationResult ValidateFieldName(string? fieldName)
         {
             if (string.IsNullOrWhiteSpace(fieldName))
             {
-                return ValidationResult.Failure("Field name cannot be empty");
+                return SmartListValidationResult.Failure("Field name cannot be empty");
             }
 
             if (fieldName.Length > MaxFieldNameLength)
             {
-                return ValidationResult.Failure($"Field name cannot exceed {MaxFieldNameLength} characters");
+                return SmartListValidationResult.Failure($"Field name cannot exceed {MaxFieldNameLength} characters");
             }
 
             // Field names should only contain alphanumeric characters and underscores
             if (!Regex.IsMatch(fieldName, @"^[a-zA-Z_][a-zA-Z0-9_]*$"))
             {
-                return ValidationResult.Failure("Field name must contain only letters, numbers, and underscores, and start with a letter or underscore");
+                return SmartListValidationResult.Failure("Field name must contain only letters, numbers, and underscores, and start with a letter or underscore");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates an operator string.
         /// </summary>
-        public static ValidationResult ValidateOperator(string? operatorValue)
+        public static SmartListValidationResult ValidateOperator(string? operatorValue)
         {
             if (string.IsNullOrWhiteSpace(operatorValue))
             {
-                return ValidationResult.Failure("Operator cannot be empty");
+                return SmartListValidationResult.Failure("Operator cannot be empty");
             }
 
             if (operatorValue.Length > MaxOperatorLength)
             {
-                return ValidationResult.Failure($"Operator cannot exceed {MaxOperatorLength} characters");
+                return SmartListValidationResult.Failure($"Operator cannot exceed {MaxOperatorLength} characters");
             }
 
             // Operators should be simple strings without special characters
             if (!Regex.IsMatch(operatorValue, @"^[a-zA-Z0-9_\-\s]+$"))
             {
-                return ValidationResult.Failure("Operator contains invalid characters");
+                return SmartListValidationResult.Failure("Operator contains invalid characters");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates an integer value within a specified range.
         /// </summary>
-        public static ValidationResult ValidateInteger(int? value, int? min = null, int? max = null, string fieldName = "Value")
+        public static SmartListValidationResult ValidateInteger(int? value, int? min = null, int? max = null, string fieldName = "Value")
         {
             if (value == null)
             {
-                return ValidationResult.Success(); // Null values are allowed
+                return SmartListValidationResult.Success(); // Null values are allowed
             }
 
             if (min.HasValue && value < min.Value)
             {
-                return ValidationResult.Failure($"{fieldName} must be at least {min.Value}");
+                return SmartListValidationResult.Failure($"{fieldName} must be at least {min.Value}");
             }
 
             if (max.HasValue && value > max.Value)
             {
-                return ValidationResult.Failure($"{fieldName} cannot exceed {max.Value}");
+                return SmartListValidationResult.Failure($"{fieldName} cannot exceed {max.Value}");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates a complete smart list DTO.
         /// </summary>
-        public static ValidationResult ValidateSmartList(SmartListDto? list)
+        public static SmartListValidationResult ValidateSmartList(SmartListDto? list)
         {
             if (list == null)
             {
-                return ValidationResult.Failure("List data is required");
+                return SmartListValidationResult.Failure("List data is required");
             }
 
             // Validate name
@@ -242,7 +244,21 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             // Validate media types count
             if (list.MediaTypes != null && list.MediaTypes.Count > MaxMediaTypesCount)
             {
-                return ValidationResult.Failure($"Cannot select more than {MaxMediaTypesCount} media types");
+                return SmartListValidationResult.Failure($"Cannot select more than {MaxMediaTypesCount} media types");
+            }
+
+            // Validate media types values
+            if (list.MediaTypes != null && list.MediaTypes.Count > 0)
+            {
+                var validMediaTypes = Core.Constants.MediaTypes.All;
+                var invalidMediaTypes = list.MediaTypes
+                    .Where(mt => !validMediaTypes.Contains(mt))
+                    .ToList();
+
+                if (invalidMediaTypes.Count > 0)
+                {
+                    return SmartListValidationResult.Failure($"Invalid media type(s): {string.Join(", ", invalidMediaTypes)}. Allowed types: {string.Join(", ", validMediaTypes)}");
+                }
             }
 
             // Validate expression sets
@@ -250,7 +266,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             {
                 if (list.ExpressionSets.Count > MaxExpressionSetsCount)
                 {
-                    return ValidationResult.Failure($"Cannot have more than {MaxExpressionSetsCount} rule groups");
+                    return SmartListValidationResult.Failure($"Cannot have more than {MaxExpressionSetsCount} rule groups");
                 }
 
                 var expressionResult = ValidateExpressionSets(list.ExpressionSets);
@@ -276,21 +292,21 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             // Validate schedules count
             if (list.Schedules != null && list.Schedules.Count > MaxSchedulesCount)
             {
-                return ValidationResult.Failure($"Cannot have more than {MaxSchedulesCount} schedules");
+                return SmartListValidationResult.Failure($"Cannot have more than {MaxSchedulesCount} schedules");
             }
 
             if (list.VisibilitySchedules != null && list.VisibilitySchedules.Count > MaxSchedulesCount)
             {
-                return ValidationResult.Failure($"Cannot have more than {MaxSchedulesCount} visibility schedules");
+                return SmartListValidationResult.Failure($"Cannot have more than {MaxSchedulesCount} visibility schedules");
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates expression sets (rule groups).
         /// </summary>
-        private static ValidationResult ValidateExpressionSets(List<ExpressionSet> expressionSets)
+        private static SmartListValidationResult ValidateExpressionSets(List<ExpressionSet> expressionSets)
         {
             foreach (var expressionSet in expressionSets)
             {
@@ -301,7 +317,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
                 if (expressionSet.Expressions.Count > MaxExpressionsPerSet)
                 {
-                    return ValidationResult.Failure($"Cannot have more than {MaxExpressionsPerSet} rules in a single group");
+                    return SmartListValidationResult.Failure($"Cannot have more than {MaxExpressionsPerSet} rules in a single group");
                 }
 
                 foreach (var expression in expressionSet.Expressions)
@@ -314,13 +330,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 }
             }
 
-            return ValidationResult.Success();
+            return SmartListValidationResult.Success();
         }
 
         /// <summary>
         /// Validates a single expression (rule).
         /// </summary>
-        private static ValidationResult ValidateExpression(Expression expression)
+        private static SmartListValidationResult ValidateExpression(Expression expression)
         {
             // Validate field name
             var fieldResult = ValidateFieldName(expression.MemberName);
@@ -423,19 +439,19 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
     /// <summary>
     /// Represents the result of a validation operation.
     /// </summary>
-    public class ValidationResult
+    public class SmartListValidationResult
     {
         public bool IsValid { get; }
         public string? ErrorMessage { get; }
 
-        private ValidationResult(bool isValid, string? errorMessage = null)
+        private SmartListValidationResult(bool isValid, string? errorMessage = null)
         {
             IsValid = isValid;
             ErrorMessage = errorMessage;
         }
 
-        public static ValidationResult Success() => new ValidationResult(true);
+        public static SmartListValidationResult Success() => new SmartListValidationResult(true);
 
-        public static ValidationResult Failure(string errorMessage) => new ValidationResult(false, errorMessage);
+        public static SmartListValidationResult Failure(string errorMessage) => new SmartListValidationResult(false, errorMessage);
     }
 }

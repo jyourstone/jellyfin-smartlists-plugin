@@ -340,6 +340,15 @@
                     if (element) {
                         // Validate that the saved value is still valid for this element
                         const options = Array.prototype.slice.call(element.options || []);
+                        
+                        // Special handling for user filter: if it only has the "all" option,
+                        // skip validation as the user options haven't been loaded yet
+                        // (they will be loaded asynchronously by populateUserFilter)
+                        if (filterKey === 'user' && options.length === 1 && options[0].value === 'all') {
+                            console.debug('Skipping user filter validation - options not yet loaded');
+                            return; // Skip this filter, will be restored after populateUserFilter
+                        }
+                        
                         const isValidOption = options.length === 0 || options.some(function (opt) {
                             return opt.value === value;
                         });
