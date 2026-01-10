@@ -1544,6 +1544,12 @@
         const apiClient = SmartLists.getApiClient();
         const container = page.querySelector('#playlist-list-container');
 
+        // Guard: Check if container exists
+        if (!container) {
+            console.error('SmartLists: Container #playlist-list-container not found');
+            return;
+        }
+
         // Prevent multiple simultaneous requests
         if (page._loadingPlaylists) {
             return;
@@ -1553,9 +1559,9 @@
         page._loadingPlaylists = true;
 
         // Disable search input while loading
-        SmartLists.setSearchInputState(page, true, 'Loading playlists...');
+        SmartLists.setSearchInputState(page, true, 'Loading lists...');
 
-        container.innerHTML = '<p>Loading playlists...</p>';
+        container.innerHTML = '<p>Loading lists...</p>';
 
         try {
             // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
@@ -1620,8 +1626,8 @@
             }
 
             try {
-                // Populate user filter dropdown
-                if (SmartLists.populateUserFilter) {
+                // Populate user filter dropdown (skip on user pages - users only see their own lists)
+                if (SmartLists.populateUserFilter && !SmartLists.IS_USER_PAGE) {
                     await SmartLists.populateUserFilter(page, processedPlaylists);
                 }
             } catch (err) {

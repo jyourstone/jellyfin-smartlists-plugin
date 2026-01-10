@@ -15,6 +15,9 @@
         }
         page._pageInitialized = true;
 
+        // Reset loading state to prevent stuck "Loading..." from previous page loads
+        page._loadingPlaylists = false;
+
         SmartLists.applyCustomStyles(page);
 
         // Show loading state
@@ -701,9 +704,26 @@
             if (SmartLists.loadPlaylistFilterPreferences) {
                 SmartLists.loadPlaylistFilterPreferences(page);
             }
-            if (SmartLists.loadPlaylistList) {
-                SmartLists.loadPlaylistList(page);
-            }
+            
+            // Load playlist list with retry logic to handle script loading race conditions
+            var loadListWithRetry = function(retryCount) {
+                retryCount = retryCount || 0;
+                if (SmartLists.loadPlaylistList) {
+                    SmartLists.loadPlaylistList(page);
+                } else if (retryCount < 5) {
+                    setTimeout(function() {
+                        loadListWithRetry(retryCount + 1);
+                    }, 50); // 50ms delay between retries
+                } else {
+                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after 5 retries');
+                    // Show error message to user
+                    var container = page.querySelector('#playlist-list-container');
+                    if (container) {
+                        container.innerHTML = '<p style="color: #ff6b6b;">Failed to load playlist list. Please refresh the page.</p>';
+                    }
+                }
+            };
+            loadListWithRetry(0);
         }
 
         // Populate defaults when switching to create tab
