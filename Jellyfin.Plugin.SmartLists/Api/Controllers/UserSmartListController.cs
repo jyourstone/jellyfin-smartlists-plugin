@@ -24,6 +24,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using static Jellyfin.Plugin.SmartLists.Utilities.InputValidator;
 
 namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 {
@@ -169,6 +170,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Log the incoming type for debugging
                 _logger.LogInformation("CreateUserSmartList: Received Type={Type}, Name={Name}", list.Type, list.Name);
 
+                // ===== SECURITY VALIDATION =====
+                // Validate the entire smart list structure
+                var validationResult = ValidateSmartList(list);
+                if (!validationResult.IsValid)
+                {
+                    _logger.LogWarning("Validation failed for user {UserId} creating list '{Name}': {Error}", 
+                        userId, list.Name, validationResult.ErrorMessage);
+                    return BadRequest(new { error = validationResult.ErrorMessage });
+                }
+
                 // Check if user can create collections
                 if (list.Type == Core.Enums.SmartListType.Collection && !CanUserManageCollections())
                 {
@@ -186,7 +197,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                 };
 
-                // Validate required fields
+                // Validate required fields (after input validation)
                 if (string.IsNullOrWhiteSpace(list.Name))
                 {
                     return BadRequest(new { error = $"{(list.Type == Core.Enums.SmartListType.Collection ? "Collection" : "Playlist")} name is required" });
@@ -394,6 +405,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return BadRequest(new { error = "User not found" });
                 }
 
+                // ===== SECURITY VALIDATION =====
+                // Validate playlist name
+                var nameValidation = ValidateName(request.Name);
+                if (!nameValidation.IsValid)
+                {
+                    _logger.LogWarning("Validation failed for user {UserId} creating playlist: {Error}", 
+                        userId, nameValidation.ErrorMessage);
+                    return BadRequest(new { error = nameValidation.ErrorMessage });
+                }
+
                 // Validate request
                 if (string.IsNullOrWhiteSpace(request.Name))
                 {
@@ -403,6 +424,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (request.MediaTypes == null || request.MediaTypes.Count == 0)
                 {
                     return BadRequest(new { error = "At least one media type must be selected" });
+                }
+
+                // Validate media types count
+                if (request.MediaTypes.Count > 50)
+                {
+                    return BadRequest(new { error = "Cannot select more than 50 media types" });
                 }
 
                 // Create the smart playlist DTO
@@ -417,6 +444,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     MaxPlayTimeMinutes = 0,
                     Public = false
                 };
+
+                // Validate the complete DTO with security checks
+                var validationResult = ValidateSmartList(smartPlaylistDto);
+                if (!validationResult.IsValid)
+                {
+                    _logger.LogWarning("Validation failed for user {UserId} creating playlist '{Name}': {Error}", 
+                        userId, request.Name, validationResult.ErrorMessage);
+                    return BadRequest(new { error = validationResult.ErrorMessage });
+                }
 
                 // Save to store
                 var store = GetPlaylistStore();
