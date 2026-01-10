@@ -761,9 +761,11 @@
             marginBottom: '0.5em'
         });
 
-        // Set initial active tab immediately to prevent flash
+        // Set initial active tab - use requestAnimationFrame to ensure DOM is ready
         var initialTab = SmartLists.getCurrentTab();
-        SmartLists.switchToTab(page, initialTab);
+        requestAnimationFrame(function() {
+            SmartLists.switchToTab(page, initialTab);
+        });
 
         // Use shared tab switching helper
         function setActiveTab(tabId) {
