@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Jellyfin.Plugin.SmartLists.Core.Enums;
 using MediaBrowser.Model.Plugins;
 
@@ -105,5 +106,12 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         /// Default: true
         /// </summary>
         public bool EnableUserPage { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the list of user IDs that have access to the user page.
+        /// If empty or null, all users have access (when EnableUserPage is true).
+        /// Admins always have access regardless of this setting.
+        /// </summary>
+        public List<string>? AllowedUserPageUsers { get; set; } = null;
     }
 }

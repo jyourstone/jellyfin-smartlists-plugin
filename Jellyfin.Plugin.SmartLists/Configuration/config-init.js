@@ -39,6 +39,7 @@
         // Only load users and configuration on admin pages
         if (!SmartLists.IS_USER_PAGE) {
             initTasks.push(SmartLists.loadUsers(page));
+            initTasks.push(SmartLists.loadAllowedUsersMultiSelect(page));
         } else {
             // On user pages, load capabilities to determine what they can create
             if (SmartLists.loadUserCapabilities) {
@@ -551,6 +552,74 @@
 
             if (SmartLists.showNotification) {
                 SmartLists.showNotification('Failed to load users. Please refresh the page.', 'error');
+            }
+        }
+    };
+
+    /**
+     * Load users for the allowed users multi-select in Settings tab
+     */
+    SmartLists.loadAllowedUsersMultiSelect = async function (page) {
+        const apiClient = SmartLists.getApiClient();
+        const container = page.querySelector('#allowedUsersMultiSelect');
+
+        if (!container) {
+            return;
+        }
+
+        try {
+            const response = await apiClient.ajax({
+                type: "GET",
+                url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
+                contentType: 'application/json'
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Failed to load users: ${errorText || response.statusText}`);
+            }
+
+            const users = await response.json();
+
+            // Initialize the multi-select component
+            if (SmartLists.initializeMultiSelect) {
+                SmartLists.initializeMultiSelect(page, {
+                    containerId: 'allowedUsersMultiSelect',
+                    displayId: 'allowedUsersMultiSelectDisplay',
+                    dropdownId: 'allowedUsersMultiSelectDropdown',
+                    optionsId: 'allowedUsersMultiSelectOptions',
+                    placeholderText: 'All users (default)',
+                    checkboxClass: 'allowed-users-checkbox',
+                    onChange: null
+                });
+            }
+
+            // Load users into the multi-select
+            if (SmartLists.loadItemsIntoMultiSelect) {
+                SmartLists.loadItemsIntoMultiSelect(
+                    page,
+                    'allowedUsersMultiSelect',
+                    users,
+                    'allowed-users-checkbox',
+                    function (user) { return user.Name || user.Username || user.Id; },
+                    function (user) { return user.Id; }
+                );
+            }
+        } catch (err) {
+            console.error('Error loading allowed users:', err);
+            const errorMessage = err.message || 'Failed to load users. Please refresh the page.';
+            
+            const options = page.querySelector('#allowedUsersMultiSelectOptions');
+            if (options) {
+                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: #BB3932;">Error: ' + errorMessage + '</div>';
+            }
+            const display = page.querySelector('#allowedUsersMultiSelectDisplay');
+            if (display) {
+                const placeholder = display.querySelector('.multi-select-placeholder');
+                if (placeholder) {
+                    placeholder.textContent = 'Error loading users';
+                    placeholder.style.color = '#BB3932';
+                }
             }
         }
     };
@@ -1147,6 +1216,18 @@
                 enableUserPageEl.checked = config.EnableUserPage !== undefined && config.EnableUserPage !== null ? config.EnableUserPage : true;
             }
 
+            // Load allowed users for user page access
+            if (config.AllowedUserPageUsers && Array.isArray(config.AllowedUserPageUsers) && config.AllowedUserPageUsers.length > 0) {
+                // Store allowed users to be set after multi-select is initialized
+                page._pendingAllowedUserPageUsers = config.AllowedUserPageUsers;
+                // Set them after a short delay to ensure multi-select is fully initialized
+                setTimeout(function () {
+                    if (SmartLists.setSelectedItems) {
+                        SmartLists.setSelectedItems(page, 'allowedUsersMultiSelect', config.AllowedUserPageUsers, 'allowed-users-checkbox', 'All users (default)');
+                    }
+                }, 100);
+            }
+
             // Load schedule configuration values
             const defaultScheduleTriggerElement = page.querySelector('#defaultScheduleTrigger');
             if (defaultScheduleTriggerElement) {
@@ -1315,6 +1396,10 @@
             // Save enable user page setting
             const enableUserPageCheckbox = page.querySelector('#enableUserPage');
             config.EnableUserPage = enableUserPageCheckbox ? enableUserPageCheckbox.checked : true;
+
+            // Save allowed users for user page access
+            const allowedUserIds = SmartLists.getSelectedItems ? SmartLists.getSelectedItems(page, 'allowedUsersMultiSelect', 'allowed-users-checkbox') : [];
+            config.AllowedUserPageUsers = allowedUserIds && allowedUserIds.length > 0 ? allowedUserIds : null;
 
             apiClient.updatePluginConfiguration(SmartLists.getPluginId(), config).then(function () {
                 Dashboard.hideLoadingMsg();

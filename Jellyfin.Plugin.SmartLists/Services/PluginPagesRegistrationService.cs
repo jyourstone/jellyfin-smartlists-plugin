@@ -39,13 +39,9 @@ namespace Jellyfin.Plugin.SmartLists.Services
         {
             try
             {
-                // Check if user page is enabled in configuration
-                var config = Plugin.Instance?.Configuration;
-                if (config?.EnableUserPage == false)
-                {
-                    _logger.LogInformation("User page is disabled in configuration. Skipping Plugin Pages registration.");
-                    return;
-                }
+                // Always register the menu item - access control is handled at the page/API level
+                // This ensures users see the menu item even if they don't have access
+                // (they'll see a nice disabled page instead of a 404)
 
                 // Try to find the Plugin Pages assembly
                 var pluginPagesAssembly = AssemblyLoadContext.All

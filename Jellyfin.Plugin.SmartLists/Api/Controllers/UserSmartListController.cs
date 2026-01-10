@@ -124,8 +124,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
-        /// Verifies that the user page is enabled. Admins always have access.
-        /// Returns Forbidden if user page is disabled for non-admin users.
+        /// Verifies that the user page is enabled and the current user has access.
+        /// Admins always have access. For non-admins:
+        /// - User page must be enabled
+        /// - If AllowedUserPageUsers is empty/null, all users have access
+        /// - If AllowedUserPageUsers is populated, user must be in the list
+        /// Returns Forbidden if access is denied.
         /// </summary>
         private ActionResult? CheckUserPageAccess()
         {
@@ -142,6 +146,24 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 { 
                     message = "The user page is currently disabled by an administrator. Please contact your administrator for access to SmartLists." 
                 });
+            }
+
+            // Check if specific users are allowed
+            var config = Plugin.Instance?.Configuration;
+            var allowedUsers = config?.AllowedUserPageUsers;
+            
+            // If list is populated, check if current user is in it
+            if (allowedUsers != null && allowedUsers.Count > 0)
+            {
+                // Format GUID without dashes to match how it's stored in configuration
+                var userId = GetCurrentUserId().ToString("N");
+                if (!allowedUsers.Contains(userId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new 
+                    { 
+                        message = "You do not have permission to access the SmartLists user page. Please contact your administrator for access." 
+                    });
+                }
             }
 
             return null;
