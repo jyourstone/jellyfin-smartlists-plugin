@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>My Smart Lists</title>
+    <title>SmartLists</title>
     <!-- All CSS styling is handled dynamically via JavaScript -->
     <link rel="stylesheet" href="configurationpage?name=config-multi-select.css">
 </head>
@@ -12,7 +12,7 @@
         <div data-role="content">
             <div class="content-primary">
                 <div style="display: flex; align-items: center; margin-bottom: 1em;">
-                    <h1>My Smart Lists</h1>
+                    <h1>SmartLists</h1>
                     <a class="emby-button raised button-alt headerHelpButton"
                         href="https://jellyfin-smartlists-plugin.dinsten.se" target="_blank"
                         rel="noopener noreferrer" style="padding: 0.4em 0.8em; margin-left: 1em;">Help</a>
@@ -340,10 +340,8 @@
 
         <!-- Initialize user mode BEFORE loading config-core.js -->
         <script>
-            console.log('SmartLists User Page: Initializing user mode');
             window.SmartLists = window.SmartLists || {};
             window.SmartLists.IS_USER_PAGE = true;
-            console.log('SmartLists User Page: IS_USER_PAGE =', window.SmartLists.IS_USER_PAGE);
             
             // Load user capabilities and configure UI accordingly
             window.SmartLists.loadUserCapabilities = async function() {
@@ -356,7 +354,6 @@
                     });
                     
                     const capabilities = await response.json();
-                    console.log('User capabilities:', capabilities);
                     
                     // Store capabilities for later use
                     window.SmartLists.userCapabilities = capabilities;
@@ -368,12 +365,10 @@
                     if (capabilities.CanCreateCollections) {
                         // User can create collections - show the dropdown
                         listTypeContainer.style.display = '';
-                        console.log('User can create collections - showing list type selector');
                     } else {
                         // User can only create playlists - hide the selector and set to Playlist
                         listTypeContainer.style.display = 'none';
                         listTypeSelect.value = 'Playlist';
-                        console.log('User can only create playlists - hiding list type selector');
                         
                         // Update labels to say "Playlist" instead of generic "List"
                         var playlistNameLabel = document.getElementById('playlistNameLabel');
@@ -389,6 +384,59 @@
                 }
             };
         </script>
+
+        <!-- Delete Confirmation Modal -->
+        <div id="delete-confirm-modal" class="custom-modal hide">
+            <div class="custom-modal-container">
+                <div class="modal-content">
+                    <div class="custom-modal-header" style="margin-top: -1em;">
+                        <h2 class="custom-modal-title">Confirm Deletion</h2>
+                    </div>
+                    <div class="custom-modal-body">
+                        <p id="delete-confirm-text"></p>
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background-color: #181818;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="delete-jellyfin-playlist-checkbox" checked
+                                    style="margin-right: 0.5em;">
+                                <span>Also delete the Jellyfin list</span>
+                            </label>
+                            <div style="font-size: 0.9em; color: #aaa; margin-top: 0.5em; margin-bottom: 0.5em;">
+                                <strong>Unchecked:</strong> Only delete the SmartList configuration. The Jellyfin list
+                                will remain and can be managed manually.<br><br>
+                                <strong>Checked:</strong> Delete both the SmartList configuration and the Jellyfin list.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="delete-cancel-btn">Cancel</button>
+                        <button type="button" is="emby-button" class="emby-button raised button-delete"
+                            id="delete-confirm-btn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Refresh All Lists Confirmation Modal -->
+        <div id="refresh-confirm-modal" class="custom-modal hide">
+            <div class="custom-modal-container">
+                <div class="modal-content">
+                    <div class="custom-modal-header" style="margin-top: -1em;">
+                        <h2 class="custom-modal-title">Refresh All Lists</h2>
+                    </div>
+                    <div class="custom-modal-body">
+                        <p>This will refresh all your smart lists, which may take a while depending on the number of lists
+                            and their complexity. Are you sure you want to continue?</p>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button type="button" is="emby-button"
+                            class="emby-button raised modal-cancel-btn">Cancel</button>
+                        <button type="button" is="emby-button" class="emby-button raised modal-confirm-btn">Refresh
+                            All</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Core utilities and constants (must load first) -->
         <script src="configurationpage?name=config-core.js"></script>

@@ -96,7 +96,7 @@ namespace Jellyfin.Plugin.SmartLists.Services
 
                 idProperty?.SetValue(page, "smartlists-user-playlists");
                 urlProperty?.SetValue(page, "/Plugins/SmartLists/Pages/UserPlaylists");
-                displayTextProperty?.SetValue(page, "My Smart Playlists");
+                displayTextProperty?.SetValue(page, "SmartLists");
                 iconProperty?.SetValue(page, "playlist_play");
 
                 // Call RegisterPluginPage on the manager

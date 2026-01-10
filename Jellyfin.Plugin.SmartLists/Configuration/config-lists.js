@@ -1578,13 +1578,6 @@
                 processedPlaylists = [];
             }
 
-            // Check if any playlists were skipped due to corruption
-            // This is a simple heuristic - if there are JSON files but fewer playlists loaded
-            // Note: This won't be 100% accurate but gives users a heads up
-            if (processedPlaylists.length > 0) {
-                console.log('SmartLists: Loaded ' + processedPlaylists.length + ' list(s) successfully');
-            }
-
             // Store playlists data for filtering
             page._allPlaylists = processedPlaylists;
 

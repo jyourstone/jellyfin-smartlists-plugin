@@ -6,11 +6,9 @@
     
     // Determine if we're in user mode (set by user-playlists.html before loading this script)
     SmartLists.IS_USER_PAGE = SmartLists.IS_USER_PAGE || false;
-    console.log('config-core.js: IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
     
     // Build endpoints based on context (admin vs user)
     var endpointPrefix = SmartLists.IS_USER_PAGE ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
-    console.log('config-core.js: Using endpoint prefix:', endpointPrefix);
     SmartLists.ENDPOINTS = {
         fields: endpointPrefix + '/fields',
         base: endpointPrefix,
@@ -21,7 +19,6 @@
         export: endpointPrefix + '/export',
         import: endpointPrefix + '/import'
     };
-    console.log('config-core.js: ENDPOINTS =', SmartLists.ENDPOINTS);
 
     // Field type constants to avoid duplication
     SmartLists.FIELD_TYPES = {

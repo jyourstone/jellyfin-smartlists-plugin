@@ -582,37 +582,17 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Queue refresh operations for all user's lists
                 int queuedCount = 0;
                 
-#pragma warning disable CS8601 // Possible null reference assignment
                 foreach (var playlist in playlists)
                 {
-                    _refreshQueueService.EnqueueOperation(new RefreshQueueItem
-                    {
-                        ListId = playlist.Id,
-                        ListName = playlist.Name ?? "Unknown",
-                        ListType = playlist.Type,
-                        OperationType = RefreshOperationType.Refresh,
-                        UserId = userId.ToString(),
-                        TriggerType = RefreshTriggerType.Manual,
-                        QueuedAt = DateTime.UtcNow
-                    });
+                    EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
                     queuedCount++;
                 }
                 
                 foreach (var collection in collections)
                 {
-                    _refreshQueueService.EnqueueOperation(new RefreshQueueItem
-                    {
-                        ListId = collection.Id,
-                        ListName = collection.Name ?? "Unknown",
-                        ListType = collection.Type,
-                        OperationType = RefreshOperationType.Refresh,
-                        UserId = userId.ToString(),
-                        TriggerType = RefreshTriggerType.Manual,
-                        QueuedAt = DateTime.UtcNow
-                    });
+                    EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
                     queuedCount++;
                 }
-#pragma warning restore CS8601
                 
                 _logger.LogInformation("Queued {QueuedCount} list(s) for refresh for user {UserId}", queuedCount, userId);
                 
@@ -643,123 +623,70 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         {
             try
             {
-                var userId = GetCurrentUserId();
-                var normalizedUserId = userId.ToString("N");
-
-                if (!Guid.TryParse(id, out var guidId))
-                {
-                    return BadRequest(new { message = "Invalid list ID format" });
-                }
-
-                // Try playlist first
-                var playlistStore = GetPlaylistStore();
-                var playlist = await playlistStore.GetByIdAsync(guidId);
-                if (playlist != null)
-                {
-                    // Verify user owns this playlist
-                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                return await ExecuteListAction(
+                    id,
+                    async playlist =>
                     {
-                        return Forbid();
-                    }
+                        var playlistStore = GetPlaylistStore();
+                        var originalEnabledState = playlist.Enabled;
+                        playlist.Enabled = true;
 
-                    var originalEnabledState = playlist.Enabled;
-                    playlist.Enabled = true;
-
-                    try
-                    {
-                        await playlistStore.SaveAsync(playlist);
-                        Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
-
-                        // Enqueue refresh operation
                         try
                         {
-#pragma warning disable CS8601 // Possible null reference assignment
-                            var queueItem = new RefreshQueueItem
+                            await playlistStore.SaveAsync(playlist);
+                            Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+
+                            // Enqueue refresh operation
+                            try
                             {
-                                ListId = playlist.Id,
-                                ListName = playlist.Name ?? "Unknown",
-                                ListType = playlist.Type,
-                                OperationType = RefreshOperationType.Refresh,
-                                ListData = playlist,
-                                UserId = playlist.UserId,
-                                TriggerType = RefreshTriggerType.Manual,
-                                QueuedAt = DateTime.UtcNow
-                            };
-#pragma warning restore CS8601
+                                EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled playlist '{Name}', but enable succeeded", playlist.Name);
+                            }
 
-                            _refreshQueueService.EnqueueOperation(queueItem);
+                            _logger.LogInformation("Enabled smart playlist: {PlaylistId} - {PlaylistName}", id, playlist.Name);
+                            return Ok(new { message = $"Smart playlist '{playlist.Name}' has been enabled" });
                         }
-                        catch (Exception enqueueEx)
+                        catch (Exception ex)
                         {
-                            _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled playlist '{Name}', but enable succeeded", playlist.Name);
+                            playlist.Enabled = originalEnabledState;
+                            _logger.LogError(ex, "Failed to enable Jellyfin playlist for {PlaylistId} - {PlaylistName}", id, playlist.Name);
+                            throw;
                         }
-
-                        _logger.LogInformation("Enabled smart playlist: {PlaylistId} - {PlaylistName}", id, playlist.Name);
-                        return Ok(new { message = $"Smart playlist '{playlist.Name}' has been enabled" });
-                    }
-                    catch (Exception ex)
+                    },
+                    async collection =>
                     {
-                        playlist.Enabled = originalEnabledState;
-                        _logger.LogError(ex, "Failed to enable Jellyfin playlist for {PlaylistId} - {PlaylistName}", id, playlist.Name);
-                        throw;
-                    }
-                }
+                        var collectionStore = GetCollectionStore();
+                        var originalEnabledState = collection.Enabled;
+                        collection.Enabled = true;
 
-                // Try collection
-                var collectionStore = GetCollectionStore();
-                var collection = await collectionStore.GetByIdAsync(guidId);
-                if (collection != null)
-                {
-                    // Verify user owns this collection
-                    if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
-                    {
-                        return Forbid();
-                    }
-
-                    var originalEnabledState = collection.Enabled;
-                    collection.Enabled = true;
-
-                    try
-                    {
-                        await collectionStore.SaveAsync(collection);
-                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
-
-                        // Enqueue refresh operation
                         try
                         {
-#pragma warning disable CS8601 // Possible null reference assignment
-                            var queueItem = new RefreshQueueItem
+                            await collectionStore.SaveAsync(collection);
+                            Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+
+                            // Enqueue refresh operation
+                            try
                             {
-                                ListId = collection.Id,
-                                ListName = collection.Name ?? "Unknown",
-                                ListType = collection.Type,
-                                OperationType = RefreshOperationType.Refresh,
-                                ListData = collection,
-                                UserId = collection.UserId,
-                                TriggerType = RefreshTriggerType.Manual,
-                                QueuedAt = DateTime.UtcNow
-                            };
-#pragma warning restore CS8601
+                                EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled collection '{Name}', but enable succeeded", collection.Name);
+                            }
 
-                            _refreshQueueService.EnqueueOperation(queueItem);
+                            _logger.LogInformation("Enabled smart collection: {CollectionId} - {CollectionName}", id, collection.Name);
+                            return Ok(new { message = $"Smart collection '{collection.Name}' has been enabled" });
                         }
-                        catch (Exception enqueueEx)
+                        catch (Exception ex)
                         {
-                            _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for enabled collection '{Name}', but enable succeeded", collection.Name);
+                            collection.Enabled = originalEnabledState;
+                            _logger.LogError(ex, "Failed to enable Jellyfin collection for {CollectionId} - {CollectionName}", id, collection.Name);
+                            throw;
                         }
-
-                        _logger.LogInformation("Enabled smart collection: {CollectionId} - {CollectionName}", id, collection.Name);
-                        return Ok(new { message = $"Smart collection '{collection.Name}' has been enabled" });
-                    }
-                    catch (Exception ex)
-                    {
-                        collection.Enabled = originalEnabledState;
-                        _logger.LogError(ex, "Failed to enable Jellyfin collection for {CollectionId} - {CollectionName}", id, collection.Name);
-                        throw;
-                    }
-                }
-
-                return NotFound(new { message = "Smart list not found" });
+                    });
             }
             catch (Exception ex)
             {
@@ -778,91 +705,66 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         {
             try
             {
-                var userId = GetCurrentUserId();
-                var normalizedUserId = userId.ToString("N");
-
-                if (!Guid.TryParse(id, out var guidId))
-                {
-                    return BadRequest(new { message = "Invalid list ID format" });
-                }
-
-                // Try playlist first
-                var playlistStore = GetPlaylistStore();
-                var playlist = await playlistStore.GetByIdAsync(guidId);
-                if (playlist != null)
-                {
-                    // Verify user owns this playlist
-                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                return await ExecuteListAction(
+                    id,
+                    async playlist =>
                     {
-                        return Forbid();
-                    }
+                        var playlistStore = GetPlaylistStore();
+                        var originalEnabledState = playlist.Enabled;
+                        playlist.Enabled = false;
 
-                    var originalEnabledState = playlist.Enabled;
-                    playlist.Enabled = false;
-
-                    try
-                    {
-                        var playlistService = GetPlaylistService();
-                        await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
-
-                        playlist.JellyfinPlaylistId = null;
-                        if (playlist.UserPlaylists != null)
+                        try
                         {
-                            foreach (var userMapping in playlist.UserPlaylists)
+                            var playlistService = GetPlaylistService();
+                            await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
+
+                            playlist.JellyfinPlaylistId = null;
+                            if (playlist.UserPlaylists != null)
                             {
-                                userMapping.JellyfinPlaylistId = null;
+                                foreach (var userMapping in playlist.UserPlaylists)
+                                {
+                                    userMapping.JellyfinPlaylistId = null;
+                                }
                             }
+
+                            await playlistStore.SaveAsync(playlist);
+                            Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+
+                            _logger.LogInformation("Disabled smart playlist: {PlaylistId} - {PlaylistName}", id, playlist.Name);
+                            return Ok(new { message = $"Smart playlist '{playlist.Name}' has been disabled" });
                         }
-
-                        await playlistStore.SaveAsync(playlist);
-                        Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
-
-                        _logger.LogInformation("Disabled smart playlist: {PlaylistId} - {PlaylistName}", id, playlist.Name);
-                        return Ok(new { message = $"Smart playlist '{playlist.Name}' has been disabled" });
-                    }
-                    catch (Exception ex)
+                        catch (Exception ex)
+                        {
+                            playlist.Enabled = originalEnabledState;
+                            _logger.LogError(ex, "Failed to disable Jellyfin playlist for {PlaylistId} - {PlaylistName}", id, playlist.Name);
+                            throw;
+                        }
+                    },
+                    async collection =>
                     {
-                        playlist.Enabled = originalEnabledState;
-                        _logger.LogError(ex, "Failed to disable Jellyfin playlist for {PlaylistId} - {PlaylistName}", id, playlist.Name);
-                        throw;
-                    }
-                }
+                        var collectionStore = GetCollectionStore();
+                        var originalEnabledState = collection.Enabled;
+                        collection.Enabled = false;
 
-                // Try collection
-                var collectionStore = GetCollectionStore();
-                var collection = await collectionStore.GetByIdAsync(guidId);
-                if (collection != null)
-                {
-                    // Verify user owns this collection
-                    if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
-                    {
-                        return Forbid();
-                    }
+                        try
+                        {
+                            var collectionService = GetCollectionService();
+                            await collectionService.DisableAsync(collection);
 
-                    var originalEnabledState = collection.Enabled;
-                    collection.Enabled = false;
+                            collection.JellyfinCollectionId = null;
+                            await collectionStore.SaveAsync(collection);
+                            Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
 
-                    try
-                    {
-                        var collectionService = GetCollectionService();
-                        await collectionService.DisableAsync(collection);
-
-                        collection.JellyfinCollectionId = null;
-                        await collectionStore.SaveAsync(collection);
-                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
-
-                        _logger.LogInformation("Disabled smart collection: {CollectionId} - {CollectionName}", id, collection.Name);
-                        return Ok(new { message = $"Smart collection '{collection.Name}' has been disabled" });
-                    }
-                    catch (Exception ex)
-                    {
-                        collection.Enabled = originalEnabledState;
-                        _logger.LogError(ex, "Failed to disable Jellyfin collection for {CollectionId} - {CollectionName}", id, collection.Name);
-                        throw;
-                    }
-                }
-
-                return NotFound(new { message = "Smart list not found" });
+                            _logger.LogInformation("Disabled smart collection: {CollectionId} - {CollectionName}", id, collection.Name);
+                            return Ok(new { message = $"Smart collection '{collection.Name}' has been disabled" });
+                        }
+                        catch (Exception ex)
+                        {
+                            collection.Enabled = originalEnabledState;
+                            _logger.LogError(ex, "Failed to disable Jellyfin collection for {CollectionId} - {CollectionName}", id, collection.Name);
+                            throw;
+                        }
+                    });
             }
             catch (Exception ex)
             {
@@ -943,6 +845,134 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 _logger.LogError(ex, "Error deleting smart list {ListId}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error deleting smart list" });
             }
+        }
+
+        /// <summary>
+        /// Trigger a refresh of a specific smart list (playlist or collection) for the current user.
+        /// </summary>
+        /// <param name="id">The list ID.</param>
+        /// <returns>Success message.</returns>
+        [HttpPost("{id}/refresh")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult> RefreshSmartList([FromRoute, Required] string id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                return await ExecuteListAction(
+                    id,
+                    playlist =>
+                    {
+                        try
+                        {
+                            EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
+                            _logger.LogInformation("User {UserId} enqueued refresh for playlist '{Name}'", userId, playlist.Name);
+                            return Task.FromResult<ActionResult>(Ok(new { message = $"Playlist '{playlist.Name}' refresh has been queued" }));
+                        }
+                        catch (Exception enqueueEx)
+                        {
+                            _logger.LogError(enqueueEx, "Failed to enqueue refresh for playlist '{Name}'", playlist.Name);
+                            return Task.FromResult<ActionResult>(StatusCode(StatusCodes.Status500InternalServerError, new { message = "Failed to queue playlist refresh" }));
+                        }
+                    },
+                    collection =>
+                    {
+                        try
+                        {
+                            EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
+                            _logger.LogInformation("User {UserId} enqueued refresh for collection '{Name}'", userId, collection.Name);
+                            return Task.FromResult<ActionResult>(Ok(new { message = $"Collection '{collection.Name}' refresh has been queued" }));
+                        }
+                        catch (Exception enqueueEx)
+                        {
+                            _logger.LogError(enqueueEx, "Failed to enqueue refresh for collection '{Name}'", collection.Name);
+                            return Task.FromResult<ActionResult>(StatusCode(StatusCodes.Status500InternalServerError, new { message = "Failed to queue collection refresh" }));
+                        }
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing smart list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error refreshing smart list" });
+            }
+        }
+
+        /// <summary>
+        /// Helper method to find a smart list (playlist or collection) and execute an action on it.
+        /// This reduces code duplication across Enable, Disable, and Refresh operations.
+        /// </summary>
+        /// <param name="id">The list ID.</param>
+        /// <param name="playlistAction">Action to perform on a playlist.</param>
+        /// <param name="collectionAction">Action to perform on a collection.</param>
+        /// <returns>ActionResult from the executed action.</returns>
+        private async Task<ActionResult> ExecuteListAction(
+            string id,
+            Func<SmartPlaylistDto, Task<ActionResult>> playlistAction,
+            Func<SmartCollectionDto, Task<ActionResult>> collectionAction)
+        {
+            var userId = GetCurrentUserId();
+            var normalizedUserId = userId.ToString("N");
+
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid list ID format" });
+            }
+
+            // Try playlist first
+            var playlistStore = GetPlaylistStore();
+            var playlist = await playlistStore.GetByIdAsync(guidId);
+            if (playlist != null)
+            {
+                // Verify user owns this playlist
+                if (!IsUserInPlaylist(playlist, normalizedUserId))
+                {
+                    return Forbid();
+                }
+
+                return await playlistAction(playlist);
+            }
+
+            // Try collection
+            var collectionStore = GetCollectionStore();
+            var collection = await collectionStore.GetByIdAsync(guidId);
+            if (collection != null)
+            {
+                // Verify user owns this collection
+                if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
+                {
+                    return Forbid();
+                }
+
+                return await collectionAction(collection);
+            }
+
+            return NotFound(new { message = "Smart list not found" });
+        }
+
+        /// <summary>
+        /// Helper method to enqueue a refresh operation for a list.
+        /// </summary>
+        private void EnqueueRefreshOperation(string? listId, string listName, Core.Enums.SmartListType listType, SmartListDto? listData, string? userId)
+        {
+#pragma warning disable CS8601 // Possible null reference assignment
+            var queueItem = new RefreshQueueItem
+            {
+                ListId = listId,
+                ListName = listName ?? "Unknown",
+                ListType = listType,
+                OperationType = RefreshOperationType.Refresh,
+                ListData = listData,
+                UserId = userId,
+                TriggerType = RefreshTriggerType.Manual,
+                QueuedAt = DateTime.UtcNow
+            };
+#pragma warning restore CS8601
+
+            _refreshQueueService.EnqueueOperation(queueItem);
         }
 
         private Services.Collections.CollectionService GetCollectionService()

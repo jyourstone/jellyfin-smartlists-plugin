@@ -1532,9 +1532,7 @@
     // ===== PAGE EVENT LISTENERS =====
     document.addEventListener('pageshow', function (e) {
         const page = e.target;
-        console.log('pageshow event fired, page classes:', page.className);
         if (page.classList.contains('SmartListsConfigurationPage')) {
-            console.log('Initializing SmartLists page, IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
             SmartLists.initPage(page);
         }
     });
@@ -1542,10 +1540,8 @@
     // Fallback initialization for pages loaded directly (not via Jellyfin navigation)
     // This handles the case where pageshow doesn't fire for custom plugin pages
     document.addEventListener('DOMContentLoaded', function () {
-        console.log('DOMContentLoaded event fired');
         const page = document.querySelector('.SmartListsConfigurationPage');
         if (page && !page._pageInitialized) {
-            console.log('Fallback initialization triggered, IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
             SmartLists.initPage(page);
         }
     });
@@ -1693,25 +1689,17 @@
 // Immediate initialization check - runs as soon as this script loads
 // This is necessary because DOMContentLoaded may have already fired
 (function() {
-    console.log('config-init.js: Immediate initialization check');
     var checkAndInit = function() {
         var page = document.querySelector('.SmartListsConfigurationPage');
         if (page && !page._pageInitialized) {
-            console.log('config-init.js: Page found and not initialized, initializing now');
             window.SmartLists.initPage(page);
-        } else if (page) {
-            console.log('config-init.js: Page already initialized');
-        } else {
-            console.log('config-init.js: Page not found yet');
         }
     };
     
     // Try immediately if DOM is already ready
     if (document.readyState === 'loading') {
-        console.log('config-init.js: DOM still loading, waiting for DOMContentLoaded');
         document.addEventListener('DOMContentLoaded', checkAndInit);
     } else {
-        console.log('config-init.js: DOM already ready, initializing immediately');
         checkAndInit();
     }
 })();
