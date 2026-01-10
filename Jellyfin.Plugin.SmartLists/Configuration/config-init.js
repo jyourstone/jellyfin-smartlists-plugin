@@ -1141,6 +1141,12 @@
                 processingBatchSizeEl.value = config.ProcessingBatchSize !== undefined && config.ProcessingBatchSize !== null && config.ProcessingBatchSize > 0 ? config.ProcessingBatchSize : 300;
             }
 
+            // Load enable user page setting
+            const enableUserPageEl = page.querySelector('#enableUserPage');
+            if (enableUserPageEl) {
+                enableUserPageEl.checked = config.EnableUserPage !== undefined && config.EnableUserPage !== null ? config.EnableUserPage : true;
+            }
+
             // Load schedule configuration values
             const defaultScheduleTriggerElement = page.querySelector('#defaultScheduleTrigger');
             if (defaultScheduleTriggerElement) {
@@ -1305,6 +1311,10 @@
                 const parsedValue = parseInt(processingBatchSizeInput, 10);
                 config.ProcessingBatchSize = (isNaN(parsedValue) || parsedValue <= 0) ? 300 : parsedValue;
             }
+
+            // Save enable user page setting
+            const enableUserPageCheckbox = page.querySelector('#enableUserPage');
+            config.EnableUserPage = enableUserPageCheckbox ? enableUserPageCheckbox.checked : true;
 
             apiClient.updatePluginConfiguration(SmartLists.getPluginId(), config).then(function () {
                 Dashboard.hideLoadingMsg();

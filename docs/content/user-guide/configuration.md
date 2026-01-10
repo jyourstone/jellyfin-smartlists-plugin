@@ -1,6 +1,46 @@
 # Configuration
 
-SmartLists features a modern web-based configuration interface through the plugin settings page! You can access it by clicking "SmartLists" in the main sidebar under "Plugins", or via Dashboard → My Plugins → SmartLists.
+SmartLists features a modern web-based configuration interface accessible in two ways:
+
+## Access Levels
+
+### User Page (For Regular Users)
+
+Regular users can access SmartLists directly from their Jellyfin home screen:
+
+- **Location**: Click "SmartLists" in the main sidebar (home screen)
+- **Available Features**:
+  - Create and manage their own personal playlists
+  - Create server-wide collections (requires Jellyfin "Manage Collections" permission)
+  - Edit and clone their own lists
+  - Refresh their lists manually
+  - View refresh status for their lists
+- **Limitations**:
+  - Can only see and manage lists they own
+  - Cannot access other users' playlists
+  - Cannot modify global plugin settings
+  - Cannot export/import list configurations
+
+!!! note "Collection Permissions"
+    To create collections as a regular user, you must have the **"Manage Collections"** permission in Jellyfin. This permission can be granted by an administrator in:
+    
+    **Dashboard → Users → [Select User] → Profile → Allow this user to manage the server's shared collections**
+    
+    Without this permission, users can only create playlists.
+
+### Admin Page (For Administrators)
+
+Administrators have full access to SmartLists through the plugin settings:
+
+- **Location**: Dashboard → My Plugins → SmartLists (or "SmartLists" in sidebar under "Plugins")
+- **Available Features**:
+  - Create and manage all playlists and collections (server-wide)
+  - View and edit any user's lists
+  - Access global plugin settings
+  - Export and import list configurations
+  - Configure performance settings
+  - Access bulk operations across all lists
+  - View comprehensive refresh statistics
 
 <div align="center" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 1000px; margin: 0 auto;">
     <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_create.png" target="_blank" style="cursor: pointer;">
@@ -70,7 +110,10 @@ SmartLists automatically generates cover images for collections based on the med
 
 ## Web Interface Overview
 
-The web interface is organized into four tabs:
+The web interface is organized into tabs. The available tabs and features depend on your access level:
+
+**User Page**: Create, Manage (2 tabs)  
+**Admin Page**: Create, Manage, Status, Settings (4 tabs)
 
 ### 1. Create List
 
@@ -89,9 +132,12 @@ This is where you build new playlists and collections:
 - Configure auto-refresh behavior (Never, On Library Changes, On All Changes)
 - Set custom refresh schedule (Daily, Weekly, Monthly, Yearly, Interval or No schedule)
 
+!!! info "User Page Differences"
+    On the **User Page**, you can only select yourself for playlists and must use your own account as the reference user for collections. Admins can select any user(s) from the dropdown.
+
 ### 2. Manage Lists
 
-View and edit all of your existing smart playlists and collections:
+View and edit your smart playlists and collections:
 
 - **Organized Interface**: Clean, modern layout with grouped actions and filters
 - **Advanced Filtering**: Filter by list type, media type, visibility and user
@@ -101,6 +147,9 @@ View and edit all of your existing smart playlists and collections:
 - **Detailed View**: Expand lists to see rules, settings, creation date, and other properties
 - **Quick Actions**: Edit, clone, refresh, or delete individual lists with confirmation dialogs
 - **Smart Selection**: Select all, expand all, or clear selections with intuitive controls
+
+!!! info "User Page Differences"
+    On the **User Page**, you can only see and manage lists you own. Admins can see and manage all lists server-wide.
 
 ### 3. Status
 
@@ -123,10 +172,13 @@ Monitor refresh operations and view statistics:
   - Check success/failure status
   - See which trigger type initiated each refresh
 
+!!! info "User Page Differences"
+    On the **User Page**, statistics and refresh history are limited to your own lists only.
+
 !!! note "Statistics Scope"
     Statistics and refresh history are tracked in-memory and reset when the Jellyfin server is restarted. Historical data is not persisted across server restarts.
 
-### 4. Settings
+### 4. Settings (Admin Only)
 
 Configure global settings for the plugin:
 
@@ -136,9 +188,21 @@ Configure global settings for the plugin:
 - Set the default auto-refresh mode for new lists
 - Set the default custom schedule settings for new lists
 - Configure performance settings
+- **Enable/disable user page access** - Control whether regular users can access SmartLists from their home screen
 - Export all lists to a ZIP file for backup or transfer
 - Import lists from a ZIP file with duplicate detection
 - Manually trigger a refresh for all smart lists
+
+## User Page Access Control
+
+Administrators can enable or disable the user-facing SmartLists page in the Settings tab:
+
+- **Enable User Page** (default: enabled): When checked, regular users can access SmartLists from their home screen sidebar
+- **Requires**: Plugin Pages and File Transformation plugins must be installed (see [Installation Guide](../getting-started/installation.md#required-plugins-for-user-page))
+- **When disabled**: Users can only access SmartLists through the admin dashboard
+
+!!! note "Server Restart Required"
+    After changing the Enable User Page setting, you may need to restart the Jellyfin server for the change to fully take effect in the Plugin Pages integration.
 
 ## Flexible Deletion Options
 

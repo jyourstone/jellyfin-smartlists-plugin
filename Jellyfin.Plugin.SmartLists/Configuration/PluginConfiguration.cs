@@ -97,5 +97,13 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
             get => _processingBatchSize;
             set => _processingBatchSize = value < 1 ? 300 : value;
         }
+
+        /// <summary>
+        /// Gets or sets whether the user-facing configuration page is enabled.
+        /// When enabled, regular users can access SmartLists from their home screen sidebar.
+        /// Requires Plugin Pages and File Transformation plugins to be installed.
+        /// Default: true
+        /// </summary>
+        public bool EnableUserPage { get; set; } = true;
     }
 }

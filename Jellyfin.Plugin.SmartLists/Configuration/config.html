@@ -563,6 +563,23 @@
                         </div>
 
                         <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
+                            User Access
+                        </h2>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="enableUserPage" />
+                                <span>Enable User Page</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                When enabled, regular users can access SmartLists from their home screen sidebar to create and manage their own playlists and collections.
+                                <strong>Requires Plugin Pages and File Transformation plugins to be installed.</strong>
+                                If disabled or if required plugins are missing, users can only access SmartLists through the admin dashboard.
+                                Note: Changing this setting requires a server restart to take effect.
+                            </div>
+                        </div>
+
+                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
                             List Naming
                             <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#custom-list-naming"
                                 target="_blank" rel="noopener noreferrer" title="Documentation"

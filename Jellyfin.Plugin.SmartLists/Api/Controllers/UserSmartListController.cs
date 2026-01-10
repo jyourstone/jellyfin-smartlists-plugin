@@ -105,6 +105,49 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
+        /// Checks if the user page feature is enabled in configuration.
+        /// </summary>
+        private static bool IsUserPageEnabled()
+        {
+            var config = Plugin.Instance?.Configuration;
+            return config?.EnableUserPage ?? true; // Default to enabled if config not available
+        }
+
+        /// <summary>
+        /// Checks if the current user is an administrator.
+        /// </summary>
+        private bool IsCurrentUserAdmin()
+        {
+            var userId = GetCurrentUserId();
+            var user = _userManager.GetUserById(userId);
+            return user?.HasPermission(PermissionKind.IsAdministrator) ?? false;
+        }
+
+        /// <summary>
+        /// Verifies that the user page is enabled. Admins always have access.
+        /// Returns Forbidden if user page is disabled for non-admin users.
+        /// </summary>
+        private ActionResult? CheckUserPageAccess()
+        {
+            // Admins always have access, even if user page is disabled
+            if (IsCurrentUserAdmin())
+            {
+                return null;
+            }
+
+            // For non-admin users, check if user page is enabled
+            if (!IsUserPageEnabled())
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new 
+                { 
+                    message = "The user page is currently disabled by an administrator. Please contact your administrator for access to SmartLists." 
+                });
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Checks if the current user has permission to manage collections.
         /// </summary>
         private bool CanUserManageCollections()
@@ -137,6 +180,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<SmartListDto>>> GetUserPlaylistsBase()
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             // Delegate to the main GetUserPlaylists method
             return await GetUserPlaylists().ConfigureAwait(false);
         }
@@ -152,6 +199,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<SmartPlaylistDto>> CreateUserSmartList([FromBody] SmartPlaylistDto? list)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             if (list == null)
             {
                 return BadRequest(new { error = "List data is required" });
@@ -230,7 +281,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         Enabled = list.Enabled,
                         MaxItems = list.MaxItems,
                         MaxPlayTimeMinutes = list.MaxPlayTimeMinutes,
-                        DateCreated = DateTime.UtcNow
+                        DateCreated = DateTime.UtcNow,
+                        AutoRefresh = list.AutoRefresh,
+                        Schedules = list.Schedules,
+                        VisibilitySchedules = list.VisibilitySchedules
                     };
 
                     var collectionStore = GetCollectionStore();
@@ -322,6 +376,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<SmartListDto>>> GetUserPlaylists()
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var userId = GetCurrentUserId();
@@ -386,6 +444,71 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
+        /// Gets a specific smart list (playlist or collection) by ID for the current user.
+        /// </summary>
+        /// <param name="id">The list ID.</param>
+        /// <returns>The smart list.</returns>
+        [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<SmartListDto>> GetSmartList([FromRoute, Required] string id)
+        {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
+            try
+            {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+
+                if (!Guid.TryParse(id, out var guidId))
+                {
+                    return BadRequest(new { message = "Invalid list ID format" });
+                }
+
+                // Try playlist first
+                var playlistStore = GetPlaylistStore();
+                var playlist = await playlistStore.GetByIdAsync(guidId);
+                if (playlist != null)
+                {
+                    // Verify user owns this playlist
+                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                    {
+                        return Forbid();
+                    }
+
+                    playlist.MigrateLegacyFields();
+                    return Ok(playlist);
+                }
+
+                // Try collection
+                var collectionStore = GetCollectionStore();
+                var collection = await collectionStore.GetByIdAsync(guidId);
+                if (collection != null)
+                {
+                    // Verify user owns this collection
+                    if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
+                    {
+                        return Forbid();
+                    }
+
+                    collection.MigrateLegacyFields();
+                    return Ok(collection);
+                }
+
+                return NotFound(new { message = "Smart list not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving smart list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error retrieving smart list" });
+            }
+        }
+
+        /// <summary>
         /// Creates a new smart playlist for the current user.
         /// </summary>
         /// <param name="request">The playlist creation request.</param>
@@ -395,6 +518,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SmartPlaylistDto>> CreateUserPlaylist([FromBody] CreatePlaylistRequest request)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var userId = GetCurrentUserId();
@@ -476,6 +603,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<object> GetFields()
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 // Use the shared field definitions (DRY principle)
@@ -496,6 +627,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<object> GetUserCapabilities()
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var canManageCollections = CanUserManageCollections();
@@ -589,6 +724,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("refresh-direct")]
         public async Task<ActionResult> RefreshUserLists()
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var userId = GetCurrentUserId();
@@ -657,6 +796,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("{id}/enable")]
         public async Task<ActionResult> EnableSmartList([FromRoute, Required] string id)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 return await ExecuteListAction(
@@ -739,6 +882,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("{id}/disable")]
         public async Task<ActionResult> DisableSmartList([FromRoute, Required] string id)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 return await ExecuteListAction(
@@ -810,6 +957,173 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
+        /// Update a smart list (playlist or collection) for the current user.
+        /// </summary>
+        /// <param name="id">The list ID.</param>
+        /// <param name="list">The updated smart list.</param>
+        /// <returns>The updated smart list.</returns>
+        [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<SmartListDto>> UpdateSmartList([FromRoute, Required] string id, [FromBody, Required] SmartListDto list)
+        {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+            if (list == null)
+            {
+                return BadRequest(new { message = "List data is required" });
+            }
+
+            try
+            {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+
+                if (!Guid.TryParse(id, out var guidId))
+                {
+                    return BadRequest(new { message = "Invalid list ID format" });
+                }
+
+                // Ensure the list ID matches
+                if (list.Id != id)
+                {
+                    list.Id = id;
+                }
+
+                // Determine if it's a playlist or collection and update accordingly
+                var playlistStore = GetPlaylistStore();
+                var existingPlaylist = await playlistStore.GetByIdAsync(guidId);
+                
+                if (existingPlaylist != null)
+                {
+                    // Verify user owns this playlist
+                    if (!IsUserInPlaylist(existingPlaylist, normalizedUserId))
+                    {
+                        return Forbid();
+                    }
+
+                    // Convert to SmartPlaylistDto
+                    var playlistDto = list as SmartPlaylistDto;
+                    if (playlistDto == null)
+                    {
+                        return BadRequest(new { message = "Invalid playlist data" });
+                    }
+
+                    // Preserve the original filename and user ownership
+                    playlistDto.FileName = existingPlaylist.FileName;
+                    playlistDto.UserId = existingPlaylist.UserId;
+                    playlistDto.UserPlaylists = existingPlaylist.UserPlaylists;
+
+                    // Save updated playlist
+                    await playlistStore.SaveAsync(playlistDto);
+                    
+                    // Update cache
+                    Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
+
+                    // Clear rule cache
+                    SmartList.ClearRuleCache(_logger);
+
+                    // Enqueue refresh if enabled
+                    if (playlistDto.Enabled)
+                    {
+                        try
+                        {
+                            EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, playlistDto.UserId);
+                        }
+                        catch (Exception enqueueEx)
+                        {
+                            _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for updated playlist '{Name}', but update succeeded", playlistDto.Name);
+                        }
+                    }
+
+                    _logger.LogInformation("User {UserId} updated smart playlist '{Name}'", userId, playlistDto.Name);
+                    return Ok(playlistDto);
+                }
+
+                // Try collection
+                var collectionStore = GetCollectionStore();
+                var existingCollection = await collectionStore.GetByIdAsync(guidId);
+                
+                if (existingCollection != null)
+                {
+                    // Verify user owns this collection
+                    if (existingCollection.UserId != null && Guid.TryParse(existingCollection.UserId, out var cUserId) && cUserId != userId)
+                    {
+                        return Forbid();
+                    }
+
+                    // Convert to SmartCollectionDto if needed
+                    var collectionDto = list as SmartCollectionDto;
+                    if (collectionDto == null && list.Type == Core.Enums.SmartListType.Collection)
+                    {
+                        collectionDto = new SmartCollectionDto
+                        {
+                            Id = list.Id,
+                            Name = list.Name,
+                            Type = Core.Enums.SmartListType.Collection,
+                            UserId = existingCollection.UserId,
+                            MediaTypes = list.MediaTypes,
+                            ExpressionSets = list.ExpressionSets,
+                            Order = list.Order,
+                            Enabled = list.Enabled,
+                            MaxItems = list.MaxItems,
+                            MaxPlayTimeMinutes = list.MaxPlayTimeMinutes,
+                            DateCreated = existingCollection.DateCreated,
+                            FileName = existingCollection.FileName,
+                            AutoRefresh = list.AutoRefresh,
+                            Schedules = list.Schedules,
+                            VisibilitySchedules = list.VisibilitySchedules
+                        };
+                    }
+
+                    if (collectionDto != null)
+                    {
+                        // Preserve the original filename and user ownership
+                        collectionDto.FileName = existingCollection.FileName;
+                        collectionDto.UserId = existingCollection.UserId;
+
+                        // Save updated collection
+                        await collectionStore.SaveAsync(collectionDto);
+                        
+                        // Update cache
+                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+
+                        // Clear rule cache
+                        SmartList.ClearRuleCache(_logger);
+
+                        // Enqueue refresh if enabled
+                        if (collectionDto.Enabled)
+                        {
+                            try
+                            {
+                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, collectionDto.UserId);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for updated collection '{Name}', but update succeeded", collectionDto.Name);
+                            }
+                        }
+
+                        _logger.LogInformation("User {UserId} updated smart collection '{Name}'", userId, collectionDto.Name);
+                        return Ok(collectionDto);
+                    }
+
+                    return BadRequest(new { message = "Invalid collection data" });
+                }
+
+                return NotFound(new { message = "Smart list not found" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating smart list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error updating smart list" });
+            }
+        }
+
+        /// <summary>
         /// Delete a smart list (playlist or collection) for the current user.
         /// </summary>
         /// <param name="id">The list ID.</param>
@@ -818,6 +1132,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteSmartList([FromRoute, Required] string id, [FromQuery] bool deleteJellyfinList = true)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var userId = GetCurrentUserId();
@@ -895,6 +1213,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult> RefreshSmartList([FromRoute, Required] string id)
         {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
             try
             {
                 var userId = GetCurrentUserId();

@@ -39,6 +39,14 @@ namespace Jellyfin.Plugin.SmartLists.Services
         {
             try
             {
+                // Check if user page is enabled in configuration
+                var config = Plugin.Instance?.Configuration;
+                if (config?.EnableUserPage == false)
+                {
+                    _logger.LogInformation("User page is disabled in configuration. Skipping Plugin Pages registration.");
+                    return;
+                }
+
                 // Try to find the Plugin Pages assembly
                 var pluginPagesAssembly = AssemblyLoadContext.All
                     .SelectMany(x => x.Assemblies)

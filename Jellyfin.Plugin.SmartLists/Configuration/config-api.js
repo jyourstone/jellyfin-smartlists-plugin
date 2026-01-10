@@ -245,9 +245,9 @@
         const setUserIdValue = function () {
             const userSelect = page.querySelector('#playlistUser');
 
-            if (!userSelect) {
-                // Element no longer exists; stop retrying
-                return true;
+            if (!userSelect || !userSelect.options) {
+                // Element doesn't exist or options not loaded yet
+                return false;
             }
 
             // Check if the option exists in the dropdown

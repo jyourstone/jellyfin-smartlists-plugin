@@ -1,8 +1,34 @@
 # Quick Start
 
+## Accessing SmartLists
+
+SmartLists can be accessed in two ways depending on your user permissions:
+
+**For Regular Users:**
+- Navigate to your Jellyfin home screen
+- Click **"SmartLists"** in the main sidebar
+- This gives you access to create and manage your own playlists and collections
+
+!!! warning "Required Plugins for User Page"
+    The user-facing SmartLists page requires two additional plugins to be installed:
+    
+    - **Plugin Pages**: [https://github.com/IAmParadox27/jellyfin-plugin-pages](https://github.com/IAmParadox27/jellyfin-plugin-pages)
+    - **File Transformation**: [https://github.com/IAmParadox27/jellyfin-plugin-file-transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation)
+    
+    See the [Installation Guide](installation.md#required-plugins-for-user-page) for details.
+
+**For Administrators:**
+- Go to **Dashboard → My Plugins → SmartLists**
+- Or click **"SmartLists"** in the sidebar under "Plugins"
+- This gives you full access to all lists and global settings
+- **No additional plugins required** for admin access
+
+!!! tip "Collection Permissions"
+    Regular users need the **"Manage Collections"** permission in Jellyfin to create collections. Administrators can grant this in: Dashboard → Users → [User] → Profile.
+
 ## Creating Your First List
 
-1. **Access Plugin Settings**: Go to Dashboard → My Plugins → SmartLists
+1. **Access SmartLists**: Use one of the methods above
 2. **Navigate to Create List Tab**: Click on the "Create List" tab
 3. **Configure Your List**:
    - Enter a name for your list

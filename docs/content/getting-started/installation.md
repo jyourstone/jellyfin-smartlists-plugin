@@ -1,5 +1,20 @@
 # Installation
 
+## Required Plugins for User Page
+
+For regular users to access SmartLists from their home screen, the following plugins are **required**:
+
+1. **Plugin Pages** - Enables custom pages in the Jellyfin sidebar
+   - Repository: [https://github.com/IAmParadox27/jellyfin-plugin-pages](https://github.com/IAmParadox27/jellyfin-plugin-pages)
+   
+2. **File Transformation** - Required dependency for Plugin Pages
+   - Repository: [https://github.com/IAmParadox27/jellyfin-plugin-file-transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation)
+
+!!! info "Not Required for Admin Access"
+    These plugins are **only needed** if you want regular users to access SmartLists from their home screen. Administrators can always access SmartLists through Dashboard → My Plugins → SmartLists without these plugins.
+    
+    If these plugins are not installed, the SmartLists plugin will still function normally, but the user-facing page will not be available.
+
 ## From Repository
 
 1. **Add the Repository**:
@@ -11,7 +26,11 @@
      ```
    - Click **Save**
 
-2. **Install the Plugin**:
+2. **Install Required Plugins** (for user page access):
+   - Follow the installation instructions from the plugin repositories above
+   - Both Plugin Pages and File Transformation must be installed
+
+3. **Install SmartLists Plugin**:
    - Go to **Dashboard** → **Plugins** → **All/Available**
    - Click **SmartLists** in the list of available plugins
    - Click **Install**
