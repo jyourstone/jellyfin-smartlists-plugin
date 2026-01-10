@@ -10,24 +10,34 @@
 
     // ===== OPERATOR OPTIONS MANAGEMENT =====
     SmartLists.updateOperatorOptions = function (fieldValue, operatorSelect) {
+        console.log('[DEBUG] updateOperatorOptions called for field:', fieldValue);
+        
         // Capture the previous operator value before clearing
         const previousOperator = operatorSelect.value;
+        console.log('[DEBUG] Previous operator value:', previousOperator);
 
         operatorSelect.innerHTML = '<option value="">-- Select Operator --</option>';
         let allowedOperators = [];
 
         // Check if availableFields is loaded - if not, return early (fields should be loaded before this is called)
         if (!SmartLists.availableFields || !SmartLists.availableFields.Operators) {
+            console.log('[DEBUG] availableFields or Operators not loaded!');
             return;
         }
+
+        console.log('[DEBUG] FieldOperators available:', !!SmartLists.availableFields.FieldOperators);
+        console.log('[DEBUG] FieldOperators for this field:', SmartLists.availableFields.FieldOperators ? SmartLists.availableFields.FieldOperators[fieldValue] : 'N/A');
 
         // Use the new field-specific operator mappings from the API
         if (SmartLists.availableFields.FieldOperators && SmartLists.availableFields.FieldOperators[fieldValue]) {
             const allowedOperatorValues = SmartLists.availableFields.FieldOperators[fieldValue];
+            console.log('[DEBUG] Using API FieldOperators:', allowedOperatorValues);
             allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                 return allowedOperatorValues.includes(op.Value);
             });
+            console.log('[DEBUG] Filtered operators from API:', allowedOperators.map(function(o) { return o.Value; }));
         } else {
+            console.log('[DEBUG] Using fallback operator logic');
             // Fallback to the old logic if FieldOperators is not available
             // Define common operator sets to avoid duplication
             const stringListOperators = ['Contains', 'NotContains', 'IsIn', 'IsNotIn', 'MatchRegex'];
@@ -36,31 +46,40 @@
             const booleanOperators = ['Equal', 'NotEqual'];
 
             if (SmartLists.FIELD_TYPES.LIST_FIELDS.indexOf(fieldValue) !== -1) {
+                console.log('[DEBUG] Field is LIST_FIELD');
                 allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                     return stringListOperators.indexOf(op.Value) !== -1;
                 });
             } else if (SmartLists.FIELD_TYPES.NUMERIC_FIELDS.indexOf(fieldValue) !== -1) {
                 // Numeric fields should NOT include date-specific operators
+                console.log('[DEBUG] Field is NUMERIC_FIELD');
                 allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                     return numericOperators.indexOf(op.Value) !== -1;
                 });
             } else if (SmartLists.FIELD_TYPES.DATE_FIELDS.indexOf(fieldValue) !== -1) {
                 // Date fields: exclude string operators and numeric-specific operators, include date-specific operators
+                console.log('[DEBUG] Field is DATE_FIELD');
                 allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                     return stringListOperators.indexOf(op.Value) === -1 &&
                         numericOperators.indexOf(op.Value) === -1;
                 });
             } else if (SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1 ||
                 SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) {
+                console.log('[DEBUG] Field is BOOLEAN or SIMPLE_FIELD');
                 allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                     return booleanOperators.indexOf(op.Value) !== -1;
                 });
             } else { // Default to string fields
+                console.log('[DEBUG] Field is STRING (default)');
                 allowedOperators = SmartLists.availableFields.Operators.filter(function (op) {
                     return stringOperators.indexOf(op.Value) !== -1;
                 });
             }
+            console.log('[DEBUG] Fallback filtered operators:', allowedOperators.map(function(o) { return o.Value; }));
         }
+
+        console.log('[DEBUG] Final allowedOperators count:', allowedOperators.length);
+        console.log('[DEBUG] Final allowedOperators:', allowedOperators.map(function(o) { return o.Value + ' (' + o.Label + ')'; }).join(', '));
 
         allowedOperators.forEach(function (opt) {
             const option = document.createElement('option');
@@ -72,10 +91,13 @@
         // Restore previous operator if it's still valid, otherwise set default
         if (previousOperator && allowedOperators.some(function (op) { return op.Value === previousOperator; })) {
             operatorSelect.value = previousOperator;
+            console.log('[DEBUG] Restored previous operator:', previousOperator);
         } else if (fieldValue === 'ItemType' || SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
             operatorSelect.value = 'Equal';
+            console.log('[DEBUG] Set default operator to Equal for ItemType/Boolean field');
         } else {
             operatorSelect.value = '';
+            console.log('[DEBUG] No default operator set');
         }
     };
 

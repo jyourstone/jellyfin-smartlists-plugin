@@ -178,6 +178,12 @@
             return Promise.resolve();
         }
 
+        // On user pages, skip loading users (admin-only endpoint)
+        if (SmartLists.IS_USER_PAGE) {
+            // User pages don't show user selectors in rules
+            return Promise.resolve();
+        }
+
         isOptional = isOptional !== undefined ? isOptional : false;
         const apiClient = SmartLists.getApiClient();
 

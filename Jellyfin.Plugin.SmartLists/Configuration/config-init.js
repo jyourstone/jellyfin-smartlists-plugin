@@ -30,13 +30,24 @@
             submitBtn.textContent = 'Loading...';
         }
 
-        // Coordinate all async initialization
-        Promise.all([
+        // Build array of async initialization tasks
+        var initTasks = [
             SmartLists.populateStaticSelects(page), // Make synchronous function async
-            SmartLists.loadUsers(page),
-            // Collections are server-wide, no library loading needed
             SmartLists.loadAndPopulateFields()
-        ]).then(function () {
+        ];
+        
+        // Only load users and configuration on admin pages
+        if (!SmartLists.IS_USER_PAGE) {
+            initTasks.push(SmartLists.loadUsers(page));
+        } else {
+            // On user pages, load capabilities to determine what they can create
+            if (SmartLists.loadUserCapabilities) {
+                initTasks.push(SmartLists.loadUserCapabilities());
+            }
+        }
+
+        // Coordinate all async initialization
+        Promise.all(initTasks).then(function () {
             // All async operations completed successfully
             const rulesContainer = page.querySelector('#rules-container');
             if (rulesContainer.children.length === 0) {
@@ -57,17 +68,24 @@
             // Populate form defaults if we're on the create tab and not in edit mode
             const currentTab = SmartLists.getCurrentTab();
             if (currentTab === 'create' && !editState.editMode) {
-                // Set default list type on initial page load only
-                const apiClient = SmartLists.getApiClient();
-                apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
-                    SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
-                    SmartLists.handleListTypeChange(page);
-                }).catch(function () {
+                // On user pages, always use Playlist type (no configuration needed)
+                if (SmartLists.IS_USER_PAGE) {
                     SmartLists.setElementValue(page, '#listType', 'Playlist');
                     SmartLists.handleListTypeChange(page);
-                });
+                    SmartLists.populateFormDefaults(page);
+                } else {
+                    // Admin page: Set default list type from configuration
+                    const apiClient = SmartLists.getApiClient();
+                    apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
+                        SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
+                        SmartLists.handleListTypeChange(page);
+                    }).catch(function () {
+                        SmartLists.setElementValue(page, '#listType', 'Playlist');
+                        SmartLists.handleListTypeChange(page);
+                    });
 
-                SmartLists.populateFormDefaults(page);
+                    SmartLists.populateFormDefaults(page);
+                }
             }
         }).catch(function (error) {
             console.error('Error during page initialization:', error);
@@ -88,8 +106,10 @@
         // Set up navigation functionality
         SmartLists.setupNavigation(page);
 
-        // Load configuration (this can run independently)
-        SmartLists.loadConfiguration(page);
+        // Load configuration (only on admin pages - user pages don't have settings tab)
+        if (!SmartLists.IS_USER_PAGE) {
+            SmartLists.loadConfiguration(page);
+        }
     };
 
     // ===== STATIC SELECTS POPULATION =====
@@ -184,6 +204,16 @@
         // Add default sort option when creating a new playlist (not in edit mode)
         const editState = SmartLists.getPageEditState(page);
         if (!editState.editMode) {
+            // On user pages, skip loading plugin configuration (admin-only)
+            if (SmartLists.IS_USER_PAGE) {
+                // Use default values for user pages
+                const sortsContainer = page.querySelector('#sorts-container');
+                if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
+                    SmartLists.addSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                }
+                return Promise.resolve();
+            }
+
             const apiClient = SmartLists.getApiClient();
 
             // Suffix initialization removed - allow blank values
@@ -401,6 +431,12 @@
     };
 
     SmartLists.populateFormDefaults = function (page) {
+        // On user pages, skip loading plugin configuration (admin-only)
+        if (SmartLists.IS_USER_PAGE) {
+            SmartLists.applyFallbackDefaults(page);
+            return;
+        }
+
         const apiClient = SmartLists.getApiClient();
         apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
             SmartLists.applyFormDefaults(page, config);
@@ -1289,7 +1325,9 @@
     SmartLists.refreshAllPlaylists = function () {
         // Show notification that refresh has started
         var statusLink = SmartLists.createStatusPageLink('status page');
-        var refreshMessage = 'List refresh started, check the ' + statusLink + ' for progress.';
+        var refreshMessage = SmartLists.IS_USER_PAGE 
+            ? 'List refresh started. Your lists will be updated in the background.'
+            : 'List refresh started, check the ' + statusLink + ' for progress.';
         SmartLists.showNotification(refreshMessage, 'info', { html: true });
 
         // Start the refresh operation (fire and forget - status page will show progress)
@@ -1494,7 +1532,20 @@
     // ===== PAGE EVENT LISTENERS =====
     document.addEventListener('pageshow', function (e) {
         const page = e.target;
+        console.log('pageshow event fired, page classes:', page.className);
         if (page.classList.contains('SmartListsConfigurationPage')) {
+            console.log('Initializing SmartLists page, IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
+            SmartLists.initPage(page);
+        }
+    });
+
+    // Fallback initialization for pages loaded directly (not via Jellyfin navigation)
+    // This handles the case where pageshow doesn't fire for custom plugin pages
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('DOMContentLoaded event fired');
+        const page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized) {
+            console.log('Fallback initialization triggered, IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
             SmartLists.initPage(page);
         }
     });
@@ -1545,7 +1596,10 @@
         });
 
         // Reload users with appropriate UI (single select for collections, multi-select for playlists)
-        SmartLists.loadUsers(page);
+        // Skip for user pages (admin-only endpoint)
+        if (!SmartLists.IS_USER_PAGE) {
+            SmartLists.loadUsers(page);
+        }
 
         // Update public checkbox visibility
         if (SmartLists.updatePublicCheckboxVisibility) {
@@ -1636,3 +1690,28 @@
 
 })(window.SmartLists = window.SmartLists || {});
 
+// Immediate initialization check - runs as soon as this script loads
+// This is necessary because DOMContentLoaded may have already fired
+(function() {
+    console.log('config-init.js: Immediate initialization check');
+    var checkAndInit = function() {
+        var page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized) {
+            console.log('config-init.js: Page found and not initialized, initializing now');
+            window.SmartLists.initPage(page);
+        } else if (page) {
+            console.log('config-init.js: Page already initialized');
+        } else {
+            console.log('config-init.js: Page not found yet');
+        }
+    };
+    
+    // Try immediately if DOM is already ready
+    if (document.readyState === 'loading') {
+        console.log('config-init.js: DOM still loading, waiting for DOMContentLoaded');
+        document.addEventListener('DOMContentLoaded', checkAndInit);
+    } else {
+        console.log('config-init.js: DOM already ready, initializing immediately');
+        checkAndInit();
+    }
+})();

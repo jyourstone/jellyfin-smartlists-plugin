@@ -3,6 +3,7 @@ using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using MediaBrowser.Common;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Services;
 
 namespace Jellyfin.Plugin.SmartLists
 {
@@ -55,6 +56,9 @@ namespace Jellyfin.Plugin.SmartLists
             
             serviceCollection.AddHostedService<AutoRefreshHostedService>();
             serviceCollection.AddScoped<IManualRefreshService, ManualRefreshService>();
+            
+            // Register Plugin Pages integration as a hosted service
+            serviceCollection.AddHostedService<PluginPagesRegistrationService>();
         }
     }
 }

@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Configuration\config.html" />
+    <!-- User-facing pages -->
+    <EmbeddedResource Include="Configuration\user-playlists.html" />
     <!-- Core utilities and constants (must load first) -->
     <EmbeddedResource Include="Configuration\config-core.js" />
     <!-- Formatters and option generators -->

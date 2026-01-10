@@ -3,16 +3,25 @@
 
     // Constants
     SmartLists.PLUGIN_ID = "A0A2A7B2-747A-4113-8B39-757A9D267C79";
+    
+    // Determine if we're in user mode (set by user-playlists.html before loading this script)
+    SmartLists.IS_USER_PAGE = SmartLists.IS_USER_PAGE || false;
+    console.log('config-core.js: IS_USER_PAGE =', SmartLists.IS_USER_PAGE);
+    
+    // Build endpoints based on context (admin vs user)
+    var endpointPrefix = SmartLists.IS_USER_PAGE ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
+    console.log('config-core.js: Using endpoint prefix:', endpointPrefix);
     SmartLists.ENDPOINTS = {
-        fields: 'Plugins/SmartLists/fields',
-        base: 'Plugins/SmartLists',
-        users: 'Plugins/SmartLists/users',
-        libraries: 'Plugins/SmartLists/libraries',
-        refresh: 'Plugins/SmartLists/refresh',
-        refreshDirect: 'Plugins/SmartLists/refresh-direct',
-        export: 'Plugins/SmartLists/export',
-        import: 'Plugins/SmartLists/import'
+        fields: endpointPrefix + '/fields',
+        base: endpointPrefix,
+        users: 'Plugins/SmartLists/users',      // Keep admin endpoint for user selection (may not be needed in user mode)
+        libraries: 'Plugins/SmartLists/libraries', // Keep admin endpoint for library selection (may not be needed in user mode)
+        refresh: endpointPrefix + '/refresh',
+        refreshDirect: endpointPrefix + '/refresh-direct',
+        export: endpointPrefix + '/export',
+        import: endpointPrefix + '/import'
     };
+    console.log('config-core.js: ENDPOINTS =', SmartLists.ENDPOINTS);
 
     // Field type constants to avoid duplication
     SmartLists.FIELD_TYPES = {
@@ -738,9 +747,15 @@
         // No manual positioning needed
     }
 
-    // Helper function to create a link to the status page
+    // Helper function to create a link to the status page (or just text for user pages)
     SmartLists.createStatusPageLink = function (linkText) {
         linkText = linkText || 'status page';
+        
+        // On user pages, users can't access the status tab, so just return plain text
+        if (SmartLists.IS_USER_PAGE) {
+            return '';  // Return empty string to remove the reference entirely
+        }
+        
         // Create a unique ID for the link to attach event listener
         var linkId = 'status-link-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
         var linkHtml = '<a href="#" id="' + linkId + '">' + linkText + '</a>';

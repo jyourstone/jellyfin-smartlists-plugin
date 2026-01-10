@@ -73,6 +73,14 @@
             return Promise.resolve(cachedName);
         }
 
+        // For user pages, don't call admin-only /users endpoint
+        // Just return a placeholder since users don't need to see other users' names
+        if (SmartLists.IS_USER_PAGE) {
+            const fallback = 'My Playlists';
+            userNameCache.set(normalizedId, fallback);
+            return Promise.resolve(fallback);
+        }
+
         // Load all users and build cache if not already loaded
         return apiClient.ajax({
             type: 'GET',
@@ -183,12 +191,17 @@
 
             // Get selected user ID(s) - collections use single select, playlists use multi-select
             let userIds;
-            if (isCollection) {
-                // Collections: single user
+            if (SmartLists.IS_USER_PAGE) {
+                // User page: always use the current logged-in user
+                const apiClient = SmartLists.getApiClient();
+                const currentUserId = apiClient.getCurrentUserId();
+                userIds = currentUserId ? [currentUserId] : [];
+            } else if (isCollection) {
+                // Admin page - Collections: single user
                 const userId = SmartLists.getElementValue(page, '#playlistUser');
                 userIds = userId ? [userId] : [];
             } else {
-                // Playlists: potentially multiple users
+                // Admin page - Playlists: potentially multiple users
                 userIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
             }
 
@@ -381,16 +394,24 @@
         SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
 
         // Apply all form defaults using shared helper (DRY)
-        const apiClient = SmartLists.getApiClient();
-        apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
-            if (SmartLists.applyFormDefaults) {
-                SmartLists.applyFormDefaults(page, config);
-            }
-        }).catch(function () {
+        // Skip loading config on user pages (admin-only endpoint)
+        if (!SmartLists.IS_USER_PAGE) {
+            const apiClient = SmartLists.getApiClient();
+            apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
+                if (SmartLists.applyFormDefaults) {
+                    SmartLists.applyFormDefaults(page, config);
+                }
+            }).catch(function () {
+                if (SmartLists.applyFallbackDefaults) {
+                    SmartLists.applyFallbackDefaults(page);
+                }
+            });
+        } else {
+            // User page: use fallback defaults
             if (SmartLists.applyFallbackDefaults) {
                 SmartLists.applyFallbackDefaults(page);
             }
-        });
+        }
 
         // Create initial logic group with one rule
         SmartLists.createInitialLogicGroup(page);
@@ -904,17 +925,23 @@
     };
 
     SmartLists.notifyRefreshQueued = function (listTypeName, playlistName) {
-        // Show single notification with status page link
+        // Show single notification with status page link (or simple message for user pages)
         var statusLink = SmartLists.createStatusPageLink('status page');
         var message = 'Refresh started';
         if (playlistName) {
             message += ' for ' + (listTypeName || 'list') + ' "' + playlistName + '"';
         }
-        message += '. Check the ' + statusLink + ' for progress.';
+        
+        if (SmartLists.IS_USER_PAGE) {
+            message += '. Your list will be updated in the background.';
+        } else {
+            message += '. Check the ' + statusLink + ' for progress.';
+        }
+        
         SmartLists.showNotification(message, 'info', { html: true });
 
-        // Start aggressive polling on status page to catch the operation
-        if (window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
+        // Start aggressive polling on status page to catch the operation (admin only)
+        if (!SmartLists.IS_USER_PAGE && window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
             window.SmartLists.Status.startAggressivePolling();
         }
     };
@@ -1414,14 +1441,22 @@
             jellyfinLinkHtml +
             '</td>' +
             '</tr>' +
-            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
-            '</tr>' +
-            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
-            '</tr>' +
+            // Hide File property on user pages
+            (!SmartLists.IS_USER_PAGE ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
+                '</tr>' :
+                ''
+            ) +
+            // Hide User(s) property on user pages
+            (!SmartLists.IS_USER_PAGE ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
+                '</tr>' :
+                ''
+            ) +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Status</td>' +
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eStatusDisplayText + '</td>' +
@@ -1554,28 +1589,31 @@
             page._allPlaylists = processedPlaylists;
 
             // Preload all users to populate cache for user name resolution
-            try {
-                // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
-                const usersResponse = await apiClient.ajax({
-                    type: 'GET',
-                    url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
-                    contentType: 'application/json'
-                });
-                const users = await usersResponse.json();
-
-                // Build cache from all users for user name resolution
-                if (Array.isArray(users)) {
-                    users.forEach(function (user) {
-                        if (user.Id && user.Name) {
-                            // Normalize GUID format when storing in cache
-                            const normalizedId = normalizeUserId(user.Id);
-                            userNameCache.set(normalizedId, user.Name);
-                        }
+            // Skip for user pages (admin-only endpoint)
+            if (!SmartLists.IS_USER_PAGE) {
+                try {
+                    // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
+                    const usersResponse = await apiClient.ajax({
+                        type: 'GET',
+                        url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
+                        contentType: 'application/json'
                     });
+                    const users = await usersResponse.json();
+
+                    // Build cache from all users for user name resolution
+                    if (Array.isArray(users)) {
+                        users.forEach(function (user) {
+                            if (user.Id && user.Name) {
+                                // Normalize GUID format when storing in cache
+                                const normalizedId = normalizeUserId(user.Id);
+                                userNameCache.set(normalizedId, user.Name);
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error preloading users:', err);
+                    // Continue even if user preload fails
                 }
-            } catch (err) {
-                console.error('Error preloading users:', err);
-                // Continue even if user preload fails
             }
 
             try {

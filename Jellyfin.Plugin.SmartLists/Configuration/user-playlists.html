@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>My Smart Lists</title>
+    <!-- All CSS styling is handled dynamically via JavaScript -->
+    <link rel="stylesheet" href="configurationpage?name=config-multi-select.css">
+</head>
+
+<body>
+    <div data-role="page" class="page type-interior pluginConfigurationPage SmartListsConfigurationPage SmartListsUserPage">
+        <div data-role="content">
+            <div class="content-primary">
+                <div style="display: flex; align-items: center; margin-bottom: 1em;">
+                    <h1>My Smart Lists</h1>
+                    <a class="emby-button raised button-alt headerHelpButton"
+                        href="https://jellyfin-smartlists-plugin.dinsten.se" target="_blank"
+                        rel="noopener noreferrer" style="padding: 0.4em 0.8em; margin-left: 1em;">Help</a>
+                </div>
+                <form style="margin: 0;">
+                    <!-- Notification area removed - now using floating notifications -->
+                </form>
+
+                <div data-role="controlgroup" data-type="horizontal" class="localnav">
+                    <a class="emby-button" href="#" data-role="button" data-tab="create">Create Smart List</a>
+                    <a class="emby-button" href="#" data-role="button" data-tab="manage">My Smart Lists</a>
+                </div>
+
+                <div id="edit-mode-indicator"
+                    style="display: none; color: #ffa500; font-weight: bold; margin: 0.5em 0;">
+                    <span>✏️ Editing Mode - Modifying existing playlist</span>
+                    <button type="button" id="cancelEditBtn" class="emby-button raised" style="margin-left: 1em;">Cancel
+                        Edit</button>
+                </div>
+
+                <!-- Create Tab -->
+                <div id="create-tab" class="page-content hide" data-tab-content="create">
+                    <form id="playlistForm" style="margin-top:2em;">
+                        <!-- List Type - shown/hidden based on user permissions -->
+                        <div class="inputContainer" id="listTypeContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="listType" style="display: flex; align-items: center;">
+                                List Type
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#playlists-vs-collections"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <select is="emby-select" id="listType" class="emby-select" required>
+                                <option value="Playlist">Playlist</option>
+                                <option value="Collection">Collection</option>
+                            </select>
+                            <div class="fieldDescription">Choose whether to create a Playlist or Collection.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="playlistName">List Name</label>
+                            <input type="text" id="playlistName" class="emby-input" required
+                                placeholder="e.g., 90s Action Movies">
+                            <div class="fieldDescription">The name of the list that will be created in Jellyfin.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Media Types
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/media-types/"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div id="mediaTypesMultiSelect">
+                                <div class="multi-select-container">
+                                    <div class="multi-select-display" id="mediaTypesMultiSelectDisplay">
+                                        <span class="multi-select-placeholder">Select media types...</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" id="mediaTypesMultiSelectDropdown"
+                                        style="display: none;">
+                                        <div class="multi-select-options" id="mediaTypesMultiSelectOptions">
+                                            <!-- Checkboxes populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="fieldDescription">Select the types of media items to include in your list. At
+                                least one type must be selected. Choose types that match your Jellyfin library content
+                                (e.g., Movies from a Movies library, Episodes from a TV Shows library, Audio from a
+                                Music library).</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Rules
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/fields-and-operators/"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div id="rules-container"></div>
+                            <div class="fieldDescription" style="margin-bottom: 1.5em; margin-top: -0.7em;">Build your
+                                rules using logical groups. Rules within a group are combined with AND, groups are
+                                combined with OR.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Sort Options
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#sorting"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div class="fieldDescription" style="margin-bottom: 0.5em;">Add up to 3 sorting options.
+                                Items are sorted by the first option, then by the second for items with equal values,
+                                and so on.</div>
+                            <div id="sorts-container"></div>
+                        </div>
+
+                        <!-- User selection hidden for user pages - user is always themselves -->
+                        <input type="hidden" id="playlistUser" value="">
+
+                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel" for="playlistMaxItems"
+                                style="display: flex; align-items: center;">
+                                Max Items
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-items"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <input type="number" id="playlistMaxItems" class="emby-input" min="0" step="1">
+                            <div class="fieldDescription">Maximum number of items in this list. Set to 0 for no limit.
+                            </div>
+                        </div>
+
+                        <div class="inputContainer playlist-only-field" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel" for="playlistMaxPlayTimeMinutes"
+                                style="display: flex; align-items: center;">
+                                Max Playtime (Minutes)
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-playtime"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <input type="number" id="playlistMaxPlayTimeMinutes" class="emby-input" min="0" step="1">
+                            <div class="fieldDescription">Maximum playtime in minutes for this list. Set to 0 for no
+                                limit.</div>
+                        </div>
+
+                        <div id="publicCheckboxContainer" class="checkboxList paperList playlist-only-field"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="playlistIsPublic" data-embycheckbox="true"
+                                    class="emby-checkbox">
+                                <span class="checkboxLabel">Make playlist public</span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">Allow this playlist to be viewed by any logged in user.</div>
+                        </div>
+
+                        <div class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="playlistIsEnabled"
+                                    data-embycheckbox="true" class="emby-checkbox" checked>
+                                <span class="checkboxLabel">
+                                    Enable list
+                                    <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#enable-list"
+                                        target="_blank" rel="noopener noreferrer" title="Documentation"
+                                        style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                        <span class="material-icons" aria-hidden="true"
+                                            style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                    </a>
+                                </span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">When enabled, the list will be created and updated
+                                automatically. When disabled, the list will be removed from Jellyfin.</div>
+                        </div>
+
+                        <div class="selectContainer" style="margin-bottom: 1em;">
+                            <label class="selectLabel" for="autoRefreshMode"
+                                style="display: flex; align-items: center;">
+                                Auto-refresh on library changes:
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/auto-refresh/"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <select id="autoRefreshMode" is="emby-select" class="emby-select-withcolor emby-select">
+                                <!-- Auto-refresh options populated dynamically by JavaScript -->
+                            </select>
+                            <div class="fieldDescription">Controls when this list automatically refreshes. Note:
+                                Choosing "On all changes" may impact performance.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Refresh Schedules
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/auto-refresh/#custom-list-scheduling"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div id="schedules-container"></div>
+                            <div class="fieldDescription">Configure custom refresh schedule(s) for this list. You can
+                                add multiple schedules (e.g., run on Sundays AND on the 1st of each month).</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Visibility Schedules
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/auto-refresh/#visibility-scheduling"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div id="visibility-schedules-container"></div>
+                            <div class="fieldDescription">Control when this list appears in Jellyfin. Use Enable/Disable actions to automatically show or hide the list on specific dates (e.g., show Christmas movies only in December).</div>
+                        </div>
+
+                        <div style="margin-top: 2em;">
+                            <button type="submit" id="submitBtn" class="button-submit emby-button block">Create
+                                List</button>
+                            <button type="button" id="clearFormBtn" class="emby-button raised block">Clear Form</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Manage Tab -->
+                <div id="manage-tab" class="page-content hide" data-tab-content="manage">
+                    <form style="margin-top:2em;">
+                        <div class="inputContainer" style="margin-bottom: 2em;">
+                            <button type="button" is="emby-button" id="refreshPlaylistsBtn"
+                                class="emby-button raised block">Refresh All Lists</button>
+                        </div>
+
+                        <!-- Filters Section -->
+                        <div class="inputContainer" style="margin-bottom: 2em;">
+                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; align-items: end;">
+                                    <div>
+                                        <label class="inputLabel" for="playlistSortSelect">Sort By</label>
+                                        <select id="playlistSortSelect" is="emby-select"
+                                            class="emby-select-withcolor emby-select"
+                                            style="background-color: #2A2A2A;">
+                                            <option value="name-asc">Name (A-Z)</option>
+                                            <option value="name-desc">Name (Z-A)</option>
+                                            <option value="created-desc">Created Date (Newest)</option>
+                                            <option value="created-asc">Created Date (Oldest)</option>
+                                            <option value="refreshed-desc">Last Refreshed (Recent)</option>
+                                            <option value="refreshed-asc">Last Refreshed (Oldest)</option>
+                                            <option value="enabled-first">Enabled First</option>
+                                            <option value="disabled-first">Disabled First</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="inputLabel" for="typeFilter">Type</label>
+                                        <select id="typeFilter" is="emby-select"
+                                            class="emby-select-withcolor emby-select"
+                                            style="background-color: #2A2A2A;">
+                                            <option value="all">All Types</option>
+                                            <option value="Playlist">Playlists</option>
+                                            <option value="Collection">Collections</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="inputLabel" for="mediaTypeFilter">Media Type</label>
+                                        <select id="mediaTypeFilter" is="emby-select"
+                                            class="emby-select-withcolor emby-select"
+                                            style="background-color: #2A2A2A;">
+                                            <option value="all">All Types</option>
+                                            <option value="Movie">Movie</option>
+                                            <option value="Episode">Episode (TV Show)</option>
+                                            <option value="Series">Series (TV Show)</option>
+                                            <option value="Audio">Audio (Music)</option>
+                                            <option value="MusicVideo">Music Video</option>
+                                            <option value="Video">Video (Home Video)</option>
+                                            <option value="Photo">Photo (Home Photo)</option>
+                                            <option value="Book">Book</option>
+                                            <option value="AudioBook">Audiobook</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Search field below the select fields -->
+                                <div style="margin-top: 1em;">
+                                    <div style="display: flex; gap: 1em; align-items: end;">
+                                        <div class="search-inputContainer"
+                                            style="position: relative; display: flex; align-items: center; flex: 1;">
+                                            <input type="search" id="playlistSearchInput" class="emby-input"
+                                                autocomplete="off" inputmode="search" placeholder="Search lists..."
+                                                style="padding: 0.75em 2.5em 0.75em 0.75em; width: 100%; box-sizing: border-box; background-color: #2A2A2A;">
+                                            <button type="button" id="clearSearchBtn" class="search-clear-btn"
+                                                style="position: absolute; right: 0.5em; background: none; border: none; color: #999; cursor: pointer; padding: 0.25em; font-size: 1.2em; display: none;"
+                                                title="Clear search" aria-label="Clear search">×</button>
+                                        </div>
+                                        <button type="button" id="clearFiltersBtn" class="emby-button raised">Clear All
+                                            Filters</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="playlist-list-container">
+                            <p>Loading lists...</p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Initialize user mode BEFORE loading config-core.js -->
+        <script>
+            console.log('SmartLists User Page: Initializing user mode');
+            window.SmartLists = window.SmartLists || {};
+            window.SmartLists.IS_USER_PAGE = true;
+            console.log('SmartLists User Page: IS_USER_PAGE =', window.SmartLists.IS_USER_PAGE);
+            
+            // Load user capabilities and configure UI accordingly
+            window.SmartLists.loadUserCapabilities = async function() {
+                try {
+                    const apiClient = window.ApiClient;
+                    const response = await apiClient.ajax({
+                        type: "GET",
+                        url: apiClient.getUrl('Plugins/SmartLists/User/Capabilities'),
+                        contentType: 'application/json'
+                    });
+                    
+                    const capabilities = await response.json();
+                    console.log('User capabilities:', capabilities);
+                    
+                    // Store capabilities for later use
+                    window.SmartLists.userCapabilities = capabilities;
+                    
+                    // Configure list type UI based on capabilities
+                    const listTypeContainer = document.getElementById('listTypeContainer');
+                    const listTypeSelect = document.getElementById('listType');
+                    
+                    if (capabilities.CanCreateCollections) {
+                        // User can create collections - show the dropdown
+                        listTypeContainer.style.display = '';
+                        console.log('User can create collections - showing list type selector');
+                    } else {
+                        // User can only create playlists - hide the selector and set to Playlist
+                        listTypeContainer.style.display = 'none';
+                        listTypeSelect.value = 'Playlist';
+                        console.log('User can only create playlists - hiding list type selector');
+                        
+                        // Update labels to say "Playlist" instead of generic "List"
+                        var playlistNameLabel = document.getElementById('playlistNameLabel');
+                        var playlistNameDesc = document.getElementById('playlistNameDesc');
+                        if (playlistNameLabel) playlistNameLabel.textContent = 'Playlist';
+                        if (playlistNameDesc) playlistNameDesc.textContent = 'playlist';
+                    }
+                } catch (error) {
+                    console.error('Error loading user capabilities:', error);
+                    // Default to playlist-only mode if we can't load capabilities
+                    document.getElementById('listTypeContainer').style.display = 'none';
+                    document.getElementById('listType').value = 'Playlist';
+                }
+            };
+        </script>
+
+        <!-- Core utilities and constants (must load first) -->
+        <script src="configurationpage?name=config-core.js"></script>
+        <!-- Formatters and option generators -->
+        <script src="configurationpage?name=config-formatters.js"></script>
+        <!-- Schedule management -->
+        <script src="configurationpage?name=config-schedules.js"></script>
+        <!-- Sort management -->
+        <script src="configurationpage?name=config-sorts.js"></script>
+        <!-- Generic multi-select component -->
+        <script src="configurationpage?name=config-multi-select.js"></script>
+        <!-- Rule management -->
+        <script src="configurationpage?name=config-rules.js"></script>
+        <!-- List CRUD operations -->
+        <script src="configurationpage?name=config-lists.js"></script>
+        <!-- Filtering and search -->
+        <script src="configurationpage?name=config-filters.js"></script>
+        <!-- Bulk actions and playlist card interactions -->
+        <script src="configurationpage?name=config-bulk-actions.js"></script>
+        <!-- API calls -->
+        <script src="configurationpage?name=config-api.js"></script>
+        <!-- Initialization (must load last) -->
+        <script src="configurationpage?name=config-init.js"></script>
+    </div>
+</body>
+
+</html>

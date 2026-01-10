@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Smart Playlists</title>
+</head>
+<body>
+    <div data-role="page" class="page type-interior pluginConfigurationPage">
+        <div data-role="content">
+            <div class="content-primary">
+                <h1>My Smart Playlists</h1>
+
+                <div data-role="controlgroup" data-type="horizontal" class="localnav">
+                    <a class="emby-button" href="#" data-role="button" data-tab="create">Create Playlist</a>
+                    <a class="emby-button" href="#" data-role="button" data-tab="manage">My Playlists</a>
+                </div>
+
+                <!-- Create Tab -->
+                <div id="create-tab" class="page-content hide" data-tab-content="create">
+                    <form id="playlistForm" style="margin-top:2em;">
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="playlistName">Playlist Name</label>
+                            <input type="text" id="playlistName" class="emby-input" required
+                                placeholder="e.g., My Favorite Movies">
+                            <div class="fieldDescription">The name of your smart playlist.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel">Media Types</label>
+                            <div id="mediaTypesContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5em; margin-top: 0.5em;">
+                                <!-- Will be populated dynamically -->
+                            </div>
+                            <div class="fieldDescription">Select at least one media type for your playlist.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel">Rules (Optional)</label>
+                            <div id="rules-container"></div>
+                            <div class="fieldDescription">Add rules to filter which items appear in your playlist. Leave empty to include all items of the selected media types.</div>
+                        </div>
+
+                        <div style="margin-top: 2em;">
+                            <button type="submit" class="emby-button raised button-submit">
+                                <span id="submitButtonText">Create Playlist</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Manage Tab -->
+                <div id="manage-tab" class="page-content hide" data-tab-content="manage">
+                    <div style="margin-top: 2em;">
+                        <div id="playlistList">
+                            <p>Loading your playlists...</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = ApiClient.getUrl('Plugins/SmartLists/User');
+        let availableFields = {};
+        let currentPlaylists = [];
+
+        // Media types
+        const mediaTypes = [
+            { value: "Movie", label: "Movie" },
+            { value: "Episode", label: "Episode (TV Show)" },
+            { value: "Audio", label: "Audio (Music)" },
+            { value: "MusicVideo", label: "Music Video" },
+            { value: "Video", label: "Video (Home Video)" },
+            { value: "Photo", label: "Photo" },
+            { value: "Book", label: "Book" },
+            { value: "AudioBook", label: "Audiobook" }
+        ];
+
+        // Tab management
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('[data-tab-content]').forEach(tab => {
+                tab.classList.add('hide');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('[data-tab]').forEach(btn => {
+                btn.classList.remove('ui-btn-active');
+            });
+            
+            // Show selected tab
+            const selectedTab = document.querySelector(`[data-tab-content="${tabName}"]`);
+            if (selectedTab) {
+                selectedTab.classList.remove('hide');
+            }
+            
+            // Activate button
+            const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
+            if (selectedBtn) {
+                selectedBtn.classList.add('ui-btn-active');
+            }
+            
+            // Load data for manage tab
+            if (tabName === 'manage') {
+                loadPlaylists();
+            }
+        }
+
+        // Initialize tab navigation
+        document.querySelectorAll('[data-tab]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabName = btn.getAttribute('data-tab');
+                switchTab(tabName);
+            });
+        });
+
+        // Initialize
+        async function init() {
+            await loadFields();
+            populateMediaTypes();
+            initRulesContainer();
+            
+            // Show create tab by default
+            switchTab('create');
+        }
+
+        async function loadFields() {
+            try {
+                const response = await ApiClient.getJSON(ApiClient.getUrl('Plugins/SmartLists/User/Fields'));
+                availableFields = response;
+            } catch (error) {
+                console.error('Error loading fields:', error);
+            }
+        }
+
+        function populateMediaTypes() {
+            const container = document.getElementById('mediaTypesContainer');
+            container.innerHTML = mediaTypes.map(mt => `
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" is="emby-checkbox" class="media-type-checkbox" value="${mt.value}" style="margin-right: 0.5em;">
+                    <span>${mt.label}</span>
+                </label>
+            `).join('');
+        }
+
+        function initRulesContainer() {
+            const container = document.getElementById('rules-container');
+            container.innerHTML = `
+                <button type="button" class="emby-button raised" onclick="addRuleGroup()">
+                    Add Rule Group
+                </button>
+                <div id="ruleGroupsContainer" style="margin-top: 1em;"></div>
+            `;
+        }
+
+        let ruleGroupCounter = 0;
+        let ruleCounters = {};
+
+        function addRuleGroup() {
+            const groupId = `group_${ruleGroupCounter++}`;
+            ruleCounters[groupId] = 0;
+
+            const container = document.getElementById('ruleGroupsContainer');
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'verticalSection';
+            groupDiv.id = groupId;
+            groupDiv.style.cssText = 'border: 1px solid rgba(255,255,255,0.1); padding: 1em; border-radius: 0.25em; margin-bottom: 1em; background: rgba(255,255,255,0.02);';
+            groupDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+                    <strong>Rule Group ${ruleGroupCounter}</strong>
+                    <button type="button" class="emby-button raised delete" onclick="removeRuleGroup('${groupId}')">Remove Group</button>
+                </div>
+                <div id="${groupId}_rules"></div>
+                <button type="button" class="emby-button raised" onclick="addRule('${groupId}')" style="margin-top: 0.5em;">Add Rule</button>
+            `;
+            container.appendChild(groupDiv);
+            
+            // Add first rule by default
+            addRule(groupId);
+        }
+
+        function removeRuleGroup(groupId) {
+            document.getElementById(groupId).remove();
+        }
+
+        function addRule(groupId) {
+            const ruleId = `${groupId}_rule_${ruleCounters[groupId]++}`;
+            const rulesContainer = document.getElementById(`${groupId}_rules`);
+            
+            const ruleDiv = document.createElement('div');
+            ruleDiv.id = ruleId;
+            ruleDiv.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 0.5em; margin-bottom: 0.5em; align-items: end;';
+            
+            const fieldOptions = Object.keys(availableFields).map(key => 
+                `<option value="${key}">${availableFields[key].DisplayName}</option>`
+            ).join('');
+
+            ruleDiv.innerHTML = `
+                <select is="emby-select" class="emby-select rule-field" required>
+                    <option value="">Select Field</option>
+                    ${fieldOptions}
+                </select>
+                <select is="emby-select" class="emby-select rule-operator" required>
+                    <option value="">Select Operator</option>
+                    <option value="Equals">Equals</option>
+                    <option value="NotEquals">Not Equals</option>
+                    <option value="Contains">Contains</option>
+                    <option value="GreaterThan">Greater Than</option>
+                    <option value="LessThan">Less Than</option>
+                </select>
+                <input type="text" class="emby-input rule-value" placeholder="Value">
+                <button type="button" class="emby-button raised delete" onclick="removeRule('${ruleId}')">×</button>
+            `;
+            rulesContainer.appendChild(ruleDiv);
+        }
+
+        function removeRule(ruleId) {
+            document.getElementById(ruleId).remove();
+        }
+
+        function getSelectedMediaTypes() {
+            const checkboxes = document.querySelectorAll('.media-type-checkbox:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function getRules() {
+            const ruleGroups = [];
+            const groupContainers = document.querySelectorAll('#ruleGroupsContainer > div');
+            
+            groupContainers.forEach(groupContainer => {
+                const rules = [];
+                const ruleRows = groupContainer.querySelectorAll('[id$="_rules"] > div');
+                
+                ruleRows.forEach(row => {
+                    const field = row.querySelector('.rule-field').value;
+                    const operator = row.querySelector('.rule-operator').value;
+                    const value = row.querySelector('.rule-value').value;
+                    
+                    if (field && operator) {
+                        rules.push({
+                            Field: field,
+                            Operator: operator,
+                            Value: value || null
+                        });
+                    }
+                });
+                
+                if (rules.length > 0) {
+                    ruleGroups.push({
+                        Rules: rules,
+                        GroupOperator: 'And'
+                    });
+                }
+            });
+            
+            return ruleGroups;
+        }
+
+        document.getElementById('playlistForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('playlistName').value;
+            const mediaTypes = getSelectedMediaTypes();
+            const rules = getRules();
+
+            if (!name) {
+                showNotification('Please enter a playlist name', 'error');
+                return;
+            }
+
+            if (mediaTypes.length === 0) {
+                showNotification('Please select at least one media type', 'error');
+                return;
+            }
+
+            try {
+                const response = await ApiClient.ajax({
+                    type: 'POST',
+                    url: API_BASE + '/Playlists',
+                    data: JSON.stringify({
+                        Name: name,
+                        MediaTypes: mediaTypes,
+                        Rules: rules
+                    }),
+                    contentType: 'application/json'
+                });
+
+                showNotification('Playlist created successfully!', 'success');
+                
+                // Reset form
+                document.getElementById('playlistForm').reset();
+                document.getElementById('ruleGroupsContainer').innerHTML = '';
+                ruleGroupCounter = 0;
+                ruleCounters = {};
+                
+                // Switch to manage tab
+                setTimeout(() => {
+                    switchTab('manage');
+                }, 1500);
+            } catch (error) {
+                console.error('Error creating playlist:', error);
+                showNotification('Failed to create playlist: ' + (error.message || 'Unknown error'), 'error');
+            }
+        });
+
+        async function loadPlaylists() {
+            try {
+                const playlists = await ApiClient.getJSON(API_BASE + '/Playlists');
+                currentPlaylists = playlists;
+                displayPlaylists(playlists);
+            } catch (error) {
+                console.error('Error loading playlists:', error);
+                document.getElementById('playlistList').innerHTML = '<p>Error loading playlists.</p>';
+            }
+        }
+
+        function displayPlaylists(playlists) {
+            const container = document.getElementById('playlistList');
+            if (!playlists || playlists.length === 0) {
+                container.innerHTML = '<p>No smart playlists yet. Create your first one using the "Create Playlist" tab!</p>';
+                return;
+            }
+
+            container.innerHTML = playlists.map(pl => `
+                <div class="verticalSection" style="margin-bottom: 1em;">
+                    <h3 style="margin-top: 0;">${escapeHtml(pl.Name)}</h3>
+                    <div style="color: rgba(255,255,255,0.7); line-height: 1.8;">
+                        <div><strong>Media Types:</strong> ${pl.MediaTypes.join(', ')}</div>
+                        <div><strong>Rules:</strong> ${pl.ExpressionSets?.length || 0} rule group(s)</div>
+                        <div><strong>Enabled:</strong> ${pl.IsEnabled !== false ? 'Yes' : 'No'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showNotification(message, type) {
+            // Simple notification using Dashboard's notification system if available
+            if (typeof Dashboard !== 'undefined' && Dashboard.alert) {
+                Dashboard.alert(message);
+            } else {
+                alert(message);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize on load
+        init();
+    </script>
+</body>
