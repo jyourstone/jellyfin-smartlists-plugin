@@ -269,6 +269,13 @@
             // Add ID if in edit mode (reuse editState from top of function)
             if (editState.editMode && editState.editingPlaylistId) {
                 playlistDto.Id = editState.editingPlaylistId;
+            } else {
+                // Only set CreatedByUserId when creating a new list (not when updating)
+                const currentUserId = apiClient.getCurrentUserId();
+                if (currentUserId) {
+                    // Normalize user ID by removing hyphens (consistent with UserIds format)
+                    playlistDto.CreatedByUserId = currentUserId.replace(/-/g, '');
+                }
             }
 
             const requestType = editState.editMode ? 'PUT' : 'POST';
@@ -1234,7 +1241,7 @@
     };
 
     // ===== GENERATE PLAYLIST CARD HTML =====
-    SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName) {
+    SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName, createdByUserName) {
         // Determine list type
         const listType = playlist.Type || 'Playlist';
         const isCollection = listType === 'Collection';
@@ -1258,6 +1265,7 @@
 
         // Use the resolved username passed as parameter (for playlists) or libraries (for collections)
         const userName = resolvedUserName || 'Unknown User';
+        const createdBy = createdByUserName || 'Unknown';
         const playlistId = playlist.Id || 'NO_ID';
 
         // Collections are server-wide, no library assignment needed
@@ -1300,6 +1308,7 @@
         const eName = SmartLists.escapeHtml(playlist.Name || '');
         const eFileName = SmartLists.escapeHtml(playlist.FileName || '');
         const eUserName = SmartLists.escapeHtml(userName || '');
+        const eCreatedBy = SmartLists.escapeHtml(createdBy || 'Unknown');
         const eSortName = SmartLists.escapeHtml(sortName);
         const eMaxItems = SmartLists.escapeHtml(maxItemsDisplay);
         const eMaxPlayTime = SmartLists.escapeHtml(maxPlayTimeDisplay);
@@ -1458,6 +1467,14 @@
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
                 '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
+                '</tr>' :
+                ''
+            ) +
+            // Hide Created By property on user pages
+            (!SmartLists.IS_USER_PAGE ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created By</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eCreatedBy + '</td>' +
                 '</tr>' :
                 ''
             ) +
@@ -1669,11 +1686,17 @@
                     // Resolve user name (both playlists and collections have a User/owner)
                     let resolvedUserName = await SmartLists.resolveUsername(apiClient, playlist);
 
+                    // Resolve CreatedBy username
+                    let createdByUserName = 'Unknown';
+                    if (playlist.CreatedByUserId) {
+                        createdByUserName = await SmartLists.resolveUserIdToName(apiClient, playlist.CreatedByUserId) || 'Unknown';
+                    }
+
                     // Generate detailed rules display using helper function
                     const rulesHtml = await SmartLists.generateRulesHtml(playlist, apiClient);
 
                     // Use helper function to generate playlist HTML (DRY)
-                    html += SmartLists.generatePlaylistCardHtml(playlist, rulesHtml, resolvedUserName);
+                    html += SmartLists.generatePlaylistCardHtml(playlist, rulesHtml, resolvedUserName, createdByUserName);
                 }
                 container.innerHTML = html;
 

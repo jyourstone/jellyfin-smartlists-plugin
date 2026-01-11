@@ -48,6 +48,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly ISessionManager _sessionManager;
         private readonly Services.Shared.RefreshQueueService _refreshQueueService;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly Services.Playlists.PlaylistStore _playlistStore;
+        private readonly Services.Collections.CollectionStore _collectionStore;
+        private readonly Services.Playlists.PlaylistService _playlistService;
+        private readonly Services.Collections.CollectionService _collectionService;
 
         public UserSmartListController(
             ILogger<UserSmartListController> logger,
@@ -60,7 +64,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             IProviderManager providerManager,
             ISessionManager sessionManager,
             Services.Shared.RefreshQueueService refreshQueueService,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            Services.Playlists.PlaylistStore playlistStore,
+            Services.Collections.CollectionStore collectionStore,
+            Services.Playlists.PlaylistService playlistService,
+            Services.Collections.CollectionService collectionService)
         {
             _logger = logger;
             _applicationPaths = applicationPaths;
@@ -73,24 +81,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             _sessionManager = sessionManager;
             _refreshQueueService = refreshQueueService;
             _loggerFactory = loggerFactory;
-        }
-
-        private PlaylistStore GetPlaylistStore()
-        {
-            var fileSystem = new SmartListFileSystem(_applicationPaths);
-            return new PlaylistStore(fileSystem);
-        }
-
-        private Services.Collections.CollectionStore GetCollectionStore()
-        {
-            var fileSystem = new SmartListFileSystem(_applicationPaths);
-            return new Services.Collections.CollectionStore(fileSystem);
-        }
-
-        private PlaylistService GetPlaylistService()
-        {
-            var playlistServiceLogger = _loggerFactory.CreateLogger<PlaylistService>();
-            return new PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _providerManager);
+            _playlistStore = playlistStore;
+            _collectionStore = collectionStore;
+            _playlistService = playlistService;
+            _collectionService = collectionService;
         }
 
         /// <summary>
@@ -112,7 +106,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private static bool IsUserPageEnabled()
         {
             var config = Plugin.Instance?.Configuration;
-            return config?.EnableUserPage ?? true; // Default to enabled if config not available
+            return config?.EnableUserPage ?? false; // Default to disabled if config not available (fail closed)
         }
 
         /// <summary>
@@ -187,7 +181,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private bool CanUserManageCollections()
         {
             var userId = GetCurrentUserId();
-            Jellyfin.Database.Implementations.Entities.User? user = _userManager.GetUserById(userId);
+            var user = _userManager.GetUserById(userId);
             
             if (user == null)
             {
@@ -297,7 +291,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 if (list.Order == null)
                 {
-                    list.Order = new OrderDto { SortOptions = new List<SortOption>() };
+                    list.Order = new OrderDto { SortOptions = [] };
                 }
 
                 // Save to appropriate store based on type
@@ -322,7 +316,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         VisibilitySchedules = list.VisibilitySchedules
                     };
 
-                    var collectionStore = GetCollectionStore();
+                    var collectionStore = _collectionStore;
 
                     // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
                     var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
@@ -380,7 +374,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Set DateCreated for playlists
                     list.DateCreated = DateTime.UtcNow;
 
-                    var store = GetPlaylistStore();
+                    var store = _playlistStore;
                     var createdPlaylist = await store.SaveAsync(list).ConfigureAwait(false);
 
                     // Update the auto-refresh cache with the new playlist
@@ -440,8 +434,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var normalizedUserId = userId.ToString("N"); // Normalize to format without dashes
                 
                 // Get both playlists and collections
-                var playlistStore = GetPlaylistStore();
-                var collectionStore = GetCollectionStore();
+                var playlistStore = _playlistStore;
+                var collectionStore = _collectionStore;
                 
                 var allPlaylists = await playlistStore.GetAllAsync().ConfigureAwait(false);
                 var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
@@ -524,7 +518,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Try playlist first
-                var playlistStore = GetPlaylistStore();
+                var playlistStore = _playlistStore;
                 var playlist = await playlistStore.GetByIdAsync(guidId);
                 if (playlist != null)
                 {
@@ -539,7 +533,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Try collection
-                var collectionStore = GetCollectionStore();
+                var collectionStore = _collectionStore;
                 var collection = await collectionStore.GetByIdAsync(guidId);
                 if (collection != null)
                 {
@@ -618,12 +612,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = request.Name,
+                    Type = Core.Enums.SmartListType.Playlist, // Explicit type
                     UserId = userId.ToString("N"),
                     MediaTypes = request.MediaTypes,
                     ExpressionSets = ConvertRulesToExpressionSets(request.Rules),
+                    Enabled = true, // Explicit default
+                    DateCreated = DateTime.UtcNow, // Set creation timestamp
                     MaxItems = 0,
                     MaxPlayTimeMinutes = 0,
-                    Public = false
+                    Public = false,
+                    UserPlaylists = [] // Initialize empty list
                 };
 
                 // Validate the complete DTO with security checks
@@ -636,7 +634,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Save to store
-                var store = GetPlaylistStore();
+                var store = _playlistStore;
                 await store.SaveAsync(smartPlaylistDto).ConfigureAwait(false);
 
                 // Update the auto-refresh cache with the new playlist
@@ -732,13 +730,25 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <summary>
         /// Converts simple rules to ExpressionSets.
         /// </summary>
-        private static List<ExpressionSet> ConvertRulesToExpressionSets(List<SimpleRuleGroup> ruleGroups)
+        private static List<ExpressionSet> ConvertRulesToExpressionSets(List<SimpleRuleGroup>? ruleGroups)
         {
             var expressionSets = new List<ExpressionSet>();
+            
+            // Handle null ruleGroups
+            if (ruleGroups == null)
+            {
+                return expressionSets;
+            }
             
             foreach (var ruleGroup in ruleGroups)
             {
                 var expressions = new List<Expression>();
+                
+                // Handle null ruleGroup.Rules
+                if (ruleGroup.Rules == null)
+                {
+                    continue;
+                }
                 
                 foreach (var rule in ruleGroup.Rules)
                 {
@@ -814,8 +824,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var normalizedUserId = userId.ToString("N");
-                var playlistStore = GetPlaylistStore();
-                var collectionStore = GetCollectionStore();
+                var playlistStore = _playlistStore;
+                var collectionStore = _collectionStore;
                 
                 // Get all playlists for this user
                 var allPlaylists = await playlistStore.GetAllAsync();
@@ -888,7 +898,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     id,
                     async playlist =>
                     {
-                        var playlistStore = GetPlaylistStore();
+                        var playlistStore = _playlistStore;
                         var originalEnabledState = playlist.Enabled;
                         playlist.Enabled = true;
 
@@ -919,7 +929,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     },
                     async collection =>
                     {
-                        var collectionStore = GetCollectionStore();
+                        var collectionStore = _collectionStore;
                         var originalEnabledState = collection.Enabled;
                         collection.Enabled = true;
 
@@ -974,13 +984,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     id,
                     async playlist =>
                     {
-                        var playlistStore = GetPlaylistStore();
+                        var playlistStore = _playlistStore;
                         var originalEnabledState = playlist.Enabled;
                         playlist.Enabled = false;
 
                         try
                         {
-                            var playlistService = GetPlaylistService();
+                            var playlistService = _playlistService;
                             await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
 
                             playlist.JellyfinPlaylistId = null;
@@ -1007,13 +1017,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     },
                     async collection =>
                     {
-                        var collectionStore = GetCollectionStore();
+                        var collectionStore = _collectionStore;
                         var originalEnabledState = collection.Enabled;
                         collection.Enabled = false;
 
                         try
                         {
-                            var collectionService = GetCollectionService();
+                            var collectionService = _collectionService;
                             await collectionService.DisableAsync(collection);
 
                             collection.JellyfinCollectionId = null;
@@ -1076,7 +1086,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Determine if it's a playlist or collection and update accordingly
-                var playlistStore = GetPlaylistStore();
+                var playlistStore = _playlistStore;
                 var existingPlaylist = await playlistStore.GetByIdAsync(guidId);
                 
                 if (existingPlaylist != null)
@@ -1094,10 +1104,20 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return BadRequest(new { message = "Invalid playlist data" });
                     }
 
-                    // Preserve the original filename and user ownership
+                    // Preserve the original filename, user ownership, and type
                     playlistDto.FileName = existingPlaylist.FileName;
                     playlistDto.UserId = existingPlaylist.UserId;
                     playlistDto.UserPlaylists = existingPlaylist.UserPlaylists;
+                    playlistDto.Type = existingPlaylist.Type; // Preserve original type
+
+                    // Validate the updated playlist
+                    var validationResult = ValidateSmartList(playlistDto);
+                    if (!validationResult.IsValid)
+                    {
+                        _logger.LogWarning("Validation failed for user {UserId} updating playlist '{Name}': {Error}", 
+                            userId, playlistDto.Name, validationResult.ErrorMessage);
+                        return BadRequest(new { error = validationResult.ErrorMessage });
+                    }
 
                     // Save updated playlist
                     await playlistStore.SaveAsync(playlistDto);
@@ -1126,7 +1146,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Try collection
-                var collectionStore = GetCollectionStore();
+                var collectionStore = _collectionStore;
                 var existingCollection = await collectionStore.GetByIdAsync(guidId);
                 
                 if (existingCollection != null)
@@ -1135,6 +1155,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     if (existingCollection.UserId == null || !Guid.TryParse(existingCollection.UserId, out var cUserId) || cUserId != userId)
                     {
                         return Forbid();
+                    }
+
+                    // Enforce collection management permission
+                    if (!CanUserManageCollections())
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new 
+                        { 
+                            message = "You do not have permission to manage collections. Contact your administrator to grant the 'Allow this user to manage collections' permission." 
+                        });
                     }
 
                     // Convert to SmartCollectionDto if needed
@@ -1163,9 +1192,19 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     if (collectionDto != null)
                     {
-                        // Preserve the original filename and user ownership
+                        // Preserve the original filename, user ownership, and type
                         collectionDto.FileName = existingCollection.FileName;
                         collectionDto.UserId = existingCollection.UserId;
+                        collectionDto.Type = existingCollection.Type; // Preserve original type
+
+                        // Validate the updated collection
+                        var validationResult = ValidateSmartList(collectionDto);
+                        if (!validationResult.IsValid)
+                        {
+                            _logger.LogWarning("Validation failed for user {UserId} updating collection '{Name}': {Error}", 
+                                userId, collectionDto.Name, validationResult.ErrorMessage);
+                            return BadRequest(new { error = validationResult.ErrorMessage });
+                        }
 
                         // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
                         // Only check if the name is changing
@@ -1252,8 +1291,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return BadRequest(new { message = "Invalid list ID format" });
                 }
 
+                // Normalize ID to dashed format for consistent cache operations
+                var normalizedId = guidId.ToString("D");
+
                 // Try playlist first
-                var playlistStore = GetPlaylistStore();
+                var playlistStore = _playlistStore;
                 var playlist = await playlistStore.GetByIdAsync(guidId);
                 if (playlist != null)
                 {
@@ -1265,18 +1307,18 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     if (deleteJellyfinList)
                     {
-                        var playlistService = GetPlaylistService();
+                        var playlistService = _playlistService;
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
                         _logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
                     }
 
                     await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(id);
+                    Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
                     return NoContent();
                 }
 
                 // Try collection
-                var collectionStore = GetCollectionStore();
+                var collectionStore = _collectionStore;
                 var collection = await collectionStore.GetByIdAsync(guidId);
                 if (collection != null)
                 {
@@ -1286,7 +1328,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return Forbid();
                     }
 
-                    var collectionService = GetCollectionService();
+                    // Enforce collection management permission
+                    if (!CanUserManageCollections())
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new 
+                        { 
+                            message = "You do not have permission to manage collections. Contact your administrator to grant the 'Allow this user to manage collections' permission." 
+                        });
+                    }
+
+                    var collectionService = _collectionService;
                     if (deleteJellyfinList)
                     {
                         await collectionService.DeleteAsync(collection);
@@ -1294,7 +1345,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
 
                     await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(id);
+                    Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
                     return NoContent();
                 }
 
@@ -1387,7 +1438,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             // Try playlist first
-            var playlistStore = GetPlaylistStore();
+            var playlistStore = _playlistStore;
             var playlist = await playlistStore.GetByIdAsync(guidId);
             if (playlist != null)
             {
@@ -1401,7 +1452,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             // Try collection
-            var collectionStore = GetCollectionStore();
+            var collectionStore = _collectionStore;
             var collection = await collectionStore.GetByIdAsync(guidId);
             if (collection != null)
             {
@@ -1409,6 +1460,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
                 {
                     return Forbid();
+                }
+
+                // Enforce collection management permission for all collection operations
+                if (!CanUserManageCollections())
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new 
+                    { 
+                        message = "You do not have permission to manage collections. Contact your administrator to grant the 'Allow this user to manage collections' permission." 
+                    });
                 }
 
                 return await collectionAction(collection);
@@ -1438,18 +1498,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             };
 
             _refreshQueueService.EnqueueOperation(queueItem);
-        }
-
-        private Services.Collections.CollectionService GetCollectionService()
-        {
-            var collectionServiceLogger = _loggerFactory.CreateLogger<Services.Collections.CollectionService>();
-            return new Services.Collections.CollectionService(
-                _libraryManager,
-                _collectionManager,
-                _userManager,
-                _userDataManager,
-                collectionServiceLogger,
-                _providerManager);
         }
     }
 

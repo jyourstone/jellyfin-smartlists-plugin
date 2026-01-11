@@ -43,7 +43,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             
             if (userId != Guid.Empty)
             {
-                Jellyfin.Database.Implementations.Entities.User? user = _userManager.GetUserById(userId);
+                var user = _userManager.GetUserById(userId);
                 isAdmin = user?.HasPermission(PermissionKind.IsAdministrator) ?? false;
             }
 
