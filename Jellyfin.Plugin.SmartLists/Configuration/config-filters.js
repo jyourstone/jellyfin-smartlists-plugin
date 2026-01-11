@@ -71,9 +71,14 @@
                     // User filter applies to both playlists (owner) and collections (rule context user)
                     // Check UserPlaylists array (multi-user playlists)
                     if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
-                        return playlist.UserPlaylists.some(function(mapping) {
+                        const hasUserInPlaylists = playlist.UserPlaylists.some(function(mapping) {
                             return normalizeUserId(mapping.UserId) === normalizedFilter;
                         });
+                        if (hasUserInPlaylists) return true;
+                    }
+                    // Check CreatedByUserId (creator/owner)
+                    if (playlist.CreatedByUserId && normalizeUserId(playlist.CreatedByUserId) === normalizedFilter) {
+                        return true;
                     }
                     // Fallback to UserId (backwards compatibility)
                     const normalizedPlaylistUserId = normalizeUserId(playlist.UserId);
@@ -190,20 +195,20 @@
             }
 
             // Search in MaxItems (numeric search)
-            if (playlist.MaxItems != null && String(playlist.MaxItems).indexOf(searchTerm) !== -1) {
+            if (playlist.MaxItems != null && playlist.MaxItems !== 0 && String(playlist.MaxItems).indexOf(searchTerm) !== -1) {
                 return true;
             }
-            // Search for "unlimited" when MaxItems is not set
-            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxItems == null || playlist.MaxItems === 0)) {
+            // Search for "unlimited" when MaxItems is not set or is 0
+            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxItems === undefined || playlist.MaxItems === null || playlist.MaxItems === 0)) {
                 return true;
             }
 
             // Search in MaxPlayTimeMinutes (numeric search)
-            if (playlist.MaxPlayTimeMinutes != null && String(playlist.MaxPlayTimeMinutes).indexOf(searchTerm) !== -1) {
+            if (playlist.MaxPlayTimeMinutes != null && playlist.MaxPlayTimeMinutes !== 0 && String(playlist.MaxPlayTimeMinutes).indexOf(searchTerm) !== -1) {
                 return true;
             }
-            // Search for "unlimited" when MaxPlayTimeMinutes is not set
-            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxPlayTimeMinutes == null || playlist.MaxPlayTimeMinutes === 0)) {
+            // Search for "unlimited" when MaxPlayTimeMinutes is not set or is 0
+            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxPlayTimeMinutes === undefined || playlist.MaxPlayTimeMinutes === null || playlist.MaxPlayTimeMinutes === 0)) {
                 return true;
             }
 

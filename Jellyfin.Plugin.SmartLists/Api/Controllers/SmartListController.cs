@@ -1333,6 +1333,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     playlist.DateCreated = existingPlaylist.DateCreated;
                 }
 
+                // Preserve original creator information
+                if (string.IsNullOrEmpty(playlist.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                {
+                    playlist.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                }
+
                 // JellyfinPlaylistId is already set above from first user's mapping
 
                 // Preserve statistics from existing playlist to avoid N/A display until refresh completes
@@ -1535,6 +1541,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (existingCollection.DateCreated.HasValue)
                 {
                     collection.DateCreated = existingCollection.DateCreated;
+                }
+
+                // Preserve original creator information
+                if (string.IsNullOrEmpty(collection.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                {
+                    collection.CreatedByUserId = existingCollection.CreatedByUserId;
                 }
 
                 // Preserve the Jellyfin collection ID from the existing collection if it exists

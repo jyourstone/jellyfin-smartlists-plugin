@@ -610,7 +610,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     MaxItems = 0,
                     MaxPlayTimeMinutes = 0,
                     Public = false,
-                    UserPlaylists = [] // Initialize empty list
+                    UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
+                    {
+                        new SmartPlaylistDto.UserPlaylistMapping
+                        {
+                            UserId = userId.ToString("N"),
+                            JellyfinPlaylistId = null
+                        }
+                    }
                 };
 
                 // Validate the complete DTO with security checks
@@ -840,13 +847,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 
                 foreach (var playlist in playlists)
                 {
-                    EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
+                    EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, normalizedUserId);
                     queuedCount++;
                 }
                 
                 foreach (var collection in collections)
                 {
-                    EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
+                    EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, normalizedUserId);
                     queuedCount++;
                 }
                 
@@ -883,6 +890,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
             try
             {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+                
                 return await ExecuteListAction(
                     id,
                     async playlist =>
@@ -899,7 +909,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             // Enqueue refresh operation
                             try
                             {
-                                EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
+                                EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, normalizedUserId);
                             }
                             catch (Exception enqueueEx)
                             {
@@ -930,7 +940,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             // Enqueue refresh operation
                             try
                             {
-                                EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
+                                EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, normalizedUserId);
                             }
                             catch (Exception enqueueEx)
                             {
@@ -1128,7 +1138,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         try
                         {
-                            EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, playlistDto.UserId);
+                            EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, normalizedUserId);
                         }
                         catch (Exception enqueueEx)
                         {
@@ -1229,7 +1239,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         {
                             try
                             {
-                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, collectionDto.UserId);
+                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
                             }
                             catch (Exception enqueueEx)
                             {
@@ -1362,6 +1372,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             try
             {
                 var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
 
                 return await ExecuteListAction(
                     id,
@@ -1369,7 +1380,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         try
                         {
-                            EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, playlist.UserId);
+                            EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, normalizedUserId);
                             _logger.LogInformation("User {UserId} enqueued refresh for playlist '{Name}'", userId, playlist.Name);
                             return Task.FromResult<ActionResult>(Ok(new { message = $"Playlist '{playlist.Name}' refresh has been queued" }));
                         }
@@ -1383,7 +1394,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         try
                         {
-                            EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, collection.UserId);
+                            EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, normalizedUserId);
                             _logger.LogInformation("User {UserId} enqueued refresh for collection '{Name}'", userId, collection.Name);
                             return Task.FromResult<ActionResult>(Ok(new { message = $"Collection '{collection.Name}' refresh has been queued" }));
                         }
