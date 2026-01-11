@@ -67,6 +67,11 @@
      * Update public checkbox visibility based on selected user count
      */
     SmartLists.updatePublicCheckboxVisibility = function (page) {
+        // Skip on user pages - users don't have the multi-select component
+        if (SmartLists.IS_USER_PAGE) {
+            return;
+        }
+        
         const listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
         const isCollection = listType === 'Collection';
         if (isCollection) {
@@ -80,10 +85,12 @@
         if (publicCheckboxContainer) {
             if (userIds.length > 1) {
                 // Hide public checkbox for multi-user playlists
+                // Use empty string removal to avoid inline style persistence issues
                 publicCheckboxContainer.style.display = 'none';
             } else {
                 // Show public checkbox for single-user playlists
-                publicCheckboxContainer.style.display = '';
+                // Remove inline style to prevent persistence across page navigations
+                publicCheckboxContainer.style.removeProperty('display');
             }
         }
     };

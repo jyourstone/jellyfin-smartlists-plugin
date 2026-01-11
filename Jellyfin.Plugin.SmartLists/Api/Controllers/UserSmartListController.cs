@@ -90,15 +90,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
         /// <summary>
         /// Gets the current user's ID from the session.
+        /// Returns Guid.Empty if user is not authenticated (does not throw).
         /// </summary>
         private Guid GetCurrentUserId()
         {
-            var userId = User.GetUserId();
-            if (userId == Guid.Empty)
-            {
-                throw new UnauthorizedAccessException("User not authenticated");
-            }
-            return userId;
+            return User.GetUserId();
         }
 
         /// <summary>
@@ -111,11 +107,17 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
-        /// Checks if the current user is an administrator.
+        /// Checks if the specified user is an administrator.
         /// </summary>
-        private bool IsCurrentUserAdmin()
+        /// <param name="userId">The user ID to check.</param>
+        /// <returns>True if the user is an admin, false otherwise.</returns>
+        private bool IsUserAdmin(Guid userId)
         {
-            var userId = GetCurrentUserId();
+            if (userId == Guid.Empty)
+            {
+                return false;
+            }
+            
             var user = _userManager.GetUserById(userId);
             return user?.HasPermission(PermissionKind.IsAdministrator) ?? false;
         }
@@ -126,12 +128,24 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// - User page must be enabled
         /// - If AllowedUserPageUsers is empty/null, all users have access
         /// - If AllowedUserPageUsers is populated, user must be in the list
-        /// Returns Forbidden if access is denied.
+        /// Returns Unauthorized if not authenticated, Forbidden if access is denied.
         /// </summary>
         private ActionResult? CheckUserPageAccess()
         {
+            // Get current user ID without throwing
+            var currentUserId = GetCurrentUserId();
+            
+            // Check authentication first
+            if (currentUserId == Guid.Empty)
+            {
+                return Unauthorized(new 
+                { 
+                    message = "User not authenticated. Please log in to access SmartLists." 
+                });
+            }
+            
             // Admins always have access, even if user page is disabled
-            if (IsCurrentUserAdmin())
+            if (IsUserAdmin(currentUserId))
             {
                 return null;
             }
@@ -153,7 +167,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (allowedUsers != null && allowedUsers.Count > 0)
             {
                 // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
-                var currentUserId = GetCurrentUserId();
                 bool isAllowed = false;
                 foreach (var allowedUserStr in allowedUsers)
                 {
@@ -182,6 +195,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private bool CanUserManageCollections()
         {
             var userId = GetCurrentUserId();
+            if (userId == Guid.Empty)
+            {
+                return false;
+            }
+            
             var user = _userManager.GetUserById(userId);
             
             if (user == null)
@@ -226,7 +244,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public async Task<ActionResult<SmartPlaylistDto>> CreateUserSmartList([FromBody] SmartPlaylistDto? list)
+        public async Task<ActionResult<SmartListDto>> CreateUserSmartList([FromBody] SmartPlaylistDto? list)
         {
             // Check if user page is enabled
             var accessCheck = CheckUserPageAccess();
@@ -284,11 +302,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return BadRequest(new { error = $"{(list.Type == Core.Enums.SmartListType.Collection ? "Collection" : "Playlist")} name is required" });
                 }
 
-                // Set defaults
-                if (string.IsNullOrEmpty(list.Id))
-                {
-                    list.Id = Guid.NewGuid().ToString();
-                }
+                // Always generate server-side Id on create (prevent overwriting existing lists by user-supplied Id)
+                list.Id = Guid.NewGuid().ToString("D");
 
                 if (list.Order == null)
                 {
@@ -1142,14 +1157,49 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             return BadRequest(new { error = conversionValidationResult.ErrorMessage });
                         }
                         
-                        // Delete old playlist
-                        await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
-                        await playlistStore.DeleteAsync(guidId);
+                        // Save-first approach: persist new collection before deleting old playlist
+                        try
+                        {
+                            // Save as collection
+                            await collectionStore.SaveAsync(collectionDto);
+                            Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+                            SmartList.ClearRuleCache(_logger);
+                            
+                            _logger.LogInformation("User {UserId} saved new collection '{Name}', now deleting old playlist", userId, collectionDto.Name);
+                        }
+                        catch (Exception saveEx)
+                        {
+                            _logger.LogError(saveEx, "Failed to save collection during playlist→collection conversion for user {UserId}, list '{Name}'. Original playlist preserved.", 
+                                userId.ToString(), collectionDto.Name);
+                            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save collection. Original playlist was not modified." });
+                        }
                         
-                        // Save as collection
-                        await collectionStore.SaveAsync(collectionDto);
-                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
-                        SmartList.ClearRuleCache(_logger);
+                        // Now delete old playlist (original data is safe if this fails)
+                        try
+                        {
+                            await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
+                            await playlistStore.DeleteAsync(guidId);
+                        }
+                        catch (Exception deleteEx)
+                        {
+                            _logger.LogError(deleteEx, "Failed to delete old playlist during conversion for user {UserId}, list '{Name}'. Collection was created successfully but old playlist remains. Attempting rollback...", 
+                                userId.ToString(), collectionDto.Name);
+                            
+                            // Attempt rollback: delete the newly created collection
+                            try
+                            {
+                                await collectionStore.DeleteAsync(guidId);
+                                Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
+                                _logger.LogWarning("Rollback successful: deleted newly created collection '{Name}' after playlist deletion failed", collectionDto.Name);
+                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original playlist preserved." });
+                            }
+                            catch (Exception rollbackEx)
+                            {
+                                _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both playlist and collection may exist. Manual cleanup may be required.", 
+                                    userId.ToString(), collectionDto.Name);
+                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both playlist and collection may exist." });
+                            }
+                        }
                         
                         // Enqueue refresh if enabled
                         if (collectionDto.Enabled)
@@ -1288,14 +1338,49 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             return BadRequest(new { error = playlistConversionValidationResult.ErrorMessage });
                         }
                         
-                        // Delete old collection
-                        await _collectionService.DeleteAsync(existingCollection);
-                        await collectionStore.DeleteAsync(guidId);
+                        // Save-first approach: persist new playlist before deleting old collection
+                        try
+                        {
+                            // Save as playlist
+                            await playlistStore.SaveAsync(playlistDto);
+                            Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
+                            SmartList.ClearRuleCache(_logger);
+                            
+                            _logger.LogInformation("User {UserId} saved new playlist '{Name}', now deleting old collection", userId, playlistDto.Name);
+                        }
+                        catch (Exception saveEx)
+                        {
+                            _logger.LogError(saveEx, "Failed to save playlist during collection→playlist conversion for user {UserId}, list '{Name}'. Original collection preserved.", 
+                                userId.ToString(), playlistDto.Name);
+                            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save playlist. Original collection was not modified." });
+                        }
                         
-                        // Save as playlist
-                        await playlistStore.SaveAsync(playlistDto);
-                        Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
-                        SmartList.ClearRuleCache(_logger);
+                        // Now delete old collection (original data is safe if this fails)
+                        try
+                        {
+                            await _collectionService.DeleteAsync(existingCollection);
+                            await collectionStore.DeleteAsync(guidId);
+                        }
+                        catch (Exception deleteEx)
+                        {
+                            _logger.LogError(deleteEx, "Failed to delete old collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully but old collection remains. Attempting rollback...", 
+                                userId.ToString(), playlistDto.Name);
+                            
+                            // Attempt rollback: delete the newly created playlist
+                            try
+                            {
+                                await playlistStore.DeleteAsync(guidId);
+                                Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
+                                _logger.LogWarning("Rollback successful: deleted newly created playlist '{Name}' after collection deletion failed", playlistDto.Name);
+                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original collection preserved." });
+                            }
+                            catch (Exception rollbackEx)
+                            {
+                                _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both collection and playlist may exist. Manual cleanup may be required.", 
+                                    userId.ToString(), playlistDto.Name);
+                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both collection and playlist may exist." });
+                            }
+                        }
                         
                         // Enqueue refresh if enabled
                         if (playlistDto.Enabled)

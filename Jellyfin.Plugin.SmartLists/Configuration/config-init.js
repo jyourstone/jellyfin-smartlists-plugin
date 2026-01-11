@@ -1650,7 +1650,33 @@
     document.addEventListener('pageshow', function (e) {
         const page = e.target;
         if (page.classList.contains('SmartListsConfigurationPage')) {
+            // Clean up any persisted inline styles from browser back/forward navigation
+            // This fixes the issue where navigating back from user page leaves elements hidden
+            const elementsWithInlineDisplay = page.querySelectorAll('[style*="display"]');
+            elementsWithInlineDisplay.forEach(function(el) {
+                // Only remove inline display styles, not other inline styles
+                if (el.style.display) {
+                    // Check if this element should have controlled visibility
+                    const hasVisibilityClass = el.classList.contains('playlist-only-field') ||
+                                              el.classList.contains('collection-only-field') ||
+                                              el.classList.contains('playlist-only-description') ||
+                                              el.classList.contains('collection-only-description') ||
+                                              el.classList.contains('playlist-only-label') ||
+                                              el.classList.contains('collection-only-label') ||
+                                              el.id === 'publicCheckboxContainer';
+                    
+                    if (hasVisibilityClass) {
+                        el.style.removeProperty('display');
+                    }
+                }
+            });
+            
             SmartLists.initPage(page);
+            
+            // Re-apply list type visibility after cleanup
+            if (page._pageInitialized) {
+                SmartLists.handleListTypeChange(page);
+            }
         }
     });
 
@@ -1682,30 +1708,51 @@
         // Show/hide playlist-only fields
         const playlistOnlyFields = page.querySelectorAll('.playlist-only-field');
         playlistOnlyFields.forEach(function (field) {
-            field.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                field.style.display = 'none';
+            } else {
+                // Remove inline style to prevent persistence across page navigations
+                field.style.removeProperty('display');
+            }
         });
 
         // Show/hide collection-only fields
         const collectionOnlyFields = page.querySelectorAll('.collection-only-field');
         collectionOnlyFields.forEach(function (field) {
-            field.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                field.style.removeProperty('display');
+            } else {
+                field.style.display = 'none';
+            }
         });
 
         // Show/hide playlist-only and collection-only descriptions
         const playlistOnlyDescriptions = page.querySelectorAll('.playlist-only-description');
         playlistOnlyDescriptions.forEach(function (desc) {
-            desc.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                desc.style.display = 'none';
+            } else {
+                desc.style.removeProperty('display');
+            }
         });
 
         const collectionOnlyDescriptions = page.querySelectorAll('.collection-only-description');
         collectionOnlyDescriptions.forEach(function (desc) {
-            desc.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                desc.style.removeProperty('display');
+            } else {
+                desc.style.display = 'none';
+            }
         });
 
         // Show/hide playlist-only and collection-only labels
         const playlistOnlyLabels = page.querySelectorAll('.playlist-only-label');
         playlistOnlyLabels.forEach(function (label) {
-            label.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                label.style.display = 'none';
+            } else {
+                label.style.removeProperty('display');
+            }
         });
 
         // Reload users with appropriate UI (single select for collections, multi-select for playlists)
@@ -1721,7 +1768,11 @@
 
         const collectionOnlyLabels = page.querySelectorAll('.collection-only-label');
         collectionOnlyLabels.forEach(function (label) {
-            label.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                label.style.removeProperty('display');
+            } else {
+                label.style.display = 'none';
+            }
         });
 
         // Update list type label text

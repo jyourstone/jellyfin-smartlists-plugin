@@ -1255,6 +1255,9 @@
 
     // ===== GENERATE PLAYLIST CARD HTML =====
     SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName, createdByUserName) {
+        // Dynamically detect if we're on the user page (instead of relying on global flag)
+        const isUserPage = document.querySelector('.SmartListsUserPage') !== null;
+        
         // Determine list type
         const listType = playlist.Type || 'Playlist';
         const isCollection = listType === 'Collection';
@@ -1468,7 +1471,7 @@
             '</td>' +
             '</tr>' +
             // Hide File property on user pages
-            (!SmartLists.IS_USER_PAGE ?
+            (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
                 '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
@@ -1476,7 +1479,7 @@
                 ''
             ) +
             // Hide User(s) property on user pages
-            (!SmartLists.IS_USER_PAGE ?
+            (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
                 '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
@@ -1484,7 +1487,7 @@
                 ''
             ) +
             // Hide Created By property on user pages
-            (!SmartLists.IS_USER_PAGE ?
+            (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created By</td>' +
                 '<td style="padding: 0.5em 0.75em; color: #fff;">' + eCreatedBy + '</td>' +

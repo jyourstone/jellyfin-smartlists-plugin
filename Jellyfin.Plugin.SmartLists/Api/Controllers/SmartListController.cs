@@ -238,18 +238,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 logger.LogDebug("Attempting to determine current user ID from Jellyfin claims...");
 
-                // Get user ID from Jellyfin-specific claims
-                var userIdClaim = User.FindFirst("Jellyfin-UserId")?.Value;
-                logger.LogDebug("Jellyfin-UserId claim: {UserId}", userIdClaim ?? "null");
+                // Use centralized extension method for claim parsing
+                var userId = User.GetUserId();
+                logger.LogDebug("User ID from claims: {UserId}", userId == Guid.Empty ? "not found" : userId.ToString());
 
-                if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
+                if (userId == Guid.Empty)
                 {
-                    logger.LogDebug("Found current user ID from Jellyfin-UserId claim: {UserId}", userId);
-                    return userId;
+                    logger.LogWarning("Could not determine current user ID from Jellyfin-UserId claim");
                 }
 
-                logger.LogWarning("Could not determine current user ID from Jellyfin-UserId claim");
-                return Guid.Empty;
+                return userId;
             }
             catch (Exception ex)
             {
@@ -273,7 +271,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (currentUserId == Guid.Empty)
             {
                 logger.LogError("Could not determine current user for collection operation");
-                errorResult = BadRequest(new ProblemDetails
+                errorResult = Unauthorized(new ProblemDetails
                 {
                     Title = "Authentication Error",
                     Detail = $"User authentication required. Please ensure you are logged in to {operationDescription}.",

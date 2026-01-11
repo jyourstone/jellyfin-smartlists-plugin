@@ -357,8 +357,10 @@
                     if (!response.ok) {
                         console.error('Failed to load user capabilities. Status:', response.status);
                         // Default to playlist-only mode if we can't load capabilities
-                        document.getElementById('listTypeContainer').style.display = 'none';
-                        document.getElementById('listType').value = 'Playlist';
+                        const listTypeContainer = document.getElementById('listTypeContainer');
+                        const listTypeSelect = document.getElementById('listType');
+                        if (listTypeContainer) listTypeContainer.style.display = 'none';
+                        if (listTypeSelect) listTypeSelect.value = 'Playlist';
                         return;
                     }
                     
@@ -371,6 +373,12 @@
                     const listTypeContainer = document.getElementById('listTypeContainer');
                     const listTypeSelect = document.getElementById('listType');
                     
+                    // Guard against calling this on pages without these elements (e.g., admin page)
+                    if (!listTypeContainer || !listTypeSelect) {
+                        console.warn('User capability elements not found - likely on wrong page type');
+                        return;
+                    }
+                    
                     if (capabilities.CanCreateCollections) {
                         // User can create collections - show the dropdown
                         listTypeContainer.style.display = '';
@@ -382,8 +390,10 @@
                 } catch (error) {
                     console.error('Error loading user capabilities:', error);
                     // Default to playlist-only mode if we can't load capabilities
-                    document.getElementById('listTypeContainer').style.display = 'none';
-                    document.getElementById('listType').value = 'Playlist';
+                    const listTypeContainer = document.getElementById('listTypeContainer');
+                    const listTypeSelect = document.getElementById('listType');
+                    if (listTypeContainer) listTypeContainer.style.display = 'none';
+                    if (listTypeSelect) listTypeSelect.value = 'Playlist';
                 }
             };
         </script>
