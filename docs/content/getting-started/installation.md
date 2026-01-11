@@ -27,7 +27,11 @@ For regular users to access SmartLists from their home screen, the following plu
    - Click **Save**
 
 2. **Install Required Plugins** (for user page access):
-   - Follow the installation instructions from the plugin repositories above
+   - First, install **File Transformation** plugin from its repository
+   - Then, install **Plugin Pages** plugin (depends on File Transformation)
+   - Installation order matters: File Transformation must be installed before Plugin Pages
+   - See repository URLs in the "Required Plugins for User Page" section above
+   - Restart Jellyfin after installing both plugins
    - Both Plugin Pages and File Transformation must be installed
 
 3. **Install SmartLists Plugin**:

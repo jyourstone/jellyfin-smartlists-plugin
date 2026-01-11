@@ -50,6 +50,29 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             @"%2e%2e\\",
         };
 
+        // Pre-compiled regex patterns for better performance
+        private static readonly Regex[] CompiledSqlInjectionPatterns = SqlInjectionPatterns
+            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100)))
+            .ToArray();
+
+        private static readonly Regex[] CompiledXssPatterns = XssPatterns
+            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100)))
+            .ToArray();
+
+        private static readonly Regex[] CompiledPathTraversalPatterns = PathTraversalPatterns
+            .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100)))
+            .ToArray();
+
+        private static readonly Regex FieldNameRegex = new Regex(
+            @"^[a-zA-Z_][a-zA-Z0-9_]*$",
+            RegexOptions.Compiled
+        );
+
+        private static readonly Regex OperatorRegex = new Regex(
+            @"^[a-zA-Z0-9_\-\s]+$",
+            RegexOptions.Compiled
+        );
+
         // Dangerous characters for file names
         private static readonly char[] DangerousFileNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0' };
 
@@ -74,8 +97,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return SmartListValidationResult.Failure("List name contains invalid characters");
             }
 
-            // Check for control characters (except normal whitespace)
-            if (name.Any(c => char.IsControl(c) && c != '\t' && c != '\n' && c != '\r'))
+            // Check for control characters (block all control characters including tabs and newlines)
+            if (name.Any(c => char.IsControl(c)))
             {
                 return SmartListValidationResult.Failure("List name contains invalid control characters");
             }
@@ -92,6 +115,12 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// <summary>
         /// Validates a string value (used in expressions).
         /// </summary>
+        /// <summary>
+        /// Validates a string value used in filters and rules.
+        /// Note: Does not check for SQL injection or XSS patterns since these values
+        /// are used for filtering media content (e.g., searching for movies with "SELECT" in the title).
+        /// The actual query execution is handled safely by Jellyfin's query engine.
+        /// </summary>
         public static SmartListValidationResult ValidateStringValue(string? value, string fieldName = "Value")
         {
             if (value == null)
@@ -104,17 +133,9 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return SmartListValidationResult.Failure($"{fieldName} cannot exceed {MaxStringValueLength} characters");
             }
 
-            // Check for SQL injection patterns
-            if (ContainsSqlInjection(value))
-            {
-                return SmartListValidationResult.Failure($"{fieldName} contains potentially dangerous SQL patterns");
-            }
-
-            // Check for XSS patterns
-            if (ContainsXss(value))
-            {
-                return SmartListValidationResult.Failure($"{fieldName} contains potentially dangerous script patterns");
-            }
+            // No SQL injection or XSS checks here - these values are used for filtering media content
+            // where titles may legitimately contain SQL keywords (e.g., "The SELECT Few", "Operation: DELETE")
+            // The query engine handles these safely without direct SQL execution
 
             return SmartListValidationResult.Success();
         }
@@ -137,7 +158,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             // Try to compile the regex with a timeout to detect ReDoS vulnerabilities
             try
             {
-                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromMilliseconds(100));
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromMilliseconds(1000));
                 // Test with a simple string to ensure it compiles correctly
                 _ = regex.IsMatch("test");
             }
@@ -169,7 +190,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             // Field names should only contain alphanumeric characters and underscores
-            if (!Regex.IsMatch(fieldName, @"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+            if (!FieldNameRegex.IsMatch(fieldName))
             {
                 return SmartListValidationResult.Failure("Field name must contain only letters, numbers, and underscores, and start with a letter or underscore");
             }
@@ -193,7 +214,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             // Operators should be simple strings without special characters
-            if (!Regex.IsMatch(operatorValue, @"^[a-zA-Z0-9_\-\s]+$"))
+            if (!OperatorRegex.IsMatch(operatorValue))
             {
                 return SmartListValidationResult.Failure("Operator contains invalid characters");
             }
@@ -368,11 +389,11 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// </summary>
         private static bool ContainsSqlInjection(string value)
         {
-            foreach (var pattern in SqlInjectionPatterns)
+            foreach (var regex in CompiledSqlInjectionPatterns)
             {
                 try
                 {
-                    if (Regex.IsMatch(value, pattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100)))
+                    if (regex.IsMatch(value))
                     {
                         return true;
                     }
@@ -392,11 +413,11 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// </summary>
         private static bool ContainsXss(string value)
         {
-            foreach (var pattern in XssPatterns)
+            foreach (var regex in CompiledXssPatterns)
             {
                 try
                 {
-                    if (Regex.IsMatch(value, pattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100)))
+                    if (regex.IsMatch(value))
                     {
                         return true;
                     }
@@ -416,11 +437,11 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// </summary>
         private static bool ContainsPathTraversal(string value)
         {
-            foreach (var pattern in PathTraversalPatterns)
+            foreach (var regex in CompiledPathTraversalPatterns)
             {
                 try
                 {
-                    if (Regex.IsMatch(value, pattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100)))
+                    if (regex.IsMatch(value))
                     {
                         return true;
                     }

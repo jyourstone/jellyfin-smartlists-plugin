@@ -400,7 +400,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             ListType = Core.Enums.SmartListType.Playlist,
                             OperationType = Services.Shared.RefreshOperationType.Create,
                             ListData = createdPlaylist,
-                            UserId = userId.ToString(),
+                            UserId = userId.ToString("N"),
                             TriggerType = Core.Enums.RefreshTriggerType.Manual
                         };
 
@@ -544,7 +544,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (collection != null)
                 {
                     // Verify user owns this collection
-                    if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
+                    if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
                     {
                         return Forbid();
                     }
@@ -618,7 +618,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = request.Name,
-                    UserId = userId.ToString(),
+                    UserId = userId.ToString("N"),
                     MediaTypes = request.MediaTypes,
                     ExpressionSets = ConvertRulesToExpressionSets(request.Rules),
                     MaxItems = 0,
@@ -656,7 +656,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         ListType = Core.Enums.SmartListType.Playlist,
                         OperationType = Services.Shared.RefreshOperationType.Create,
                         ListData = smartPlaylistDto,
-                        UserId = userId.ToString(),
+                        UserId = userId.ToString("N"),
                         TriggerType = Core.Enums.RefreshTriggerType.Manual
                     };
 
@@ -668,7 +668,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     _logger.LogInformation("User {UserId} created disabled smart playlist '{Name}' (not enqueued for refresh)", userId, smartPlaylistDto.Name);
                 }
 
-                return CreatedAtAction(nameof(GetUserPlaylists), new { id = smartPlaylistDto.Id }, smartPlaylistDto);
+                return CreatedAtAction(nameof(GetSmartList), new { id = smartPlaylistDto.Id }, smartPlaylistDto);
             }
             catch (Exception ex)
             {
@@ -1132,7 +1132,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (existingCollection != null)
                 {
                     // Verify user owns this collection
-                    if (existingCollection.UserId != null && Guid.TryParse(existingCollection.UserId, out var cUserId) && cUserId != userId)
+                    if (existingCollection.UserId == null || !Guid.TryParse(existingCollection.UserId, out var cUserId) || cUserId != userId)
                     {
                         return Forbid();
                     }
@@ -1281,7 +1281,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (collection != null)
                 {
                     // Verify user owns this collection
-                    if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
+                    if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
                     {
                         return Forbid();
                     }
@@ -1406,7 +1406,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (collection != null)
             {
                 // Verify user owns this collection
-                if (collection.UserId != null && Guid.TryParse(collection.UserId, out var cUserId) && cUserId != userId)
+                if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
                 {
                     return Forbid();
                 }

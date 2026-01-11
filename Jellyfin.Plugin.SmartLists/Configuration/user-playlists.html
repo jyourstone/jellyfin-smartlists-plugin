@@ -353,6 +353,15 @@
                         contentType: 'application/json'
                     });
                     
+                    // Check if response is ok before parsing JSON
+                    if (!response.ok) {
+                        console.error('Failed to load user capabilities. Status:', response.status);
+                        // Default to playlist-only mode if we can't load capabilities
+                        document.getElementById('listTypeContainer').style.display = 'none';
+                        document.getElementById('listType').value = 'Playlist';
+                        return;
+                    }
+                    
                     const capabilities = await response.json();
                     
                     // Store capabilities for later use
