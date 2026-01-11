@@ -1134,7 +1134,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.Type = Core.Enums.SmartListType.Collection;
                         
                         // Set owner to current user (they're converting their own playlist)
-                        collectionDto.UserId = userId.ToString("D");
+                        // Use "N" format (no dashes) to match client-side normalization
+                        collectionDto.UserId = userId.ToString("N").ToLowerInvariant();
                         
                         // Preserve original creation timestamp
                         if (existingPlaylist.DateCreated.HasValue)

@@ -347,24 +347,11 @@
             window.SmartLists.loadUserCapabilities = async function() {
                 try {
                     const apiClient = window.ApiClient;
-                    const response = await apiClient.ajax({
+                    const capabilities = await apiClient.ajax({
                         type: "GET",
                         url: apiClient.getUrl('Plugins/SmartLists/User/Capabilities'),
                         contentType: 'application/json'
                     });
-                    
-                    // Check if response is ok before parsing JSON
-                    if (!response.ok) {
-                        console.error('Failed to load user capabilities. Status:', response.status);
-                        // Default to playlist-only mode if we can't load capabilities
-                        const listTypeContainer = document.getElementById('listTypeContainer');
-                        const listTypeSelect = document.getElementById('listType');
-                        if (listTypeContainer) listTypeContainer.style.display = 'none';
-                        if (listTypeSelect) listTypeSelect.value = 'Playlist';
-                        return;
-                    }
-                    
-                    const capabilities = await response.json();
                     
                     // Store capabilities for later use
                     window.SmartLists.userCapabilities = capabilities;

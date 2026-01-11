@@ -24,7 +24,7 @@ SmartLists can be accessed in two ways depending on your user permissions:
 - **No additional plugins required** for admin access
 
 !!! tip "Collection Permissions"
-    Regular users need the **"Manage Collections"** permission in Jellyfin to create collections. Administrators can grant this in: Dashboard → Users → [User] → Profile.
+    Regular users need the **"Manage Collections"** permission in Jellyfin to create and manage collections. Administrators can grant this in: Dashboard → Users → [User] → Profile.
 
 ## Creating Your First List
 

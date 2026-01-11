@@ -84,8 +84,8 @@
 
         if (publicCheckboxContainer) {
             if (userIds.length > 1) {
-                // Hide public checkbox for multi-user playlists
-                // Use empty string removal to avoid inline style persistence issues
+                // Hide public checkbox for multi-user playlists (using inline style)
+                // Note: We use removeProperty() when showing to avoid style persistence across navigations
                 publicCheckboxContainer.style.display = 'none';
             } else {
                 // Show public checkbox for single-user playlists

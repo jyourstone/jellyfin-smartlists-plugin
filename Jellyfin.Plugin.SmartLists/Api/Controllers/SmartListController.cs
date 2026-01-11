@@ -264,7 +264,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="errorResult">The error response to return if validation fails</param>
         /// <param name="operationDescription">Description of the operation for error messages (default: "manage collections")</param>
         /// <returns>The User object if validation succeeds, null otherwise</returns>
-        private User? ValidateAndGetCurrentUser(Guid currentUserId, out ActionResult? errorResult, string operationDescription = "manage collections")
+        private Jellyfin.Database.Implementations.Entities.User? ValidateAndGetCurrentUser(Guid currentUserId, out ActionResult? errorResult, string operationDescription = "manage collections")
         {
             errorResult = null;
 
@@ -294,6 +294,28 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             return currentUser;
+        }
+
+        /// <summary>
+        /// Normalizes a user ID string to canonical "N" format (no dashes, lowercase).
+        /// Handles both "N" format and "D" format (with dashes) input.
+        /// This matches the format used by the client-side normalization.
+        /// </summary>
+        /// <param name="userId">The user ID string to normalize</param>
+        /// <returns>Normalized user ID in "N" format, or original string if invalid GUID</returns>
+        private static string NormalizeUserId(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return userId;
+            }
+
+            if (Guid.TryParse(userId, out var guid))
+            {
+                return guid.ToString("N").ToLowerInvariant();
+            }
+
+            return userId; // Return as-is if not a valid GUID
         }
 
         /// <summary>
@@ -756,7 +778,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 collection.Order.SortOptions = [];
             }
 
-            // Set default owner user if not specified
+            // Set default owner user if not specified, or normalize if already set
             if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
             {
                 // Default to currently logged-in user
@@ -767,8 +789,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return errorResult!;
                 }
 
-                collection.UserId = currentUser.Id.ToString("D");
+                collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
                 logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+            }
+            else
+            {
+                // Normalize existing UserId to canonical "N" format (no dashes)
+                collection.UserId = NormalizeUserId(collection.UserId);
+                logger.LogDebug("Normalized collection UserId to canonical format: {UserId}", collection.UserId);
             }
 
             // Ensure Type is set correctly
@@ -979,7 +1007,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                      existingPlaylist.UserPlaylists != null && 
                                      existingPlaylist.UserPlaylists.Any(up => Guid.TryParse(up.UserId, out var upId) && upId == currentUserId))
                             {
-                                collectionDto.UserId = currentUserId.ToString("D");
+                                collectionDto.UserId = currentUserId.ToString("N").ToLowerInvariant();
                                 logger.LogDebug("Set collection owner to authenticated user (who is a playlist owner): {UserId}", currentUserId);
                             }
                             // Use the playlist's primary owner (first user in UserPlaylists array)
@@ -999,7 +1027,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             // Last resort: use the currently authenticated user performing the conversion
                             else if (currentUserId != Guid.Empty)
                             {
-                                collectionDto.UserId = currentUserId.ToString("D");
+                                collectionDto.UserId = currentUserId.ToString("N").ToLowerInvariant();
                                 logger.LogDebug("Set collection owner to authenticated user performing conversion: {UserId}", currentUserId);
                             }
                             
@@ -1039,8 +1067,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                 });
                             }
 
-                            // Prefer a single canonical persisted format for collections
-                            collectionDto.UserId = resolvedOwnerId.ToString("D");
+                            // Normalize to canonical "N" format (no dashes) for collections
+                            collectionDto.UserId = resolvedOwnerId.ToString("N").ToLowerInvariant();
                             logger.LogDebug("Validated and normalized collection owner: {Username} ({UserId})", resolvedOwnerUser.Username, collectionDto.UserId);
                         }
                         
@@ -1516,7 +1544,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return NotFound("Smart collection not found");
                 }
 
-                // Set default owner user if not specified (same as CreateCollectionInternal)
+                // Set default owner user if not specified, or normalize if already set (same as CreateCollectionInternal)
                 if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
                 {
                     // Default to currently logged-in user
@@ -1527,8 +1555,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return errorResult!;
                     }
 
-                    collection.UserId = currentUser.Id.ToString("D");
+                    collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
                     logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                }
+                else
+                {
+                    // Normalize existing UserId to canonical "N" format (no dashes)
+                    collection.UserId = NormalizeUserId(collection.UserId);
+                    logger.LogDebug("Normalized collection UserId to canonical format during update: {UserId}", collection.UserId);
                 }
 
                 // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)

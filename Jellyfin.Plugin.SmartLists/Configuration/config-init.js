@@ -83,12 +83,12 @@
                     apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
                         SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
                         SmartLists.handleListTypeChange(page);
+                        SmartLists.populateFormDefaults(page);
                     }).catch(function () {
                         SmartLists.setElementValue(page, '#listType', 'Playlist');
                         SmartLists.handleListTypeChange(page);
+                        SmartLists.populateFormDefaults(page);
                     });
-
-                    SmartLists.populateFormDefaults(page);
                 }
             }
         }).catch(function (error) {

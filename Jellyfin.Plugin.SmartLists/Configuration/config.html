@@ -19,7 +19,7 @@
                 
                 <!-- User Config Page Link -->
                 <div style="margin-bottom: 1em;">
-                    <a href="#/userpluginsettings.html?pageUrl=/Plugins/SmartLists/Pages/UserPlaylists&tab=create" 
+                    <a href="#/userpluginsettings.html?pageUrl=/Plugins/SmartLists/Pages/UserPlaylists&amp;tab=create" 
                        style="color: #00a4dc; text-decoration: none;">
                         Open User Config Page
                     </a>
@@ -589,12 +589,12 @@
 
                         <div class="checkboxContainer checkboxContainer-withDescription" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="emby-checkbox-label">
-                                <input type="checkbox" is="emby-checkbox" id="enableUserPage" />
+                                <input type="checkbox" is="emby-checkbox" id="enableUserPage" data-embycheckbox="true" class="emby-checkbox" />
                                 <span>Enable User Page</span>
                             </label>
                             <div class="fieldDescription checkboxFieldDescription">
                                 When enabled, regular users can access SmartLists from their home screen sidebar to create and manage their own playlists and collections.
-                                <strong>Requires the plugins  "Plugin Pages" and "File Transformation" to be installed.</strong>
+                                <strong>Requires the plugins "Plugin Pages" and "File Transformation" to be installed.</strong>
                                 If disabled or if required plugins are missing, users can only access SmartLists through the admin dashboard.
                             </div>
                         </div>
