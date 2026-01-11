@@ -15,6 +15,9 @@
         }
         page._pageInitialized = true;
 
+        // Reset loading state to prevent stuck "Loading..." from previous page loads
+        page._loadingPlaylists = false;
+
         SmartLists.applyCustomStyles(page);
 
         // Show loading state
@@ -30,13 +33,25 @@
             submitBtn.textContent = 'Loading...';
         }
 
-        // Coordinate all async initialization
-        Promise.all([
+        // Build array of async initialization tasks
+        var initTasks = [
             SmartLists.populateStaticSelects(page), // Make synchronous function async
-            SmartLists.loadUsers(page),
-            // Collections are server-wide, no library loading needed
             SmartLists.loadAndPopulateFields()
-        ]).then(function () {
+        ];
+        
+        // Only load users and configuration on admin pages
+        if (!SmartLists.IS_USER_PAGE) {
+            initTasks.push(SmartLists.loadUsers(page));
+            initTasks.push(SmartLists.loadAllowedUsersMultiSelect(page));
+        } else {
+            // On user pages, load capabilities to determine what they can create
+            if (SmartLists.loadUserCapabilities) {
+                initTasks.push(SmartLists.loadUserCapabilities());
+            }
+        }
+
+        // Coordinate all async initialization
+        Promise.all(initTasks).then(function () {
             // All async operations completed successfully
             const rulesContainer = page.querySelector('#rules-container');
             if (rulesContainer.children.length === 0) {
@@ -57,17 +72,24 @@
             // Populate form defaults if we're on the create tab and not in edit mode
             const currentTab = SmartLists.getCurrentTab();
             if (currentTab === 'create' && !editState.editMode) {
-                // Set default list type on initial page load only
-                const apiClient = SmartLists.getApiClient();
-                apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
-                    SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
-                    SmartLists.handleListTypeChange(page);
-                }).catch(function () {
+                // On user pages, always use Playlist type (no configuration needed)
+                if (SmartLists.IS_USER_PAGE) {
                     SmartLists.setElementValue(page, '#listType', 'Playlist');
                     SmartLists.handleListTypeChange(page);
-                });
-
-                SmartLists.populateFormDefaults(page);
+                    SmartLists.populateFormDefaults(page);
+                } else {
+                    // Admin page: Set default list type from configuration
+                    const apiClient = SmartLists.getApiClient();
+                    apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
+                        SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
+                        SmartLists.handleListTypeChange(page);
+                        SmartLists.populateFormDefaults(page);
+                    }).catch(function () {
+                        SmartLists.setElementValue(page, '#listType', 'Playlist');
+                        SmartLists.handleListTypeChange(page);
+                        SmartLists.populateFormDefaults(page);
+                    });
+                }
             }
         }).catch(function (error) {
             console.error('Error during page initialization:', error);
@@ -88,8 +110,10 @@
         // Set up navigation functionality
         SmartLists.setupNavigation(page);
 
-        // Load configuration (this can run independently)
-        SmartLists.loadConfiguration(page);
+        // Load configuration (only on admin pages - user pages don't have settings tab)
+        if (!SmartLists.IS_USER_PAGE) {
+            SmartLists.loadConfiguration(page);
+        }
     };
 
     // ===== STATIC SELECTS POPULATION =====
@@ -184,6 +208,16 @@
         // Add default sort option when creating a new playlist (not in edit mode)
         const editState = SmartLists.getPageEditState(page);
         if (!editState.editMode) {
+            // On user pages, skip loading plugin configuration (admin-only)
+            if (SmartLists.IS_USER_PAGE) {
+                // Use default values for user pages
+                const sortsContainer = page.querySelector('#sorts-container');
+                if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
+                    SmartLists.addSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                }
+                return Promise.resolve();
+            }
+
             const apiClient = SmartLists.getApiClient();
 
             // Suffix initialization removed - allow blank values
@@ -401,6 +435,12 @@
     };
 
     SmartLists.populateFormDefaults = function (page) {
+        // On user pages, skip loading plugin configuration (admin-only)
+        if (SmartLists.IS_USER_PAGE) {
+            SmartLists.applyFallbackDefaults(page);
+            return;
+        }
+
         const apiClient = SmartLists.getApiClient();
         apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
             SmartLists.applyFormDefaults(page, config);
@@ -519,6 +559,74 @@
         }
     };
 
+    /**
+     * Load users for the allowed users multi-select in Settings tab
+     */
+    SmartLists.loadAllowedUsersMultiSelect = async function (page) {
+        const apiClient = SmartLists.getApiClient();
+        const container = page.querySelector('#allowedUsersMultiSelect');
+
+        if (!container) {
+            return;
+        }
+
+        try {
+            const response = await apiClient.ajax({
+                type: "GET",
+                url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
+                contentType: 'application/json'
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Failed to load users: ${errorText || response.statusText}`);
+            }
+
+            const users = await response.json();
+
+            // Initialize the multi-select component
+            if (SmartLists.initializeMultiSelect) {
+                SmartLists.initializeMultiSelect(page, {
+                    containerId: 'allowedUsersMultiSelect',
+                    displayId: 'allowedUsersMultiSelectDisplay',
+                    dropdownId: 'allowedUsersMultiSelectDropdown',
+                    optionsId: 'allowedUsersMultiSelectOptions',
+                    placeholderText: 'All users (default)',
+                    checkboxClass: 'allowed-users-checkbox',
+                    onChange: null
+                });
+            }
+
+            // Load users into the multi-select
+            if (SmartLists.loadItemsIntoMultiSelect) {
+                SmartLists.loadItemsIntoMultiSelect(
+                    page,
+                    'allowedUsersMultiSelect',
+                    users,
+                    'allowed-users-checkbox',
+                    function (user) { return user.Name || user.Username || user.Id; },
+                    function (user) { return user.Id; }
+                );
+            }
+        } catch (err) {
+            console.error('Error loading allowed users:', err);
+            const errorMessage = err.message || 'Failed to load users. Please refresh the page.';
+            
+            const options = page.querySelector('#allowedUsersMultiSelectOptions');
+            if (options) {
+                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: #BB3932;">Error: ' + errorMessage + '</div>';
+            }
+            const display = page.querySelector('#allowedUsersMultiSelectDisplay');
+            if (display) {
+                const placeholder = display.querySelector('.multi-select-placeholder');
+                if (placeholder) {
+                    placeholder.textContent = 'Error loading users';
+                    placeholder.style.color = '#BB3932';
+                }
+            }
+        }
+    };
+
     // ===== NAVIGATION =====
     SmartLists.getCurrentTab = function () {
         const hash = window.location.hash;
@@ -596,9 +704,26 @@
             if (SmartLists.loadPlaylistFilterPreferences) {
                 SmartLists.loadPlaylistFilterPreferences(page);
             }
-            if (SmartLists.loadPlaylistList) {
-                SmartLists.loadPlaylistList(page);
-            }
+            
+            // Load playlist list with retry logic to handle script loading race conditions
+            var loadListWithRetry = function(retryCount) {
+                retryCount = retryCount || 0;
+                if (SmartLists.loadPlaylistList) {
+                    SmartLists.loadPlaylistList(page);
+                } else if (retryCount < 5) {
+                    setTimeout(function() {
+                        loadListWithRetry(retryCount + 1);
+                    }, 50); // 50ms delay between retries
+                } else {
+                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after 5 retries');
+                    // Show error message to user
+                    var container = page.querySelector('#playlist-list-container');
+                    if (container) {
+                        container.innerHTML = '<p style="color: #ff6b6b;">Failed to load playlist list. Please refresh the page.</p>';
+                    }
+                }
+            };
+            loadListWithRetry(0);
         }
 
         // Populate defaults when switching to create tab
@@ -636,9 +761,11 @@
             marginBottom: '0.5em'
         });
 
-        // Set initial active tab immediately to prevent flash
+        // Set initial active tab - use requestAnimationFrame to ensure DOM is ready
         var initialTab = SmartLists.getCurrentTab();
-        SmartLists.switchToTab(page, initialTab);
+        requestAnimationFrame(function() {
+            SmartLists.switchToTab(page, initialTab);
+        });
 
         // Use shared tab switching helper
         function setActiveTab(tabId) {
@@ -1105,6 +1232,24 @@
                 processingBatchSizeEl.value = config.ProcessingBatchSize !== undefined && config.ProcessingBatchSize !== null && config.ProcessingBatchSize > 0 ? config.ProcessingBatchSize : 300;
             }
 
+            // Load enable user page setting
+            const enableUserPageEl = page.querySelector('#enableUserPage');
+            if (enableUserPageEl) {
+                enableUserPageEl.checked = config.EnableUserPage !== undefined && config.EnableUserPage !== null ? config.EnableUserPage : true;
+            }
+
+            // Load allowed users for user page access
+            if (config.AllowedUserPageUsers && Array.isArray(config.AllowedUserPageUsers) && config.AllowedUserPageUsers.length > 0) {
+                // Store allowed users to be set after multi-select is initialized
+                page._pendingAllowedUserPageUsers = config.AllowedUserPageUsers;
+                // Set them after a short delay to ensure multi-select is fully initialized
+                setTimeout(function () {
+                    if (SmartLists.setSelectedItems) {
+                        SmartLists.setSelectedItems(page, 'allowedUsersMultiSelect', config.AllowedUserPageUsers, 'allowed-users-checkbox', 'All users (default)');
+                    }
+                }, 100);
+            }
+
             // Load schedule configuration values
             const defaultScheduleTriggerElement = page.querySelector('#defaultScheduleTrigger');
             if (defaultScheduleTriggerElement) {
@@ -1270,6 +1415,14 @@
                 config.ProcessingBatchSize = (isNaN(parsedValue) || parsedValue <= 0) ? 300 : parsedValue;
             }
 
+            // Save enable user page setting
+            const enableUserPageCheckbox = page.querySelector('#enableUserPage');
+            config.EnableUserPage = enableUserPageCheckbox ? enableUserPageCheckbox.checked : true;
+
+            // Save allowed users for user page access
+            const allowedUserIds = SmartLists.getSelectedItems ? SmartLists.getSelectedItems(page, 'allowedUsersMultiSelect', 'allowed-users-checkbox') : [];
+            config.AllowedUserPageUsers = allowedUserIds && allowedUserIds.length > 0 ? allowedUserIds : null;
+
             apiClient.updatePluginConfiguration(SmartLists.getPluginId(), config).then(function () {
                 Dashboard.hideLoadingMsg();
                 SmartLists.showNotification('Configuration saved successfully.', 'success');
@@ -1289,7 +1442,9 @@
     SmartLists.refreshAllPlaylists = function () {
         // Show notification that refresh has started
         var statusLink = SmartLists.createStatusPageLink('status page');
-        var refreshMessage = 'List refresh started, check the ' + statusLink + ' for progress.';
+        var refreshMessage = SmartLists.IS_USER_PAGE 
+            ? 'List refresh started. Your lists will be updated in the background.'
+            : 'List refresh started, check the ' + statusLink + ' for progress.';
         SmartLists.showNotification(refreshMessage, 'info', { html: true });
 
         // Start the refresh operation (fire and forget - status page will show progress)
@@ -1495,6 +1650,41 @@
     document.addEventListener('pageshow', function (e) {
         const page = e.target;
         if (page.classList.contains('SmartListsConfigurationPage')) {
+            // Clean up any persisted inline styles from browser back/forward navigation
+            // This fixes the issue where navigating back from user page leaves elements hidden
+            const elementsWithInlineDisplay = page.querySelectorAll('[style*="display"]');
+            elementsWithInlineDisplay.forEach(function(el) {
+                // Only remove inline display styles, not other inline styles
+                if (el.style.display) {
+                    // Check if this element should have controlled visibility
+                    const hasVisibilityClass = el.classList.contains('playlist-only-field') ||
+                                              el.classList.contains('collection-only-field') ||
+                                              el.classList.contains('playlist-only-description') ||
+                                              el.classList.contains('collection-only-description') ||
+                                              el.classList.contains('playlist-only-label') ||
+                                              el.classList.contains('collection-only-label') ||
+                                              el.id === 'publicCheckboxContainer';
+                    
+                    if (hasVisibilityClass) {
+                        el.style.removeProperty('display');
+                    }
+                }
+            });
+            
+            SmartLists.initPage(page);
+            
+            // Re-apply list type visibility after cleanup
+            if (page._pageInitialized) {
+                SmartLists.handleListTypeChange(page);
+            }
+        }
+    });
+
+    // Fallback initialization for pages loaded directly (not via Jellyfin navigation)
+    // This handles the case where pageshow doesn't fire for custom plugin pages
+    document.addEventListener('DOMContentLoaded', function () {
+        const page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized) {
             SmartLists.initPage(page);
         }
     });
@@ -1518,34 +1708,58 @@
         // Show/hide playlist-only fields
         const playlistOnlyFields = page.querySelectorAll('.playlist-only-field');
         playlistOnlyFields.forEach(function (field) {
-            field.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                field.style.display = 'none';
+            } else {
+                // Remove inline style to prevent persistence across page navigations
+                field.style.removeProperty('display');
+            }
         });
 
         // Show/hide collection-only fields
         const collectionOnlyFields = page.querySelectorAll('.collection-only-field');
         collectionOnlyFields.forEach(function (field) {
-            field.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                field.style.removeProperty('display');
+            } else {
+                field.style.display = 'none';
+            }
         });
 
         // Show/hide playlist-only and collection-only descriptions
         const playlistOnlyDescriptions = page.querySelectorAll('.playlist-only-description');
         playlistOnlyDescriptions.forEach(function (desc) {
-            desc.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                desc.style.display = 'none';
+            } else {
+                desc.style.removeProperty('display');
+            }
         });
 
         const collectionOnlyDescriptions = page.querySelectorAll('.collection-only-description');
         collectionOnlyDescriptions.forEach(function (desc) {
-            desc.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                desc.style.removeProperty('display');
+            } else {
+                desc.style.display = 'none';
+            }
         });
 
         // Show/hide playlist-only and collection-only labels
         const playlistOnlyLabels = page.querySelectorAll('.playlist-only-label');
         playlistOnlyLabels.forEach(function (label) {
-            label.style.display = isCollection ? 'none' : '';
+            if (isCollection) {
+                label.style.display = 'none';
+            } else {
+                label.style.removeProperty('display');
+            }
         });
 
         // Reload users with appropriate UI (single select for collections, multi-select for playlists)
-        SmartLists.loadUsers(page);
+        // Skip for user pages (admin-only endpoint)
+        if (!SmartLists.IS_USER_PAGE) {
+            SmartLists.loadUsers(page);
+        }
 
         // Update public checkbox visibility
         if (SmartLists.updatePublicCheckboxVisibility) {
@@ -1554,7 +1768,11 @@
 
         const collectionOnlyLabels = page.querySelectorAll('.collection-only-label');
         collectionOnlyLabels.forEach(function (label) {
-            label.style.display = isCollection ? '' : 'none';
+            if (isCollection) {
+                label.style.removeProperty('display');
+            } else {
+                label.style.display = 'none';
+            }
         });
 
         // Update list type label text
@@ -1636,3 +1854,20 @@
 
 })(window.SmartLists = window.SmartLists || {});
 
+// Immediate initialization check - runs as soon as this script loads
+// This is necessary because DOMContentLoaded may have already fired
+(function() {
+    var checkAndInit = function() {
+        var page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized) {
+            window.SmartLists.initPage(page);
+        }
+    };
+    
+    // Try immediately if DOM is already ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAndInit);
+    } else {
+        checkAndInit();
+    }
+})();

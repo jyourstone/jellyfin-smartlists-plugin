@@ -71,9 +71,14 @@
                     // User filter applies to both playlists (owner) and collections (rule context user)
                     // Check UserPlaylists array (multi-user playlists)
                     if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
-                        return playlist.UserPlaylists.some(function(mapping) {
+                        const hasUserInPlaylists = playlist.UserPlaylists.some(function(mapping) {
                             return normalizeUserId(mapping.UserId) === normalizedFilter;
                         });
+                        if (hasUserInPlaylists) return true;
+                    }
+                    // Check CreatedByUserId (creator/owner)
+                    if (playlist.CreatedByUserId && normalizeUserId(playlist.CreatedByUserId) === normalizedFilter) {
+                        return true;
                     }
                     // Fallback to UserId (backwards compatibility)
                     const normalizedPlaylistUserId = normalizeUserId(playlist.UserId);
@@ -100,8 +105,18 @@
                 return true;
             }
 
+            // Search in ID
+            if (playlist.Id && playlist.Id.toLowerCase().indexOf(searchTerm) !== -1) {
+                return true;
+            }
+
             // Search in filename
             if (playlist.FileName && playlist.FileName.toLowerCase().indexOf(searchTerm) !== -1) {
+                return true;
+            }
+
+            // Search in list type
+            if (playlist.Type && playlist.Type.toLowerCase().indexOf(searchTerm) !== -1) {
                 return true;
             }
 
@@ -170,6 +185,94 @@
                 return true;
             }
 
+            // Search in auto-refresh mode
+            if (playlist.AutoRefresh && playlist.AutoRefresh.toLowerCase().indexOf(searchTerm) !== -1) {
+                return true;
+            }
+            // Search for "never" when AutoRefresh is not set or is default
+            if (searchTerm === 'never' && (!playlist.AutoRefresh || playlist.AutoRefresh === 'Never')) {
+                return true;
+            }
+
+            // Search in MaxItems (numeric search)
+            if (playlist.MaxItems != null && playlist.MaxItems !== 0 && String(playlist.MaxItems).indexOf(searchTerm) !== -1) {
+                return true;
+            }
+            // Search for "unlimited" when MaxItems is not set or is 0
+            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxItems === undefined || playlist.MaxItems === null || playlist.MaxItems === 0)) {
+                return true;
+            }
+
+            // Search in MaxPlayTimeMinutes (numeric search)
+            if (playlist.MaxPlayTimeMinutes != null && playlist.MaxPlayTimeMinutes !== 0 && String(playlist.MaxPlayTimeMinutes).indexOf(searchTerm) !== -1) {
+                return true;
+            }
+            // Search for "unlimited" when MaxPlayTimeMinutes is not set or is 0
+            if ((searchTerm === 'unlimited' || searchTerm === 'none') && (playlist.MaxPlayTimeMinutes === undefined || playlist.MaxPlayTimeMinutes === null || playlist.MaxPlayTimeMinutes === 0)) {
+                return true;
+            }
+
+            // Search in ItemCount statistics (numeric search)
+            if (playlist.ItemCount != null && String(playlist.ItemCount).indexOf(searchTerm) !== -1) {
+                return true;
+            }
+
+            // Search in TotalRuntimeMinutes statistics (numeric search)
+            if (playlist.TotalRuntimeMinutes != null && String(playlist.TotalRuntimeMinutes).indexOf(searchTerm) !== -1) {
+                return true;
+            }
+
+            // Search in similarity comparison fields
+            if (playlist.SimilarityComparisonFields && playlist.SimilarityComparisonFields.some(function (field) {
+                return field && field.toLowerCase().indexOf(searchTerm) !== -1;
+            })) {
+                return true;
+            }
+
+            // Search in schedules (both Schedules and VisibilitySchedules)
+            const allSchedules = (playlist.Schedules || []).concat(playlist.VisibilitySchedules || []);
+            if (allSchedules.length > 0) {
+                for (var s = 0; s < allSchedules.length; s++) {
+                    const schedule = allSchedules[s];
+                    // Search in trigger type
+                    if (schedule.Trigger && schedule.Trigger.toLowerCase().indexOf(searchTerm) !== -1) {
+                        return true;
+                    }
+                    // Search in action (Enable/Disable for visibility schedules)
+                    if (schedule.Action && schedule.Action.toLowerCase().indexOf(searchTerm) !== -1) {
+                        return true;
+                    }
+                    // Search for day names (convert DayOfWeek number to name)
+                    if (schedule.DayOfWeek != null && 
+                        Number.isInteger(schedule.DayOfWeek) && 
+                        schedule.DayOfWeek >= 0 && 
+                        schedule.DayOfWeek <= 6) {
+                        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                        const dayName = dayNames[schedule.DayOfWeek];
+                        if (dayName && dayName.indexOf(searchTerm) !== -1) {
+                            return true;
+                        }
+                    }
+                    // Search for month names
+                    if (schedule.Month != null && 
+                        Number.isInteger(schedule.Month) && 
+                        schedule.Month >= 1 && 
+                        schedule.Month <= 12) {
+                        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                                          'july', 'august', 'september', 'october', 'november', 'december'];
+                        const monthName = monthNames[schedule.Month - 1];
+                        if (monthName && monthName.indexOf(searchTerm) !== -1) {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                // Search for "none" or "unscheduled" when there are no schedules
+                if (searchTerm === 'none' || searchTerm === 'unscheduled' || searchTerm === 'noscheduled' || searchTerm === 'manual') {
+                    return true;
+                }
+            }
+
             // Search in username (resolved from User ID or UserPlaylists)
             if (page && page._usernameCache) {
                 // Check UserPlaylists array (multi-user playlists)
@@ -185,6 +288,13 @@
                 if (playlist.UserId) {
                     const username = page._usernameCache.get(normalizeUserId(playlist.UserId));
                     if (username && username.toLowerCase().indexOf(searchTerm) !== -1) {
+                        return true;
+                    }
+                }
+                // Search in CreatedBy username
+                if (playlist.CreatedByUserId) {
+                    const createdByUsername = page._usernameCache.get(normalizeUserId(playlist.CreatedByUserId));
+                    if (createdByUsername && createdByUsername.toLowerCase().indexOf(searchTerm) !== -1) {
                         return true;
                     }
                 }
@@ -340,6 +450,15 @@
                     if (element) {
                         // Validate that the saved value is still valid for this element
                         const options = Array.prototype.slice.call(element.options || []);
+                        
+                        // Special handling for user filter: if it only has the "all" option,
+                        // skip validation as the user options haven't been loaded yet
+                        // (they will be loaded asynchronously by populateUserFilter)
+                        if (filterKey === 'user' && options.length === 1 && options[0].value === 'all') {
+                            console.debug('Skipping user filter validation - options not yet loaded');
+                            return; // Skip this filter, will be restored after populateUserFilter
+                        }
+                        
                         const isValidOption = options.length === 0 || options.some(function (opt) {
                             return opt.value === value;
                         });
@@ -459,6 +578,15 @@
                         seenIds[normalizedId] = true;
                     }
                 }
+                // Also collect CreatedByUserId for username cache
+                if (playlist.CreatedByUserId) {
+                    const userId = playlist.CreatedByUserId;
+                    const normalizedId = normalizeUserId(userId);
+                    if (!seenIds[normalizedId]) {
+                        userIds.push(userId);
+                        seenIds[normalizedId] = true;
+                    }
+                }
             }
 
             // Clear existing options except "All Users"
@@ -562,11 +690,19 @@
             promises.push(
                 SmartLists.resolveUsername(apiClient, playlist).then(function (resolvedUserName) {
                     return SmartLists.generateRulesHtml(playlist, apiClient).then(function (rulesHtml) {
-                        return {
-                            playlist: playlist,
-                            rulesHtml: rulesHtml,
-                            resolvedUserName: resolvedUserName
-                        };
+                        // Resolve CreatedBy username
+                        const createdByPromise = playlist.CreatedByUserId
+                            ? SmartLists.resolveUserIdToName(apiClient, playlist.CreatedByUserId)
+                            : Promise.resolve('Unknown');
+                        
+                        return createdByPromise.then(function (createdByUserName) {
+                            return {
+                                playlist: playlist,
+                                rulesHtml: rulesHtml,
+                                resolvedUserName: resolvedUserName,
+                                createdByUserName: createdByUserName || 'Unknown'
+                            };
+                        });
                     });
                 })
             );
@@ -575,7 +711,7 @@
         const results = await Promise.all(promises);
         for (var j = 0; j < results.length; j++) {
             const result = results[j];
-            html += SmartLists.generatePlaylistCardHtml(result.playlist, result.rulesHtml, result.resolvedUserName);
+            html += SmartLists.generatePlaylistCardHtml(result.playlist, result.rulesHtml, result.resolvedUserName, result.createdByUserName);
         }
         container.innerHTML = html;
         // Restore expand states from localStorage after regenerating HTML

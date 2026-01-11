@@ -3,6 +3,9 @@ using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using MediaBrowser.Common;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Services;
+using Jellyfin.Plugin.SmartLists.Services.Playlists;
+using Jellyfin.Plugin.SmartLists.Services.Collections;
 
 namespace Jellyfin.Plugin.SmartLists
 {
@@ -20,6 +23,15 @@ namespace Jellyfin.Plugin.SmartLists
         {
             // Register RefreshStatusService first
             serviceCollection.AddSingleton<RefreshStatusService>();
+            
+            // Register file system and stores
+            serviceCollection.AddSingleton<ISmartListFileSystem, SmartListFileSystem>();
+            serviceCollection.AddSingleton<PlaylistStore>();
+            serviceCollection.AddSingleton<CollectionStore>();
+            
+            // Register playlist and collection services
+            serviceCollection.AddSingleton<PlaylistService>();
+            serviceCollection.AddSingleton<CollectionService>();
             
             // Register RefreshQueueService as singleton
             serviceCollection.AddSingleton<RefreshQueueService>(sp =>
@@ -55,6 +67,9 @@ namespace Jellyfin.Plugin.SmartLists
             
             serviceCollection.AddHostedService<AutoRefreshHostedService>();
             serviceCollection.AddScoped<IManualRefreshService, ManualRefreshService>();
+            
+            // Register Plugin Pages integration as a hosted service
+            serviceCollection.AddHostedService<PluginPagesRegistrationService>();
         }
     }
 }

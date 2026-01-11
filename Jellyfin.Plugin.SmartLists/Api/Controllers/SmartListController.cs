@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
@@ -237,24 +238,84 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 logger.LogDebug("Attempting to determine current user ID from Jellyfin claims...");
 
-                // Get user ID from Jellyfin-specific claims
-                var userIdClaim = User.FindFirst("Jellyfin-UserId")?.Value;
-                logger.LogDebug("Jellyfin-UserId claim: {UserId}", userIdClaim ?? "null");
+                // Use centralized extension method for claim parsing
+                var userId = User.GetUserId();
+                logger.LogDebug("User ID from claims: {UserId}", userId == Guid.Empty ? "not found" : userId.ToString());
 
-                if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
+                if (userId == Guid.Empty)
                 {
-                    logger.LogDebug("Found current user ID from Jellyfin-UserId claim: {UserId}", userId);
-                    return userId;
+                    logger.LogWarning("Could not determine current user ID from Jellyfin-UserId claim");
                 }
 
-                logger.LogWarning("Could not determine current user ID from Jellyfin-UserId claim");
-                return Guid.Empty;
+                return userId;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error getting current user ID");
                 return Guid.Empty;
             }
+        }
+
+        /// <summary>
+        /// Validates the current user ID and retrieves the user object.
+        /// Returns an error response if the user ID is invalid or the user is not found.
+        /// </summary>
+        /// <param name="currentUserId">The current user ID to validate</param>
+        /// <param name="errorResult">The error response to return if validation fails</param>
+        /// <param name="operationDescription">Description of the operation for error messages (default: "manage collections")</param>
+        /// <returns>The User object if validation succeeds, null otherwise</returns>
+        private Jellyfin.Database.Implementations.Entities.User? ValidateAndGetCurrentUser(Guid currentUserId, out ActionResult? errorResult, string operationDescription = "manage collections")
+        {
+            errorResult = null;
+
+            if (currentUserId == Guid.Empty)
+            {
+                logger.LogError("Could not determine current user for collection operation");
+                errorResult = Unauthorized(new ProblemDetails
+                {
+                    Title = "Authentication Error",
+                    Detail = $"User authentication required. Please ensure you are logged in to {operationDescription}.",
+                    Status = StatusCodes.Status401Unauthorized
+                });
+                return null;
+            }
+
+            var currentUser = _userManager.GetUserById(currentUserId);
+            if (currentUser == null)
+            {
+                logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager", currentUserId);
+                errorResult = StatusCode(StatusCodes.Status401Unauthorized, new ProblemDetails
+                {
+                    Title = "Authentication Error",
+                    Detail = "The authenticated user could not be found. Please log out and log back in.",
+                    Status = StatusCodes.Status401Unauthorized
+                });
+                return null;
+            }
+
+            return currentUser;
+        }
+
+        /// <summary>
+        /// Normalizes a user ID string to canonical "N" format (no dashes, lowercase).
+        /// Handles both "N" format and "D" format (with dashes) input.
+        /// This matches the format used by the client-side normalization.
+        /// </summary>
+        /// <param name="userId">The user ID string to normalize</param>
+        /// <returns>Normalized user ID in "N" format, or original string if invalid GUID</returns>
+        private static string NormalizeUserId(string userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return userId;
+            }
+
+            if (Guid.TryParse(userId, out var guid))
+            {
+                return guid.ToString("N").ToLowerInvariant();
+            }
+
+            return userId; // Return as-is if not a valid GUID
         }
 
         /// <summary>
@@ -717,52 +778,25 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 collection.Order.SortOptions = [];
             }
 
-            // Set default owner user if not specified
+            // Set default owner user if not specified, or normalize if already set
             if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
             {
                 // Default to currently logged-in user
                 var currentUserId = GetCurrentUserId();
-                
-                if (currentUserId != Guid.Empty)
+                var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                if (currentUser == null)
                 {
-                    var currentUser = _userManager.GetUserById(currentUserId);
-                    if (currentUser != null)
-                    {
-                        collection.UserId = currentUser.Id.ToString("D");
-                        logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
-                    }
-                    else
-                    {
-                        logger.LogWarning("Current user ID {UserId} not found, falling back to first user", currentUserId);
-                        var defaultUser = _userManager.Users.FirstOrDefault();
-                        if (defaultUser != null)
-                        {
-                            collection.UserId = defaultUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to first user: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                        }
-                    }
+                    return errorResult!;
                 }
-                else
-                {
-                    logger.LogWarning("Could not determine current user, falling back to first user");
-                    var defaultUser = _userManager.Users.FirstOrDefault();
-                    if (defaultUser != null)
-                    {
-                        collection.UserId = defaultUser.Id.ToString("D");
-                        logger.LogDebug("Set default collection owner to first user: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                    }
-                }
-                
-                if (string.IsNullOrEmpty(collection.UserId))
-                {
-                    logger.LogError("No users found to set as collection owner");
-                    return BadRequest(new ProblemDetails
-                    {
-                        Title = "Configuration Error",
-                        Detail = "No users found. At least one user must exist to create collections.",
-                        Status = StatusCodes.Status400BadRequest
-                    });
-                }
+
+                collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
+                logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+            }
+            else
+            {
+                // Normalize existing UserId to canonical "N" format (no dashes)
+                collection.UserId = NormalizeUserId(collection.UserId);
+                logger.LogDebug("Normalized collection UserId to canonical format: {UserId}", collection.UserId);
             }
 
             // Ensure Type is set correctly
@@ -955,6 +989,95 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingPlaylist.FileName; // Keep the same filename
                         collectionDto.JellyfinCollectionId = null; // Clear old Jellyfin ID
                         
+                        // Ensure UserId is set (required for collections for rule evaluation context)
+                        if (string.IsNullOrEmpty(collectionDto.UserId))
+                        {
+                            // Strategy: prefer the authenticated user if they're a playlist owner,
+                            // otherwise use the playlist's primary owner (first owner from UserPlaylists)
+                            var currentUserId = GetCurrentUserId();
+                            
+                            // Try to get from existing playlist's UserId first (legacy single-user format)
+                            if (!string.IsNullOrEmpty(existingPlaylist.UserId))
+                            {
+                                collectionDto.UserId = existingPlaylist.UserId;
+                                logger.LogDebug("Set collection owner from playlist's UserId field: {UserId}", existingPlaylist.UserId);
+                            }
+                            // Check if authenticated user is one of the playlist owners (preferred)
+                            else if (currentUserId != Guid.Empty && 
+                                     existingPlaylist.UserPlaylists != null && 
+                                     existingPlaylist.UserPlaylists.Any(up => Guid.TryParse(up.UserId, out var upId) && upId == currentUserId))
+                            {
+                                collectionDto.UserId = currentUserId.ToString("N").ToLowerInvariant();
+                                logger.LogDebug("Set collection owner to authenticated user (who is a playlist owner): {UserId}", currentUserId);
+                            }
+                            // Use the playlist's primary owner (first user in UserPlaylists array)
+                            // Note: This is legitimate - we're using a user who explicitly owns this playlist,
+                            // not an arbitrary system user
+                            else if (existingPlaylist.UserPlaylists != null && existingPlaylist.UserPlaylists.Count > 0)
+                            {
+                                collectionDto.UserId = existingPlaylist.UserPlaylists[0].UserId;
+                                logger.LogDebug("Set collection owner to playlist's primary owner: {UserId}", collectionDto.UserId);
+                            }
+                            // Fallback to CreatedByUserId if available
+                            else if (!string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                            {
+                                collectionDto.UserId = existingPlaylist.CreatedByUserId;
+                                logger.LogDebug("Set collection owner from playlist's CreatedByUserId: {UserId}", existingPlaylist.CreatedByUserId);
+                            }
+                            // Last resort: use the currently authenticated user performing the conversion
+                            else if (currentUserId != Guid.Empty)
+                            {
+                                collectionDto.UserId = currentUserId.ToString("N").ToLowerInvariant();
+                                logger.LogDebug("Set collection owner to authenticated user performing conversion: {UserId}", currentUserId);
+                            }
+                            
+                            // Validation: if we still don't have a UserId, fail the conversion
+                            if (string.IsNullOrEmpty(collectionDto.UserId))
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: unable to determine owner user ID", existingPlaylist.Name);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Cannot determine collection owner. The playlist has no associated users and you are not authenticated.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+
+                            // Normalize + validate resolved owner exists (collections require valid owner context)
+                            if (!Guid.TryParse(collectionDto.UserId, out var resolvedOwnerId) || resolvedOwnerId == Guid.Empty)
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: owner user ID '{UserId}' is not a valid GUID", existingPlaylist.Name, collectionDto.UserId);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Collection owner is not a valid user ID.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+
+                            var resolvedOwnerUser = _userManager.GetUserById(resolvedOwnerId);
+                            if (resolvedOwnerUser == null)
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: owner user {UserId} not found in user manager", existingPlaylist.Name, resolvedOwnerId);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Collection owner user not found. The user may have been deleted. Please choose a valid owner.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+
+                            // Normalize to canonical "N" format (no dashes) for collections
+                            collectionDto.UserId = resolvedOwnerId.ToString("N").ToLowerInvariant();
+                            logger.LogDebug("Validated and normalized collection owner: {Username} ({UserId})", resolvedOwnerUser.Username, collectionDto.UserId);
+                        }
+                        
+                        // Preserve creator information from original playlist
+                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                        {
+                            collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                        }
+                        
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
@@ -1023,6 +1146,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         if (string.IsNullOrEmpty(playlistDto.UserId))
                         {
                             playlistDto.UserId = existingCollection.UserId; // Carry over from collection
+                        }
+                        
+                        // Preserve creator information from original collection
+                        if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                        {
+                            playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
                         }
                         
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
@@ -1321,6 +1450,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     playlist.DateCreated = existingPlaylist.DateCreated;
                 }
 
+                // Preserve original creator information
+                if (string.IsNullOrEmpty(playlist.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                {
+                    playlist.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                }
+
                 // JellyfinPlaylistId is already set above from first user's mapping
 
                 // Preserve statistics from existing playlist to avoid N/A display until refresh completes
@@ -1409,52 +1544,25 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return NotFound("Smart collection not found");
                 }
 
-                // Set default owner user if not specified (same as CreateCollectionInternal)
+                // Set default owner user if not specified, or normalize if already set (same as CreateCollectionInternal)
                 if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
                 {
                     // Default to currently logged-in user
                     var currentUserId = GetCurrentUserId();
-                    
-                    if (currentUserId != Guid.Empty)
+                    var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                    if (currentUser == null)
                     {
-                        var currentUser = _userManager.GetUserById(currentUserId);
-                        if (currentUser != null)
-                        {
-                            collection.UserId = currentUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
-                        }
-                        else
-                        {
-                            logger.LogWarning("Current user ID {UserId} not found during update, falling back to first user", currentUserId);
-                            var defaultUser = _userManager.Users.FirstOrDefault();
-                            if (defaultUser != null)
-                            {
-                                collection.UserId = defaultUser.Id.ToString("D");
-                                logger.LogDebug("Set default collection owner to first user during update: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                            }
-                        }
+                        return errorResult!;
                     }
-                    else
-                    {
-                        logger.LogWarning("Could not determine current user during update, falling back to first user");
-                        var defaultUser = _userManager.Users.FirstOrDefault();
-                        if (defaultUser != null)
-                        {
-                            collection.UserId = defaultUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to first user during update: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                        }
-                    }
-                    
-                    if (string.IsNullOrEmpty(collection.UserId))
-                    {
-                        logger.LogError("No users found to set as collection owner during update");
-                        return BadRequest(new ProblemDetails
-                        {
-                            Title = "Configuration Error",
-                            Detail = "No users found. At least one user must exist to update collections.",
-                            Status = StatusCodes.Status400BadRequest
-                        });
-                    }
+
+                    collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
+                    logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                }
+                else
+                {
+                    // Normalize existing UserId to canonical "N" format (no dashes)
+                    collection.UserId = NormalizeUserId(collection.UserId);
+                    logger.LogDebug("Normalized collection UserId to canonical format during update: {UserId}", collection.UserId);
                 }
 
                 // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
@@ -1523,6 +1631,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (existingCollection.DateCreated.HasValue)
                 {
                     collection.DateCreated = existingCollection.DateCreated;
+                }
+
+                // Preserve original creator information
+                if (string.IsNullOrEmpty(collection.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                {
+                    collection.CreatedByUserId = existingCollection.CreatedByUserId;
                 }
 
                 // Preserve the Jellyfin collection ID from the existing collection if it exists
@@ -1703,146 +1817,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpGet("fields")]
         public ActionResult<object> GetAvailableFields()
         {
-            var fields = new
-            {
-                ContentFields = new[]
-                {
-                    new { Value = "Name", Label = "Name" },
-                    new { Value = "SeriesName", Label = "Series Name" },
-                    new { Value = "SimilarTo", Label = "Similar To" },
-                    new { Value = "OfficialRating", Label = "Parental Rating" },
-                    new { Value = "Overview", Label = "Overview" },
-                    new { Value = "ProductionYear", Label = "Production Year" },
-                    new { Value = "ReleaseDate", Label = "Release Date" }
-                    // Note: ItemType (Media Type) is intentionally excluded from UI fields
-                    // because users select media type (Audio/Video) before creating rules
-                },
-                VideoFields = new[]
-                {
-                    new { Value = "Resolution", Label = "Resolution" },
-                    new { Value = "Framerate", Label = "Framerate" },
-                    new { Value = "VideoCodec", Label = "Video Codec" },
-                    new { Value = "VideoProfile", Label = "Video Profile" },
-                    new { Value = "VideoRange", Label = "Video Range" },
-                    new { Value = "VideoRangeType", Label = "Video Range Type" },
-                },
-                AudioFields = new[]
-                {
-                    new { Value = "AudioLanguages", Label = "Audio Languages" },
-                    new { Value = "AudioBitrate", Label = "Audio Bitrate (kbps)" },
-                    new { Value = "AudioSampleRate", Label = "Audio Sample Rate (Hz)" },
-                    new { Value = "AudioBitDepth", Label = "Audio Bit Depth" },
-                    new { Value = "AudioCodec", Label = "Audio Codec" },
-                    new { Value = "AudioProfile", Label = "Audio Profile" },
-                    new { Value = "AudioChannels", Label = "Audio Channels" },
-                },
-                RatingsPlaybackFields = new[]
-                {
-                    new { Value = "CommunityRating", Label = "Community Rating" },
-                    new { Value = "CriticRating", Label = "Critic Rating" },
-                    new { Value = "IsFavorite", Label = "Is Favorite" },
-                    new { Value = "PlaybackStatus", Label = "Playback Status" },
-                    new { Value = "LastPlayedDate", Label = "Last Played" },
-                    new { Value = "NextUnwatched", Label = "Next Unwatched" },
-                    new { Value = "PlayCount", Label = "Play Count" },
-                    new { Value = "RuntimeMinutes", Label = "Runtime (Minutes)" },
-                },
-
-                FileFields = new[]
-                {
-                    new { Value = "FileName", Label = "File Name" },
-                    new { Value = "FolderPath", Label = "Folder Path" },
-                    new { Value = "DateModified", Label = "Date Modified" },
-                },
-                LibraryFields = new[]
-                {
-                    new { Value = "DateCreated", Label = "Date Added to Library" },
-                    new { Value = "DateLastRefreshed", Label = "Last Metadata Refresh" },
-                    new { Value = "DateLastSaved", Label = "Last Database Save" },
-                },
-                PeopleFields = new[]
-                {
-                    new { Value = "People", Label = "People" },
-                },
-                PeopleSubFields = new[]
-                {
-                    new { Value = "People", Label = "People (All)" },
-                    new { Value = "Actors", Label = "Actors" },
-                    new { Value = "ActorRoles", Label = "Actor Roles (Character Names)" },
-                    new { Value = "Directors", Label = "Directors" },
-                    new { Value = "Composers", Label = "Composers" },
-                    new { Value = "Writers", Label = "Writers" },
-                    new { Value = "GuestStars", Label = "Guest Stars" },
-                    new { Value = "Producers", Label = "Producers" },
-                    new { Value = "Conductors", Label = "Conductors" },
-                    new { Value = "Lyricists", Label = "Lyricists" },
-                    new { Value = "Arrangers", Label = "Arrangers" },
-                    new { Value = "SoundEngineers", Label = "Sound Engineers" },
-                    new { Value = "Mixers", Label = "Mixers" },
-                    new { Value = "Remixers", Label = "Remixers" },
-                    new { Value = "Creators", Label = "Creators" },
-                    new { Value = "PersonArtists", Label = "Artists (Person Role)" },
-                    new { Value = "PersonAlbumArtists", Label = "Album Artists (Person Role)" },
-                    new { Value = "Authors", Label = "Authors" },
-                    new { Value = "Illustrators", Label = "Illustrators" },
-                    new { Value = "Pencilers", Label = "Pencilers" },
-                    new { Value = "Inkers", Label = "Inkers" },
-                    new { Value = "Colorists", Label = "Colorists" },
-                    new { Value = "Letterers", Label = "Letterers" },
-                    new { Value = "CoverArtists", Label = "Cover Artists" },
-                    new { Value = "Editors", Label = "Editors" },
-                    new { Value = "Translators", Label = "Translators" },
-                },
-                CollectionFields = new[]
-                {
-                    new { Value = "Collections", Label = "Collections" },
-                    new { Value = "Playlists", Label = "Playlists" },
-                    new { Value = "Genres", Label = "Genres" },
-                    new { Value = "Studios", Label = "Studios" },
-                    new { Value = "Tags", Label = "Tags" },
-                    new { Value = "Album", Label = "Album" },
-                    new { Value = "Artists", Label = "Artists" },
-                    new { Value = "AlbumArtists", Label = "Album Artists" },
-                },
-                SimilarityComparisonFields = new[]
-                {
-                    new { Value = "Genre", Label = "Genre" },
-                    new { Value = "Tags", Label = "Tags" },
-                    new { Value = "Actors", Label = "Actors" },
-                    new { Value = "ActorRoles", Label = "Actor Roles (Character Names)" },
-                    new { Value = "Writers", Label = "Writers" },
-                    new { Value = "Producers", Label = "Producers" },
-                    new { Value = "Directors", Label = "Directors" },
-                    new { Value = "Studios", Label = "Studios" },
-                    new { Value = "Audio Languages", Label = "Audio Languages" },
-                    new { Value = "Name", Label = "Name" },
-                    new { Value = "Production Year", Label = "Production Year" },
-                    new { Value = "Parental Rating", Label = "Parental Rating" },
-                },
-                Operators = Core.Constants.Operators.AllOperators,
-                FieldOperators = GetFieldOperators(),
-                OrderOptions = new[]
-                {
-                    new { Value = "NoOrder", Label = "No Order" },
-                    new { Value = "Random", Label = "Random" },
-                    new { Value = "Name Ascending", Label = "Name Ascending" },
-                    new { Value = "Name Descending", Label = "Name Descending" },
-                    new { Value = "ProductionYear Ascending", Label = "Production Year Ascending" },
-                    new { Value = "ProductionYear Descending", Label = "Production Year Descending" },
-                    new { Value = "DateCreated Ascending", Label = "Date Created Ascending" },
-                    new { Value = "DateCreated Descending", Label = "Date Created Descending" },
-                    new { Value = "ReleaseDate Ascending", Label = "Release Date Ascending" },
-                    new { Value = "ReleaseDate Descending", Label = "Release Date Descending" },
-                    new { Value = "CommunityRating Ascending", Label = "Community Rating Ascending" },
-                    new { Value = "CommunityRating Descending", Label = "Community Rating Descending" },
-                    new { Value = "Similarity Ascending", Label = "Similarity Ascending" },
-                    new { Value = "Similarity Descending", Label = "Similarity Descending" },
-                    new { Value = "PlayCount (owner) Ascending", Label = "Play Count (owner) Ascending" },
-                    new { Value = "PlayCount (owner) Descending", Label = "Play Count (owner) Descending" },
-                }
-            };
-
-            return Ok(fields);
+            // Use the shared field definitions (DRY principle)
+            return Ok(SharedFieldDefinitions.GetAvailableFields());
         }
 
         /// <summary>

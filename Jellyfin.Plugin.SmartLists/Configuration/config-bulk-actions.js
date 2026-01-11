@@ -49,7 +49,9 @@
         // If enabling, show notification about refresh starting
         if (options.actionType === 'enable' && listsToProcess.length > 0) {
             var statusLink = SmartLists.createStatusPageLink('status page');
-            var refreshMessage = 'List(s) have been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
+            var refreshMessage = SmartLists.IS_USER_PAGE
+                ? 'List(s) have been enabled. A refresh will be triggered automatically in the background.'
+                : 'List(s) have been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
             SmartLists.showNotification(refreshMessage, 'info', { html: true });
         }
 
@@ -148,7 +150,9 @@
         // If enabling, show notification about refresh starting
         if (options.actionType === 'enable') {
             var statusLink = SmartLists.createStatusPageLink('status page');
-            var refreshMessage = 'List has been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
+            var refreshMessage = SmartLists.IS_USER_PAGE
+                ? 'List has been enabled. A refresh will be triggered automatically in the background.'
+                : 'List has been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
             SmartLists.showNotification(refreshMessage, 'info', { html: true });
         }
 
@@ -331,11 +335,13 @@
     SmartLists.bulkRefreshPlaylists = async function (page) {
         // Show notification that refresh has started (similar to enable action)
         var statusLink = SmartLists.createStatusPageLink('status page');
-        var refreshMessage = 'Refresh started for selected list(s). Check the ' + statusLink + ' for progress.';
+        var refreshMessage = SmartLists.IS_USER_PAGE
+            ? 'Refresh started for selected list(s). Your lists will be updated in the background.'
+            : 'Refresh started for selected list(s). Check the ' + statusLink + ' for progress.';
         SmartLists.showNotification(refreshMessage, 'info', { html: true });
 
-        // Start aggressive polling on status page to catch the operation
-        if (window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
+        // Start aggressive polling on status page to catch the operation (admin only)
+        if (!SmartLists.IS_USER_PAGE && window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
             window.SmartLists.Status.startAggressivePolling();
         }
 

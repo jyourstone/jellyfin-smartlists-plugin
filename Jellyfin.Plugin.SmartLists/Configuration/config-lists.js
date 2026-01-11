@@ -73,6 +73,14 @@
             return Promise.resolve(cachedName);
         }
 
+        // For user pages, don't call admin-only /users endpoint
+        // Just return a placeholder since users don't need to see other users' names
+        if (SmartLists.IS_USER_PAGE) {
+            const fallback = 'My Playlists';
+            userNameCache.set(normalizedId, fallback);
+            return Promise.resolve(fallback);
+        }
+
         // Load all users and build cache if not already loaded
         return apiClient.ajax({
             type: 'GET',
@@ -183,13 +191,22 @@
 
             // Get selected user ID(s) - collections use single select, playlists use multi-select
             let userIds;
-            if (isCollection) {
-                // Collections: single user
+            if (SmartLists.IS_USER_PAGE) {
+                // User page: always use the current logged-in user
+                const apiClient = SmartLists.getApiClient();
+                const currentUserId = apiClient.getCurrentUserId();
+                // Normalize user ID (remove hyphens and lowercase)
+                userIds = currentUserId ? [normalizeUserId(currentUserId)] : [];
+            } else if (isCollection) {
+                // Admin page - Collections: single user
                 const userId = SmartLists.getElementValue(page, '#playlistUser');
-                userIds = userId ? [userId] : [];
+                // Normalize user ID (remove hyphens and lowercase)
+                userIds = userId ? [normalizeUserId(userId)] : [];
             } else {
-                // Playlists: potentially multiple users
-                userIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
+                // Admin page - Playlists: potentially multiple users
+                const selectedIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
+                // Normalize all user IDs (remove hyphens and lowercase)
+                userIds = selectedIds.map(function(id) { return normalizeUserId(id); });
             }
 
             if (!userIds || userIds.length === 0) {
@@ -253,6 +270,17 @@
             // Add ID if in edit mode (reuse editState from top of function)
             if (editState.editMode && editState.editingPlaylistId) {
                 playlistDto.Id = editState.editingPlaylistId;
+                // Preserve CreatedByUserId from the existing list when updating
+                if (page._editingPlaylistCreatedByUserId) {
+                    playlistDto.CreatedByUserId = page._editingPlaylistCreatedByUserId;
+                }
+            } else {
+                // Only set CreatedByUserId when creating a new list (not when updating)
+                const currentUserId = apiClient.getCurrentUserId();
+                if (currentUserId) {
+                    // Normalize user ID by removing hyphens (consistent with UserIds format)
+                    playlistDto.CreatedByUserId = currentUserId.replace(/-/g, '');
+                }
             }
 
             const requestType = editState.editMode ? 'PUT' : 'POST';
@@ -364,6 +392,9 @@
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 
+        // Clear stored edit state values
+        delete page._editingPlaylistCreatedByUserId;
+
         SmartLists.setElementValue(page, '#playlistName', '');
 
         // Clean up all existing event listeners before clearing rules
@@ -381,16 +412,24 @@
         SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
 
         // Apply all form defaults using shared helper (DRY)
-        const apiClient = SmartLists.getApiClient();
-        apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
-            if (SmartLists.applyFormDefaults) {
-                SmartLists.applyFormDefaults(page, config);
-            }
-        }).catch(function () {
+        // Skip loading config on user pages (admin-only endpoint)
+        if (!SmartLists.IS_USER_PAGE) {
+            const apiClient = SmartLists.getApiClient();
+            apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
+                if (SmartLists.applyFormDefaults) {
+                    SmartLists.applyFormDefaults(page, config);
+                }
+            }).catch(function () {
+                if (SmartLists.applyFallbackDefaults) {
+                    SmartLists.applyFallbackDefaults(page);
+                }
+            });
+        } else {
+            // User page: use fallback defaults
             if (SmartLists.applyFallbackDefaults) {
                 SmartLists.applyFallbackDefaults(page);
             }
-        });
+        }
 
         // Create initial logic group with one rule
         SmartLists.createInitialLogicGroup(page);
@@ -424,6 +463,11 @@
             }
 
             try {
+                // Store CreatedByUserId to preserve it during updates
+                if (playlist.CreatedByUserId) {
+                    page._editingPlaylistCreatedByUserId = playlist.CreatedByUserId;
+                }
+
                 // Determine list type
                 const listType = playlist.Type || 'Playlist';
                 const isCollection = listType === 'Collection';
@@ -904,17 +948,23 @@
     };
 
     SmartLists.notifyRefreshQueued = function (listTypeName, playlistName) {
-        // Show single notification with status page link
+        // Show single notification with status page link (or simple message for user pages)
         var statusLink = SmartLists.createStatusPageLink('status page');
         var message = 'Refresh started';
         if (playlistName) {
             message += ' for ' + (listTypeName || 'list') + ' "' + playlistName + '"';
         }
-        message += '. Check the ' + statusLink + ' for progress.';
+        
+        if (SmartLists.IS_USER_PAGE) {
+            message += '. Your list will be updated in the background.';
+        } else {
+            message += '. Check the ' + statusLink + ' for progress.';
+        }
+        
         SmartLists.showNotification(message, 'info', { html: true });
 
-        // Start aggressive polling on status page to catch the operation
-        if (window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
+        // Start aggressive polling on status page to catch the operation (admin only)
+        if (!SmartLists.IS_USER_PAGE && window.SmartLists && window.SmartLists.Status && window.SmartLists.Status.startAggressivePolling) {
             window.SmartLists.Status.startAggressivePolling();
         }
     };
@@ -1116,8 +1166,9 @@
                         }
 
                         // Check if this rule has a specific user and resolve username
+                        // Skip showing user info on user pages since users only see their own playlists
                         let userInfo = '';
-                        if (rule.UserId && rule.UserId !== '00000000-0000-0000-0000-000000000000') {
+                        if (!SmartLists.IS_USER_PAGE && rule.UserId && rule.UserId !== '00000000-0000-0000-0000-000000000000') {
                             try {
                                 const userName = await SmartLists.resolveUserIdToName(apiClient, rule.UserId);
                                 userInfo = ' for ' + (userName || 'Unknown User');
@@ -1203,7 +1254,10 @@
     };
 
     // ===== GENERATE PLAYLIST CARD HTML =====
-    SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName) {
+    SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName, createdByUserName) {
+        // Dynamically detect if we're on the user page (instead of relying on global flag)
+        const isUserPage = document.querySelector('.SmartListsUserPage') !== null;
+        
         // Determine list type
         const listType = playlist.Type || 'Playlist';
         const isCollection = listType === 'Collection';
@@ -1227,6 +1281,7 @@
 
         // Use the resolved username passed as parameter (for playlists) or libraries (for collections)
         const userName = resolvedUserName || 'Unknown User';
+        const createdBy = createdByUserName || 'Unknown';
         const playlistId = playlist.Id || 'NO_ID';
 
         // Collections are server-wide, no library assignment needed
@@ -1269,6 +1324,7 @@
         const eName = SmartLists.escapeHtml(playlist.Name || '');
         const eFileName = SmartLists.escapeHtml(playlist.FileName || '');
         const eUserName = SmartLists.escapeHtml(userName || '');
+        const eCreatedBy = SmartLists.escapeHtml(createdBy || 'Unknown');
         const eSortName = SmartLists.escapeHtml(sortName);
         const eMaxItems = SmartLists.escapeHtml(maxItemsDisplay);
         const eMaxPlayTime = SmartLists.escapeHtml(maxPlayTimeDisplay);
@@ -1414,14 +1470,30 @@
             jellyfinLinkHtml +
             '</td>' +
             '</tr>' +
-            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
-            '</tr>' +
-            '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
-            '</tr>' +
+            // Hide File property on user pages
+            (!isUserPage ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
+                '</tr>' :
+                ''
+            ) +
+            // Hide User(s) property on user pages
+            (!isUserPage ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
+                '</tr>' :
+                ''
+            ) +
+            // Hide Created By property on user pages
+            (!isUserPage ?
+                '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created By</td>' +
+                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eCreatedBy + '</td>' +
+                '</tr>' :
+                ''
+            ) +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Status</td>' +
             '<td style="padding: 0.5em 0.75em; color: #fff;">' + eStatusDisplayText + '</td>' +
@@ -1509,6 +1581,12 @@
         const apiClient = SmartLists.getApiClient();
         const container = page.querySelector('#playlist-list-container');
 
+        // Guard: Check if container exists
+        if (!container) {
+            console.error('SmartLists: Container #playlist-list-container not found');
+            return;
+        }
+
         // Prevent multiple simultaneous requests
         if (page._loadingPlaylists) {
             return;
@@ -1518,9 +1596,9 @@
         page._loadingPlaylists = true;
 
         // Disable search input while loading
-        SmartLists.setSearchInputState(page, true, 'Loading playlists...');
+        SmartLists.setSearchInputState(page, true, 'Loading lists...');
 
-        container.innerHTML = '<p>Loading playlists...</p>';
+        container.innerHTML = '<p>Loading lists...</p>';
 
         try {
             // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
@@ -1543,44 +1621,55 @@
                 processedPlaylists = [];
             }
 
-            // Check if any playlists were skipped due to corruption
-            // This is a simple heuristic - if there are JSON files but fewer playlists loaded
-            // Note: This won't be 100% accurate but gives users a heads up
-            if (processedPlaylists.length > 0) {
-                console.log('SmartLists: Loaded ' + processedPlaylists.length + ' list(s) successfully');
+            // On user pages, filter out multi-user playlists to prevent users from
+            // editing playlists that would affect other users
+            if (SmartLists.IS_USER_PAGE) {
+                processedPlaylists = processedPlaylists.filter(function (playlist) {
+                    // Only show playlists that have 0 or 1 user
+                    // Multi-user playlists (created by admins) should only be visible/editable by admins
+                    return !playlist.UserPlaylists || playlist.UserPlaylists.length <= 1;
+                });
             }
 
             // Store playlists data for filtering
             page._allPlaylists = processedPlaylists;
 
             // Preload all users to populate cache for user name resolution
-            try {
-                // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
-                const usersResponse = await apiClient.ajax({
-                    type: 'GET',
-                    url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
-                    contentType: 'application/json'
-                });
-                const users = await usersResponse.json();
-
-                // Build cache from all users for user name resolution
-                if (Array.isArray(users)) {
-                    users.forEach(function (user) {
-                        if (user.Id && user.Name) {
-                            // Normalize GUID format when storing in cache
-                            const normalizedId = normalizeUserId(user.Id);
-                            userNameCache.set(normalizedId, user.Name);
-                        }
+            // Skip for user pages (admin-only endpoint)
+            if (!SmartLists.IS_USER_PAGE) {
+                try {
+                    // Note: apiClient.ajax() returns a fetch Response object (not parsed JSON)
+                    const usersResponse = await apiClient.ajax({
+                        type: 'GET',
+                        url: apiClient.getUrl(SmartLists.ENDPOINTS.users),
+                        contentType: 'application/json'
                     });
+                    
+                    if (!usersResponse.ok) {
+                        throw new Error('HTTP ' + usersResponse.status + ': ' + usersResponse.statusText);
+                    }
+                    
+                    const users = await usersResponse.json();
+
+                    // Build cache from all users for user name resolution
+                    if (Array.isArray(users)) {
+                        users.forEach(function (user) {
+                            if (user.Id && user.Name) {
+                                // Normalize GUID format when storing in cache
+                                const normalizedId = normalizeUserId(user.Id);
+                                userNameCache.set(normalizedId, user.Name);
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error('Error preloading users:', err);
+                    // Continue even if user preload fails
                 }
-            } catch (err) {
-                console.error('Error preloading users:', err);
-                // Continue even if user preload fails
             }
 
             try {
-                // Populate user filter dropdown
-                if (SmartLists.populateUserFilter) {
+                // Populate user filter dropdown (skip on user pages - users only see their own lists)
+                if (SmartLists.populateUserFilter && !SmartLists.IS_USER_PAGE) {
                     await SmartLists.populateUserFilter(page, processedPlaylists);
                 }
             } catch (err) {
@@ -1613,11 +1702,17 @@
                     // Resolve user name (both playlists and collections have a User/owner)
                     let resolvedUserName = await SmartLists.resolveUsername(apiClient, playlist);
 
+                    // Resolve CreatedBy username
+                    let createdByUserName = 'Unknown';
+                    if (playlist.CreatedByUserId) {
+                        createdByUserName = await SmartLists.resolveUserIdToName(apiClient, playlist.CreatedByUserId) || 'Unknown';
+                    }
+
                     // Generate detailed rules display using helper function
                     const rulesHtml = await SmartLists.generateRulesHtml(playlist, apiClient);
 
                     // Use helper function to generate playlist HTML (DRY)
-                    html += SmartLists.generatePlaylistCardHtml(playlist, rulesHtml, resolvedUserName);
+                    html += SmartLists.generatePlaylistCardHtml(playlist, rulesHtml, resolvedUserName, createdByUserName);
                 }
                 container.innerHTML = html;
 

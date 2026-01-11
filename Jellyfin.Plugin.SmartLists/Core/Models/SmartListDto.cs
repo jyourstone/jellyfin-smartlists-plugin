@@ -37,6 +37,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? UserId { get; set; }
 
+        /// <summary>
+        /// User ID of the user who created this list
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CreatedByUserId { get; set; }
+
         // Query and filtering
         public List<ExpressionSet> ExpressionSets { get; set; } = [];
         // Order is optional for creation (initialized if not provided)
