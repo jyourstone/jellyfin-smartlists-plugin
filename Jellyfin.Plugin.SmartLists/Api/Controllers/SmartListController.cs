@@ -955,6 +955,26 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingPlaylist.FileName; // Keep the same filename
                         collectionDto.JellyfinCollectionId = null; // Clear old Jellyfin ID
                         
+                        // Ensure UserId is set (required for collections for rule evaluation context)
+                        if (string.IsNullOrEmpty(collectionDto.UserId))
+                        {
+                            // Try to get from existing playlist's UserId first
+                            if (!string.IsNullOrEmpty(existingPlaylist.UserId))
+                            {
+                                collectionDto.UserId = existingPlaylist.UserId;
+                            }
+                            // Otherwise, try to get from first user in UserPlaylists array
+                            else if (existingPlaylist.UserPlaylists != null && existingPlaylist.UserPlaylists.Count > 0)
+                            {
+                                collectionDto.UserId = existingPlaylist.UserPlaylists[0].UserId;
+                            }
+                            // Fallback to CreatedByUserId if available
+                            else if (!string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                            {
+                                collectionDto.UserId = existingPlaylist.CreatedByUserId;
+                            }
+                        }
+                        
                         // Preserve creator information from original playlist
                         if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
                         {

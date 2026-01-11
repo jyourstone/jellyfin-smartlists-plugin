@@ -1096,12 +1096,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return Forbid();
                     }
 
-                    // Convert to SmartPlaylistDto
-                    var playlistDto = list as SmartPlaylistDto;
-                    if (playlistDto == null)
-                    {
-                        return BadRequest(new { message = "Invalid playlist data" });
-                    }
+                    // Convert to SmartPlaylistDto (handle polymorphism/serialization like SmartListController)
+                    var playlistDto = list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!;
 
                     // Preserve the original filename, user ownership, and type
                     playlistDto.FileName = existingPlaylist.FileName;

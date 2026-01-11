@@ -243,9 +243,13 @@
                         return true;
                     }
                     // Search for day names (convert DayOfWeek number to name)
-                    if (schedule.DayOfWeek != null) {
+                    if (schedule.DayOfWeek != null && 
+                        Number.isInteger(schedule.DayOfWeek) && 
+                        schedule.DayOfWeek >= 0 && 
+                        schedule.DayOfWeek <= 6) {
                         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                        if (dayNames[schedule.DayOfWeek].indexOf(searchTerm) !== -1) {
+                        const dayName = dayNames[schedule.DayOfWeek];
+                        if (dayName && dayName.indexOf(searchTerm) !== -1) {
                             return true;
                         }
                     }
