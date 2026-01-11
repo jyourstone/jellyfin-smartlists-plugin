@@ -254,10 +254,14 @@
                         }
                     }
                     // Search for month names
-                    if (schedule.Month != null) {
+                    if (schedule.Month != null && 
+                        Number.isInteger(schedule.Month) && 
+                        schedule.Month >= 1 && 
+                        schedule.Month <= 12) {
                         const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
                                           'july', 'august', 'september', 'october', 'november', 'december'];
-                        if (monthNames[schedule.Month - 1] && monthNames[schedule.Month - 1].indexOf(searchTerm) !== -1) {
+                        const monthName = monthNames[schedule.Month - 1];
+                        if (monthName && monthName.indexOf(searchTerm) !== -1) {
                             return true;
                         }
                     }

@@ -733,34 +733,23 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                     else
                     {
-                        logger.LogWarning("Current user ID {UserId} not found, falling back to first user", currentUserId);
-                        var defaultUser = _userManager.Users.FirstOrDefault();
-                        if (defaultUser != null)
+                        logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager", currentUserId);
+                        return BadRequest(new ProblemDetails
                         {
-                            collection.UserId = defaultUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to first user: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                        }
+                            Title = "Authentication Error",
+                            Detail = "The authenticated user could not be found. Please log out and log back in.",
+                            Status = StatusCodes.Status400BadRequest
+                        });
                     }
                 }
                 else
                 {
-                    logger.LogWarning("Could not determine current user, falling back to first user");
-                    var defaultUser = _userManager.Users.FirstOrDefault();
-                    if (defaultUser != null)
-                    {
-                        collection.UserId = defaultUser.Id.ToString("D");
-                        logger.LogDebug("Set default collection owner to first user: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                    }
-                }
-                
-                if (string.IsNullOrEmpty(collection.UserId))
-                {
-                    logger.LogError("No users found to set as collection owner");
+                    logger.LogError("Could not determine current user for collection creation");
                     return BadRequest(new ProblemDetails
                     {
-                        Title = "Configuration Error",
-                        Detail = "No users found. At least one user must exist to create collections.",
-                        Status = StatusCodes.Status400BadRequest
+                        Title = "Authentication Error",
+                        Detail = "User authentication required. Please ensure you are logged in to create collections.",
+                        Status = StatusCodes.Status401Unauthorized
                     });
                 }
             }
@@ -958,20 +947,55 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         // Ensure UserId is set (required for collections for rule evaluation context)
                         if (string.IsNullOrEmpty(collectionDto.UserId))
                         {
-                            // Try to get from existing playlist's UserId first
+                            // Strategy: prefer the authenticated user if they're a playlist owner,
+                            // otherwise use the playlist's primary owner (first owner from UserPlaylists)
+                            var currentUserId = GetCurrentUserId();
+                            
+                            // Try to get from existing playlist's UserId first (legacy single-user format)
                             if (!string.IsNullOrEmpty(existingPlaylist.UserId))
                             {
                                 collectionDto.UserId = existingPlaylist.UserId;
+                                logger.LogDebug("Set collection owner from playlist's UserId field: {UserId}", existingPlaylist.UserId);
                             }
-                            // Otherwise, try to get from first user in UserPlaylists array
+                            // Check if authenticated user is one of the playlist owners (preferred)
+                            else if (currentUserId != Guid.Empty && 
+                                     existingPlaylist.UserPlaylists != null && 
+                                     existingPlaylist.UserPlaylists.Any(up => Guid.TryParse(up.UserId, out var upId) && upId == currentUserId))
+                            {
+                                collectionDto.UserId = currentUserId.ToString("D");
+                                logger.LogDebug("Set collection owner to authenticated user (who is a playlist owner): {UserId}", currentUserId);
+                            }
+                            // Use the playlist's primary owner (first user in UserPlaylists array)
+                            // Note: This is legitimate - we're using a user who explicitly owns this playlist,
+                            // not an arbitrary system user
                             else if (existingPlaylist.UserPlaylists != null && existingPlaylist.UserPlaylists.Count > 0)
                             {
                                 collectionDto.UserId = existingPlaylist.UserPlaylists[0].UserId;
+                                logger.LogDebug("Set collection owner to playlist's primary owner: {UserId}", collectionDto.UserId);
                             }
                             // Fallback to CreatedByUserId if available
                             else if (!string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
                             {
                                 collectionDto.UserId = existingPlaylist.CreatedByUserId;
+                                logger.LogDebug("Set collection owner from playlist's CreatedByUserId: {UserId}", existingPlaylist.CreatedByUserId);
+                            }
+                            // Last resort: use the currently authenticated user performing the conversion
+                            else if (currentUserId != Guid.Empty)
+                            {
+                                collectionDto.UserId = currentUserId.ToString("D");
+                                logger.LogDebug("Set collection owner to authenticated user performing conversion: {UserId}", currentUserId);
+                            }
+                            
+                            // Validation: if we still don't have a UserId, fail the conversion
+                            if (string.IsNullOrEmpty(collectionDto.UserId))
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: unable to determine owner user ID", existingPlaylist.Name);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Cannot determine collection owner. The playlist has no associated users and you are not authenticated.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
                             }
                         }
                         
@@ -1463,34 +1487,23 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         }
                         else
                         {
-                            logger.LogWarning("Current user ID {UserId} not found during update, falling back to first user", currentUserId);
-                            var defaultUser = _userManager.Users.FirstOrDefault();
-                            if (defaultUser != null)
+                            logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager during update", currentUserId);
+                            return BadRequest(new ProblemDetails
                             {
-                                collection.UserId = defaultUser.Id.ToString("D");
-                                logger.LogDebug("Set default collection owner to first user during update: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                            }
+                                Title = "Authentication Error",
+                                Detail = "The authenticated user could not be found. Please log out and log back in.",
+                                Status = StatusCodes.Status400BadRequest
+                            });
                         }
                     }
                     else
                     {
-                        logger.LogWarning("Could not determine current user during update, falling back to first user");
-                        var defaultUser = _userManager.Users.FirstOrDefault();
-                        if (defaultUser != null)
-                        {
-                            collection.UserId = defaultUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to first user during update: {Username} ({UserId})", defaultUser.Username, defaultUser.Id);
-                        }
-                    }
-                    
-                    if (string.IsNullOrEmpty(collection.UserId))
-                    {
-                        logger.LogError("No users found to set as collection owner during update");
+                        logger.LogError("Could not determine current user during collection update");
                         return BadRequest(new ProblemDetails
                         {
-                            Title = "Configuration Error",
-                            Detail = "No users found. At least one user must exist to update collections.",
-                            Status = StatusCodes.Status400BadRequest
+                            Title = "Authentication Error",
+                            Detail = "User authentication required. Please ensure you are logged in to update collections.",
+                            Status = StatusCodes.Status401Unauthorized
                         });
                     }
                 }

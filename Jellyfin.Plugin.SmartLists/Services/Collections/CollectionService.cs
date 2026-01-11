@@ -836,17 +836,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             
             var baseItemKinds = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger);
             
-            // Use the owner user for the query if provided, otherwise fall back to first user
-            var queryUser = ownerUser ?? _userManager.Users.FirstOrDefault();
-            
-            if (queryUser == null)
+            // Owner user is required for proper permissions and user-specific data
+            if (ownerUser == null)
             {
-                _logger.LogWarning("No users found - cannot query media for collections");
+                _logger.LogError("Owner user is required for GetAllMedia but was not provided");
                 return [];
             }
             
             // Query all items the owner user has access to
-            var query = new InternalItemsQuery(queryUser)
+            var query = new InternalItemsQuery(ownerUser)
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
