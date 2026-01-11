@@ -955,6 +955,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingPlaylist.FileName; // Keep the same filename
                         collectionDto.JellyfinCollectionId = null; // Clear old Jellyfin ID
                         
+                        // Preserve creator information from original playlist
+                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                        {
+                            collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                        }
+                        
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
@@ -1023,6 +1029,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         if (string.IsNullOrEmpty(playlistDto.UserId))
                         {
                             playlistDto.UserId = existingCollection.UserId; // Carry over from collection
+                        }
+                        
+                        // Preserve creator information from original collection
+                        if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                        {
+                            playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
                         }
                         
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved

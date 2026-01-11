@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Jellyfin.Data;
 using Jellyfin.Data.Enums;
@@ -298,23 +299,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (list.Type == Core.Enums.SmartListType.Collection)
                 {
                     // For collections, we need to use SmartCollectionDto
-                    var collectionDto = new SmartCollectionDto
-                    {
-                        Id = list.Id,
-                        Name = list.Name,
-                        Type = Core.Enums.SmartListType.Collection,
-                        UserId = userId.ToString("N"),
-                        MediaTypes = list.MediaTypes,
-                        ExpressionSets = list.ExpressionSets,
-                        Order = list.Order,
-                        Enabled = list.Enabled,
-                        MaxItems = list.MaxItems,
-                        MaxPlayTimeMinutes = list.MaxPlayTimeMinutes,
-                        DateCreated = DateTime.UtcNow,
-                        AutoRefresh = list.AutoRefresh,
-                        Schedules = list.Schedules,
-                        VisibilitySchedules = list.VisibilitySchedules
-                    };
+                    // Use serialization to convert SmartPlaylistDto to SmartCollectionDto, preserving all base class properties
+                    var collectionDto = JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
+                    collectionDto.Type = Core.Enums.SmartListType.Collection;
+                    collectionDto.UserId = userId.ToString("N");
+                    collectionDto.DateCreated = DateTime.UtcNow;
 
                     var collectionStore = _collectionStore;
 
@@ -1109,6 +1098,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     playlistDto.UserId = existingPlaylist.UserId;
                     playlistDto.UserPlaylists = existingPlaylist.UserPlaylists;
                     playlistDto.Type = existingPlaylist.Type; // Preserve original type
+                    
+                    // Preserve creator information if not already set
+                    if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                    {
+                        playlistDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                    }
 
                     // Validate the updated playlist
                     var validationResult = ValidateSmartList(playlistDto);
@@ -1170,24 +1165,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     var collectionDto = list as SmartCollectionDto;
                     if (collectionDto == null && list.Type == Core.Enums.SmartListType.Collection)
                     {
-                        collectionDto = new SmartCollectionDto
-                        {
-                            Id = list.Id,
-                            Name = list.Name,
-                            Type = Core.Enums.SmartListType.Collection,
-                            UserId = existingCollection.UserId,
-                            MediaTypes = list.MediaTypes,
-                            ExpressionSets = list.ExpressionSets,
-                            Order = list.Order,
-                            Enabled = list.Enabled,
-                            MaxItems = list.MaxItems,
-                            MaxPlayTimeMinutes = list.MaxPlayTimeMinutes,
-                            DateCreated = existingCollection.DateCreated,
-                            FileName = existingCollection.FileName,
-                            AutoRefresh = list.AutoRefresh,
-                            Schedules = list.Schedules,
-                            VisibilitySchedules = list.VisibilitySchedules
-                        };
+                        // Use serialization to convert, preserving all base class properties
+                        collectionDto = JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
                     }
 
                     if (collectionDto != null)
@@ -1196,6 +1175,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.FileName = existingCollection.FileName;
                         collectionDto.UserId = existingCollection.UserId;
                         collectionDto.Type = existingCollection.Type; // Preserve original type
+                        
+                        // Preserve creator information if not already set
+                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                        {
+                            collectionDto.CreatedByUserId = existingCollection.CreatedByUserId;
+                        }
 
                         // Validate the updated collection
                         var validationResult = ValidateSmartList(collectionDto);

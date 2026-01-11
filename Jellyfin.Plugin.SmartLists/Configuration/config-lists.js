@@ -195,17 +195,18 @@
                 // User page: always use the current logged-in user
                 const apiClient = SmartLists.getApiClient();
                 const currentUserId = apiClient.getCurrentUserId();
-                // Normalize user ID by removing hyphens
-                userIds = currentUserId ? [currentUserId.replace(/-/g, '')] : [];
+                // Normalize user ID (remove hyphens and lowercase)
+                userIds = currentUserId ? [normalizeUserId(currentUserId)] : [];
             } else if (isCollection) {
                 // Admin page - Collections: single user
                 const userId = SmartLists.getElementValue(page, '#playlistUser');
-                // User ID from dropdown is already normalized (no hyphens from API)
-                userIds = userId ? [userId] : [];
+                // Normalize user ID (remove hyphens and lowercase)
+                userIds = userId ? [normalizeUserId(userId)] : [];
             } else {
                 // Admin page - Playlists: potentially multiple users
-                // User IDs from dropdown are already normalized (no hyphens from API)
-                userIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
+                const selectedIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
+                // Normalize all user IDs (remove hyphens and lowercase)
+                userIds = selectedIds.map(function(id) { return normalizeUserId(id); });
             }
 
             if (!userIds || userIds.length === 0) {
@@ -269,6 +270,10 @@
             // Add ID if in edit mode (reuse editState from top of function)
             if (editState.editMode && editState.editingPlaylistId) {
                 playlistDto.Id = editState.editingPlaylistId;
+                // Preserve CreatedByUserId from the existing list when updating
+                if (page._editingPlaylistCreatedByUserId) {
+                    playlistDto.CreatedByUserId = page._editingPlaylistCreatedByUserId;
+                }
             } else {
                 // Only set CreatedByUserId when creating a new list (not when updating)
                 const currentUserId = apiClient.getCurrentUserId();
@@ -387,6 +392,9 @@
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 
+        // Clear stored edit state values
+        delete page._editingPlaylistCreatedByUserId;
+
         SmartLists.setElementValue(page, '#playlistName', '');
 
         // Clean up all existing event listeners before clearing rules
@@ -455,6 +463,11 @@
             }
 
             try {
+                // Store CreatedByUserId to preserve it during updates
+                if (playlist.CreatedByUserId) {
+                    page._editingPlaylistCreatedByUserId = playlist.CreatedByUserId;
+                }
+
                 // Determine list type
                 const listType = playlist.Type || 'Playlist';
                 const isCollection = listType === 'Collection';
