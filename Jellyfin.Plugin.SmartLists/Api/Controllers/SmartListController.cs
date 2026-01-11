@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
@@ -255,6 +256,46 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 logger.LogError(ex, "Error getting current user ID");
                 return Guid.Empty;
             }
+        }
+
+        /// <summary>
+        /// Validates the current user ID and retrieves the user object.
+        /// Returns an error response if the user ID is invalid or the user is not found.
+        /// </summary>
+        /// <param name="currentUserId">The current user ID to validate</param>
+        /// <param name="errorResult">The error response to return if validation fails</param>
+        /// <param name="operationDescription">Description of the operation for error messages (default: "manage collections")</param>
+        /// <returns>The User object if validation succeeds, null otherwise</returns>
+        private User? ValidateAndGetCurrentUser(Guid currentUserId, out ActionResult? errorResult, string operationDescription = "manage collections")
+        {
+            errorResult = null;
+
+            if (currentUserId == Guid.Empty)
+            {
+                logger.LogError("Could not determine current user for collection operation");
+                errorResult = BadRequest(new ProblemDetails
+                {
+                    Title = "Authentication Error",
+                    Detail = $"User authentication required. Please ensure you are logged in to {operationDescription}.",
+                    Status = StatusCodes.Status401Unauthorized
+                });
+                return null;
+            }
+
+            var currentUser = _userManager.GetUserById(currentUserId);
+            if (currentUser == null)
+            {
+                logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager", currentUserId);
+                errorResult = StatusCode(StatusCodes.Status401Unauthorized, new ProblemDetails
+                {
+                    Title = "Authentication Error",
+                    Detail = "The authenticated user could not be found. Please log out and log back in.",
+                    Status = StatusCodes.Status401Unauthorized
+                });
+                return null;
+            }
+
+            return currentUser;
         }
 
         /// <summary>
@@ -722,36 +763,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 // Default to currently logged-in user
                 var currentUserId = GetCurrentUserId();
-                
-                if (currentUserId != Guid.Empty)
+                var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                if (currentUser == null)
                 {
-                    var currentUser = _userManager.GetUserById(currentUserId);
-                    if (currentUser != null)
-                    {
-                        collection.UserId = currentUser.Id.ToString("D");
-                        logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
-                    }
-                    else
-                    {
-                        logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager", currentUserId);
-                        return BadRequest(new ProblemDetails
-                        {
-                            Title = "Authentication Error",
-                            Detail = "The authenticated user could not be found. Please log out and log back in.",
-                            Status = StatusCodes.Status400BadRequest
-                        });
-                    }
+                    return errorResult!;
                 }
-                else
-                {
-                    logger.LogError("Could not determine current user for collection creation");
-                    return BadRequest(new ProblemDetails
-                    {
-                        Title = "Authentication Error",
-                        Detail = "User authentication required. Please ensure you are logged in to create collections.",
-                        Status = StatusCodes.Status401Unauthorized
-                    });
-                }
+
+                collection.UserId = currentUser.Id.ToString("D");
+                logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
             }
 
             // Ensure Type is set correctly
@@ -997,6 +1016,34 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                     Status = StatusCodes.Status400BadRequest
                                 });
                             }
+
+                            // Normalize + validate resolved owner exists (collections require valid owner context)
+                            if (!Guid.TryParse(collectionDto.UserId, out var resolvedOwnerId) || resolvedOwnerId == Guid.Empty)
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: owner user ID '{UserId}' is not a valid GUID", existingPlaylist.Name, collectionDto.UserId);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Collection owner is not a valid user ID.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+
+                            var resolvedOwnerUser = _userManager.GetUserById(resolvedOwnerId);
+                            if (resolvedOwnerUser == null)
+                            {
+                                logger.LogError("Cannot convert playlist '{Name}' to collection: owner user {UserId} not found in user manager", existingPlaylist.Name, resolvedOwnerId);
+                                return BadRequest(new ProblemDetails
+                                {
+                                    Title = "Conversion Error",
+                                    Detail = "Collection owner user not found. The user may have been deleted. Please choose a valid owner.",
+                                    Status = StatusCodes.Status400BadRequest
+                                });
+                            }
+
+                            // Prefer a single canonical persisted format for collections
+                            collectionDto.UserId = resolvedOwnerId.ToString("D");
+                            logger.LogDebug("Validated and normalized collection owner: {Username} ({UserId})", resolvedOwnerUser.Username, collectionDto.UserId);
                         }
                         
                         // Preserve creator information from original playlist
@@ -1476,36 +1523,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     // Default to currently logged-in user
                     var currentUserId = GetCurrentUserId();
-                    
-                    if (currentUserId != Guid.Empty)
+                    var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                    if (currentUser == null)
                     {
-                        var currentUser = _userManager.GetUserById(currentUserId);
-                        if (currentUser != null)
-                        {
-                            collection.UserId = currentUser.Id.ToString("D");
-                            logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
-                        }
-                        else
-                        {
-                            logger.LogError("Current user ID {UserId} exists in claims but was not found in user manager during update", currentUserId);
-                            return BadRequest(new ProblemDetails
-                            {
-                                Title = "Authentication Error",
-                                Detail = "The authenticated user could not be found. Please log out and log back in.",
-                                Status = StatusCodes.Status400BadRequest
-                            });
-                        }
+                        return errorResult!;
                     }
-                    else
-                    {
-                        logger.LogError("Could not determine current user during collection update");
-                        return BadRequest(new ProblemDetails
-                        {
-                            Title = "Authentication Error",
-                            Detail = "User authentication required. Please ensure you are logged in to update collections.",
-                            Status = StatusCodes.Status401Unauthorized
-                        });
-                    }
+
+                    collection.UserId = currentUser.Id.ToString("D");
+                    logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
                 }
 
                 // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)

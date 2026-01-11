@@ -1086,6 +1086,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 // Determine if it's a playlist or collection and update accordingly
                 var playlistStore = _playlistStore;
+                var collectionStore = _collectionStore;
                 var existingPlaylist = await playlistStore.GetByIdAsync(guidId);
                 
                 if (existingPlaylist != null)
@@ -1096,14 +1097,91 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return Forbid();
                     }
 
-                    // Convert to SmartPlaylistDto (handle polymorphism/serialization like SmartListController)
+                    // Handle type conversion: playlist → collection
+                    if (list.Type == Core.Enums.SmartListType.Collection)
+                    {
+                        // Check collection management permission before converting
+                        if (!CanUserManageCollections())
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new 
+                            { 
+                                message = "You do not have permission to create collections. Contact your administrator to grant the 'Allow this user to manage collections' permission." 
+                            });
+                        }
+
+                        _logger.LogInformation("User {UserId} converting playlist '{Name}' to collection", userId, existingPlaylist.Name);
+                        
+                        // Convert to collection DTO
+                        var collectionDto = list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
+                        collectionDto.Id = id;
+                        collectionDto.FileName = existingPlaylist.FileName;
+                        collectionDto.JellyfinCollectionId = null;
+                        collectionDto.Type = Core.Enums.SmartListType.Collection;
+                        
+                        // Set owner to current user (they're converting their own playlist)
+                        collectionDto.UserId = userId.ToString("D");
+                        
+                        // Preserve original creation timestamp
+                        if (existingPlaylist.DateCreated.HasValue)
+                        {
+                            collectionDto.DateCreated = existingPlaylist.DateCreated;
+                        }
+                        
+                        // Preserve creator information
+                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+                        {
+                            collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
+                        }
+
+                        // Validate the collection
+                        var conversionValidationResult = ValidateSmartList(collectionDto);
+                        if (!conversionValidationResult.IsValid)
+                        {
+                            _logger.LogWarning("Validation failed for user {UserId} converting playlist to collection '{Name}': {Error}", 
+                                userId, collectionDto.Name, conversionValidationResult.ErrorMessage);
+                            return BadRequest(new { error = conversionValidationResult.ErrorMessage });
+                        }
+                        
+                        // Delete old playlist
+                        await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
+                        await playlistStore.DeleteAsync(guidId);
+                        
+                        // Save as collection
+                        await collectionStore.SaveAsync(collectionDto);
+                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+                        SmartList.ClearRuleCache(_logger);
+                        
+                        // Enqueue refresh if enabled
+                        if (collectionDto.Enabled)
+                        {
+                            try
+                            {
+                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
+                            }
+                            catch (Exception enqueueEx)
+                            {
+                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted collection '{Name}', but conversion succeeded", collectionDto.Name);
+                            }
+                        }
+                        
+                        _logger.LogInformation("User {UserId} successfully converted playlist to collection '{Name}'", userId, collectionDto.Name);
+                        return Ok(collectionDto);
+                    }
+
+                    // Normal playlist update - Convert to SmartPlaylistDto
                     var playlistDto = list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!;
 
                     // Preserve the original filename, user ownership, and type
                     playlistDto.FileName = existingPlaylist.FileName;
                     playlistDto.UserId = existingPlaylist.UserId;
                     playlistDto.UserPlaylists = existingPlaylist.UserPlaylists;
-                    playlistDto.Type = existingPlaylist.Type; // Preserve original type
+                    playlistDto.Type = Core.Enums.SmartListType.Playlist;
+                    
+                    // Preserve original creation timestamp
+                    if (existingPlaylist.DateCreated.HasValue)
+                    {
+                        playlistDto.DateCreated = existingPlaylist.DateCreated;
+                    }
                     
                     // Preserve creator information if not already set
                     if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
@@ -1147,7 +1225,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Try collection
-                var collectionStore = _collectionStore;
                 var existingCollection = await collectionStore.GetByIdAsync(guidId);
                 
                 if (existingCollection != null)
@@ -1158,7 +1235,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return Forbid();
                     }
 
-                    // Enforce collection management permission
+                    // Enforce collection management permission (for both updating and converting)
                     if (!CanUserManageCollections())
                     {
                         return StatusCode(StatusCodes.Status403Forbidden, new 
@@ -1167,87 +1244,153 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         });
                     }
 
-                    // Convert to SmartCollectionDto if needed
-                    var collectionDto = list as SmartCollectionDto;
-                    if (collectionDto == null && list.Type == Core.Enums.SmartListType.Collection)
+                    // Handle type conversion: collection → playlist
+                    if (list.Type == Core.Enums.SmartListType.Playlist)
                     {
-                        // Use serialization to convert, preserving all base class properties
-                        collectionDto = JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
-                    }
-
-                    if (collectionDto != null)
-                    {
-                        // Preserve the original filename, user ownership, and type
-                        collectionDto.FileName = existingCollection.FileName;
-                        collectionDto.UserId = existingCollection.UserId;
-                        collectionDto.Type = existingCollection.Type; // Preserve original type
+                        _logger.LogInformation("User {UserId} converting collection '{Name}' to playlist", userId, existingCollection.Name);
                         
-                        // Preserve creator information if not already set
-                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                        // Convert to playlist DTO
+                        var playlistDto = list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!;
+                        playlistDto.Id = id;
+                        playlistDto.FileName = existingCollection.FileName;
+                        playlistDto.JellyfinPlaylistId = null;
+                        playlistDto.Type = Core.Enums.SmartListType.Playlist;
+                        
+                        // Set up UserPlaylists for current user
+                        playlistDto.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
                         {
-                            collectionDto.CreatedByUserId = existingCollection.CreatedByUserId;
-                        }
-
-                        // Validate the updated collection
-                        var validationResult = ValidateSmartList(collectionDto);
-                        if (!validationResult.IsValid)
-                        {
-                            _logger.LogWarning("Validation failed for user {UserId} updating collection '{Name}': {Error}", 
-                                userId, collectionDto.Name, validationResult.ErrorMessage);
-                            return BadRequest(new { error = validationResult.ErrorMessage });
-                        }
-
-                        // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
-                        // Only check if the name is changing
-                        bool nameChanging = !string.Equals(existingCollection.Name, collectionDto.Name, StringComparison.OrdinalIgnoreCase);
-                        if (nameChanging)
-                        {
-                            var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
-                            var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
-                            var duplicateCollection = allCollections.FirstOrDefault(c => 
-                                c.Id != collectionDto.Id && 
-                                string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
-                            
-                            if (duplicateCollection != null)
+                            new SmartPlaylistDto.UserPlaylistMapping
                             {
-                                _logger.LogWarning("User {UserId} cannot update collection '{OldName}' to '{NewName}' - a collection with this name already exists", 
-                                    userId, existingCollection.Name, collectionDto.Name);
-                                return BadRequest(new ProblemDetails
-                                {
-                                    Title = "Validation Error",
-                                    Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
-                                    Status = StatusCodes.Status400BadRequest
-                                });
+                                UserId = normalizedUserId,
+                                JellyfinPlaylistId = null
                             }
+                        };
+                        playlistDto.UserId = normalizedUserId; // For backwards compatibility
+                        
+                        // Preserve original creation timestamp
+                        if (existingCollection.DateCreated.HasValue)
+                        {
+                            playlistDto.DateCreated = existingCollection.DateCreated;
+                        }
+                        
+                        // Preserve creator information
+                        if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                        {
+                            playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
                         }
 
-                        // Save updated collection
-                        await collectionStore.SaveAsync(collectionDto);
+                        // Validate the playlist
+                        var playlistConversionValidationResult = ValidateSmartList(playlistDto);
+                        if (!playlistConversionValidationResult.IsValid)
+                        {
+                            _logger.LogWarning("Validation failed for user {UserId} converting collection to playlist '{Name}': {Error}", 
+                                userId, playlistDto.Name, playlistConversionValidationResult.ErrorMessage);
+                            return BadRequest(new { error = playlistConversionValidationResult.ErrorMessage });
+                        }
                         
-                        // Update cache
-                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
-
-                        // Clear rule cache
+                        // Delete old collection
+                        await _collectionService.DeleteAsync(existingCollection);
+                        await collectionStore.DeleteAsync(guidId);
+                        
+                        // Save as playlist
+                        await playlistStore.SaveAsync(playlistDto);
+                        Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
                         SmartList.ClearRuleCache(_logger);
-
+                        
                         // Enqueue refresh if enabled
-                        if (collectionDto.Enabled)
+                        if (playlistDto.Enabled)
                         {
                             try
                             {
-                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
+                                EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, normalizedUserId);
                             }
                             catch (Exception enqueueEx)
                             {
-                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for updated collection '{Name}', but update succeeded", collectionDto.Name);
+                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted playlist '{Name}', but conversion succeeded", playlistDto.Name);
                             }
                         }
-
-                        _logger.LogInformation("User {UserId} updated smart collection '{Name}'", userId, collectionDto.Name);
-                        return Ok(collectionDto);
+                        
+                        _logger.LogInformation("User {UserId} successfully converted collection to playlist '{Name}'", userId, playlistDto.Name);
+                        return Ok(playlistDto);
                     }
 
-                    return BadRequest(new { message = "Invalid collection data" });
+                    // Normal collection update - Convert to SmartCollectionDto
+                    var collectionDto = list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
+
+                    // Preserve the original filename, user ownership, and type
+                    collectionDto.FileName = existingCollection.FileName;
+                    collectionDto.UserId = existingCollection.UserId;
+                    collectionDto.Type = Core.Enums.SmartListType.Collection;
+                    
+                    // Preserve original creation timestamp
+                    if (existingCollection.DateCreated.HasValue)
+                    {
+                        collectionDto.DateCreated = existingCollection.DateCreated;
+                    }
+                    
+                    // Preserve creator information if not already set
+                    if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+                    {
+                        collectionDto.CreatedByUserId = existingCollection.CreatedByUserId;
+                    }
+
+                    // Validate the updated collection
+                    var validationResult = ValidateSmartList(collectionDto);
+                    if (!validationResult.IsValid)
+                    {
+                        _logger.LogWarning("Validation failed for user {UserId} updating collection '{Name}': {Error}", 
+                            userId, collectionDto.Name, validationResult.ErrorMessage);
+                        return BadRequest(new { error = validationResult.ErrorMessage });
+                    }
+
+                    // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
+                    // Only check if the name is changing
+                    bool nameChanging = !string.Equals(existingCollection.Name, collectionDto.Name, StringComparison.OrdinalIgnoreCase);
+                    if (nameChanging)
+                    {
+                        var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
+                        var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                        var duplicateCollection = allCollections.FirstOrDefault(c => 
+                            c.Id != collectionDto.Id && 
+                            string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
+                        
+                        if (duplicateCollection != null)
+                        {
+                            _logger.LogWarning("User {UserId} cannot update collection '{OldName}' to '{NewName}' - a collection with this name already exists", 
+                                userId, existingCollection.Name, collectionDto.Name);
+                            return BadRequest(new ProblemDetails
+                            {
+                                Title = "Validation Error",
+                                Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
+                                Status = StatusCodes.Status400BadRequest
+                            });
+                        }
+                    }
+
+                    // Save updated collection
+                    await collectionStore.SaveAsync(collectionDto);
+                    
+                    // Update cache
+                    Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+
+                    // Clear rule cache
+                    SmartList.ClearRuleCache(_logger);
+
+                    // Enqueue refresh if enabled
+                    if (collectionDto.Enabled)
+                    {
+                        try
+                        {
+                            EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
+                        }
+                        catch (Exception enqueueEx)
+                        {
+                            _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for updated collection '{Name}', but update succeeded", collectionDto.Name);
+                        }
+                    }
+
+                    _logger.LogInformation("User {UserId} updated smart collection '{Name}'", userId, collectionDto.Name);
+                    return Ok(collectionDto);
                 }
 
                 return NotFound(new { message = "Smart list not found" });
