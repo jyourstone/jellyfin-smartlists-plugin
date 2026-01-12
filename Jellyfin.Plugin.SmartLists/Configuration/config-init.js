@@ -7,6 +7,25 @@
         SmartLists = window.SmartLists;
     }
 
+    // ===== SAFE SORT BOX ADDITION =====
+    // Helper to safely add a sort box, handling race conditions with config-sorts.js loading
+    SmartLists.safeAddSortBox = function(page, sortData, retryCount) {
+        retryCount = retryCount || 0;
+        const maxRetries = 10;
+        const retryDelay = 100; // ms
+
+        if (typeof SmartLists.addSortBox === 'function') {
+            SmartLists.addSortBox(page, sortData);
+        } else if (retryCount < maxRetries) {
+            // config-sorts.js hasn't loaded yet, retry after a short delay
+            setTimeout(function() {
+                SmartLists.safeAddSortBox(page, sortData, retryCount + 1);
+            }, retryDelay);
+        } else {
+            console.warn('SmartLists: addSortBox function not available after retries. config-sorts.js may not have loaded.');
+        }
+    };
+
     // ===== PAGE INITIALIZATION =====
     SmartLists.initPage = function (page) {
         // Check if this specific page is already initialized
@@ -213,7 +232,7 @@
                 // Use default values for user pages
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.addSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
                 }
                 return Promise.resolve();
             }
@@ -225,13 +244,13 @@
             return apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.addSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
                 }
             }).catch(function () {
                 // Fallback to default values if config load fails
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.addSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
                 }
             });
         }
@@ -402,7 +421,7 @@
         SmartLists.initializeSortSystem(page);
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-            SmartLists.addSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
+            SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
         }
 
         // Reset user dropdown to currently logged-in user
@@ -431,7 +450,10 @@
 
         // Reinitialize sort system with fallback defaults
         SmartLists.initializeSortSystem(page);
-        SmartLists.addSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+        const sortsContainer = page.querySelector('#sorts-container');
+        if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
+            SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+        }
     };
 
     SmartLists.populateFormDefaults = function (page) {
