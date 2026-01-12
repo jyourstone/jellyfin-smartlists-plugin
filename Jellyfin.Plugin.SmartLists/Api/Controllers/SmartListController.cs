@@ -2195,6 +2195,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Validate that the playlist is enabled before allowing refresh
                     if (playlist.Enabled == false)
                     {
+                        // Start operation to properly track this failed attempt
+                        _refreshStatusService?.StartOperation(
+                            id,
+                            playlist.Name,
+                            Core.Enums.SmartListType.Playlist,
+                            Core.Enums.RefreshTriggerType.Manual,
+                            0);
+                        
                         var duration = _refreshStatusService?.GetElapsedTime(id) ?? TimeSpan.Zero;
                         _refreshStatusService?.CompleteOperation(id, false, duration, "Cannot refresh disabled list");
                         
@@ -2230,6 +2238,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Validate that the collection is enabled before allowing refresh
                     if (collection.Enabled == false)
                     {
+                        // Start operation to properly track this failed attempt
+                        _refreshStatusService?.StartOperation(
+                            id,
+                            collection.Name,
+                            Core.Enums.SmartListType.Collection,
+                            Core.Enums.RefreshTriggerType.Manual,
+                            0);
+                        
                         var duration = _refreshStatusService?.GetElapsedTime(id) ?? TimeSpan.Zero;
                         _refreshStatusService?.CompleteOperation(id, false, duration, "Cannot refresh disabled list");
                         
