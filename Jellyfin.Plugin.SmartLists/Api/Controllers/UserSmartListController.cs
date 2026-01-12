@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Jellyfin.Data;
 using Jellyfin.Data.Enums;
@@ -282,14 +281,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Override user selection - always use current user
                 // Use "N" format to exclude hyphens (consistent with admin page and API responses)
                 list.UserId = userId.ToString("N");
-                list.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
-                {
+                list.UserPlaylists =
+                [
                     new SmartPlaylistDto.UserPlaylistMapping
                     {
                         UserId = userId.ToString("N"),
                         JellyfinPlaylistId = null
                     }
-                };
+                ];
 
                 // Validate required fields (after input validation)
                 if (string.IsNullOrWhiteSpace(list.Name))
@@ -627,14 +626,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     MaxItems = 0,
                     MaxPlayTimeMinutes = 0,
                     Public = false,
-                    UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
-                    {
+                    UserPlaylists =
+                    [
                         new SmartPlaylistDto.UserPlaylistMapping
                         {
                             UserId = userId.ToString("N"),
                             JellyfinPlaylistId = null
                         }
-                    }
+                    ]
                 };
 
                 // Validate the complete DTO with security checks
@@ -793,9 +792,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             public string Name { get; set; } = string.Empty;
 
             [Required]
-            public List<string> MediaTypes { get; set; } = new();
+            public List<string> MediaTypes { get; set; } = [];
 
-            public List<SimpleRuleGroup> Rules { get; set; } = new();
+            public List<SimpleRuleGroup> Rules { get; set; } = [];
         }
 
         /// <summary>
@@ -805,7 +804,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         public class SimpleRuleGroup
         {
-            public List<SimpleRule> Rules { get; set; } = new();
+            public List<SimpleRule> Rules { get; set; } = [];
         }
 
         /// <summary>
@@ -1656,14 +1655,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             playlistDto.Type = Core.Enums.SmartListType.Playlist;
             
             // Set up UserPlaylists for current user
-            playlistDto.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
-            {
+            playlistDto.UserPlaylists =
+            [
                 new SmartPlaylistDto.UserPlaylistMapping
                 {
                     UserId = normalizedUserId,
                     JellyfinPlaylistId = null
                 }
-            };
+            ];
             playlistDto.UserId = normalizedUserId; // For backwards compatibility
             
             // Preserve original creation timestamp
