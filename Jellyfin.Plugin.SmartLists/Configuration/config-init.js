@@ -278,9 +278,26 @@
     };
 
     // ===== MEDIA TYPE CHECKBOXES GENERATION =====
-    SmartLists.generateMediaTypeCheckboxes = function (page) {
+    SmartLists.generateMediaTypeCheckboxes = function (page, retryCount) {
+        retryCount = retryCount || 0;
+        const maxRetries = 10;
+
         const container = page.querySelector('#mediaTypesMultiSelect');
         if (!container) return;
+
+        // Check if required dependencies are loaded
+        if (typeof SmartLists.createAbortController !== 'function' || 
+            typeof SmartLists.initializeMultiSelect !== 'function') {
+            if (retryCount < maxRetries) {
+                // Retry after a short delay to allow dependencies to load
+                setTimeout(function() {
+                    SmartLists.generateMediaTypeCheckboxes(page, retryCount + 1);
+                }, 100);
+            } else {
+                console.warn('SmartLists: Required functions not available after retries. Dependencies may not have loaded.');
+            }
+            return;
+        }
 
         // Debounce timer and AbortController for media type updates (shared per page)
         page._mediaTypeUpdateTimer = page._mediaTypeUpdateTimer || null;
@@ -407,10 +424,14 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
-        SmartLists.initializeScheduleSystem(page);
+        if (typeof SmartLists.initializeScheduleSystem === 'function') {
+            SmartLists.initializeScheduleSystem(page);
+        }
 
         // Reinitialize visibility schedule system
-        SmartLists.initializeVisibilityScheduleSystem(page);
+        if (typeof SmartLists.initializeVisibilityScheduleSystem === 'function') {
+            SmartLists.initializeVisibilityScheduleSystem(page);
+        }
 
         // Apply default schedule if configured
         if (SmartLists.applyDefaultScheduleFromConfig) {
@@ -418,7 +439,9 @@
         }
 
         // Reinitialize sort system with defaults
-        SmartLists.initializeSortSystem(page);
+        if (typeof SmartLists.initializeSortSystem === 'function') {
+            SmartLists.initializeSortSystem(page);
+        }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
@@ -443,13 +466,19 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
-        SmartLists.initializeScheduleSystem(page);
+        if (typeof SmartLists.initializeScheduleSystem === 'function') {
+            SmartLists.initializeScheduleSystem(page);
+        }
 
         // Reinitialize visibility schedule system with fallback defaults
-        SmartLists.initializeVisibilityScheduleSystem(page);
+        if (typeof SmartLists.initializeVisibilityScheduleSystem === 'function') {
+            SmartLists.initializeVisibilityScheduleSystem(page);
+        }
 
         // Reinitialize sort system with fallback defaults
-        SmartLists.initializeSortSystem(page);
+        if (typeof SmartLists.initializeSortSystem === 'function') {
+            SmartLists.initializeSortSystem(page);
+        }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
@@ -743,14 +772,15 @@
             // Load playlist list with retry logic to handle script loading race conditions
             var loadListWithRetry = function(retryCount) {
                 retryCount = retryCount || 0;
+                const maxRetries = 10;
                 if (SmartLists.loadPlaylistList) {
                     SmartLists.loadPlaylistList(page);
-                } else if (retryCount < 5) {
+                } else if (retryCount < maxRetries) {
                     setTimeout(function() {
                         loadListWithRetry(retryCount + 1);
-                    }, 50); // 50ms delay between retries
+                    }, 100); // 100ms delay between retries
                 } else {
-                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after 5 retries');
+                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after retries');
                     // Show error message to user
                     var container = page.querySelector('#playlist-list-container');
                     if (container) {
@@ -781,9 +811,25 @@
         SmartLists.updateUrl(tabId);
     };
 
-    SmartLists.setupNavigation = function (page) {
+    SmartLists.setupNavigation = function (page, retryCount) {
+        retryCount = retryCount || 0;
+        const maxRetries = 10;
+
         var navContainer = page.querySelector('.localnav');
         if (!navContainer) {
+            return;
+        }
+
+        // Check if required dependencies are loaded
+        if (typeof SmartLists.createAbortController !== 'function') {
+            if (retryCount < maxRetries) {
+                // Retry after a short delay to allow config-core.js to load
+                setTimeout(function() {
+                    SmartLists.setupNavigation(page, retryCount + 1);
+                }, 100);
+            } else {
+                console.warn('SmartLists: createAbortController not available after retries. config-core.js may not have loaded.');
+            }
             return;
         }
 
@@ -856,7 +902,23 @@
     };
 
     // ===== EVENT LISTENERS SETUP =====
-    SmartLists.setupEventListeners = function (page) {
+    SmartLists.setupEventListeners = function (page, retryCount) {
+        retryCount = retryCount || 0;
+        const maxRetries = 10;
+
+        // Check if required dependencies are loaded
+        if (typeof SmartLists.createAbortController !== 'function') {
+            if (retryCount < maxRetries) {
+                // Retry after a short delay to allow config-core.js to load
+                setTimeout(function() {
+                    SmartLists.setupEventListeners(page, retryCount + 1);
+                }, 100);
+            } else {
+                console.warn('SmartLists: createAbortController not available after retries. config-core.js may not have loaded.');
+            }
+            return;
+        }
+
         // Create AbortController for page event listeners
         const pageAbortController = SmartLists.createAbortController();
         const pageSignal = pageAbortController.signal;
@@ -1887,11 +1949,53 @@
 // Immediate initialization check - runs as soon as this script loads
 // This is necessary because DOMContentLoaded may have already fired
 (function() {
-    var checkAndInit = function() {
-        var page = document.querySelector('.SmartListsConfigurationPage');
-        if (page && !page._pageInitialized) {
-            window.SmartLists.initPage(page);
+    // Check if all required dependencies are loaded
+    var checkDependencies = function() {
+        var requiredFunctions = [
+            'createAbortController',           // config-core.js
+            'generateAutoRefreshOptions',      // config-formatters.js
+            'initializeScheduleSystem',        // config-schedules.js
+            'initializeVisibilityScheduleSystem', // config-schedules.js
+            'addSortBox',                      // config-sorts.js
+            'initializeSortSystem',            // config-sorts.js
+            'initializeMultiSelect',           // config-multi-select.js
+            'updateAllFieldSelects'            // config-rules.js
+        ];
+        
+        for (var i = 0; i < requiredFunctions.length; i++) {
+            if (typeof window.SmartLists[requiredFunctions[i]] !== 'function') {
+                return false;
+            }
         }
+        return true;
+    };
+    
+    var checkAndInit = function(retryCount) {
+        retryCount = retryCount || 0;
+        var maxRetries = 30; // 30 retries × 100ms = 3 seconds total
+        
+        var page = document.querySelector('.SmartListsConfigurationPage');
+        if (!page || page._pageInitialized) {
+            return;
+        }
+        
+        // Check if all dependencies are loaded
+        if (!checkDependencies()) {
+            if (retryCount < maxRetries) {
+                // Retry after a short delay to allow all scripts to load
+                setTimeout(function() {
+                    checkAndInit(retryCount + 1);
+                }, 100);
+            } else {
+                console.error('SmartLists: Required dependencies not loaded after 3 seconds. Some features may not work correctly.');
+                // Initialize anyway to at least show the page
+                window.SmartLists.initPage(page);
+            }
+            return;
+        }
+        
+        // All dependencies loaded, proceed with initialization
+        window.SmartLists.initPage(page);
     };
     
     // Try immediately if DOM is already ready
