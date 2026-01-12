@@ -278,26 +278,9 @@
     };
 
     // ===== MEDIA TYPE CHECKBOXES GENERATION =====
-    SmartLists.generateMediaTypeCheckboxes = function (page, retryCount) {
-        retryCount = retryCount || 0;
-        const maxRetries = 10;
-
+    SmartLists.generateMediaTypeCheckboxes = function (page) {
         const container = page.querySelector('#mediaTypesMultiSelect');
         if (!container) return;
-
-        // Check if required dependencies are loaded
-        if (typeof SmartLists.createAbortController !== 'function' || 
-            typeof SmartLists.initializeMultiSelect !== 'function') {
-            if (retryCount < maxRetries) {
-                // Retry after a short delay to allow dependencies to load
-                setTimeout(function() {
-                    SmartLists.generateMediaTypeCheckboxes(page, retryCount + 1);
-                }, 100);
-            } else {
-                console.warn('SmartLists: Required functions not available after retries. Dependencies may not have loaded.');
-            }
-            return;
-        }
 
         // Debounce timer and AbortController for media type updates (shared per page)
         page._mediaTypeUpdateTimer = page._mediaTypeUpdateTimer || null;
@@ -811,25 +794,9 @@
         SmartLists.updateUrl(tabId);
     };
 
-    SmartLists.setupNavigation = function (page, retryCount) {
-        retryCount = retryCount || 0;
-        const maxRetries = 10;
-
+    SmartLists.setupNavigation = function (page) {
         var navContainer = page.querySelector('.localnav');
         if (!navContainer) {
-            return;
-        }
-
-        // Check if required dependencies are loaded
-        if (typeof SmartLists.createAbortController !== 'function') {
-            if (retryCount < maxRetries) {
-                // Retry after a short delay to allow config-core.js to load
-                setTimeout(function() {
-                    SmartLists.setupNavigation(page, retryCount + 1);
-                }, 100);
-            } else {
-                console.warn('SmartLists: createAbortController not available after retries. config-core.js may not have loaded.');
-            }
             return;
         }
 
@@ -902,23 +869,7 @@
     };
 
     // ===== EVENT LISTENERS SETUP =====
-    SmartLists.setupEventListeners = function (page, retryCount) {
-        retryCount = retryCount || 0;
-        const maxRetries = 10;
-
-        // Check if required dependencies are loaded
-        if (typeof SmartLists.createAbortController !== 'function') {
-            if (retryCount < maxRetries) {
-                // Retry after a short delay to allow config-core.js to load
-                setTimeout(function() {
-                    SmartLists.setupEventListeners(page, retryCount + 1);
-                }, 100);
-            } else {
-                console.warn('SmartLists: createAbortController not available after retries. config-core.js may not have loaded.');
-            }
-            return;
-        }
-
+    SmartLists.setupEventListeners = function (page) {
         // Create AbortController for page event listeners
         const pageAbortController = SmartLists.createAbortController();
         const pageSignal = pageAbortController.signal;
@@ -1947,7 +1898,6 @@
 })(window.SmartLists = window.SmartLists || {});
 
 // Immediate initialization check - runs as soon as this script loads
-// This is necessary because DOMContentLoaded may have already fired
 (function() {
     // Check if all required dependencies are loaded
     var checkDependencies = function() {
@@ -1970,12 +1920,24 @@
         return true;
     };
     
-    var checkAndInit = function(retryCount) {
+    var checkAndInit = function(retryCount, targetPage) {
         retryCount = retryCount || 0;
         var maxRetries = 30; // 30 retries × 100ms = 3 seconds total
         
-        var page = document.querySelector('.SmartListsConfigurationPage');
-        if (!page || page._pageInitialized) {
+        // Use the specific page element if provided, otherwise find it
+        var page = targetPage || document.querySelector('.SmartListsConfigurationPage');
+        if (!page) {
+            return;
+        }
+        
+        // Check if this specific page element is already initialized
+        if (page._pageInitialized) {
+            return;
+        }
+        
+        // For user pages loaded via Plugin Pages, ensure the page is actually visible/attached
+        // This prevents initializing stale elements from previous navigations
+        if (!document.body.contains(page)) {
             return;
         }
         
@@ -1984,7 +1946,7 @@
             if (retryCount < maxRetries) {
                 // Retry after a short delay to allow all scripts to load
                 setTimeout(function() {
-                    checkAndInit(retryCount + 1);
+                    checkAndInit(retryCount + 1, page);
                 }, 100);
             } else {
                 console.error('SmartLists: Required dependencies not loaded after 3 seconds. Some features may not work correctly.');
@@ -1998,10 +1960,69 @@
         window.SmartLists.initPage(page);
     };
     
-    // Try immediately if DOM is already ready
+    // For Plugin Pages plugin - watch for when content is dynamically inserted into the DOM
+    var setupMutationObserver = function() {
+        var MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
+        if (!MutationObserver) {
+            return;
+        }
+        
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                    for (var i = 0; i < mutation.addedNodes.length; i++) {
+                        var node = mutation.addedNodes[i];
+                        var pageElement = null;
+                        
+                        // Check if our page was added
+                        if (node.classList && node.classList.contains('SmartListsConfigurationPage')) {
+                            pageElement = node;
+                        }
+                        // Also check descendants in case page is nested
+                        else if (node.querySelector && node.querySelector('.SmartListsConfigurationPage')) {
+                            pageElement = node.querySelector('.SmartListsConfigurationPage');
+                        }
+                        
+                        if (pageElement) {
+                            // Pass the specific page element to checkAndInit
+                            checkAndInit(0, pageElement);
+                            return;
+                        }
+                    }
+                }
+            });
+        });
+        
+        // Observe the document body for added nodes
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    };
+    
+    // Standard page events for normal Jellyfin page navigation
+    document.addEventListener('pageshow', function (e) {
+        var page = e.target;
+        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
+            checkAndInit(0, page);
+        }
+    });
+    
+    document.addEventListener('viewshow', function (e) {
+        var page = e.detail && e.detail.element;
+        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
+            checkAndInit(0, page);
+        }
+    });
+    
+    // Try immediate initialization for standard page loads
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', checkAndInit);
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAndInit();
+            setupMutationObserver();
+        });
     } else {
         checkAndInit();
+        setupMutationObserver();
     }
 })();
