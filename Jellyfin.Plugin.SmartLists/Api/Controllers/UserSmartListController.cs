@@ -1416,6 +1416,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     id,
                     playlist =>
                     {
+                        // Validate that the playlist is enabled before allowing refresh
+                        if (playlist.Enabled == false)
+                        {
+                            _logger.LogWarning("User {UserId} attempted to refresh disabled playlist '{Name}'", userId, playlist.Name);
+                            return Task.FromResult<ActionResult>(BadRequest(new { message = $"Cannot refresh disabled playlist '{playlist.Name}'. Please enable the playlist first." }));
+                        }
+                        
                         try
                         {
                             EnqueueRefreshOperation(playlist.Id, playlist.Name, playlist.Type, playlist, normalizedUserId);
@@ -1430,6 +1437,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     },
                     collection =>
                     {
+                        // Validate that the collection is enabled before allowing refresh
+                        if (collection.Enabled == false)
+                        {
+                            _logger.LogWarning("User {UserId} attempted to refresh disabled collection '{Name}'", userId, collection.Name);
+                            return Task.FromResult<ActionResult>(BadRequest(new { message = $"Cannot refresh disabled collection '{collection.Name}'. Please enable the collection first." }));
+                        }
+                        
                         try
                         {
                             EnqueueRefreshOperation(collection.Id, collection.Name, collection.Type, collection, normalizedUserId);

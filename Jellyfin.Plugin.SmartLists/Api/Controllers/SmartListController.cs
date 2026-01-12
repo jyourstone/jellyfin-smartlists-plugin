@@ -2192,6 +2192,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     listName = playlist.Name;
                     listType = Core.Enums.SmartListType.Playlist;
                     
+                    // Validate that the playlist is enabled before allowing refresh
+                    if (playlist.Enabled == false)
+                    {
+                        var duration = _refreshStatusService?.GetElapsedTime(id) ?? TimeSpan.Zero;
+                        _refreshStatusService?.CompleteOperation(id, false, duration, "Cannot refresh disabled list");
+                        
+                        return BadRequest(new { message = $"Cannot refresh disabled playlist '{playlist.Name}'. Please enable the playlist first." });
+                    }
+                    
                     var (success, message, jellyfinPlaylistId) = await _manualRefreshService.RefreshSinglePlaylistAsync(playlist);
 
                     if (success)
@@ -2217,6 +2226,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     listName = collection.Name;
                     listType = Core.Enums.SmartListType.Collection;
+                    
+                    // Validate that the collection is enabled before allowing refresh
+                    if (collection.Enabled == false)
+                    {
+                        var duration = _refreshStatusService?.GetElapsedTime(id) ?? TimeSpan.Zero;
+                        _refreshStatusService?.CompleteOperation(id, false, duration, "Cannot refresh disabled list");
+                        
+                        return BadRequest(new { message = $"Cannot refresh disabled collection '{collection.Name}'. Please enable the collection first." });
+                    }
                     
                     var (success, message, jellyfinCollectionId) = await _manualRefreshService.RefreshSingleCollectionAsync(collection);
 

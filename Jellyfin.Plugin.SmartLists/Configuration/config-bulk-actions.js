@@ -333,11 +333,63 @@
     };
 
     SmartLists.bulkRefreshPlaylists = async function (page) {
-        // Show notification that refresh has started (similar to enable action)
+        const selectedCheckboxes = page.querySelectorAll('.playlist-checkbox:checked');
+        const allListIds = Array.prototype.slice.call(selectedCheckboxes).map(function (cb) {
+            return cb.getAttribute('data-playlist-id');
+        });
+
+        if (allListIds.length === 0) {
+            SmartLists.showNotification('No lists selected', 'error');
+            return;
+        }
+
+        // Filter out disabled lists - check against page._allPlaylists data
+        const enabledListIds = [];
+        const disabledListIds = [];
+        
+        allListIds.forEach(function (listId) {
+            if (page._allPlaylists) {
+                const playlist = page._allPlaylists.find(function (p) { return p.Id === listId; });
+                if (playlist) {
+                    // Default to true for backward compatibility (if Enabled property doesn't exist)
+                    const isEnabled = playlist.Enabled !== false;
+                    if (isEnabled) {
+                        enabledListIds.push(listId);
+                    } else {
+                        disabledListIds.push(listId);
+                    }
+                } else {
+                    // If playlist not found in data, assume it's enabled (fallback)
+                    enabledListIds.push(listId);
+                }
+            } else {
+                // If no playlist data available, assume all are enabled (fallback)
+                enabledListIds.push(listId);
+            }
+        });
+
+        // If all selected lists are disabled, show error and return
+        if (enabledListIds.length === 0) {
+            SmartLists.showNotification('All selected lists are disabled. Enable them first before refreshing.', 'error');
+            return;
+        }
+
+        // Show notification about what we're doing
         var statusLink = SmartLists.createStatusPageLink('status page');
-        var refreshMessage = SmartLists.IS_USER_PAGE
-            ? 'Refresh started for selected list(s). Your lists will be updated in the background.'
-            : 'Refresh started for selected list(s). Check the ' + statusLink + ' for progress.';
+        var refreshMessage;
+        
+        if (disabledListIds.length > 0) {
+            // Some lists were skipped
+            refreshMessage = SmartLists.IS_USER_PAGE
+                ? 'Skipped ' + disabledListIds.length + ' disabled list(s). Refreshing ' + enabledListIds.length + ' enabled list(s) in the background.'
+                : 'Skipped ' + disabledListIds.length + ' disabled list(s). Refreshing ' + enabledListIds.length + ' enabled list(s). Check the ' + statusLink + ' for progress.';
+        } else {
+            // All lists are enabled
+            refreshMessage = SmartLists.IS_USER_PAGE
+                ? 'Refresh started for selected list(s). Your lists will be updated in the background.'
+                : 'Refresh started for selected list(s). Check the ' + statusLink + ' for progress.';
+        }
+        
         SmartLists.showNotification(refreshMessage, 'info', { html: true });
 
         // Start aggressive polling on status page to catch the operation (admin only)
@@ -345,20 +397,52 @@
             window.SmartLists.Status.startAggressivePolling();
         }
 
-        await SmartLists.performBulkListAction(page, {
-            actionType: 'refresh',
-            apiPath: '/refresh',
-            httpMethod: 'POST',
-            // No filter function needed - we can refresh any list
-            formatSuccessMessage: function (count) {
-                // We don't show a success message for refresh because it's an async operation
-                // and we already showed the "Refresh started" notification
-                return null;
-            },
-            formatErrorMessage: function (errorCount, successCount) {
-                return 'Failed to trigger refresh for ' + errorCount + ' list(s).';
+        // Process only enabled lists
+        const apiClient = SmartLists.getApiClient();
+        let successCount = 0;
+        let errorCount = 0;
+
+        // Clear selections immediately (before API calls)
+        const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = false;
+        }
+
+        // Process sequentially in background
+        (async function () {
+            for (const listId of enabledListIds) {
+                const url = SmartLists.ENDPOINTS.base + '/' + listId + '/refresh';
+
+                try {
+                    const response = await apiClient.ajax({
+                        type: 'POST',
+                        url: apiClient.getUrl(url),
+                        contentType: 'application/json'
+                    });
+
+                    if (!response.ok) {
+                        const errorMessage = await SmartLists.extractErrorMessage(response, 'HTTP ' + response.status + ': ' + response.statusText);
+                        console.error('Error refreshing list:', listId, errorMessage);
+                        errorCount++;
+                    } else {
+                        successCount++;
+                    }
+                } catch (err) {
+                    console.error('Error refreshing list:', listId, err);
+                    errorCount++;
+                }
             }
-        });
+
+            // If there were errors, show error notification
+            if (errorCount > 0) {
+                SmartLists.showNotification('Failed to trigger refresh for ' + errorCount + ' list(s).', 'error');
+            }
+
+            // Reload list to show updated state
+            if (SmartLists.loadPlaylistList) {
+                SmartLists.loadPlaylistList(page);
+            }
+        })();
     };
 
     // Refresh confirmation modal function
