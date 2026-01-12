@@ -38,6 +38,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     [Produces("application/json")]
     public class UserSmartListController : ControllerBase
     {
+        private const int MaxMediaTypesLimit = 50;
+        
         private readonly ILogger<UserSmartListController> _logger;
         private readonly IServerApplicationPaths _applicationPaths;
         private readonly IUserManager _userManager;
@@ -167,15 +169,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (allowedUsers != null && allowedUsers.Count > 0)
             {
                 // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
-                bool isAllowed = false;
-                foreach (var allowedUserStr in allowedUsers)
-                {
-                    if (Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == currentUserId)
-                    {
-                        isAllowed = true;
-                        break;
-                    }
-                }
+                bool isAllowed = allowedUsers.Any(allowedUserStr => 
+                    Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == currentUserId);
                 
                 if (!isAllowed)
                 {
@@ -317,8 +312,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 if (list.Type == Core.Enums.SmartListType.Collection)
                 {
                     // For collections, we need to use SmartCollectionDto
-                    // Use serialization to convert SmartPlaylistDto to SmartCollectionDto, preserving all base class properties
-                    var collectionDto = JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
+                    // Use type-safe mapping to convert to SmartCollectionDto, preserving all base class properties
+                    var collectionDto = DtoMapper.ToCollectionDto(list);
                     collectionDto.Type = Core.Enums.SmartListType.Collection;
                     collectionDto.UserId = userId.ToString("N");
                     collectionDto.DateCreated = DateTime.UtcNow;
@@ -440,12 +435,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var userId = GetCurrentUserId();
                 var normalizedUserId = userId.ToString("N"); // Normalize to format without dashes
                 
-                // Get both playlists and collections
+                // Get both playlists and collections in parallel
                 var playlistStore = _playlistStore;
                 var collectionStore = _collectionStore;
                 
-                var allPlaylists = await playlistStore.GetAllAsync().ConfigureAwait(false);
-                var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                var playlistTask = playlistStore.GetAllAsync();
+                var collectionTask = collectionStore.GetAllAsync();
+                await Task.WhenAll(playlistTask, collectionTask).ConfigureAwait(false);
+                
+                var allPlaylists = await playlistTask;
+                var allCollections = await collectionTask;
                 
                 // Filter playlists where the current user is in the UserPlaylists array or is the UserId owner
                 var userPlaylists = allPlaylists.Where(p => IsUserInPlaylist(p, normalizedUserId)).Cast<SmartListDto>();
@@ -609,9 +608,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 }
 
                 // Validate media types count
-                if (request.MediaTypes.Count > 50)
+                if (request.MediaTypes.Count > MaxMediaTypesLimit)
                 {
-                    return BadRequest(new { error = "Cannot select more than 50 media types" });
+                    return BadRequest(new { error = $"Cannot select more than {MaxMediaTypesLimit} media types" });
                 }
 
                 // Create the smart playlist DTO
@@ -841,14 +840,17 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var playlistStore = _playlistStore;
                 var collectionStore = _collectionStore;
                 
-                // Get all playlists for this user
-                var allPlaylists = await playlistStore.GetAllAsync();
+                // Get all playlists and collections for this user in parallel
+                var playlistTask = playlistStore.GetAllAsync();
+                var collectionTask = collectionStore.GetAllAsync();
+                await Task.WhenAll(playlistTask, collectionTask).ConfigureAwait(false);
+                
+                var allPlaylists = await playlistTask;
                 var playlists = allPlaylists
                     .Where(p => IsUserInPlaylist(p, normalizedUserId))
                     .ToList();
                 
-                // Get all collections for this user
-                var allCollections = await collectionStore.GetAllAsync();
+                var allCollections = await collectionTask;
                 var collections = allCollections
                     .Where(c => c.UserId != null && Guid.TryParse(c.UserId, out var cUserId) && cUserId == userId)
                     .ToList();
@@ -1127,103 +1129,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             });
                         }
 
-                        _logger.LogInformation("User {UserId} converting playlist '{Name}' to collection", userId, existingPlaylist.Name);
-                        
-                        // Convert to collection DTO
-                        var collectionDto = list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
-                        collectionDto.Id = id;
-                        collectionDto.FileName = existingPlaylist.FileName;
-                        collectionDto.JellyfinCollectionId = null;
-                        collectionDto.Type = Core.Enums.SmartListType.Collection;
-                        
-                        // Set owner to current user (they're converting their own playlist)
-                        // Use "N" format (no dashes) to match client-side normalization
-                        collectionDto.UserId = userId.ToString("N").ToLowerInvariant();
-                        
-                        // Preserve original creation timestamp
-                        if (existingPlaylist.DateCreated.HasValue)
-                        {
-                            collectionDto.DateCreated = existingPlaylist.DateCreated;
-                        }
-                        
-                        // Preserve creator information
-                        if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
-                        {
-                            collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
-                        }
-
-                        // Validate the collection
-                        var conversionValidationResult = ValidateSmartList(collectionDto);
-                        if (!conversionValidationResult.IsValid)
-                        {
-                            _logger.LogWarning("Validation failed for user {UserId} converting playlist to collection '{Name}': {Error}", 
-                                userId, collectionDto.Name, conversionValidationResult.ErrorMessage);
-                            return BadRequest(new { error = conversionValidationResult.ErrorMessage });
-                        }
-                        
-                        // Save-first approach: persist new collection before deleting old playlist
-                        try
-                        {
-                            // Save as collection
-                            await collectionStore.SaveAsync(collectionDto);
-                            Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
-                            SmartList.ClearRuleCache(_logger);
-                            
-                            _logger.LogInformation("User {UserId} saved new collection '{Name}', now deleting old playlist", userId, collectionDto.Name);
-                        }
-                        catch (Exception saveEx)
-                        {
-                            _logger.LogError(saveEx, "Failed to save collection during playlist→collection conversion for user {UserId}, list '{Name}'. Original playlist preserved.", 
-                                userId.ToString(), collectionDto.Name);
-                            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save collection. Original playlist was not modified." });
-                        }
-                        
-                        // Now delete old playlist (original data is safe if this fails)
-                        try
-                        {
-                            await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
-                            await playlistStore.DeleteAsync(guidId);
-                        }
-                        catch (Exception deleteEx)
-                        {
-                            _logger.LogError(deleteEx, "Failed to delete old playlist during conversion for user {UserId}, list '{Name}'. Collection was created successfully but old playlist remains. Attempting rollback...", 
-                                userId.ToString(), collectionDto.Name);
-                            
-                            // Attempt rollback: delete the newly created collection
-                            try
-                            {
-                                await collectionStore.DeleteAsync(guidId);
-                                Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
-                                _logger.LogWarning("Rollback successful: deleted newly created collection '{Name}' after playlist deletion failed", collectionDto.Name);
-                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original playlist preserved." });
-                            }
-                            catch (Exception rollbackEx)
-                            {
-                                _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both playlist and collection may exist. Manual cleanup may be required.", 
-                                    userId.ToString(), collectionDto.Name);
-                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both playlist and collection may exist." });
-                            }
-                        }
-                        
-                        // Enqueue refresh if enabled
-                        if (collectionDto.Enabled)
-                        {
-                            try
-                            {
-                                EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
-                            }
-                            catch (Exception enqueueEx)
-                            {
-                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted collection '{Name}', but conversion succeeded", collectionDto.Name);
-                            }
-                        }
-                        
-                        _logger.LogInformation("User {UserId} successfully converted playlist to collection '{Name}'", userId, collectionDto.Name);
-                        return Ok(collectionDto);
+                        return await ConvertPlaylistToCollectionAsync(list, existingPlaylist, id, guidId, userId, normalizedUserId).ConfigureAwait(false);
                     }
 
                     // Normal playlist update - Convert to SmartPlaylistDto
-                    var playlistDto = list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!;
+                    var playlistDto = list as SmartPlaylistDto ?? DtoMapper.ToPlaylistDto(list);
 
                     // Preserve the original filename, user ownership, and type
                     playlistDto.FileName = existingPlaylist.FileName;
@@ -1301,110 +1211,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Handle type conversion: collection → playlist
                     if (list.Type == Core.Enums.SmartListType.Playlist)
                     {
-                        _logger.LogInformation("User {UserId} converting collection '{Name}' to playlist", userId, existingCollection.Name);
-                        
-                        // Convert to playlist DTO
-                        var playlistDto = list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!;
-                        playlistDto.Id = id;
-                        playlistDto.FileName = existingCollection.FileName;
-                        playlistDto.JellyfinPlaylistId = null;
-                        playlistDto.Type = Core.Enums.SmartListType.Playlist;
-                        
-                        // Set up UserPlaylists for current user
-                        playlistDto.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
-                        {
-                            new SmartPlaylistDto.UserPlaylistMapping
-                            {
-                                UserId = normalizedUserId,
-                                JellyfinPlaylistId = null
-                            }
-                        };
-                        playlistDto.UserId = normalizedUserId; // For backwards compatibility
-                        
-                        // Preserve original creation timestamp
-                        if (existingCollection.DateCreated.HasValue)
-                        {
-                            playlistDto.DateCreated = existingCollection.DateCreated;
-                        }
-                        
-                        // Preserve creator information
-                        if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
-                        {
-                            playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
-                        }
-
-                        // Validate the playlist
-                        var playlistConversionValidationResult = ValidateSmartList(playlistDto);
-                        if (!playlistConversionValidationResult.IsValid)
-                        {
-                            _logger.LogWarning("Validation failed for user {UserId} converting collection to playlist '{Name}': {Error}", 
-                                userId, playlistDto.Name, playlistConversionValidationResult.ErrorMessage);
-                            return BadRequest(new { error = playlistConversionValidationResult.ErrorMessage });
-                        }
-                        
-                        // Save-first approach: persist new playlist before deleting old collection
-                        try
-                        {
-                            // Save as playlist
-                            await playlistStore.SaveAsync(playlistDto);
-                            Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
-                            SmartList.ClearRuleCache(_logger);
-                            
-                            _logger.LogInformation("User {UserId} saved new playlist '{Name}', now deleting old collection", userId, playlistDto.Name);
-                        }
-                        catch (Exception saveEx)
-                        {
-                            _logger.LogError(saveEx, "Failed to save playlist during collection→playlist conversion for user {UserId}, list '{Name}'. Original collection preserved.", 
-                                userId.ToString(), playlistDto.Name);
-                            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save playlist. Original collection was not modified." });
-                        }
-                        
-                        // Now delete old collection (original data is safe if this fails)
-                        try
-                        {
-                            await _collectionService.DeleteAsync(existingCollection);
-                            await collectionStore.DeleteAsync(guidId);
-                        }
-                        catch (Exception deleteEx)
-                        {
-                            _logger.LogError(deleteEx, "Failed to delete old collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully but old collection remains. Attempting rollback...", 
-                                userId.ToString(), playlistDto.Name);
-                            
-                            // Attempt rollback: delete the newly created playlist
-                            try
-                            {
-                                await playlistStore.DeleteAsync(guidId);
-                                Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
-                                _logger.LogWarning("Rollback successful: deleted newly created playlist '{Name}' after collection deletion failed", playlistDto.Name);
-                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original collection preserved." });
-                            }
-                            catch (Exception rollbackEx)
-                            {
-                                _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both collection and playlist may exist. Manual cleanup may be required.", 
-                                    userId.ToString(), playlistDto.Name);
-                                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both collection and playlist may exist." });
-                            }
-                        }
-                        
-                        // Enqueue refresh if enabled
-                        if (playlistDto.Enabled)
-                        {
-                            try
-                            {
-                                EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, normalizedUserId);
-                            }
-                            catch (Exception enqueueEx)
-                            {
-                                _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted playlist '{Name}', but conversion succeeded", playlistDto.Name);
-                            }
-                        }
-                        
-                        _logger.LogInformation("User {UserId} successfully converted collection to playlist '{Name}'", userId, playlistDto.Name);
-                        return Ok(playlistDto);
+                        return await ConvertCollectionToPlaylistAsync(list, existingCollection, id, guidId, userId, normalizedUserId).ConfigureAwait(false);
                     }
 
                     // Normal collection update - Convert to SmartCollectionDto
-                    var collectionDto = list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!;
+                    var collectionDto = list as SmartCollectionDto ?? DtoMapper.ToCollectionDto(list);
 
                     // Preserve the original filename, user ownership, and type
                     collectionDto.FileName = existingCollection.FileName;
@@ -1699,6 +1510,245 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             return NotFound(new { message = "Smart list not found" });
+        }
+
+        /// <summary>
+        /// Converts a playlist to a collection, handling validation, save, delete, and rollback operations.
+        /// </summary>
+        /// <param name="list">The updated list DTO from the client.</param>
+        /// <param name="existingPlaylist">The existing playlist to convert.</param>
+        /// <param name="id">The list ID.</param>
+        /// <param name="guidId">The parsed Guid ID.</param>
+        /// <param name="userId">The current user ID.</param>
+        /// <param name="normalizedUserId">The normalized user ID.</param>
+        /// <returns>ActionResult with the converted collection or error.</returns>
+        private async Task<ActionResult<SmartListDto>> ConvertPlaylistToCollectionAsync(
+            SmartListDto list,
+            SmartPlaylistDto existingPlaylist,
+            string id,
+            Guid guidId,
+            Guid userId,
+            string normalizedUserId)
+        {
+            _logger.LogInformation("User {UserId} converting playlist '{Name}' to collection", userId, existingPlaylist.Name);
+            
+            // Convert to collection DTO
+            var collectionDto = list as SmartCollectionDto ?? DtoMapper.ToCollectionDto(list);
+            collectionDto.Id = id;
+            collectionDto.FileName = existingPlaylist.FileName;
+            collectionDto.JellyfinCollectionId = null;
+            collectionDto.Type = Core.Enums.SmartListType.Collection;
+            
+            // Set owner to current user (they're converting their own playlist)
+            // Use "N" format (no dashes) to match client-side normalization
+            collectionDto.UserId = userId.ToString("N").ToLowerInvariant();
+            
+            // Preserve original creation timestamp
+            if (existingPlaylist.DateCreated.HasValue)
+            {
+                collectionDto.DateCreated = existingPlaylist.DateCreated;
+            }
+            
+            // Preserve creator information
+            if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
+            {
+                collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
+            }
+
+            // Validate the collection
+            var conversionValidationResult = ValidateSmartList(collectionDto);
+            if (!conversionValidationResult.IsValid)
+            {
+                _logger.LogWarning("Validation failed for user {UserId} converting playlist to collection '{Name}': {Error}", 
+                    userId, collectionDto.Name, conversionValidationResult.ErrorMessage);
+                return BadRequest(new { error = conversionValidationResult.ErrorMessage });
+            }
+            
+            var collectionStore = _collectionStore;
+            var playlistStore = _playlistStore;
+            
+            // Save-first approach: persist new collection before deleting old playlist
+            try
+            {
+                // Save as collection
+                await collectionStore.SaveAsync(collectionDto).ConfigureAwait(false);
+                Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+                SmartList.ClearRuleCache(_logger);
+                
+                _logger.LogInformation("User {UserId} saved new collection '{Name}', now deleting old playlist", userId, collectionDto.Name);
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogError(saveEx, "Failed to save collection during playlist→collection conversion for user {UserId}, list '{Name}'. Original playlist preserved.", 
+                    userId.ToString(), collectionDto.Name);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save collection. Original playlist was not modified." });
+            }
+            
+            // Now delete old playlist (original data is safe if this fails)
+            try
+            {
+                await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist).ConfigureAwait(false);
+                await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
+            }
+            catch (Exception deleteEx)
+            {
+                _logger.LogError(deleteEx, "Failed to delete old playlist during conversion for user {UserId}, list '{Name}'. Collection was created successfully but old playlist remains. Attempting rollback...", 
+                    userId.ToString(), collectionDto.Name);
+                
+                // Attempt rollback: delete the newly created collection
+                try
+                {
+                    await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
+                    Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
+                    _logger.LogWarning("Rollback successful: deleted newly created collection '{Name}' after playlist deletion failed", collectionDto.Name);
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original playlist preserved." });
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both playlist and collection may exist. Manual cleanup may be required.", 
+                        userId.ToString(), collectionDto.Name);
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both playlist and collection may exist." });
+                }
+            }
+            
+            // Enqueue refresh if enabled
+            if (collectionDto.Enabled)
+            {
+                try
+                {
+                    EnqueueRefreshOperation(collectionDto.Id, collectionDto.Name, collectionDto.Type, collectionDto, normalizedUserId);
+                }
+                catch (Exception enqueueEx)
+                {
+                    _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted collection '{Name}', but conversion succeeded", collectionDto.Name);
+                }
+            }
+            
+            _logger.LogInformation("User {UserId} successfully converted playlist to collection '{Name}'", userId, collectionDto.Name);
+            return Ok(collectionDto);
+        }
+
+        /// <summary>
+        /// Converts a collection to a playlist, handling validation, save, delete, and rollback operations.
+        /// </summary>
+        /// <param name="list">The updated list DTO from the client.</param>
+        /// <param name="existingCollection">The existing collection to convert.</param>
+        /// <param name="id">The list ID.</param>
+        /// <param name="guidId">The parsed Guid ID.</param>
+        /// <param name="userId">The current user ID.</param>
+        /// <param name="normalizedUserId">The normalized user ID.</param>
+        /// <returns>ActionResult with the converted playlist or error.</returns>
+        private async Task<ActionResult<SmartListDto>> ConvertCollectionToPlaylistAsync(
+            SmartListDto list,
+            SmartCollectionDto existingCollection,
+            string id,
+            Guid guidId,
+            Guid userId,
+            string normalizedUserId)
+        {
+            _logger.LogInformation("User {UserId} converting collection '{Name}' to playlist", userId, existingCollection.Name);
+            
+            // Convert to playlist DTO
+            var playlistDto = list as SmartPlaylistDto ?? DtoMapper.ToPlaylistDto(list);
+            playlistDto.Id = id;
+            playlistDto.FileName = existingCollection.FileName;
+            playlistDto.JellyfinPlaylistId = null;
+            playlistDto.Type = Core.Enums.SmartListType.Playlist;
+            
+            // Set up UserPlaylists for current user
+            playlistDto.UserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>
+            {
+                new SmartPlaylistDto.UserPlaylistMapping
+                {
+                    UserId = normalizedUserId,
+                    JellyfinPlaylistId = null
+                }
+            };
+            playlistDto.UserId = normalizedUserId; // For backwards compatibility
+            
+            // Preserve original creation timestamp
+            if (existingCollection.DateCreated.HasValue)
+            {
+                playlistDto.DateCreated = existingCollection.DateCreated;
+            }
+            
+            // Preserve creator information
+            if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
+            {
+                playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
+            }
+
+            // Validate the playlist
+            var playlistConversionValidationResult = ValidateSmartList(playlistDto);
+            if (!playlistConversionValidationResult.IsValid)
+            {
+                _logger.LogWarning("Validation failed for user {UserId} converting collection to playlist '{Name}': {Error}", 
+                    userId, playlistDto.Name, playlistConversionValidationResult.ErrorMessage);
+                return BadRequest(new { error = playlistConversionValidationResult.ErrorMessage });
+            }
+            
+            var playlistStore = _playlistStore;
+            var collectionStore = _collectionStore;
+            
+            // Save-first approach: persist new playlist before deleting old collection
+            try
+            {
+                // Save as playlist
+                await playlistStore.SaveAsync(playlistDto).ConfigureAwait(false);
+                Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
+                SmartList.ClearRuleCache(_logger);
+                
+                _logger.LogInformation("User {UserId} saved new playlist '{Name}', now deleting old collection", userId, playlistDto.Name);
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogError(saveEx, "Failed to save playlist during collection→playlist conversion for user {UserId}, list '{Name}'. Original collection preserved.", 
+                    userId.ToString(), playlistDto.Name);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save playlist. Original collection was not modified." });
+            }
+            
+            // Now delete old collection (original data is safe if this fails)
+            try
+            {
+                await _collectionService.DeleteAsync(existingCollection).ConfigureAwait(false);
+                await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
+            }
+            catch (Exception deleteEx)
+            {
+                _logger.LogError(deleteEx, "Failed to delete old collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully but old collection remains. Attempting rollback...", 
+                    userId.ToString(), playlistDto.Name);
+                
+                // Attempt rollback: delete the newly created playlist
+                try
+                {
+                    await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
+                    Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
+                    _logger.LogWarning("Rollback successful: deleted newly created playlist '{Name}' after collection deletion failed", playlistDto.Name);
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original collection preserved." });
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both collection and playlist may exist. Manual cleanup may be required.", 
+                        userId.ToString(), playlistDto.Name);
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both collection and playlist may exist." });
+                }
+            }
+            
+            // Enqueue refresh if enabled
+            if (playlistDto.Enabled)
+            {
+                try
+                {
+                    EnqueueRefreshOperation(playlistDto.Id, playlistDto.Name, playlistDto.Type, playlistDto, normalizedUserId);
+                }
+                catch (Exception enqueueEx)
+                {
+                    _logger.LogWarning(enqueueEx, "Failed to enqueue refresh for converted playlist '{Name}', but conversion succeeded", playlistDto.Name);
+                }
+            }
+            
+            _logger.LogInformation("User {UserId} successfully converted collection to playlist '{Name}'", userId, playlistDto.Name);
+            return Ok(playlistDto);
         }
 
         /// <summary>
