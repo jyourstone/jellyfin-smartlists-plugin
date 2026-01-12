@@ -450,7 +450,10 @@
 
         // Reinitialize sort system with fallback defaults
         SmartLists.initializeSortSystem(page);
-        SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+        const sortsContainer = page.querySelector('#sorts-container');
+        if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
+            SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+        }
     };
 
     SmartLists.populateFormDefaults = function (page) {
