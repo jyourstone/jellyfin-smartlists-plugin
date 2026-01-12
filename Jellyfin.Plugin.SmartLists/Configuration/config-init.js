@@ -407,10 +407,14 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
-        SmartLists.initializeScheduleSystem(page);
+        if (typeof SmartLists.initializeScheduleSystem === 'function') {
+            SmartLists.initializeScheduleSystem(page);
+        }
 
         // Reinitialize visibility schedule system
-        SmartLists.initializeVisibilityScheduleSystem(page);
+        if (typeof SmartLists.initializeVisibilityScheduleSystem === 'function') {
+            SmartLists.initializeVisibilityScheduleSystem(page);
+        }
 
         // Apply default schedule if configured
         if (SmartLists.applyDefaultScheduleFromConfig) {
@@ -418,7 +422,9 @@
         }
 
         // Reinitialize sort system with defaults
-        SmartLists.initializeSortSystem(page);
+        if (typeof SmartLists.initializeSortSystem === 'function') {
+            SmartLists.initializeSortSystem(page);
+        }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
@@ -443,13 +449,19 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
-        SmartLists.initializeScheduleSystem(page);
+        if (typeof SmartLists.initializeScheduleSystem === 'function') {
+            SmartLists.initializeScheduleSystem(page);
+        }
 
         // Reinitialize visibility schedule system with fallback defaults
-        SmartLists.initializeVisibilityScheduleSystem(page);
+        if (typeof SmartLists.initializeVisibilityScheduleSystem === 'function') {
+            SmartLists.initializeVisibilityScheduleSystem(page);
+        }
 
         // Reinitialize sort system with fallback defaults
-        SmartLists.initializeSortSystem(page);
+        if (typeof SmartLists.initializeSortSystem === 'function') {
+            SmartLists.initializeSortSystem(page);
+        }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
@@ -743,14 +755,15 @@
             // Load playlist list with retry logic to handle script loading race conditions
             var loadListWithRetry = function(retryCount) {
                 retryCount = retryCount || 0;
+                const maxRetries = 10;
                 if (SmartLists.loadPlaylistList) {
                     SmartLists.loadPlaylistList(page);
-                } else if (retryCount < 5) {
+                } else if (retryCount < maxRetries) {
                     setTimeout(function() {
                         loadListWithRetry(retryCount + 1);
-                    }, 50); // 50ms delay between retries
+                    }, 100); // 100ms delay between retries
                 } else {
-                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after 5 retries');
+                    console.error('SmartLists: Failed to load playlist list - loadPlaylistList function not available after retries');
                     // Show error message to user
                     var container = page.querySelector('#playlist-list-container');
                     if (container) {
@@ -1885,19 +1898,168 @@
 })(window.SmartLists = window.SmartLists || {});
 
 // Immediate initialization check - runs as soon as this script loads
-// This is necessary because DOMContentLoaded may have already fired
 (function() {
-    var checkAndInit = function() {
-        var page = document.querySelector('.SmartListsConfigurationPage');
-        if (page && !page._pageInitialized) {
-            window.SmartLists.initPage(page);
+    // Store observer reference for cleanup
+    var pageObserver = null;
+    
+    // Required functions that must be loaded before initialization
+    var requiredFunctions = [
+        'createAbortController',           // config-core.js
+        'generateAutoRefreshOptions',      // config-formatters.js
+        'initializeScheduleSystem',        // config-schedules.js
+        'initializeVisibilityScheduleSystem', // config-schedules.js
+        'addSortBox',                      // config-sorts.js
+        'initializeSortSystem',            // config-sorts.js
+        'initializeMultiSelect',           // config-multi-select.js
+        'updateAllFieldSelects'            // config-rules.js
+    ];
+    
+    // Check if all required dependencies are loaded
+    var checkDependencies = function() {
+        for (var i = 0; i < requiredFunctions.length; i++) {
+            if (typeof window.SmartLists[requiredFunctions[i]] !== 'function') {
+                return false;
+            }
+        }
+        return true;
+    };
+    
+    // Get list of missing dependencies for error reporting
+    var getMissingDependencies = function() {
+        var missing = [];
+        for (var i = 0; i < requiredFunctions.length; i++) {
+            if (typeof window.SmartLists[requiredFunctions[i]] !== 'function') {
+                missing.push(requiredFunctions[i]);
+            }
+        }
+        return missing;
+    };
+    
+    // Disconnect the MutationObserver to prevent memory leaks
+    var disconnectObserver = function() {
+        if (pageObserver) {
+            pageObserver.disconnect();
+            pageObserver = null;
         }
     };
     
-    // Try immediately if DOM is already ready
+    var checkAndInit = function(retryCount, targetPage) {
+        retryCount = retryCount || 0;
+        var maxRetries = 30; // 30 retries × 100ms = 3 seconds total
+        
+        // Use the specific page element if provided, otherwise find it
+        var page = targetPage || document.querySelector('.SmartListsConfigurationPage');
+        if (!page) {
+            return;
+        }
+        
+        // Check if this specific page element is already initialized or initialization is in progress
+        if (page._pageInitialized || page._initializationInProgress) {
+            return;
+        }
+        
+        // For user pages loaded via Plugin Pages, ensure the page is actually visible/attached
+        // This prevents initializing stale elements from previous navigations
+        if (!document.body.contains(page)) {
+            return;
+        }
+        
+        // Check if all dependencies are loaded
+        if (!checkDependencies()) {
+            if (retryCount < maxRetries) {
+                // Retry after a short delay to allow all scripts to load
+                setTimeout(function() {
+                    checkAndInit(retryCount + 1, page);
+                }, 100);
+            } else {
+                var missingFunctions = getMissingDependencies();
+                console.error('SmartLists: Required dependencies not loaded after 3 seconds. Missing functions:', missingFunctions);
+                // Initialize anyway to at least show the page
+                page._initializationInProgress = true;
+                window.SmartLists.initPage(page);
+            }
+            return;
+        }
+        
+        // Mark initialization as in progress to prevent duplicate calls
+        page._initializationInProgress = true;
+        
+        // Disconnect observer once we've found and are initializing our page
+        disconnectObserver();
+        
+        // All dependencies loaded, proceed with initialization
+        window.SmartLists.initPage(page);
+    };
+    
+    // For Plugin Pages plugin - watch for when content is dynamically inserted into the DOM
+    var setupMutationObserver = function() {
+        // Don't set up if already exists
+        if (pageObserver) {
+            return;
+        }
+        
+        var MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
+        if (!MutationObserver) {
+            return;
+        }
+        
+        pageObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                    for (var i = 0; i < mutation.addedNodes.length; i++) {
+                        var node = mutation.addedNodes[i];
+                        var pageElement = null;
+                        
+                        // Check if our page was added
+                        if (node.classList && node.classList.contains('SmartListsConfigurationPage')) {
+                            pageElement = node;
+                        }
+                        // Also check descendants in case page is nested
+                        else if (node.querySelector && node.querySelector('.SmartListsConfigurationPage')) {
+                            pageElement = node.querySelector('.SmartListsConfigurationPage');
+                        }
+                        
+                        if (pageElement) {
+                            // Pass the specific page element to checkAndInit
+                            checkAndInit(0, pageElement);
+                            return;
+                        }
+                    }
+                }
+            });
+        });
+        
+        // Observe the document body for added nodes
+        pageObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    };
+    
+    // Standard page events for normal Jellyfin page navigation
+    // Note: pageshow event target is the document, so we need to query for our page element
+    document.addEventListener('pageshow', function (e) {
+        var page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized && !page._initializationInProgress) {
+            checkAndInit(0, page);
+        }
+    });
+    
+    document.addEventListener('viewshow', function (e) {
+        var page = e.detail && e.detail.element;
+        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
+            checkAndInit(0, page);
+        }
+    });
+    
+    // Try immediate initialization for standard page loads
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', checkAndInit);
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAndInit();
+            setupMutationObserver();
+        });
     } else {
         checkAndInit();
+        setupMutationObserver();
     }
 })();
