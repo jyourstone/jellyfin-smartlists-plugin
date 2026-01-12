@@ -608,6 +608,19 @@
                     function (user) { return user.Id; }
                 );
             }
+            
+            // Apply any pending selections that were stored before the multi-select was ready
+            if (page._pendingAllowedUserPageUsers && SmartLists.setSelectedItems) {
+                SmartLists.setSelectedItems(
+                    page, 
+                    'allowedUsersMultiSelect', 
+                    page._pendingAllowedUserPageUsers, 
+                    'allowed-users-checkbox', 
+                    'All users (default)'
+                );
+                // Clear the pending data once applied
+                delete page._pendingAllowedUserPageUsers;
+            }
         } catch (err) {
             console.error('Error loading allowed users:', err);
             const errorMessage = err.message || 'Failed to load users. Please refresh the page.';
@@ -1240,14 +1253,9 @@
 
             // Load allowed users for user page access
             if (config.AllowedUserPageUsers && Array.isArray(config.AllowedUserPageUsers) && config.AllowedUserPageUsers.length > 0) {
-                // Store allowed users to be set after multi-select is initialized
+                // Store allowed users to be applied when multi-select is initialized
+                // (loadAllowedUsersMultiSelect will apply these after loading users)
                 page._pendingAllowedUserPageUsers = config.AllowedUserPageUsers;
-                // Set them after a short delay to ensure multi-select is fully initialized
-                setTimeout(function () {
-                    if (SmartLists.setSelectedItems) {
-                        SmartLists.setSelectedItems(page, 'allowedUsersMultiSelect', config.AllowedUserPageUsers, 'allowed-users-checkbox', 'All users (default)');
-                    }
-                }, 100);
             }
 
             // Load schedule configuration values

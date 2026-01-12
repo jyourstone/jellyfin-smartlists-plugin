@@ -304,6 +304,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 // Always generate server-side Id on create (prevent overwriting existing lists by user-supplied Id)
                 list.Id = Guid.NewGuid().ToString("D");
+                
+                // Clear storage-related fields to prevent client influence on file persistence (defense-in-depth)
+                list.FileName = null;
 
                 if (list.Order == null)
                 {

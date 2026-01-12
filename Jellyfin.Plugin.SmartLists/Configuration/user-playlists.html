@@ -347,11 +347,19 @@
             window.SmartLists.loadUserCapabilities = async function() {
                 try {
                     const apiClient = window.ApiClient;
-                    const capabilities = await apiClient.ajax({
+                    const response = await apiClient.ajax({
                         type: "GET",
                         url: apiClient.getUrl('Plugins/SmartLists/User/Capabilities'),
                         contentType: 'application/json'
                     });
+                    
+                    // Check if response is ok (handle HTTP errors)
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    // Parse JSON from response
+                    const capabilities = await response.json();
                     
                     // Store capabilities for later use
                     window.SmartLists.userCapabilities = capabilities;

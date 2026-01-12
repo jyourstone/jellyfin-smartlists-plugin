@@ -35,7 +35,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         {
             // Check if user page is enabled
             var config = Plugin.Instance?.Configuration;
-            var isEnabled = config?.EnableUserPage ?? true;
+            var isEnabled = config?.EnableUserPage ?? false; // Default to disabled if config not available (fail closed)
 
             // Check if user is admin
             var userId = User.GetUserId();
