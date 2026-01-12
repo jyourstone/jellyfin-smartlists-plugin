@@ -1899,25 +1899,48 @@
 
 // Immediate initialization check - runs as soon as this script loads
 (function() {
+    // Store observer reference for cleanup
+    var pageObserver = null;
+    
+    // Required functions that must be loaded before initialization
+    var requiredFunctions = [
+        'createAbortController',           // config-core.js
+        'generateAutoRefreshOptions',      // config-formatters.js
+        'initializeScheduleSystem',        // config-schedules.js
+        'initializeVisibilityScheduleSystem', // config-schedules.js
+        'addSortBox',                      // config-sorts.js
+        'initializeSortSystem',            // config-sorts.js
+        'initializeMultiSelect',           // config-multi-select.js
+        'updateAllFieldSelects'            // config-rules.js
+    ];
+    
     // Check if all required dependencies are loaded
     var checkDependencies = function() {
-        var requiredFunctions = [
-            'createAbortController',           // config-core.js
-            'generateAutoRefreshOptions',      // config-formatters.js
-            'initializeScheduleSystem',        // config-schedules.js
-            'initializeVisibilityScheduleSystem', // config-schedules.js
-            'addSortBox',                      // config-sorts.js
-            'initializeSortSystem',            // config-sorts.js
-            'initializeMultiSelect',           // config-multi-select.js
-            'updateAllFieldSelects'            // config-rules.js
-        ];
-        
         for (var i = 0; i < requiredFunctions.length; i++) {
             if (typeof window.SmartLists[requiredFunctions[i]] !== 'function') {
                 return false;
             }
         }
         return true;
+    };
+    
+    // Get list of missing dependencies for error reporting
+    var getMissingDependencies = function() {
+        var missing = [];
+        for (var i = 0; i < requiredFunctions.length; i++) {
+            if (typeof window.SmartLists[requiredFunctions[i]] !== 'function') {
+                missing.push(requiredFunctions[i]);
+            }
+        }
+        return missing;
+    };
+    
+    // Disconnect the MutationObserver to prevent memory leaks
+    var disconnectObserver = function() {
+        if (pageObserver) {
+            pageObserver.disconnect();
+            pageObserver = null;
+        }
     };
     
     var checkAndInit = function(retryCount, targetPage) {
@@ -1930,8 +1953,8 @@
             return;
         }
         
-        // Check if this specific page element is already initialized
-        if (page._pageInitialized) {
+        // Check if this specific page element is already initialized or initialization is in progress
+        if (page._pageInitialized || page._initializationInProgress) {
             return;
         }
         
@@ -1949,12 +1972,20 @@
                     checkAndInit(retryCount + 1, page);
                 }, 100);
             } else {
-                console.error('SmartLists: Required dependencies not loaded after 3 seconds. Some features may not work correctly.');
+                var missingFunctions = getMissingDependencies();
+                console.error('SmartLists: Required dependencies not loaded after 3 seconds. Missing functions:', missingFunctions);
                 // Initialize anyway to at least show the page
+                page._initializationInProgress = true;
                 window.SmartLists.initPage(page);
             }
             return;
         }
+        
+        // Mark initialization as in progress to prevent duplicate calls
+        page._initializationInProgress = true;
+        
+        // Disconnect observer once we've found and are initializing our page
+        disconnectObserver();
         
         // All dependencies loaded, proceed with initialization
         window.SmartLists.initPage(page);
@@ -1962,12 +1993,17 @@
     
     // For Plugin Pages plugin - watch for when content is dynamically inserted into the DOM
     var setupMutationObserver = function() {
+        // Don't set up if already exists
+        if (pageObserver) {
+            return;
+        }
+        
         var MutationObserver = window.MutationObserver || window.WebKitMutationObserver;
         if (!MutationObserver) {
             return;
         }
         
-        var observer = new MutationObserver(function(mutations) {
+        pageObserver = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.addedNodes && mutation.addedNodes.length > 0) {
                     for (var i = 0; i < mutation.addedNodes.length; i++) {
@@ -1994,16 +2030,17 @@
         });
         
         // Observe the document body for added nodes
-        observer.observe(document.body, {
+        pageObserver.observe(document.body, {
             childList: true,
             subtree: true
         });
     };
     
     // Standard page events for normal Jellyfin page navigation
+    // Note: pageshow event target is the document, so we need to query for our page element
     document.addEventListener('pageshow', function (e) {
-        var page = e.target;
-        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
+        var page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && !page._pageInitialized && !page._initializationInProgress) {
             checkAndInit(0, page);
         }
     });
