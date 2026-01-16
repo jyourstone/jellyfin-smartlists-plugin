@@ -855,7 +855,10 @@
                                 } else {
                                     // Add additional rule rows
                                     SmartLists.addRuleToGroup(page, logicGroup);
-                                    const newRuleRow = logicGroup.querySelector('.rule-row:last-child');
+                                    // Use querySelectorAll to get the last rule row, since :last-child doesn't work
+                                    // when the MaxItems container is appended after the rule rows
+                                    const ruleRowsInGroup = logicGroup.querySelectorAll('.rule-row');
+                                    const newRuleRow = ruleRowsInGroup[ruleRowsInGroup.length - 1];
                                     if (newRuleRow) {
                                         SmartLists.populateRuleRow(newRuleRow, expression, page);
                                     }

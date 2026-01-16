@@ -1248,7 +1248,10 @@
         // Create a new rule using addRuleToGroup
         // Clone to the bottom of the group
         SmartLists.addRuleToGroup(page, logicGroup);
-        const newRuleRow = logicGroup.querySelector('.rule-row:last-child');
+        // Use querySelectorAll to get the last rule row, since :last-child doesn't work
+        // when the MaxItems container is appended after the rule rows
+        const ruleRows = logicGroup.querySelectorAll('.rule-row');
+        const newRuleRow = ruleRows[ruleRows.length - 1];
 
         // Store similarity fields on page for populateRuleRow to access
         // Store even if null (for defaults) so we know to show the options div
@@ -1306,7 +1309,10 @@
 
             // Add rule to group
             SmartLists.addRuleToGroup(page, newLogicGroupDiv);
-            const newRuleRow = newLogicGroupDiv.querySelector('.rule-row:last-child');
+            // Use querySelectorAll to get the last rule row, since :last-child doesn't work
+            // when the MaxItems container is appended after the rule rows
+            const ruleRowsInGroup = newLogicGroupDiv.querySelectorAll('.rule-row');
+            const newRuleRow = ruleRowsInGroup[ruleRowsInGroup.length - 1];
 
             // Populate with extracted data
             SmartLists.populateRuleRow(newRuleRow, ruleConfig.expression, page);
