@@ -396,11 +396,9 @@
     SmartLists.STYLES = {
         scheduleBox: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '2px',
+            borderRadius: '0.8em',
             padding: '1em 1.5em',
             marginBottom: '1em',
-            background: 'var(--jf-palette-background-paper)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         scheduleFields: {
@@ -440,11 +438,9 @@
         },
         sortBox: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '2px',
+            borderRadius: '0.8em',
             padding: '1em 1.5em',
             marginBottom: '1em',
-            background: 'var(--jf-palette-background-paper)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         sortFields: {
@@ -508,11 +504,9 @@
         },
         logicGroup: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '2px',
+            borderRadius: '0.8em',
             padding: '1.5em 1.5em 0.5em 1.5em',
             marginBottom: '1em',
-            background: 'var(--jf-palette-background-paper)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         logicGroupHeader: {

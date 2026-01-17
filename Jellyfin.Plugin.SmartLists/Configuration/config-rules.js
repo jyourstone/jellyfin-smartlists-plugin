@@ -473,15 +473,15 @@
     SmartLists.createTagBasedInput = function (valueContainer, currentValue) {
         // Create the main container with EXACT same styling as standard Jellyfin inputs
         const tagContainer = document.createElement('div');
-        tagContainer.className = 'tag-input-container';
-        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; background: var(--jf-palette-background-paper); padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
+        tagContainer.className = 'tag-input-container emby-input';
+        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
 
         // Create the input field with standard Jellyfin styling
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'emby-input tag-input-field';
+        input.className = 'tag-input-field';
         input.placeholder = 'Type a value and press Enter';
-        input.style.cssText = 'border: none; background: transparent; color: inherit; flex: 1; min-width: 200px; outline: none; font-family: inherit; padding: 0; margin: 0;';
+        input.style.cssText = 'border: none; background: transparent; color: inherit; flex: 1; min-width: 200px; outline: none; font-family: inherit; font-size: inherit; padding: 0; margin: 0;';
         input.setAttribute('data-input-type', 'tag-input');
 
         // Use page-level ::placeholder styling (see config.html)
@@ -761,7 +761,8 @@
         const rulesContainer = page.querySelector('#rules-container');
         const logicGroupId = 'logic-group-' + Date.now();
 
-        const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group', SmartLists.STYLES.logicGroup);
+        // Create logic group with paperList class for theme-aware background
+        const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
 
         rulesContainer.appendChild(logicGroupDiv);
@@ -1062,9 +1063,9 @@
         const orSeparator = SmartLists.createOrSeparator();
         rulesContainer.appendChild(orSeparator);
 
-        // Create new logic group
+        // Create new logic group with paperList class for theme-aware background
         const logicGroupId = 'logic-group-' + Date.now();
-        const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group', SmartLists.STYLES.logicGroup);
+        const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
 
         rulesContainer.appendChild(logicGroupDiv);
@@ -1292,8 +1293,9 @@
         const orSeparator = SmartLists.createOrSeparator();
         rulesContainer.appendChild(orSeparator);
 
+        // Create cloned logic group with paperList class for theme-aware background
         const logicGroupId = 'logic-group-' + Date.now();
-        const newLogicGroupDiv = SmartLists.createStyledElement('div', 'logic-group', SmartLists.STYLES.logicGroup);
+        const newLogicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         newLogicGroupDiv.setAttribute('data-group-id', logicGroupId);
         rulesContainer.appendChild(newLogicGroupDiv);
 

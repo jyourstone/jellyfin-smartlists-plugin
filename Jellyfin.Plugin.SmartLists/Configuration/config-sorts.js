@@ -204,8 +204,8 @@
             ignoreArticles = true;
         }
         
-        // Create box container
-        const box = SmartLists.createStyledElement('div', 'sort-box', SmartLists.STYLES.sortBox);
+        // Create box container with paperList class for theme-aware background
+        const box = SmartLists.createStyledElement('div', 'sort-box paperList', SmartLists.STYLES.sortBox);
         box.setAttribute('data-sort-id', sortId);
         
         // Create fields container

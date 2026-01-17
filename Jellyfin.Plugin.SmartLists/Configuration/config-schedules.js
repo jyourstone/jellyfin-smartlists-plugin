@@ -65,9 +65,9 @@
     
     SmartLists.createScheduleBox = function(page, scheduleData) {
         const scheduleId = 'schedule-' + Date.now() + '-' + Math.random();
-        
-        // Create box container with inline styles
-        const box = SmartLists.createStyledElement('div', 'schedule-box', SmartLists.STYLES.scheduleBox);
+
+        // Create box container with inline styles and paperList class for theme-aware background
+        const box = SmartLists.createStyledElement('div', 'schedule-box paperList', SmartLists.STYLES.scheduleBox);
         box.setAttribute('data-schedule-id', scheduleId);
         
         // Create fields container with inline styles
@@ -446,9 +446,9 @@
     
     SmartLists.createVisibilityScheduleBox = function(page, scheduleData) {
         const scheduleId = 'visibility-schedule-' + Date.now() + '-' + Math.random();
-        
-        // Create box container with inline styles
-        const box = SmartLists.createStyledElement('div', 'schedule-box', SmartLists.STYLES.scheduleBox);
+
+        // Create box container with inline styles and paperList class for theme-aware background
+        const box = SmartLists.createStyledElement('div', 'schedule-box paperList', SmartLists.STYLES.scheduleBox);
         box.setAttribute('data-schedule-id', scheduleId);
         
         // Create fields container with inline styles
