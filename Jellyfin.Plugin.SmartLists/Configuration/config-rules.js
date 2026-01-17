@@ -474,14 +474,14 @@
         // Create the main container with EXACT same styling as standard Jellyfin inputs
         const tagContainer = document.createElement('div');
         tagContainer.className = 'tag-input-container';
-        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; background: #292929; padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
+        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; background: rgba(255, 255, 255, 0.05); padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
 
         // Create the input field with standard Jellyfin styling
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'emby-input tag-input-field';
         input.placeholder = 'Type a value and press Enter';
-        input.style.cssText = 'border: none; background: transparent; color: #fff; flex: 1; min-width: 200px; outline: none; font-family: inherit; padding: 0; margin: 0;';
+        input.style.cssText = 'border: none; background: transparent; color: inherit; flex: 1; min-width: 200px; outline: none; font-family: inherit; padding: 0; margin: 0;';
         input.setAttribute('data-input-type', 'tag-input');
 
         // Use page-level ::placeholder styling (see config.html)
@@ -564,7 +564,7 @@
         // Create tag element with subtle Jellyfin styling
         const tag = document.createElement('div');
         tag.className = 'tag-item';
-        tag.style.cssText = 'background: #292929; color: #ccc; padding: 0.3em 0.6em; border-radius: 2px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.5em; max-width: none; flex: 0 0 auto; border: 1px solid #444; white-space: nowrap; overflow: hidden;';
+        tag.style.cssText = 'background: rgba(255, 255, 255, 0.08); padding: 0.3em 0.6em; border-radius: 2px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.5em; max-width: none; flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, 0.15); white-space: nowrap; overflow: hidden;';
 
         // Tag text
         const tagTextSpan = document.createElement('span');
@@ -575,7 +575,7 @@
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.innerHTML = '×';
-        removeBtn.style.cssText = 'background: none; border: none; color: #ccc; cursor: pointer; font-size: 1.2em; font-weight: bold; padding: 0; line-height: 1; width: 1.2em; height: 1.2em; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s ease;';
+        removeBtn.style.cssText = 'background: none; border: none; color: rgba(255, 255, 255, 0.6); cursor: pointer; font-size: 1.2em; font-weight: bold; padding: 0; line-height: 1; width: 1.2em; height: 1.2em; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s ease;';
 
         removeBtn.addEventListener('mouseenter', function () {
             this.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
@@ -648,7 +648,7 @@
         if (operatorSelect && operatorSelect.value === 'MatchRegex') {
             const helpDiv = document.createElement('div');
             helpDiv.className = 'regex-help field-description';
-            helpDiv.style.cssText = 'margin-top: 0.5em; margin-bottom: 0.5em; font-size: 0.85em; color: #aaa; background: rgba(255,255,255,0.05); padding: 0.5em; border-radius: 1px;';
+            helpDiv.style.cssText = 'margin-top: 0.5em; margin-bottom: 0.5em; font-size: 0.85em; opacity: 0.7; background: rgba(255,255,255,0.05); padding: 0.5em; border-radius: 1px;';
             // Use safe HTML creation instead of innerHTML for security
             helpDiv.innerHTML = '';
 
@@ -684,7 +684,7 @@
             const regexLink = document.createElement('a');
             regexLink.href = 'https://regex101.com/?flavor=dotnet';
             regexLink.target = '_blank';
-            regexLink.style.color = '#00a4dc';
+            regexLink.className = 'emby-button-link';
             regexLink.textContent = 'Regex101.com (.NET flavor)';
             helpDiv.appendChild(regexLink);
             ruleGroup.appendChild(helpDiv);
@@ -726,7 +726,7 @@
 
         const label = document.createElement('label');
         label.textContent = 'Max Items for this OR block: ';
-        label.style.cssText = 'font-size: 0.9em; color: #888; margin-right: 8px;';
+        label.style.cssText = 'font-size: 0.9em; opacity: 0.6; margin-right: 8px;';
 
         const input = document.createElement('input');
         input.type = 'number';
@@ -740,7 +740,7 @@
         infoLink.target = '_blank';
         infoLink.rel = 'noopener noreferrer';
         infoLink.title = 'Documentation';
-        infoLink.style.cssText = 'text-decoration: none; color: #888; display: inline-flex; align-items: center; margin-left: 8px;';
+        infoLink.style.cssText = 'text-decoration: none; color: inherit; opacity: 0.6; display: inline-flex; align-items: center; margin-left: 8px;';
 
         const infoIcon = document.createElement('span');
         infoIcon.className = 'material-icons';
@@ -826,7 +826,7 @@
             '</div>' +
             '</div>' +
             '<div class="rule-user-selector" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Check for specific user (optional):' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-user-select" style="width: 100%;">' +
@@ -834,7 +834,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-nextunwatched-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include unwatched series:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-nextunwatched-select" style="width: 100%;">' +
@@ -844,7 +844,7 @@
             '</div>' +
             '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
             '<div class="rule-collections-collection-only" style="margin-bottom: 0.75em;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include collection only:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-collections-collection-only-select" style="width: 100%;">' +
@@ -853,7 +853,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-collections-episodes" style="margin-bottom: 0.75em;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include episodes within series:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-collections-select" style="width: 100%;">' +
@@ -864,7 +864,7 @@
             '</div>' +
             '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
             '<div class="rule-playlists-playlist-only" style="margin-bottom: 0.75em;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include playlist only:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-playlists-playlist-only-select" style="width: 100%;">' +
@@ -874,7 +874,7 @@
             '</div>' +
             '</div>' +
             '<div class="rule-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series tags:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-tags-select" style="width: 100%;">' +
@@ -883,7 +883,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-studios-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series studios:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-studios-select" style="width: 100%;">' +
@@ -892,7 +892,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-genres-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series genres:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-genres-select" style="width: 100%;">' +
@@ -901,7 +901,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-audiolanguages-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Must be the default language:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-audiolanguages-select" style="width: 100%;">' +
@@ -910,7 +910,7 @@
             '</select>' +
             '</div>' +
             '<div class="rule-similarity-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.5em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.5em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Compare using these metadata fields (default: Genre + Tags):' +
             '</label>' +
             '<div class="similarity-fields-container" style="display: flex; flex-wrap: wrap; gap: 0.5em;">' +
@@ -918,7 +918,7 @@
             '</div>' +
             '</div>' +
             '<div class="rule-people-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; color: #ccc; font-weight: 500;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Select person type:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-people-select" style="width: 100%;">' +

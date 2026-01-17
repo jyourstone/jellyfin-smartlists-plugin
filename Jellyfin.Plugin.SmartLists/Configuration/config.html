@@ -20,7 +20,7 @@
                 <!-- User Config Page Link -->
                 <div style="margin-bottom: 1em;">
                     <a href="#/userpluginsettings.html?pageUrl=/Plugins/SmartLists/Pages/UserPlaylists&amp;tab=create" 
-                       style="color: #00a4dc; text-decoration: none;">
+                       style="color: var(--jf-palette-primary-main); text-decoration: none;">
                         Open User Config Page
                     </a> (requires the plugins "File Transformation" and "Plugin Pages")
                     <a href="https://jellyfin-smartlists-plugin.dinsten.se/getting-started/quick-start/"
@@ -303,8 +303,7 @@
                         </div>
 
                         <div style="margin-top: 2em;">
-                            <button type="submit" id="submitBtn" class="button-submit emby-button block">Create
-                                List</button>
+                            <button type="submit" id="submitBtn" class="button-submit emby-button block">Create List</button>
                             <button type="button" id="clearFormBtn" class="emby-button raised block">Clear Form</button>
                         </div>
                     </form>
@@ -320,14 +319,13 @@
 
                         <!-- Filters Section -->
                         <div class="inputContainer" style="margin-bottom: 2em;">
-                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
                                 <div
                                     style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1em; align-items: end;">
                                     <div>
                                         <label class="inputLabel" for="playlistSortSelect">Sort By</label>
                                         <select id="playlistSortSelect" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="name-asc">Name (A-Z)</option>
                                             <option value="name-desc">Name (Z-A)</option>
                                             <option value="created-desc">Created Date (Newest)</option>
@@ -342,8 +340,7 @@
                                     <div>
                                         <label class="inputLabel" for="typeFilter">Type</label>
                                         <select id="typeFilter" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="all">All Types</option>
                                             <option value="Playlist">Playlists</option>
                                             <option value="Collection">Collections</option>
@@ -353,8 +350,7 @@
                                     <div>
                                         <label class="inputLabel" for="mediaTypeFilter">Media Type</label>
                                         <select id="mediaTypeFilter" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="all">All Types</option>
                                             <option value="Movie">Movie</option>
                                             <option value="Episode">Episode (TV Show)</option>
@@ -371,8 +367,7 @@
                                     <div>
                                         <label class="inputLabel" for="userFilter">User</label>
                                         <select id="userFilter" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="all">All Users</option>
                                             <!-- Options will be populated dynamically -->
                                         </select>
@@ -386,9 +381,9 @@
                                             style="position: relative; display: flex; align-items: center; flex: 1;">
                                             <input type="search" id="playlistSearchInput" class="emby-input"
                                                 autocomplete="off" inputmode="search" placeholder="Search lists..."
-                                                style="padding: 0.75em 2.5em 0.75em 0.75em; width: 100%; box-sizing: border-box; background-color: #2A2A2A;">
+                                                style="padding: 0.75em 2.5em 0.75em 0.75em; width: 100%; box-sizing: border-box;">
                                             <button type="button" id="clearSearchBtn" class="search-clear-btn"
-                                                style="position: absolute; right: 0.5em; background: none; border: none; color: #999; cursor: pointer; padding: 0.25em; font-size: 1.2em; display: none;"
+                                                style="position: absolute; right: 0.5em; background: none; border: none; cursor: pointer; padding: 0.25em; font-size: 1.2em; display: none; opacity: 0.6;"
                                                 title="Clear search" aria-label="Clear search">×</button>
                                         </div>
                                         <button type="button" id="clearFiltersBtn" class="emby-button raised">Clear All
@@ -655,8 +650,8 @@
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel">Preview</label>
                             <div id="playlistNamePreview"
-                                style="padding: 0.5em; background-color: #2a2a2a; border: 1px solid #555; border-radius: 4px; font-family: monospace; width: 100%; box-sizing: border-box;">
-                                <span style="color: #888;">Example: </span><span id="previewText">My Awesome List</span>
+                                style="padding: 0.5em; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; font-family: monospace; width: 100%; box-sizing: border-box;">
+                                <span style="opacity: 0.6;">Example: </span><span id="previewText">My Awesome List</span>
                             </div>
                             <div class="fieldDescription">Live preview of how list names will appear in Jellyfin. You
                                 can use both prefix and suffix, or just one, or neither.</div>
@@ -692,7 +687,7 @@
                             <label for="importPlaylistsFile" class="emby-button raised block"
                                 style="display: inline-block; margin-bottom: 0.5em; cursor: pointer;">Choose ZIP
                                 File</label>
-                            <div id="selectedFileName" style="margin-bottom: 0.5em; color: #ccc; font-size: 0.9em;">
+                            <div id="selectedFileName" style="margin-bottom: 0.5em; opacity: 0.8; font-size: 0.9em;">
                             </div>
                             <button type="button" is="emby-button" id="importPlaylistsBtn"
                                 class="emby-button raised block" style="display: none;">Import Selected File</button>
@@ -724,9 +719,9 @@
 
                         <div class="inputContainer" style="margin-bottom: 2em;">
                             <h3 class="sectionTitle">Ongoing Operations</h3>
-                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
                                 <div id="ongoing-operations-container">
-                                    <p style="color: #aaa;">No ongoing refresh operations.</p>
+                                    <p style="opacity: 0.6;">No ongoing refresh operations.</p>
                                 </div>
                             </div>
                         </div>
@@ -735,9 +730,9 @@
                             <h3 class="sectionTitle">Statistics</h3>
                             <div class="fieldDescription" style="margin-bottom: 1em;">Statistics are tracked since the
                                 last server restart. Historical data is not persisted across restarts.</div>
-                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
                                 <div id="statistics-container">
-                                    <p style="color: #aaa;">No statistics available yet. Statistics will appear after
+                                    <p style="opacity: 0.6;">No statistics available yet. Statistics will appear after
                                         refreshing lists.</p>
                                 </div>
                             </div>
@@ -747,9 +742,9 @@
                             <h3 class="sectionTitle">Refresh History</h3>
                             <div class="fieldDescription" style="margin-bottom: 1em;">Shows the last refresh for each
                                 list since the last server restart.</div>
-                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
                                 <div id="refresh-history-container">
-                                    <p style="color: #aaa;">No refresh history available. History will appear after
+                                    <p style="opacity: 0.6;">No refresh history available. History will appear after
                                         refreshing lists.</p>
                                 </div>
                             </div>
@@ -769,13 +764,13 @@
                     </div>
                     <div class="custom-modal-body">
                         <p id="delete-confirm-text"></p>
-                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background-color: #181818;">
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background: rgba(255, 255, 255, 0.05);">
                             <label style="display: flex; align-items: center; cursor: pointer;">
                                 <input type="checkbox" id="delete-jellyfin-playlist-checkbox" checked
                                     style="margin-right: 0.5em;">
                                 <span>Also delete the Jellyfin list</span>
                             </label>
-                            <div style="font-size: 0.9em; color: #aaa; margin-top: 0.5em; margin-bottom: 0.5em;">
+                            <div style="font-size: 0.9em; opacity: 0.6; margin-top: 0.5em; margin-bottom: 0.5em;">
                                 <strong>Unchecked:</strong> Only delete the SmartList configuration. The Jellyfin list
                                 will remain and can be managed manually.<br><br>
                                 <strong>Checked:</strong> Delete both the SmartList configuration and the Jellyfin list.

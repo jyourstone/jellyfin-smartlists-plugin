@@ -263,13 +263,12 @@
 
                         <!-- Filters Section -->
                         <div class="inputContainer" style="margin-bottom: 2em;">
-                            <div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; align-items: end;">
                                     <div>
                                         <label class="inputLabel" for="playlistSortSelect">Sort By</label>
                                         <select id="playlistSortSelect" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="name-asc">Name (A-Z)</option>
                                             <option value="name-desc">Name (Z-A)</option>
                                             <option value="created-desc">Created Date (Newest)</option>
@@ -284,8 +283,7 @@
                                     <div>
                                         <label class="inputLabel" for="typeFilter">Type</label>
                                         <select id="typeFilter" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="all">All Types</option>
                                             <option value="Playlist">Playlists</option>
                                             <option value="Collection">Collections</option>
@@ -295,8 +293,7 @@
                                     <div>
                                         <label class="inputLabel" for="mediaTypeFilter">Media Type</label>
                                         <select id="mediaTypeFilter" is="emby-select"
-                                            class="emby-select-withcolor emby-select"
-                                            style="background-color: #2A2A2A;">
+                                            class="emby-select-withcolor emby-select">
                                             <option value="all">All Types</option>
                                             <option value="Movie">Movie</option>
                                             <option value="Episode">Episode (TV Show)</option>
@@ -318,9 +315,9 @@
                                             style="position: relative; display: flex; align-items: center; flex: 1;">
                                             <input type="search" id="playlistSearchInput" class="emby-input"
                                                 autocomplete="off" inputmode="search" placeholder="Search lists..."
-                                                style="padding: 0.75em 2.5em 0.75em 0.75em; width: 100%; box-sizing: border-box; background-color: #2A2A2A;">
+                                                style="padding: 0.75em 2.5em 0.75em 0.75em; width: 100%; box-sizing: border-box;">
                                             <button type="button" id="clearSearchBtn" class="search-clear-btn"
-                                                style="position: absolute; right: 0.5em; background: none; border: none; color: #999; cursor: pointer; padding: 0.25em; font-size: 1.2em; display: none;"
+                                                style="position: absolute; right: 0.5em; background: none; border: none; cursor: pointer; padding: 0.25em; font-size: 1.2em; display: none; opacity: 0.6;"
                                                 title="Clear search" aria-label="Clear search">×</button>
                                         </div>
                                         <button type="button" id="clearFiltersBtn" class="emby-button raised">Clear All
@@ -402,13 +399,13 @@
                     </div>
                     <div class="custom-modal-body">
                         <p id="delete-confirm-text"></p>
-                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background-color: #181818;">
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background: rgba(255, 255, 255, 0.05);">
                             <label style="display: flex; align-items: center; cursor: pointer;">
                                 <input type="checkbox" id="delete-jellyfin-playlist-checkbox" checked
                                     style="margin-right: 0.5em;">
                                 <span>Also delete the Jellyfin list</span>
                             </label>
-                            <div style="font-size: 0.9em; color: #aaa; margin-top: 0.5em; margin-bottom: 0.5em;">
+                            <div style="font-size: 0.9em; opacity: 0.6; margin-top: 0.5em; margin-bottom: 0.5em;">
                                 <strong>Unchecked:</strong> Only delete the SmartList configuration. The Jellyfin list
                                 will remain and can be managed manually.<br><br>
                                 <strong>Checked:</strong> Delete both the SmartList configuration and the Jellyfin list.

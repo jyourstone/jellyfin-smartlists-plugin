@@ -1119,7 +1119,7 @@
             for (let groupIndex = 0; groupIndex < playlist.ExpressionSets.length; groupIndex++) {
                 const expressionSet = playlist.ExpressionSets[groupIndex];
                 if (groupIndex > 0) {
-                    rulesHtml += '<strong style="color: #888;">OR</strong><br>';
+                    rulesHtml += '<strong style="opacity: 0.6;">OR</strong><br>';
                 }
 
                 if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
@@ -1128,7 +1128,7 @@
                     for (let ruleIndex = 0; ruleIndex < expressionSet.Expressions.length; ruleIndex++) {
                         const rule = expressionSet.Expressions[ruleIndex];
                         if (ruleIndex > 0) {
-                            rulesHtml += '<br><em style="color: #888; font-size: 0.9em;">AND</em><br>';
+                            rulesHtml += '<br><em style="opacity: 0.6; font-size: 0.9em;">AND</em><br>';
                         }
 
                         let fieldName = rule.MemberName;
@@ -1237,14 +1237,14 @@
                             }
                         }
 
-                        rulesHtml += '<span style="font-family: monospace; background: #232323; padding: 4px 4px; border-radius: 3px;">';
+                        rulesHtml += '<span style="font-family: monospace; background: rgba(255, 255, 255, 0.08); padding: 4px 4px; border-radius: 3px;">';
                         rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
                         rulesHtml += '</span>';
                     }
 
                     // Add MaxItems indicator if this group has a limit
                     if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
-                        rulesHtml += '<br><span style="color: #888; font-size: 0.9em;">↳ Max ' + SmartLists.escapeHtml(expressionSet.MaxItems.toString()) + ' items from this group</span>';
+                        rulesHtml += '<br><span style="opacity: 0.6; font-size: 0.9em;">↳ Max ' + SmartLists.escapeHtml(expressionSet.MaxItems.toString()) + ' items from this group</span>';
                     }
 
                     rulesHtml += '</div>';
@@ -1377,7 +1377,7 @@
                 const jellyfinId = playlist.JellyfinCollectionId;
                 const url = buildJellyfinUrl(jellyfinId);
                 if (url) {
-                    jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: #00a4dc; text-decoration: none;">View in Jellyfin</a>';
+                    jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: var(--jf-palette-primary-main); text-decoration: none;">View in Jellyfin</a>';
                 }
             } else {
                 // Playlists: show current user's playlist (if they have one) + count of others
@@ -1403,35 +1403,35 @@
                         if (currentUserPlaylist) {
                             const url = buildJellyfinUrl(currentUserPlaylist.JellyfinPlaylistId);
                             if (url) {
-                                jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: #00a4dc; text-decoration: none;">View in Jellyfin</a>';
+                                jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: var(--jf-palette-primary-main); text-decoration: none;">View in Jellyfin</a>';
 
                                 // Add count of other users if any
                                 if (otherUsersCount > 0) {
-                                    jellyfinLinkHtml += ' <span style="color: #888; font-size: 0.9em;">(+' + otherUsersCount + ' other' + (otherUsersCount === 1 ? '' : 's') + ')</span>';
+                                    jellyfinLinkHtml += ' <span style="opacity: 0.6; font-size: 0.9em;">(+' + otherUsersCount + ' other' + (otherUsersCount === 1 ? '' : 's') + ')</span>';
                                 }
                             }
                         } else if (otherUsersCount > 0) {
                             // Current user doesn't have this playlist, just show count
-                            jellyfinLinkHtml = ' - <span style="color: #888; font-style: italic;">(' + playlist.UserPlaylists.length + ' user' + (playlist.UserPlaylists.length === 1 ? '' : 's') + ')</span>';
+                            jellyfinLinkHtml = ' - <span style="opacity: 0.6; font-style: italic;">(' + playlist.UserPlaylists.length + ' user' + (playlist.UserPlaylists.length === 1 ? '' : 's') + ')</span>';
                         }
                     } catch (err) {
                         console.error('Error getting current user ID:', err);
                         // Fallback: show count only
-                        jellyfinLinkHtml = ' - <span style="color: #888; font-style: italic;">(' + playlist.UserPlaylists.length + ' user' + (playlist.UserPlaylists.length === 1 ? '' : 's') + ')</span>';
+                        jellyfinLinkHtml = ' - <span style="opacity: 0.6; font-style: italic;">(' + playlist.UserPlaylists.length + ' user' + (playlist.UserPlaylists.length === 1 ? '' : 's') + ')</span>';
                     }
                 } else {
                     // Fallback: single playlist (backwards compatibility)
                     const jellyfinId = playlist.JellyfinPlaylistId;
                     const url = buildJellyfinUrl(jellyfinId);
                     if (url) {
-                        jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: #00a4dc; text-decoration: none;">View in Jellyfin</a>';
+                        jellyfinLinkHtml = ' - <a href="' + SmartLists.escapeHtmlAttribute(url) + '" target="_blank" rel="noopener noreferrer" style="color: var(--jf-palette-primary-main); text-decoration: none;">View in Jellyfin</a>';
                     }
                 }
             }
         }
 
         // Generate collapsible playlist card with improved styling
-        return '<div class="inputContainer playlist-card" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" style="border: none; border-radius: 2px; margin-bottom: 1em; background: #202020;">' +
+        return '<div class="inputContainer playlist-card" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" style="border: 1px solid var(--jf-palette-divider); border-radius: 2px; margin-bottom: 1em; background: var(--jf-palette-background-paper);">' +
             // Compact header (always visible)
             '<div class="playlist-header" style="padding: 0.75em; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">' +
             '<div class="playlist-header-left" style="display: flex; align-items: center; flex: 1; min-width: 0;">' +
@@ -1443,123 +1443,123 @@
             '<span class="material-icons checkboxIcon checkboxIcon-unchecked" aria-hidden="true"></span>' +
             '</span>' +
             '</label>' +
-            '<span class="playlist-expand-icon" style="margin-right: 0.5em; font-family: monospace; font-size: 1.2em; color: #999; flex-shrink: 0;">▶</span>' +
+            '<span class="playlist-expand-icon" style="margin-right: 0.5em; font-family: monospace; font-size: 1.2em; opacity: 0.6; flex-shrink: 0;">▶</span>' +
             '<h3 style="margin: 0; flex: 1.5; min-width: 0; word-wrap: break-word; padding-right: 0.5em;">' + eName + '</h3>' +
             (enabledStatus ? '<span class="playlist-status" style="color: ' + enabledStatusColor + '; font-weight: bold; margin-right: 0.75em; flex-shrink: 0; line-height: 1.5; align-self: center;">' + enabledStatus + '</span>' : '') +
-            (eStatsDisplay ? '<span class="playlist-stats" style="color: #888; font-size: 0.85em; margin-right: 0.5em; flex-shrink: 0; font-weight: normal; line-height: 1.5; align-self: center;">' + eStatsDisplay + '</span>' : '') +
+            (eStatsDisplay ? '<span class="playlist-stats" style="opacity: 0.6; font-size: 0.85em; margin-right: 0.5em; flex-shrink: 0; font-weight: normal; line-height: 1.5; align-self: center;">' + eStatsDisplay + '</span>' : '') +
             '</div>' +
             '<div class="playlist-header-right" style="display: flex; align-items: center; margin-left: 1em; margin-right: 0.5em;">' +
             '<div class="playlist-type-container" style="display: flex; flex-wrap: wrap; gap: 0.25em; flex-shrink: 0; max-width: 160px; justify-content: flex-end;">' +
-            '<span class="playlist-type-label" style="padding: 0.4em 0.6em; background: #333; border-radius: 3px; font-size: 0.8em; color: #ccc; white-space: nowrap;">' + SmartLists.escapeHtml(listType) + '</span>' +
+            '<span class="playlist-type-label" style="padding: 0.4em 0.6em; background: rgba(255, 255, 255, 0.1); border-radius: 3px; font-size: 0.8em; opacity: 0.8; white-space: nowrap;">' + SmartLists.escapeHtml(listType) + '</span>' +
             '</div>' +
             '</div>' +
             '</div>' +
 
             // Detailed content (initially hidden)
-            '<div class="playlist-details" style="display: none; padding: 0 0.75em 0.75em 0.75em; background: #202020;">' +
+            '<div class="playlist-details" style="display: none; padding: 0 0.75em 0.75em 0.75em;">' +
             // Rules section
             '<div class="rules-section" style="margin-bottom: 1em; margin-left: 0.5em;">' +
-            '<h4 style="margin: 0 0 0.5em 0; color: #fff; font-size: 1em;">Rules</h4>' +
+            '<h4 style="margin: 0 0 0.5em 0; font-size: 1em;">Rules</h4>' +
             rulesHtml +
             '</div>' +
 
             // Properties table
             '<div class="properties-section" style="margin-bottom: 1em; margin-left: 0.5em;">' +
-            '<h4 style="margin: 0 0 0.5em 0; color: #fff; font-size: 1em;">Properties</h4>' +
+            '<h4 style="margin: 0 0 0.5em 0; font-size: 1em;">Properties</h4>' +
             '<table style="width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.02); border-radius: 4px; overflow: hidden;">' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Type</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eListType +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Type</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eListType +
             jellyfinLinkHtml +
             '</td>' +
             '</tr>' +
             // Hide File property on user pages
             (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eFileName + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">File</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eFileName + '</td>' +
                 '</tr>' :
                 ''
             ) +
             // Hide User(s) property on user pages
             (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eUserName + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">User(s)</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eUserName + '</td>' +
                 '</tr>' :
                 ''
             ) +
             // Hide Created By property on user pages
             (!isUserPage ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created By</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eCreatedBy + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created By</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eCreatedBy + '</td>' +
                 '</tr>' :
                 ''
             ) +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Status</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eStatusDisplayText + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Status</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eStatusDisplayText + '</td>' +
             '</tr>' +
             (!isCollection ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Visibility</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + SmartLists.escapeHtml(isPublic) + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Visibility</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + SmartLists.escapeHtml(isPublic) + '</td>' +
                 '</tr>' :
                 ''
             ) +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Media Types</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eMediaTypesDisplayText + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Media Types</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eMediaTypesDisplayText + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Sort</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eSortName + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Sort</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eSortName + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Max Items</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eMaxItems + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Max Items</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eMaxItems + '</td>' +
             '</tr>' +
             (!isCollection ?
                 '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Max Playtime</td>' +
-                '<td style="padding: 0.5em 0.75em; color: #fff;">' + eMaxPlayTime + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Max Playtime</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eMaxPlayTime + '</td>' +
                 '</tr>' : ''
             ) +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Auto Refresh</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eAutoRefreshDisplay + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Auto Refresh</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eAutoRefreshDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Refresh Schedule</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eScheduleDisplay + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Refresh Schedule</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eScheduleDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Visibility Schedule</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eVisibilityScheduleDisplay + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Visibility Schedule</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eVisibilityScheduleDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eDateCreatedDisplay + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Created</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eDateCreatedDisplay + '</td>' +
             '</tr>' +
             '</table>' +
             '</div>' +
 
             // Statistics table
             '<div class="statistics-section" style="margin-bottom: 1em; margin-left: 0.5em;">' +
-            '<h4 style="margin: 0 0 0.5em 0; color: #fff; font-size: 1em;">Statistics</h4>' +
+            '<h4 style="margin: 0 0 0.5em 0; font-size: 1em;">Statistics</h4>' +
             '<table style="width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.02); border-radius: 4px; overflow: hidden;">' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Item Count</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + (itemCount !== null ? itemCount : 'N/A') + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Item Count</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + (itemCount !== null ? itemCount : 'N/A') + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Total Playtime</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + (eTotalRuntimeLong && playlist.TotalRuntimeMinutes && playlist.TotalRuntimeMinutes > 0 ? eTotalRuntimeLong : 'N/A') + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Total Playtime</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + (eTotalRuntimeLong && playlist.TotalRuntimeMinutes && playlist.TotalRuntimeMinutes > 0 ? eTotalRuntimeLong : 'N/A') + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">' +
-            '<td style="padding: 0.5em 0.75em; font-weight: bold; color: #ccc; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Last Refreshed</td>' +
-            '<td style="padding: 0.5em 0.75em; color: #fff;">' + eLastRefreshDisplay + '</td>' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid rgba(255,255,255,0.1);">Last Refreshed</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eLastRefreshDisplay + '</td>' +
             '</tr>' +
             '</table>' +
             '</div>' +

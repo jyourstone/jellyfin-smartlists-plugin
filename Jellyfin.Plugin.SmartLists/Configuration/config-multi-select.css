@@ -1,4 +1,5 @@
 /* Multi-select component styling - centralized for reuse */
+/* Matches Jellyfin's native single-select styling for consistency */
 
 .multi-select-container {
     position: relative;
@@ -6,7 +7,7 @@
 
 .multi-select-display {
     padding: 0.5em;
-    background-color: #2A2A2A;
+    background: var(--jf-palette-background-paper);
     min-height: 1.7em;
     display: flex;
     align-items: center;
@@ -15,13 +16,12 @@
 }
 
 .multi-select-placeholder {
-    color: #999;
+    opacity: 0.6;
     font-size: 110%;
     cursor: default;
 }
 
 .multi-select-selected-items {
-    color: #e0e0e0;
     font-size: 110%;
     cursor: default;
 }
@@ -32,11 +32,11 @@
     right: 0;
     max-height: 400px;
     overflow-y: auto;
-    background-color: rgba(42, 42, 42, 0.95);
-    border: 1px solid #7a7a7a;
+    background: color-mix(in srgb, var(--jf-palette-background-paper) 90%, transparent);
+    border: 1px solid var(--jf-palette-divider);
     z-index: 1000;
     border-radius: 1em;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(8px);
 }
 
 .multi-select-options {
@@ -49,7 +49,7 @@
 }
 
 .multi-select-option:hover {
-    background-color: #2A56B9;
+    background: var(--jf-palette-action-hover);
     border-radius: 0.5em;
 }
 
@@ -73,5 +73,5 @@
     margin-left: auto;
     margin-right: 1.1em;
     font-size: 0.5em;
-    color: #E0E0E0;
+    opacity: 0.8;
 }

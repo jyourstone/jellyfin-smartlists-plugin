@@ -150,7 +150,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             font-size: 18px;
             font-weight: 500;
             margin: 0 0 12px 0;
-            color: #00a4dc;
+            color: var(--jf-palette-primary-main);
         }
         .info-box p {
             margin: 0;
@@ -159,7 +159,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         .back-link {
             display: inline-block;
             margin-top: 24px;
-            color: #00a4dc;
+            color: var(--jf-palette-primary-main);
             text-decoration: none;
             font-size: 14px;
             font-weight: 500;

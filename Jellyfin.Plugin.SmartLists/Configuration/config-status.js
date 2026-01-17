@@ -116,7 +116,7 @@
         if (!container) return;
 
         if (!operations || operations.length === 0) {
-            container.innerHTML = '<p style="color: #aaa;">No ongoing refresh operations.</p>';
+            container.innerHTML = '<p style="opacity: 0.6;">No ongoing refresh operations.</p>';
             return;
         }
 
@@ -128,15 +128,15 @@
             const estimatedTime = op.estimatedTimeRemaining ? formatDuration(op.estimatedTimeRemaining) : 'Calculating...';
 
             html += `
-                <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.5em;">
                         <div>
                             <strong>${escapeHtml(op.listName)}</strong>
-                            <span style="margin-left: 0.5em; font-size: 0.9em; color: #aaa;">
+                            <span style="margin-left: 0.5em; font-size: 0.9em; color: var(--jf-palette-text-secondary);">
                                 (${escapeHtml(String(op.listType))}) - ${escapeHtml(String(op.triggerType))}
                             </span>
                         </div>
-                        <div style="font-size: 0.9em; color: #aaa;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary);">
                             Started: ${formatDateTime(op.startTime)}
                         </div>
                     </div>
@@ -145,15 +145,15 @@
                             <span>Progress: ${op.processedItems} / ${op.totalItems} items</span>
                             <span>${progressPercent}%</span>
                         </div>
-                        <div style="width: 100%; height: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden;">
-                            <div style="width: ${progressPercent}%; height: 100%; background: #00a4dc; transition: width 0.3s;"></div>
+                        <div style="width: 100%; height: 20px; background: var(--jf-palette-action-hover); border-radius: 10px; overflow: hidden;">
+                            <div style="width: ${progressPercent}%; height: 100%; background: var(--jf-palette-primary-main); transition: width 0.3s;"></div>
                         </div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: #aaa;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: var(--jf-palette-text-secondary);">
                         <span>Elapsed: ${elapsedTime}</span>
                         <span>Estimated remaining: ${estimatedTime}</span>
                     </div>
-                    ${op.errorMessage ? `<div style="margin-top: 0.5em; color: #ff6b6b;">Error: ${escapeHtml(op.errorMessage)}</div>` : ''}
+                    ${op.errorMessage ? `<div style="margin-top: 0.5em; color: var(--jf-palette-error-main);">Error: ${escapeHtml(op.errorMessage)}</div>` : ''}
                 </div>
             `;
         });
@@ -196,31 +196,31 @@
         const newHTML = `
             <div style="display: flex; flex-direction: column; gap: 1em;">
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em;">
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">In Queue</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">In Queue</div>
                         <div style="font-size: 1.5em; font-weight: bold;">${queuedCount}</div>
                     </div>
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">Avg Duration</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Avg Duration</div>
                         <div style="font-size: 1.1em;">${avgDuration}</div>
                     </div>
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">Last Refresh</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Last Refresh</div>
                         <div style="font-size: 1.1em;">${lastRefresh}</div>
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em;">
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">Total Lists Processed</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Total Lists Processed</div>
                         <div style="font-size: 1.5em; font-weight: bold;">${stats.totalLists || 0}</div>
                     </div>
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">Successful</div>
-                        <div style="font-size: 1.5em; font-weight: bold; color: #4caf50;">${stats.successfulRefreshes || 0}</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Successful</div>
+                        <div style="font-size: 1.5em; font-weight: bold; color: var(--jf-palette-success-main);">${stats.successfulRefreshes || 0}</div>
                     </div>
-                    <div style="padding: 1em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                        <div style="font-size: 0.9em; color: #aaa; margin-bottom: 0.25em;">Failed</div>
-                        <div style="font-size: 1.5em; font-weight: bold; color: #ff6b6b;">${stats.failedRefreshes || 0}</div>
+                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                        <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Failed</div>
+                        <div style="font-size: 1.5em; font-weight: bold; color: var(--jf-palette-error-main);">${stats.failedRefreshes || 0}</div>
                     </div>
                 </div>
             </div>
@@ -240,7 +240,7 @@
         if (!container) return;
 
         if (!history || history.length === 0) {
-            container.innerHTML = '<p style="color: #aaa;">No refresh history available. History will appear after refreshing lists.</p>';
+            container.innerHTML = '<p style="opacity: 0.6;">No refresh history available. History will appear after refreshing lists.</p>';
             return;
         }
 

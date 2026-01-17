@@ -395,12 +395,12 @@
     // Centralized styling configuration
     SmartLists.STYLES = {
         scheduleBox: {
-            border: '1px solid #666',
+            border: '1px solid var(--jf-palette-divider)',
             borderRadius: '2px',
             padding: '1em 1.5em',
             marginBottom: '1em',
-            background: 'rgba(255, 255, 255, 0.05)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            background: 'var(--jf-palette-background-paper)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         scheduleFields: {
@@ -420,15 +420,15 @@
         scheduleFieldLabel: {
             marginBottom: '0.3em',
             fontSize: '0.85em',
-            color: '#ccc',
+            opacity: '0.8',
             fontWeight: '500'
         },
         scheduleRemoveBtn: {
             padding: '0.3em 0.6em',
             fontSize: '1.3em',
-            border: '1px solid #666',
-            background: 'rgba(255, 255, 255, 0.07)',
-            color: '#aaa',
+            border: '1px solid var(--jf-palette-divider)',
+            background: 'var(--jf-palette-action-hover)',
+            color: 'var(--jf-palette-text-secondary)',
             borderRadius: '4px',
             cursor: 'pointer',
             fontWeight: '500',
@@ -439,12 +439,12 @@
             marginLeft: 'auto'
         },
         sortBox: {
-            border: '1px solid #666',
+            border: '1px solid var(--jf-palette-divider)',
             borderRadius: '2px',
             padding: '1em 1.5em',
             marginBottom: '1em',
-            background: 'rgba(255, 255, 255, 0.05)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            background: 'var(--jf-palette-background-paper)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         sortFields: {
@@ -462,15 +462,14 @@
         sortFieldLabel: {
             marginBottom: '0.3em',
             fontSize: '0.85em',
-            color: '#ccc',
+            opacity: '0.8',
             fontWeight: '500'
         },
         sortRemoveBtn: {
             padding: '0.3em 0.6em',
             fontSize: '1.3em',
-            border: '1px solid #666',
-            background: 'rgba(255, 255, 255, 0.07)',
-            color: '#aaa',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            background: 'rgba(255, 255, 255, 0.1)',
             borderRadius: '4px',
             cursor: 'pointer',
             fontWeight: '500',
@@ -478,7 +477,8 @@
             width: 'auto',
             minWidth: 'auto',
             alignSelf: 'center',
-            marginLeft: 'auto'
+            marginLeft: 'auto',
+            opacity: '0.8'
         },
         modal: {
             container: {
@@ -487,7 +487,7 @@
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 zIndex: '10001',
-                backgroundColor: '#101010',
+                backgroundColor: 'rgba(0, 0, 0, 0.95)',
                 padding: '1.5em',
                 width: '90%',
                 maxWidth: '400px'
@@ -503,20 +503,20 @@
             }
         },
         logicGroup: {
-            border: '1px solid #666',
+            border: '1px solid var(--jf-palette-divider)',
             borderRadius: '2px',
             padding: '1.5em 1.5em 0.5em 1.5em',
             marginBottom: '1em',
-            background: 'rgba(255, 255, 255, 0.05)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            background: 'var(--jf-palette-background-paper)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
             position: 'relative'
         },
         logicGroupHeader: {
             position: 'absolute',
-            top: '-14px',
-            right: '12px',
+            top: '-32px',
+            right: '0',
             padding: '0',
-            background: '#101010', // Match page background to "cut" the border
+            background: 'transparent',
             zIndex: '5',
             display: 'flex',
             gap: '4px'
@@ -526,9 +526,9 @@
                 base: {
                     padding: '0.3em 0.8em',
                     fontSize: '0.8em',
-                    border: '1px solid #666',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    color: '#aaa',
+                    border: '1px solid var(--jf-palette-divider)',
+                    background: 'var(--jf-palette-action-hover)',
+                    color: 'var(--jf-palette-text-secondary)',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: '400',
@@ -542,9 +542,9 @@
                 base: {
                     padding: '0.3em 0.8em',
                     fontSize: '0.8em',
-                    border: '1px solid #666',
-                    background: 'rgba(255, 255, 255, 0.07)',
-                    color: '#aaa',
+                    border: '1px solid var(--jf-palette-divider)',
+                    background: 'var(--jf-palette-action-hover)',
+                    color: 'var(--jf-palette-text-secondary)',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: '400',
@@ -559,9 +559,9 @@
                 base: {
                     padding: '0.3em 0.8em',
                     fontSize: '1em',
-                    border: '1px solid #666',
-                    background: 'rgba(255, 255, 255, 0.07)',
-                    color: '#aaa',
+                    border: 'none',
+                    background: 'var(--jf-palette-error-main)',
+                    color: 'var(--jf-palette-error-contrastText)',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontWeight: '400',
@@ -576,7 +576,7 @@
             and: {
                 textAlign: 'center',
                 margin: '0.8em 0',
-                color: '#888',
+                opacity: '0.6',
                 fontSize: '0.8em',
                 fontWeight: 'bold',
                 position: 'relative',
@@ -588,8 +588,7 @@
                 position: 'relative'
             },
             orText: {
-                background: '#1a1a1a',
-                color: '#bbb',
+                background: 'rgba(255, 255, 255, 0.1)',
                 padding: '0.4em',
                 borderRadius: '4px',
                 fontWeight: 'bold',
@@ -597,7 +596,7 @@
                 position: 'relative',
                 zIndex: '2',
                 display: 'inline-block',
-                border: '1px solid #777',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
                 boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)'
             },
             orLine: {
@@ -606,7 +605,7 @@
                 left: '0',
                 right: '0',
                 height: '2px',
-                background: 'linear-gradient(to right, transparent, #777, transparent)',
+                background: 'linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent)',
                 zIndex: '1'
             },
             andLine: {
@@ -615,7 +614,7 @@
                 left: '20%',
                 right: '20%',
                 height: '1px',
-                background: 'rgba(136, 136, 136, 0.3)',
+                background: 'rgba(255, 255, 255, 0.15)',
                 zIndex: '1'
             }
         }

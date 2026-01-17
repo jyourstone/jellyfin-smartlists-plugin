@@ -325,10 +325,10 @@
     SmartLists.generateBulkActionsHTML = function (summaryText) {
         let html = '';
         html += '<div class="inputContainer" id="bulkActionsContainer" style="margin-bottom: 1em; display: none;">';
-        html += '<div class="paperList" style="padding: 1em; background-color: #202020; border-radius: 4px;">';
+        html += '<div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">';
 
         // Summary row at top
-        html += '<div id="playlist-summary" class="field-description" style="margin: 0 0 1em 0; padding: 0.5em; background: #2A2A2A; border-radius: 4px;">';
+        html += '<div id="playlist-summary" class="field-description" style="margin: 0 0 1em 0; padding: 0.5em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">';
         html += summaryText;
         html += '</div>';
 
@@ -349,7 +349,7 @@
         html += '</label>';
 
         // Selected count display
-        html += '<span id="selectedCountDisplay" class="fieldDescription" style="color: #999; margin-right: 0.75em; font-style: italic;">(0)</span>';
+        html += '<span id="selectedCountDisplay" class="fieldDescription" style="opacity: 0.6; margin-right: 0.75em; font-style: italic;">(0)</span>';
 
         // 2. Enable button
         html += '<button type="button" id="bulkEnableBtn" class="emby-button raised" disabled>Enable</button>';

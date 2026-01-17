@@ -39,7 +39,7 @@
             input = document.createElement('select');
             input.setAttribute('is', 'emby-select');
             input.className = 'emby-select-withcolor emby-select';
-            input.style.backgroundColor = '#2A2A2A';
+            // Let Jellyfin theme handle background color
             if (options) {
                 SmartLists.populateSelectElement(input, options);
             }
@@ -56,7 +56,7 @@
         separator.className = 'sort-separator';
         separator.style.textAlign = 'center';
         separator.style.margin = '0.75em 0';
-        separator.style.color = '#888';
+        separator.style.opacity = '0.6';
         separator.style.fontSize = '0.9em';
         separator.style.fontWeight = 'bold';
         separator.textContent = 'AND THEN';

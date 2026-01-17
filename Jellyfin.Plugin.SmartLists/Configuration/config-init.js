@@ -1560,16 +1560,14 @@
             optgroup {
                 font-weight: bold;
                 font-size: 0.9em;
-                color: #00a4dc;
                 background: rgba(255, 255, 255, 0.05);
                 padding: 0.2em 0;
                 margin-top: 0.3em;
             }
-            
+
             optgroup option {
                 font-weight: normal;
                 font-size: 1em;
-                color: #e0e0e0;
                 background: inherit;
                 padding-left: 1em;
             }
