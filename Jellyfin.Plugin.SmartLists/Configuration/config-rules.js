@@ -474,7 +474,7 @@
         // Create the main container with EXACT same styling as standard Jellyfin inputs
         const tagContainer = document.createElement('div');
         tagContainer.className = 'tag-input-container';
-        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; background: rgba(255, 255, 255, 0.05); padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
+        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; background: var(--jf-palette-background-paper); padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
 
         // Create the input field with standard Jellyfin styling
         const input = document.createElement('input');
@@ -564,7 +564,7 @@
         // Create tag element with subtle Jellyfin styling
         const tag = document.createElement('div');
         tag.className = 'tag-item';
-        tag.style.cssText = 'background: rgba(255, 255, 255, 0.08); padding: 0.3em 0.6em; border-radius: 2px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.5em; max-width: none; flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, 0.15); white-space: nowrap; overflow: hidden;';
+        tag.style.cssText = 'background: var(--jf-palette-background-paper); padding: 0.3em 0.6em; border-radius: 2px; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.5em; max-width: none; flex: 0 0 auto; border: 1px solid var(--jf-palette-divider); white-space: nowrap; overflow: hidden;';
 
         // Tag text
         const tagTextSpan = document.createElement('span');
@@ -575,10 +575,10 @@
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.innerHTML = '×';
-        removeBtn.style.cssText = 'background: none; border: none; color: rgba(255, 255, 255, 0.6); cursor: pointer; font-size: 1.2em; font-weight: bold; padding: 0; line-height: 1; width: 1.2em; height: 1.2em; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s ease;';
+        removeBtn.style.cssText = 'background: none; border: none; color: var(--jf-palette-text-secondary); cursor: pointer; font-size: 1.2em; font-weight: bold; padding: 0; line-height: 1; width: 1.2em; height: 1.2em; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s ease;';
 
         removeBtn.addEventListener('mouseenter', function () {
-            this.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            this.style.backgroundColor = 'var(--jf-palette-action-hover)';
         });
 
         removeBtn.addEventListener('mouseleave', function () {
@@ -648,7 +648,7 @@
         if (operatorSelect && operatorSelect.value === 'MatchRegex') {
             const helpDiv = document.createElement('div');
             helpDiv.className = 'regex-help field-description';
-            helpDiv.style.cssText = 'margin-top: 0.5em; margin-bottom: 0.5em; font-size: 0.85em; opacity: 0.7; background: rgba(255,255,255,0.05); padding: 0.5em; border-radius: 1px;';
+            helpDiv.style.cssText = 'margin-top: 0.5em; margin-bottom: 0.5em; font-size: 0.85em; opacity: 0.7; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); padding: 0.5em; border-radius: 1px;';
             // Use safe HTML creation instead of innerHTML for security
             helpDiv.innerHTML = '';
 
@@ -722,7 +722,7 @@
     SmartLists.createGroupMaxItemsField = function () {
         const container = document.createElement('div');
         container.className = 'group-max-items-container';
-        container.style.cssText = 'margin: 10px 0 5px 0; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;';
+        container.style.cssText = 'margin: 10px 0 5px 0; padding: 8px; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;';
 
         const label = document.createElement('label');
         label.textContent = 'Max Items for this OR block: ';
@@ -825,7 +825,7 @@
             '<button type="button" class="rule-action-btn delete-btn" title="Remove rule">×</button>' +
             '</div>' +
             '</div>' +
-            '<div class="rule-user-selector" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-user-selector" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Check for specific user (optional):' +
             '</label>' +
@@ -833,7 +833,7 @@
             '<option value="">Default (list user)</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-nextunwatched-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-nextunwatched-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include unwatched series:' +
             '</label>' +
@@ -842,7 +842,7 @@
             '<option value="false">No - Only show next episodes from started series</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<div class="rule-collections-collection-only" style="margin-bottom: 0.75em;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include collection only:' +
@@ -862,7 +862,7 @@
             '</select>' +
             '</div>' +
             '</div>' +
-            '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<div class="rule-playlists-playlist-only" style="margin-bottom: 0.75em;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include playlist only:' +
@@ -873,7 +873,7 @@
             '</select>' +
             '</div>' +
             '</div>' +
-            '<div class="rule-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series tags:' +
             '</label>' +
@@ -882,7 +882,7 @@
             '<option value="true">Yes - Also check tags from parent series</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-studios-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-studios-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series studios:' +
             '</label>' +
@@ -891,7 +891,7 @@
             '<option value="true">Yes - Also check studios from parent series</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-genres-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-genres-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series genres:' +
             '</label>' +
@@ -900,7 +900,7 @@
             '<option value="true">Yes - Also check genres from parent series</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-audiolanguages-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-audiolanguages-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Must be the default language:' +
             '</label>' +
@@ -909,7 +909,7 @@
             '<option value="true">Yes - Only match default audio language</option>' +
             '</select>' +
             '</div>' +
-            '<div class="rule-similarity-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-similarity-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.5em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Compare using these metadata fields (default: Genre + Tags):' +
             '</label>' +
@@ -917,7 +917,7 @@
             '<!-- Options will be populated dynamically -->' +
             '</div>' +
             '</div>' +
-            '<div class="rule-people-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">' +
+            '<div class="rule-people-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Select person type:' +
             '</label>' +
@@ -1990,7 +1990,7 @@
         // Create checkboxes for each comparison field
         SmartLists.availableFields.SimilarityComparisonFields.forEach(function (field) {
             const checkboxWrapper = document.createElement('label');
-            checkboxWrapper.style.cssText = 'display: flex; align-items: center; gap: 0.25em; cursor: pointer; padding: 0.25em 0.5em; background: rgba(255,255,255,0.05); border-radius: 3px; font-size: 0.9em;';
+            checkboxWrapper.style.cssText = 'display: flex; align-items: center; gap: 0.25em; cursor: pointer; padding: 0.25em 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 3px; font-size: 0.9em;';
 
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';

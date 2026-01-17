@@ -319,7 +319,7 @@
 
                         <!-- Filters Section -->
                         <div class="inputContainer" style="margin-bottom: 2em;">
-                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                                 <div
                                     style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1em; align-items: end;">
                                     <div>
@@ -650,7 +650,7 @@
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel">Preview</label>
                             <div id="playlistNamePreview"
-                                style="padding: 0.5em; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; font-family: monospace; width: 100%; box-sizing: border-box;">
+                                style="padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px; font-family: monospace; width: 100%; box-sizing: border-box;">
                                 <span style="opacity: 0.6;">Example: </span><span id="previewText">My Awesome List</span>
                             </div>
                             <div class="fieldDescription">Live preview of how list names will appear in Jellyfin. You
@@ -702,7 +702,7 @@
                         </div>
 
                         <div class="fieldDescription"
-                            style="margin-top: 1em; padding: 0.75em; background: rgba(255,255,255,0.05); border-radius: 1px;">
+                            style="margin-top: 1em; padding: 0.75em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                             <strong>Note:</strong> After saving settings, refresh your browser to see the new default
                             values in the "Create List" tab.
                         </div>
@@ -719,7 +719,7 @@
 
                         <div class="inputContainer" style="margin-bottom: 2em;">
                             <h3 class="sectionTitle">Ongoing Operations</h3>
-                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                                 <div id="ongoing-operations-container">
                                     <p style="opacity: 0.6;">No ongoing refresh operations.</p>
                                 </div>
@@ -730,7 +730,7 @@
                             <h3 class="sectionTitle">Statistics</h3>
                             <div class="fieldDescription" style="margin-bottom: 1em;">Statistics are tracked since the
                                 last server restart. Historical data is not persisted across restarts.</div>
-                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                                 <div id="statistics-container">
                                     <p style="opacity: 0.6;">No statistics available yet. Statistics will appear after
                                         refreshing lists.</p>
@@ -742,7 +742,7 @@
                             <h3 class="sectionTitle">Refresh History</h3>
                             <div class="fieldDescription" style="margin-bottom: 1em;">Shows the last refresh for each
                                 list since the last server restart.</div>
-                            <div class="paperList" style="padding: 1em; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
+                            <div class="paperList" style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                                 <div id="refresh-history-container">
                                     <p style="opacity: 0.6;">No refresh history available. History will appear after
                                         refreshing lists.</p>
@@ -764,7 +764,7 @@
                     </div>
                     <div class="custom-modal-body">
                         <p id="delete-confirm-text"></p>
-                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background: rgba(255, 255, 255, 0.05);">
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                             <label style="display: flex; align-items: center; cursor: pointer;">
                                 <input type="checkbox" id="delete-jellyfin-playlist-checkbox" checked
                                     style="margin-right: 0.5em;">

@@ -1560,7 +1560,7 @@
             optgroup {
                 font-weight: bold;
                 font-size: 0.9em;
-                background: rgba(255, 255, 255, 0.05);
+                background: var(--jf-palette-background-paper);
                 padding: 0.2em 0;
                 margin-top: 0.3em;
             }

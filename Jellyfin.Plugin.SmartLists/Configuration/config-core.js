@@ -468,8 +468,9 @@
         sortRemoveBtn: {
             padding: '0.3em 0.6em',
             fontSize: '1.3em',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            background: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid var(--jf-palette-divider)',
+            background: 'var(--jf-palette-action-hover)',
+            color: 'var(--jf-palette-text-secondary)',
             borderRadius: '4px',
             cursor: 'pointer',
             fontWeight: '500',
@@ -487,10 +488,13 @@
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 zIndex: '10001',
-                backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                backgroundColor: 'var(--jf-palette-background-default)',
+                color: 'var(--jf-palette-text-primary)',
+                border: '1px solid var(--jf-palette-divider)',
                 padding: '1.5em',
                 width: '90%',
-                maxWidth: '400px'
+                maxWidth: '400px',
+                borderRadius: '4px'
             },
             backdrop: {
                 position: 'fixed',
@@ -588,7 +592,7 @@
                 position: 'relative'
             },
             orText: {
-                background: 'rgba(255, 255, 255, 0.1)',
+                background: 'var(--jf-palette-background-paper)',
                 padding: '0.4em',
                 borderRadius: '4px',
                 fontWeight: 'bold',
@@ -596,7 +600,7 @@
                 position: 'relative',
                 zIndex: '2',
                 display: 'inline-block',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
+                border: '1px solid var(--jf-palette-divider)',
                 boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)'
             },
             orLine: {
@@ -605,7 +609,7 @@
                 left: '0',
                 right: '0',
                 height: '2px',
-                background: 'linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent)',
+                background: 'linear-gradient(to right, transparent, var(--jf-palette-divider), transparent)',
                 zIndex: '1'
             },
             andLine: {
@@ -614,7 +618,7 @@
                 left: '20%',
                 right: '20%',
                 height: '1px',
-                background: 'rgba(255, 255, 255, 0.15)',
+                background: 'var(--jf-palette-divider)',
                 zIndex: '1'
             }
         }
@@ -812,7 +816,7 @@
             transform: 'translateY(-50%)',
             background: 'transparent',
             border: 'none',
-            color: 'rgba(255, 255, 255, 0.7)',
+            color: 'var(--jf-palette-text-secondary)',
             fontSize: '20px',
             cursor: 'pointer',
             padding: '4px',
@@ -857,7 +861,7 @@
         // Apply notification styles
         const notificationStyles = {
             padding: '16px 40px 16px 20px', // Extra right padding for close button
-            color: 'rgba(255, 255, 255, 0.95)',
+            color: 'var(--jf-palette-text-primary)',
             backgroundColor: type === 'success' ? 'rgba(40, 40, 40, 0.95)' :
                 type === 'warning' ? '#ff9800' :
                     type === 'info' ? 'rgba(40, 40, 40, 0.95)' : '#f44336',
@@ -886,7 +890,7 @@
             setTimeout(function () {
                 var links = notificationElement.querySelectorAll('a');
                 for (var i = 0; i < links.length; i++) {
-                    links[i].style.color = 'rgba(255, 255, 255, 0.95)';
+                    links[i].style.color = 'var(--jf-palette-text-primary)';
                     links[i].style.textDecoration = 'underline';
                     links[i].style.cursor = 'pointer';
                 }

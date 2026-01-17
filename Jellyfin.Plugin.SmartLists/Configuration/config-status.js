@@ -252,7 +252,7 @@
         });
 
         let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
-        html += '<thead><tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">';
+        html += '<thead><tr style="border-bottom: 1px solid var(--jf-palette-divider);">';
         html += '<th style="text-align: left; padding: 0.75em;">List Name</th>';
         html += '<th style="text-align: left; padding: 0.75em;">Type</th>';
         html += '<th style="text-align: left; padding: 0.75em;">Trigger</th>';
@@ -262,12 +262,12 @@
         html += '</tr></thead><tbody>';
 
         sortedHistory.forEach(entry => {
-            const statusColor = entry.success ? '#4caf50' : '#ff6b6b';
+            const statusColor = entry.success ? 'var(--jf-palette-success-main)' : 'var(--jf-palette-error-main)';
             const statusText = entry.success ? 'Success' : 'Failed';
             const duration = formatDuration(entry.duration);
             const endTime = entry.endTime ? formatDateTime(entry.endTime) : 'N/A';
 
-            html += '<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">';
+            html += '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">';
             html += `<td style="padding: 0.75em;">${escapeHtml(entry.listName)}</td>`;
             html += `<td style="padding: 0.75em;">${escapeHtml(String(entry.listType))}</td>`;
             html += `<td style="padding: 0.75em;">${escapeHtml(String(entry.triggerType))}</td>`;
