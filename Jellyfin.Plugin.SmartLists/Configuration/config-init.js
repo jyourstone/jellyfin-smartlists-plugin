@@ -574,14 +574,14 @@
             if (multiSelectContainer) {
                 const options = page.querySelector('#userMultiSelectOptions');
                 if (options) {
-                    options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: #BB3932;">Error: ' + errorMessage + '</div>';
+                    options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + errorMessage + '</div>';
                 }
                 const display = page.querySelector('#userMultiSelectDisplay');
                 if (display) {
                     const placeholder = display.querySelector('.multi-select-placeholder');
                     if (placeholder) {
                         placeholder.textContent = 'Error loading users';
-                        placeholder.style.color = '#BB3932';
+                        placeholder.style.color = 'var(--jf-palette-error-main)';
                         placeholder.style.display = 'inline';
                     }
                 }
@@ -661,14 +661,14 @@
             
             const options = page.querySelector('#allowedUsersMultiSelectOptions');
             if (options) {
-                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: #BB3932;">Error: ' + errorMessage + '</div>';
+                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + errorMessage + '</div>';
             }
             const display = page.querySelector('#allowedUsersMultiSelectDisplay');
             if (display) {
                 const placeholder = display.querySelector('.multi-select-placeholder');
                 if (placeholder) {
                     placeholder.textContent = 'Error loading users';
-                    placeholder.style.color = '#BB3932';
+                    placeholder.style.color = 'var(--jf-palette-error-main)';
                 }
             }
         }
@@ -767,7 +767,7 @@
                     // Show error message to user
                     var container = page.querySelector('#playlist-list-container');
                     if (container) {
-                        container.innerHTML = '<p style="color: #ff6b6b;">Failed to load playlist list. Please refresh the page.</p>';
+                        container.innerHTML = '<p style="color: var(--jf-palette-error-main);">Failed to load playlist list. Please refresh the page.</p>';
                     }
                 }
             };
@@ -1585,8 +1585,8 @@
             /* Style danger/delete buttons to be red */
             .SmartListsConfigurationPage .emby-button.danger,
             .SmartListsConfigurationPage .emby-button.button-delete {
-                background-color: #BB3932 !important;
-                border-color: #BB3932 !important;
+                background-color: var(--jf-palette-error-main) !important;
+                border-color: var(--jf-palette-error-main) !important;
             }
         `;
         document.head.appendChild(style);

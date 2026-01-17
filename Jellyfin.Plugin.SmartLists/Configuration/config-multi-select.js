@@ -213,7 +213,7 @@
             const noItems = document.createElement('div');
             noItems.className = 'multi-select-option';
             noItems.style.padding = '0.5em';
-            noItems.style.color = '#999';
+            noItems.style.color = 'var(--jf-palette-text-secondary)';
             noItems.textContent = 'No items available';
             options.appendChild(noItems);
             return;

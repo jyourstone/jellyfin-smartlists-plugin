@@ -862,9 +862,9 @@
         const notificationStyles = {
             padding: '16px 40px 16px 20px', // Extra right padding for close button
             color: 'var(--jf-palette-text-primary)',
-            backgroundColor: type === 'success' ? 'rgba(40, 40, 40, 0.95)' :
-                type === 'warning' ? '#ff9800' :
-                    type === 'info' ? 'rgba(40, 40, 40, 0.95)' : '#f44336',
+            backgroundColor: type === 'success' ? 'var(--jf-palette-background-paper)' :
+                type === 'warning' ? 'var(--jf-palette-warning-main)' :
+                    type === 'info' ? 'var(--jf-palette-background-paper)' : 'var(--jf-palette-error-main)',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
             fontSize: '16px',
             fontWeight: 'normal',

@@ -1268,7 +1268,7 @@
         const isPublic = playlist.Public ? 'Public' : 'Private';
         const isEnabled = playlist.Enabled !== false; // Default to true for backward compatibility
         const enabledStatus = isEnabled ? '' : 'Disabled';
-        const enabledStatusColor = isEnabled ? '#4CAF50' : '#f44336';
+        const enabledStatusColor = isEnabled ? 'var(--jf-palette-success-main)' : 'var(--jf-palette-error-main)';
         const statusDisplayText = isEnabled ? 'Enabled' : 'Disabled';
         const autoRefreshMode = playlist.AutoRefresh || 'Never';
         const autoRefreshDisplay = autoRefreshMode === 'Never' ? 'Manual/scheduled only' :
@@ -1740,7 +1740,7 @@
 
         } catch (err) {
             const errorMessage = SmartLists.displayApiError ? SmartLists.displayApiError(err, 'Failed to load playlists') : (err.message || 'Failed to load playlists');
-            container.innerHTML = '<div class="inputContainer"><p style="color: #ff6b6b;">' + SmartLists.escapeHtml(errorMessage) + '</p></div>';
+            container.innerHTML = '<div class="inputContainer"><p style="color: var(--jf-palette-error-main);">' + SmartLists.escapeHtml(errorMessage) + '</p></div>';
         } finally {
             // Always re-enable search input and clear loading flag
             SmartLists.setSearchInputState(page, false);

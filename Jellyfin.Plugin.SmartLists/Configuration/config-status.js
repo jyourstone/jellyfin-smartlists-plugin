@@ -70,7 +70,7 @@
                 containers.forEach(function (containerId) {
                     const container = page.querySelector('#' + containerId);
                     if (container) {
-                        container.innerHTML = '<p style="color: #ff6b6b;">Error: ' + escapeHtml(errorMsg) + '</p>';
+                        container.innerHTML = '<p style="color: var(--jf-palette-error-main);">Error: ' + escapeHtml(errorMsg) + '</p>';
                     }
                 });
             }
@@ -321,7 +321,7 @@
         const page = getActiveConfigPage();
         const container = page ? page.querySelector('#ongoing-operations-container') : null;
         if (container) {
-            container.innerHTML = `<p style="color: #ff6b6b;">${escapeHtml(message)}</p>`;
+            container.innerHTML = `<p style="color: var(--jf-palette-error-main);">${escapeHtml(message)}</p>`;
         }
     }
 
