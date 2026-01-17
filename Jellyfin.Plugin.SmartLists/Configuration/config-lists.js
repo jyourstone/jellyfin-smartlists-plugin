@@ -1123,7 +1123,7 @@
                 }
 
                 if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
-                    rulesHtml += '<div style="padding: 0.6em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px; margin: 0.3em 0;">';
+                    rulesHtml += '<div class="paperList" style="padding: 0.6em; border: 1px solid var(--jf-palette-divider); margin: 0.3em 0;">';
 
                     for (let ruleIndex = 0; ruleIndex < expressionSet.Expressions.length; ruleIndex++) {
                         const rule = expressionSet.Expressions[ruleIndex];
@@ -1431,7 +1431,7 @@
         }
 
         // Generate collapsible playlist card with improved styling
-        return '<div class="inputContainer playlist-card" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" style="border: 1px solid var(--jf-palette-divider); border-radius: 2px; margin-bottom: 1em; background: var(--jf-palette-background-paper);">' +
+        return '<div class="inputContainer playlist-card paperList" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" style="border: 1px solid var(--jf-palette-divider); margin-bottom: 1em;">' +
             // Compact header (always visible)
             '<div class="playlist-header" style="padding: 0.75em; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">' +
             '<div class="playlist-header-left" style="display: flex; align-items: center; flex: 1; min-width: 0;">' +
@@ -1466,7 +1466,7 @@
             // Properties table
             '<div class="properties-section" style="margin-bottom: 1em; margin-left: 0.5em;">' +
             '<h4 style="margin: 0 0 0.5em 0; font-size: 1em;">Properties</h4>' +
-            '<table style="width: 100%; border-collapse: collapse; background: var(--jf-palette-background-paper); border-radius: 4px; overflow: hidden;">' +
+            '<table class="paperList" style="width: 100%; border-collapse: collapse; overflow: hidden;">' +
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Type</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eListType +
@@ -1548,7 +1548,7 @@
             // Statistics table
             '<div class="statistics-section" style="margin-bottom: 1em; margin-left: 0.5em;">' +
             '<h4 style="margin: 0 0 0.5em 0; font-size: 1em;">Statistics</h4>' +
-            '<table style="width: 100%; border-collapse: collapse; background: var(--jf-palette-background-paper); border-radius: 4px; overflow: hidden;">' +
+            '<table class="paperList" style="width: 100%; border-collapse: collapse; overflow: hidden;">' +
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Item Count</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + (itemCount !== null ? itemCount : 'N/A') + '</td>' +

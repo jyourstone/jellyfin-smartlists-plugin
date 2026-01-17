@@ -128,7 +128,7 @@
             const estimatedTime = op.estimatedTimeRemaining ? formatDuration(op.estimatedTimeRemaining) : 'Calculating...';
 
             html += `
-                <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px; margin-bottom: 0.5em;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.5em;">
                         <div>
                             <strong>${escapeHtml(op.listName)}</strong>
@@ -196,29 +196,29 @@
         const newHTML = `
             <div style="display: flex; flex-direction: column; gap: 1em;">
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em;">
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">In Queue</div>
                         <div style="font-size: 1.5em; font-weight: bold;">${queuedCount}</div>
                     </div>
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Avg Duration</div>
                         <div style="font-size: 1.1em;">${avgDuration}</div>
                     </div>
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Last Refresh</div>
                         <div style="font-size: 1.1em;">${lastRefresh}</div>
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em;">
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Total Lists Processed</div>
                         <div style="font-size: 1.5em; font-weight: bold;">${stats.totalLists || 0}</div>
                     </div>
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Successful</div>
                         <div style="font-size: 1.5em; font-weight: bold; color: var(--jf-palette-success-main);">${stats.successfulRefreshes || 0}</div>
                     </div>
-                    <div style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                    <div style="padding: 1em; border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
                         <div style="font-size: 0.9em; color: var(--jf-palette-text-secondary); margin-bottom: 0.25em;">Failed</div>
                         <div style="font-size: 1.5em; font-weight: bold; color: var(--jf-palette-error-main);">${stats.failedRefreshes || 0}</div>
                     </div>

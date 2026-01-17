@@ -325,7 +325,7 @@
     SmartLists.generateBulkActionsHTML = function (summaryText) {
         let html = '';
         html += '<div class="inputContainer" id="bulkActionsContainer" style="margin-bottom: 1em; display: none;">';
-        html += '<div class="paperList" style="padding: 1em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">';
+        html += '<div class="paperList" style="padding: 1em; border: 1px solid var(--jf-palette-divider);">';
 
         // Summary row at top
         html += '<div id="playlist-summary" class="field-description" style="margin: 0 0 1em 0; padding: 0.5em; background: var(--jf-palette-action-hover); border-radius: 4px;">';

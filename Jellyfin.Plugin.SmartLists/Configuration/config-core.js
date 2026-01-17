@@ -396,7 +396,6 @@
     SmartLists.STYLES = {
         scheduleBox: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '0.8em',
             padding: '1em 1.5em',
             marginBottom: '1em',
             position: 'relative'
@@ -438,7 +437,6 @@
         },
         sortBox: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '0.8em',
             padding: '1em 1.5em',
             marginBottom: '1em',
             position: 'relative'
@@ -504,7 +502,6 @@
         },
         logicGroup: {
             border: '1px solid var(--jf-palette-divider)',
-            borderRadius: '0.8em',
             padding: '1.5em 1.5em 0.5em 1.5em',
             marginBottom: '1em',
             position: 'relative'
