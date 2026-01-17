@@ -1588,6 +1588,35 @@
                 background-color: var(--jf-palette-error-main) !important;
                 border-color: var(--jf-palette-error-main) !important;
             }
+
+            /* Responsive rule rows for mobile */
+            @media (max-width: 768px) {
+                .rule-row .input-group {
+                    flex-wrap: wrap !important;
+                }
+
+                .rule-row .input-group .rule-field-select {
+                    flex: 1 1 calc(50% - 0.25em) !important;
+                    min-width: 0 !important;
+                }
+
+                .rule-row .input-group .rule-operator-select {
+                    flex: 1 1 calc(50% - 0.25em) !important;
+                    min-width: 0 !important;
+                }
+
+                .rule-row .input-group .rule-value-container {
+                    flex: 1 1 100% !important;
+                    order: 3 !important;
+                }
+
+                .rule-row .input-group .rule-actions {
+                    flex: 0 0 auto !important;
+                    order: 4 !important;
+                    margin-left: auto !important;
+                    margin-top: 0.5em !important;
+                }
+            }
         `;
         document.head.appendChild(style);
     };
