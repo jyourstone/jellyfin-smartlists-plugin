@@ -54,6 +54,3 @@ https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/unstable/m
 
 !!! warning "RC Releases"
     RC releases are pre-release versions that may contain bugs or incomplete features. Use at your own risk and consider backing up your smart list configurations before upgrading.
-
-!!! tip "Dashboard Theme Recommendation"
-    This plugin is best used with the **Dark** dashboard theme in Jellyfin. The plugin's custom styling is designed to match the dark theme, providing the best visual experience and consistency with the Jellyfin interface.

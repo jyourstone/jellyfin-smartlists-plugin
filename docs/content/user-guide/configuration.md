@@ -297,6 +297,3 @@ Control how many items are processed in each batch during list refreshes:
 ## Manual Configuration (Advanced Users)
 
 For advanced users who prefer JSON configuration, see the [Advanced Configuration](advanced-configuration.md) guide for details about manual file editing.
-
-!!! tip "Dashboard Theme Recommendation"
-    This plugin is best used with the **Dark** dashboard theme in Jellyfin. The plugin's custom styling mimics the dark theme, providing the best visual experience and consistency with the Jellyfin interface.
