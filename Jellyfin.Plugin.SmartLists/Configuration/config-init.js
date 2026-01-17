@@ -574,7 +574,7 @@
             if (multiSelectContainer) {
                 const options = page.querySelector('#userMultiSelectOptions');
                 if (options) {
-                    options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + errorMessage + '</div>';
+                    options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + SmartLists.escapeHtml(errorMessage) + '</div>';
                 }
                 const display = page.querySelector('#userMultiSelectDisplay');
                 if (display) {
@@ -661,7 +661,7 @@
             
             const options = page.querySelector('#allowedUsersMultiSelectOptions');
             if (options) {
-                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + errorMessage + '</div>';
+                options.innerHTML = '<div class="multi-select-option" style="padding: 0.5em; color: var(--jf-palette-error-main);">Error: ' + SmartLists.escapeHtml(errorMessage) + '</div>';
             }
             const display = page.querySelector('#allowedUsersMultiSelectDisplay');
             if (display) {
