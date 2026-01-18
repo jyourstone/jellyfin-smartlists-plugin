@@ -24,6 +24,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public string? FileName { get; set; }
         public Guid UserId { get; set; }
         public List<Order> Orders { get; set; }
+        public List<SortOption>? SortOptions { get; set; }  // Original sort options with UseChildValues flag
         public List<string>? MediaTypes { get; set; }
         public List<ExpressionSet> ExpressionSets { get; set; }
         public int MaxItems { get; set; }
@@ -104,6 +105,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // Handle both legacy single Order and new multiple Orders formats
             if (dto.Order?.SortOptions != null && dto.Order.SortOptions.Count > 0)
             {
+                // Store original sort options for child value aggregation support
+                SortOptions = new List<SortOption>(dto.Order.SortOptions);
+
                 // New format: multiple sort options
                 Orders = dto.Order.SortOptions
                     .Select(so =>
@@ -123,11 +127,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
             {
                 // Legacy format: single order by name
                 Orders = [OrderFactory.CreateOrder(dto.Order.Name)];
+                SortOptions = null; // No SortOptions for legacy format
             }
             else
             {
                 // No order specified, use NoOrder
                 Orders = [new NoOrder()];
+                SortOptions = null;
             }
 
             MediaTypes = dto.MediaTypes != null ? new List<string>(dto.MediaTypes) : null; // Create defensive copy to prevent corruption
@@ -830,8 +836,31 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 if (allRulesAreIncludeOnly && (hasCollectionsIncludeCollectionOnly || hasPlaylistsIncludePlaylistOnly))
                 {
-                    logger?.LogDebug("All rules are IncludeCollectionOnly or IncludePlaylistOnly - skipping media item processing, returning {Count} items", results.Count);
-                    return results.Select(item => item.Id);
+                    logger?.LogDebug("All rules are IncludeCollectionOnly or IncludePlaylistOnly - skipping media item processing, applying sorting to {Count} items", results.Count);
+
+                    // Still need to apply sorting and limits to the collection/playlist results
+                    try
+                    {
+                        // Apply multiple orders in cascade
+                        var orderedResults = ApplyMultipleOrders(results, user, userDataManager, logger, refreshCache);
+
+                        // Apply limits (items and/or time)
+                        if (MaxItems > 0 || MaxPlayTimeMinutes > 0)
+                        {
+                            var limitedResults = ApplyLimits(orderedResults, libraryManager, user, userDataManager, refreshCache, logger);
+                            logger?.LogDebug("Limited IncludeOnly results from {TotalCount} to {LimitedCount} items", results.Count, limitedResults.Count);
+                            return limitedResults.Select(x => x.Id);
+                        }
+                        else
+                        {
+                            return orderedResults.Select(x => x.Id);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError(ex, "Error applying ordering and limits to IncludeOnly results. Returning unordered results.");
+                        return results.Select(x => x.Id);
+                    }
                 }
 
                 // Early validation of additional users to prevent exceptions during item processing
@@ -1766,22 +1795,74 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return items;
             }
 
-            logger?.LogDebug("ApplyMultipleOrders: Processing {OrderCount} sort options", Orders.Count);
-            for (int i = 0; i < Orders.Count; i++)
+            // Wrap orders with ChildAggregatingOrder if UseChildValues is enabled
+            var effectiveOrders = WrapOrdersWithChildAggregation(Orders, logger);
+
+            logger?.LogDebug("ApplyMultipleOrders: Processing {OrderCount} sort options", effectiveOrders.Count);
+            for (int i = 0; i < effectiveOrders.Count; i++)
             {
-                logger?.LogDebug("  Sort #{Index}: {OrderName}", i + 1, Orders[i].Name);
+                logger?.LogDebug("  Sort #{Index}: {OrderName}", i + 1, effectiveOrders[i].Name);
             }
 
             // If there's only one order, use the original Order.OrderBy() method
             // Single sort optimization is now safe because GetSortKey logic is unified with OrderBy logic
-            if (Orders.Count == 1)
+            if (effectiveOrders.Count == 1)
             {
                 logger?.LogDebug("Single sort detected, returning result from Order.OrderBy()");
-                return Orders[0].OrderBy(items, user, userDataManager, logger, refreshCache);
+                return effectiveOrders[0].OrderBy(items, user, userDataManager, logger, refreshCache);
             }
 
             // Use the common sorting helper for multi-sort scenarios
-            return ApplySortingCore(items.ToList(), Orders, user, userDataManager, logger, refreshCache);
+            return ApplySortingCore(items.ToList(), effectiveOrders, user, userDataManager, logger, refreshCache);
+        }
+
+        /// <summary>
+        /// Wraps orders with ChildAggregatingOrder when UseChildValues is enabled in the corresponding SortOption.
+        /// </summary>
+        private List<Order> WrapOrdersWithChildAggregation(List<Order> orders, ILogger? logger)
+        {
+            // If no SortOptions stored, return orders unchanged
+            if (SortOptions == null || SortOptions.Count == 0)
+            {
+                return orders;
+            }
+
+            // Check if any SortOption has UseChildValues enabled
+            var hasChildAggregation = SortOptions.Any(so => so.UseChildValues && ChildAggregatingOrder.IsSupportedSortField(so.SortBy));
+            if (!hasChildAggregation)
+            {
+                return orders;
+            }
+
+            logger?.LogDebug("Wrapping orders with child aggregation (UseChildValues enabled)");
+
+            var wrappedOrders = new List<Order>();
+            for (int i = 0; i < orders.Count; i++)
+            {
+                var order = orders[i];
+
+                // Match with corresponding SortOption (same index)
+                if (i < SortOptions.Count)
+                {
+                    var sortOption = SortOptions[i];
+
+                    // Wrap if UseChildValues is enabled and field is supported
+                    if (sortOption.UseChildValues && ChildAggregatingOrder.IsSupportedSortField(sortOption.SortBy))
+                    {
+                        var isDescending = IsDescendingOrder(order);
+                        var wrappedOrder = new ChildAggregatingOrder(order, isDescending, sortOption.SortBy);
+                        wrappedOrders.Add(wrappedOrder);
+                        logger?.LogDebug("  Wrapped order #{Index} ({OrderName}) with child aggregation for field {Field}",
+                            i + 1, order.Name, sortOption.SortBy);
+                        continue;
+                    }
+                }
+
+                // Keep original order
+                wrappedOrders.Add(order);
+            }
+
+            return wrappedOrders;
         }
 
         /// <summary>
@@ -1877,6 +1958,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private static bool IsDescendingOrder(Order order)
         {
+            // Handle ChildAggregatingOrder wrapper - check its IsDescending property
+            if (order is ChildAggregatingOrder childAggOrder)
+            {
+                return childAggOrder.IsDescending;
+            }
+
             return order is NameOrderDesc ||
                    order is NameIgnoreArticlesOrderDesc ||
                    order is ProductionYearOrderDesc ||

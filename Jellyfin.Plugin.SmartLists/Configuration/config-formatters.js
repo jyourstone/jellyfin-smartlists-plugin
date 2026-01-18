@@ -433,7 +433,12 @@
                 if (displaySortBy === 'Random' || displaySortBy === 'NoOrder' || displaySortBy === 'No Order') {
                     return displaySortBy === 'NoOrder' ? 'No Order' : displaySortBy;
                 }
-                return displaySortBy + ' ' + opt.SortOrder;
+                var result = displaySortBy + ' ' + opt.SortOrder;
+                // Add indicator when sorting by child item values
+                if (opt.UseChildValues) {
+                    result += ' (child items)';
+                }
+                return result;
             }).join(' → ');
         }
 

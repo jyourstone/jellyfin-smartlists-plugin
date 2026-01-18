@@ -45,6 +45,31 @@ Here are some more complex playlist and collection examples:
 - Great for organizing themed playlists without duplicating content
 - Use regex for flexible pattern matching (e.g., case-insensitive matching of multiple keywords)
 
+## Recently Updated Collections {#recently-updated-collections}
+
+Create a collection of collections that automatically sorts by the most recently added content within each child collection.
+
+**Scenario**: You have multiple manual collections:
+
+- Collection A (contains movies from 2024 and 2023)
+- Collection B (contains movies from 2022)
+- Collection C (contains a movie from 2025)
+
+**Configuration**:
+
+- **List Type**: Collection
+- **Rule**: **Collections** contains your collection name pattern with **"Include collection only"** set to "Yes"
+- **Sort by**: Date Created Descending (or Release Date, Production Year, Community Rating)
+- **Enable**: "Include items within child collections/playlists" checkbox
+
+**Result**: Collections are sorted by their newest content:
+
+1. Collection C appears first (has a 2025 movie)
+2. Collection A appears second (has 2024 movies)
+3. Collection B appears last (has 2022 movies)
+
+As you add new content to any collection, it automatically rises to the top of the parent collection.
+
 ## Advanced Per-Group Limit Techniques
 
 ### Curated Discovery Playlist
