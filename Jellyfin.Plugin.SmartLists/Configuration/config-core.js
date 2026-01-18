@@ -482,7 +482,7 @@
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 zIndex: '10001',
-                backgroundColor: 'var(--jf-palette-background-default)',
+                backgroundColor: 'var(--jf-palette-background-paper)',
                 color: 'var(--jf-palette-text-primary)',
                 border: '1px solid var(--jf-palette-divider)',
                 padding: '1.5em',
