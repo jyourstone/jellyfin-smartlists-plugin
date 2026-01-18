@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using MediaBrowser.Controller.Entities;
@@ -110,8 +111,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             if (item == null) return false;
 
-            var typeName = item.GetType().Name;
-            return typeName == "BoxSet" || typeName == "Playlist";
+            var itemKind = item.GetBaseItemKind();
+            return itemKind == BaseItemKind.BoxSet || itemKind == BaseItemKind.Playlist;
         }
 
         /// <summary>
@@ -120,14 +121,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         private static BaseItem[]? GetChildItems(BaseItem item, User user, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             var itemId = item.Id;
-            var typeName = item.GetType().Name;
+            var itemKind = item.GetBaseItemKind();
 
             // Check cache first
-            if (typeName == "BoxSet" && refreshCache.CollectionChildItems.TryGetValue(itemId, out var cachedCollectionItems))
+            if (itemKind == BaseItemKind.BoxSet && refreshCache.CollectionChildItems.TryGetValue(itemId, out var cachedCollectionItems))
             {
                 return cachedCollectionItems;
             }
-            if (typeName == "Playlist" && refreshCache.PlaylistChildItems.TryGetValue(itemId, out var cachedPlaylistItems))
+            if (itemKind == BaseItemKind.Playlist && refreshCache.PlaylistChildItems.TryGetValue(itemId, out var cachedPlaylistItems))
             {
                 return cachedPlaylistItems;
             }
@@ -178,11 +179,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             // Cache the result
             childItems ??= [];
-            if (typeName == "BoxSet")
+            if (itemKind == BaseItemKind.BoxSet)
             {
                 refreshCache.CollectionChildItems[itemId] = childItems;
             }
-            else if (typeName == "Playlist")
+            else if (itemKind == BaseItemKind.Playlist)
             {
                 refreshCache.PlaylistChildItems[itemId] = childItems;
             }
@@ -231,8 +232,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         .Select(c => OrderUtilities.GetReleaseDate(c))
                         .Where(d => d > DateTime.MinValue)
                         .ToList();
-                    // Return as ticks for consistency with ReleaseDateOrder
-                    return releaseDates.Count > 0 ? releaseDates.Max().Ticks : (IComparable?)null;
+                    // Return as ComparableTuple4 for consistency with ReleaseDateOrder.GetSortKey
+                    // Use (ticks, 1, 0, 0) to place aggregated collections after episodes on same date
+                    if (releaseDates.Count > 0)
+                    {
+                        var maxDate = releaseDates.Max();
+                        return new ComparableTuple4<long, int, int, int>(maxDate.Date.Ticks, 1, 0, 0);
+                    }
+                    return null;
 
                 default:
                     logger?.LogWarning("ChildAggregatingOrder: Unsupported sort field '{SortField}'", _sortField);

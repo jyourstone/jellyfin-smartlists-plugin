@@ -10,10 +10,11 @@ A Jellyfin plugin that creates dynamic playlists and collections based on user-d
 
 # View logs
 tail -f dev/jellyfin-data/config/log/log_*.log | grep "Smart"
+```
 
 ## Project Structure
 
-```
+```text
 Jellyfin.Plugin.SmartLists/
 ├── Core/                    # Business logic
 │   ├── Constants/           # MediaTypes, Operators, ResolutionTypes
