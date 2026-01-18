@@ -657,6 +657,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             
             // Media streams cache - keyed by ItemId only (user-agnostic)
             public ConcurrentDictionary<Guid, IEnumerable<object>> MediaStreamsCache { get; } = new();
+
+            // Child items cache for sorting collections by child values
+            // Maps Collection/Playlist ID → array of child BaseItems (with full item data for property access)
+            public ConcurrentDictionary<Guid, BaseItem[]> CollectionChildItems { get; } = new();
+            public ConcurrentDictionary<Guid, BaseItem[]> PlaylistChildItems { get; } = new();
         }
 
         /// <summary>

@@ -1919,6 +1919,11 @@
             SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
         }
 
+        // Update "Use Child Values" checkbox visibility in sort boxes when switching between Playlist/Collection
+        if (SmartLists.updateUseChildValuesVisibility) {
+            SmartLists.updateUseChildValuesVisibility(page);
+        }
+
         // Collections are server-wide, no library loading needed
     };
 

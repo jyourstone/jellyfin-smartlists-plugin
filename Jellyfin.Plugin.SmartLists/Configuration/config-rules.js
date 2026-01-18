@@ -1020,6 +1020,10 @@
                 const fieldSelect = newRuleRow.querySelector('.rule-field-select');
                 const fieldValue = fieldSelect ? fieldSelect.value : '';
                 SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldValue, page);
+                // Update sort "Use Child Values" checkbox visibility when collection-only option changes
+                if (SmartLists.updateUseChildValuesVisibility) {
+                    SmartLists.updateUseChildValuesVisibility(page);
+                }
             }, listenerOptions);
         }
 
@@ -1031,6 +1035,10 @@
                 const fieldSelect = newRuleRow.querySelector('.rule-field-select');
                 const fieldValue = fieldSelect ? fieldSelect.value : '';
                 SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldValue, page);
+                // Update sort "Use Child Values" checkbox visibility when playlist-only option changes
+                if (SmartLists.updateUseChildValuesVisibility) {
+                    SmartLists.updateUseChildValuesVisibility(page);
+                }
             }, listenerOptions);
         }
 
@@ -1500,6 +1508,10 @@
                         const fieldSelect = ruleRow.querySelector('.rule-field-select');
                         const fieldValue = fieldSelect ? fieldSelect.value : '';
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldValue, page);
+                        // Update sort "Use Child Values" checkbox visibility when collection-only option changes
+                        if (SmartLists.updateUseChildValuesVisibility) {
+                            SmartLists.updateUseChildValuesVisibility(page);
+                        }
                     }, listenerOptions);
                 }
 
@@ -1511,6 +1523,10 @@
                         const fieldSelect = ruleRow.querySelector('.rule-field-select');
                         const fieldValue = fieldSelect ? fieldSelect.value : '';
                         SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldValue, page);
+                        // Update sort "Use Child Values" checkbox visibility when playlist-only option changes
+                        if (SmartLists.updateUseChildValuesVisibility) {
+                            SmartLists.updateUseChildValuesVisibility(page);
+                        }
                     }, listenerOptions);
                 }
 

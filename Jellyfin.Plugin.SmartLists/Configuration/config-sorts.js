@@ -113,7 +113,130 @@
         
         return { container: container, checkbox: checkbox };
     };
-    
+
+    // Helper function to create "Use Child Values" checkbox for collection sorting
+    // This checkbox enables sorting by aggregated child item values (e.g., newest DateCreated among children)
+    SmartLists.createUseChildValuesCheckbox = function(sortId, checked) {
+        const container = document.createElement('div');
+        container.className = 'sort-field-container use-child-values-container';
+        container.style.minWidth = '280px';
+        container.style.alignItems = 'center';
+        container.style.flexDirection = 'column';
+
+        // Create checkbox with label
+        const checkboxLabel = document.createElement('label');
+        checkboxLabel.className = 'emby-checkbox-label';
+        checkboxLabel.style.display = 'flex';
+        checkboxLabel.style.alignItems = 'center';
+        checkboxLabel.style.cursor = 'pointer';
+        checkboxLabel.style.marginTop = '0.5em';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'sort-use-child-values-' + sortId;
+        checkbox.className = 'emby-checkbox';
+        checkbox.checked = checked || false;
+
+        const checkboxText = document.createElement('span');
+        checkboxText.className = 'checkboxLabel';
+        checkboxText.textContent = 'Include items within child collections/playlists';
+        checkboxText.style.fontSize = '0.9em';
+        checkboxText.style.paddingLeft = '0.1em';
+
+        const checkboxOutline = document.createElement('span');
+        checkboxOutline.className = 'checkboxOutline';
+
+        const checkedIcon = document.createElement('span');
+        checkedIcon.className = 'material-icons checkboxIcon checkboxIcon-checked check';
+        checkedIcon.setAttribute('aria-hidden', 'true');
+
+        const uncheckedIcon = document.createElement('span');
+        uncheckedIcon.className = 'material-icons checkboxIcon checkboxIcon-unchecked';
+        uncheckedIcon.setAttribute('aria-hidden', 'true');
+
+        checkboxOutline.appendChild(checkedIcon);
+        checkboxOutline.appendChild(uncheckedIcon);
+
+        checkboxLabel.appendChild(checkbox);
+        checkboxLabel.appendChild(checkboxText);
+        checkboxLabel.appendChild(checkboxOutline);
+
+        // Add info icon linking to documentation
+        const infoLink = document.createElement('a');
+        infoLink.href = 'https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#child-item-sorting';
+        infoLink.target = '_blank';
+        infoLink.rel = 'noopener noreferrer';
+        infoLink.title = 'Documentation';
+        infoLink.style.cssText = 'text-decoration: none; color: inherit; opacity: 0.6; display: inline-flex; align-items: center; margin-left: 8px;';
+
+        const infoIcon = document.createElement('span');
+        infoIcon.className = 'material-icons';
+        infoIcon.setAttribute('aria-hidden', 'true');
+        infoIcon.textContent = 'info_outline';
+        infoIcon.style.cssText = 'font-size: 1.1em; line-height: 0;';
+
+        infoLink.appendChild(infoIcon);
+        checkboxLabel.appendChild(infoLink);
+
+        container.appendChild(checkboxLabel);
+
+        return { container: container, checkbox: checkbox };
+    };
+
+    // Helper function to check if any rule has Collections or Playlists field with "include only" option enabled
+    // This means the user is including collections/playlists as items (not expanding them to media)
+    SmartLists.hasCollectionOrPlaylistOnlyRule = function(page) {
+        var rulesContainer = page.querySelector('#rules-container');
+        if (!rulesContainer) return false;
+
+        var ruleRows = rulesContainer.querySelectorAll('.rule-row');
+        for (var i = 0; i < ruleRows.length; i++) {
+            var ruleRow = ruleRows[i];
+            var fieldSelect = ruleRow.querySelector('.rule-field-select');
+            if (!fieldSelect) continue;
+
+            var fieldValue = fieldSelect.value;
+
+            // Check for Collections field with IncludeCollectionOnly = true
+            if (fieldValue === 'Collections') {
+                var collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
+                if (collectionOnlySelect && collectionOnlySelect.value === 'true') {
+                    return true;
+                }
+            }
+
+            // Check for Playlists field with IncludePlaylistOnly = true
+            if (fieldValue === 'Playlists') {
+                var playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
+                if (playlistOnlySelect && playlistOnlySelect.value === 'true') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    };
+
+    // Helper function to check if "Use Child Values" checkbox should be visible
+    // Only visible when:
+    // 1. Output type is Collection (not Playlist)
+    // 2. Sort field is in CHILD_VALUE_SORT_FIELDS
+    // 3. At least one rule has Collections/Playlists with "include only" option enabled
+    SmartLists.shouldShowUseChildValuesCheckbox = function(page, sortByValue) {
+        // Check if output type is Collection
+        var listTypeSelect = page.querySelector('#listType');
+        var isCollection = listTypeSelect && listTypeSelect.value === 'Collection';
+
+        // Check if sort field supports child value aggregation
+        var supportedField = SmartLists.CHILD_VALUE_SORT_FIELDS &&
+            SmartLists.CHILD_VALUE_SORT_FIELDS.indexOf(sortByValue) !== -1;
+
+        // Check if any rule includes collections/playlists as items (not expanded)
+        var hasCollectionOrPlaylistOnly = SmartLists.hasCollectionOrPlaylistOnlyRule(page);
+
+        return isCollection && supportedField && hasCollectionOrPlaylistOnly;
+    };
+
     // Helper function to sync Sort Order UI based on Sort By value
     SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect) {
         if (!sortOrderContainer || !sortOrderSelect) return;
@@ -191,11 +314,12 @@
     
     SmartLists.createSortBox = function(page, sortData) {
         const sortId = 'sort-' + Date.now() + '-' + Math.random();
-        
+
         // Parse sortData to handle "Name (Ignore Articles)" and "SeriesName (Ignore Articles)" backwards compatibility
         let actualSortBy = sortData ? sortData.SortBy : 'Name';
         let ignoreArticles = false;
-        
+        let useChildValues = sortData ? (sortData.UseChildValues || false) : false;
+
         if (actualSortBy === 'Name (Ignore Articles)') {
             actualSortBy = 'Name';
             ignoreArticles = true;
@@ -203,14 +327,14 @@
             actualSortBy = 'SeriesName';
             ignoreArticles = true;
         }
-        
+
         // Create box container with paperList class for theme-aware background
         const box = SmartLists.createStyledElement('div', 'sort-box paperList', SmartLists.STYLES.sortBox);
         box.setAttribute('data-sort-id', sortId);
-        
+
         // Create fields container
         const fieldsContainer = SmartLists.createStyledElement('div', 'sort-fields', SmartLists.STYLES.sortFields);
-        
+
         // Sort By field
         const sortByField = SmartLists.createSortField('Sort By', 'sort-by-' + sortId, 'select');
         // Set a fixed width to prevent resizing when options change
@@ -228,7 +352,7 @@
         });
         SmartLists.populateSelectElement(sortByField.input, sortByOptions);
         fieldsContainer.appendChild(sortByField.container);
-        
+
         // Sort Order field
         const sortOrderField = SmartLists.createSortField('Sort Order', 'sort-order-' + sortId, 'select');
         const sortOrderOptions = SmartLists.SORT_ORDER_OPTIONS.map(function(opt) {
@@ -240,13 +364,19 @@
         });
         SmartLists.populateSelectElement(sortOrderField.input, sortOrderOptions);
         fieldsContainer.appendChild(sortOrderField.container);
-        
+
         // Ignore Articles checkbox (visible for Name and SeriesName)
         const ignoreArticlesField = SmartLists.createIgnoreArticleCheckbox(sortId, ignoreArticles);
-        const shouldShowCheckbox = (actualSortBy === 'Name' || actualSortBy === 'SeriesName');
-        ignoreArticlesField.container.style.display = shouldShowCheckbox ? '' : 'none';
+        const shouldShowIgnoreArticles = (actualSortBy === 'Name' || actualSortBy === 'SeriesName');
+        ignoreArticlesField.container.style.display = shouldShowIgnoreArticles ? '' : 'none';
         fieldsContainer.appendChild(ignoreArticlesField.container);
-        
+
+        // Use Child Values checkbox (visible for Collection output type and supported sort fields)
+        const useChildValuesField = SmartLists.createUseChildValuesCheckbox(sortId, useChildValues);
+        const shouldShowUseChildValues = SmartLists.shouldShowUseChildValuesCheckbox(page, actualSortBy);
+        useChildValuesField.container.style.display = shouldShowUseChildValues ? '' : 'none';
+        fieldsContainer.appendChild(useChildValuesField.container);
+
         // Remove button
         const removeBtn = SmartLists.createStyledElement('button', 'sort-remove-btn', SmartLists.STYLES.sortRemoveBtn);
         removeBtn.type = 'button';
@@ -256,24 +386,32 @@
             SmartLists.removeSortBox(page, box);
         });
         fieldsContainer.appendChild(removeBtn);
-        
+
         box.appendChild(fieldsContainer);
-        
+
         // Add event listener to sync Sort Order UI and checkbox visibility when Sort By changes
         sortByField.input.addEventListener('change', function() {
             SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input);
             // Show/hide ignore articles checkbox based on Sort By value
-            const showCheckbox = (this.value === 'Name' || this.value === 'SeriesName');
-            ignoreArticlesField.container.style.display = showCheckbox ? '' : 'none';
+            const showIgnoreArticles = (this.value === 'Name' || this.value === 'SeriesName');
+            ignoreArticlesField.container.style.display = showIgnoreArticles ? '' : 'none';
             // Reset checkbox when switching away from Name/SeriesName
-            if (!showCheckbox) {
+            if (!showIgnoreArticles) {
                 ignoreArticlesField.checkbox.checked = false;
             }
+
+            // Show/hide use child values checkbox based on Sort By value and output type
+            const showUseChildValues = SmartLists.shouldShowUseChildValuesCheckbox(page, this.value);
+            useChildValuesField.container.style.display = showUseChildValues ? '' : 'none';
+            // Reset checkbox when switching away from supported fields
+            if (!showUseChildValues) {
+                useChildValuesField.checkbox.checked = false;
+            }
         });
-        
+
         // Initialize Sort Order UI based on current Sort By value
         SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input);
-        
+
         return box;
     };
     
@@ -367,28 +505,33 @@
     SmartLists.collectSortsFromForm = function(page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return [];
-        
+
         const boxes = sortsContainer.querySelectorAll('.sort-box');
         const sorts = [];
-        
+
         boxes.forEach(function(box) {
             const sortBySelect = box.querySelector('[id^="sort-by-"]');
             const sortOrderSelect = box.querySelector('[id^="sort-order-"]');
             const ignoreArticlesCheckbox = box.querySelector('[id^="sort-ignore-articles-"]');
-            
+            const useChildValuesCheckbox = box.querySelector('[id^="sort-use-child-values-"]');
+
             if (!sortBySelect || !sortBySelect.value) return; // Skip if no sort by selected
-            
+
             let sortBy = sortBySelect.value;
             const sortOrder = (sortBy === 'Random' || sortBy === 'NoOrder') ? 'Ascending' : (sortOrderSelect ? sortOrderSelect.value : 'Ascending');
-            
+
             // Handle "Ignore Articles" checkbox - convert to "(Ignore Articles)" for backwards compatibility
             if ((sortBy === 'Name' || sortBy === 'SeriesName') && ignoreArticlesCheckbox && ignoreArticlesCheckbox.checked) {
                 sortBy = sortBy + ' (Ignore Articles)';
             }
-            
+
+            // Collect UseChildValues checkbox value
+            const useChildValues = useChildValuesCheckbox ? useChildValuesCheckbox.checked : false;
+
             sorts.push({
                 SortBy: sortBy,
-                SortOrder: sortOrder
+                SortOrder: sortOrder,
+                UseChildValues: useChildValues
             });
         });
         
@@ -399,19 +542,19 @@
     SmartLists.updateAllSortOptionsVisibility = function(page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
-        
+
         const sortBoxes = sortsContainer.querySelectorAll('.sort-box');
         const filteredOptions = SmartLists.getFilteredSortOptions(page);
-        
+
         sortBoxes.forEach(function(box) {
             const sortBySelect = box.querySelector('select[id^="sort-by-"]');
             const sortOrderSelect = box.querySelector('select[id^="sort-order-"]');
             const sortOrderContainer = sortOrderSelect ? sortOrderSelect.closest('.sort-field-container') : null;
-            
+
             if (!sortBySelect) return;
-            
+
             const currentValue = sortBySelect.value;
-            
+
             // Rebuild the options
             const sortByOptions = filteredOptions.map(function(opt) {
                 return {
@@ -420,48 +563,75 @@
                     selected: opt.value === currentValue
                 };
             });
-            
+
             // Check if current value is still valid
             const isCurrentValueValid = filteredOptions.some(function(opt) {
                 return opt.value === currentValue;
             });
-            
+
             // Repopulate the dropdown
             SmartLists.populateSelectElement(sortBySelect, sortByOptions);
-            
-            // If current value is no longer valid, clear it and select first option
-            if (!isCurrentValueValid && currentValue) {
-                if (sortByOptions.length > 0) {
-                    sortBySelect.value = sortByOptions[0].value;
-                    // Sync Sort Order UI for the new value
-                    SmartLists.syncSortOrderUI(sortByOptions[0].value, sortOrderContainer, sortOrderSelect);
-                    // Update ignore article checkbox visibility for the new value
-                    const ignoreArticlesContainer = box.querySelector('.ignore-article-container');
-                    if (ignoreArticlesContainer) {
-                        const showCheckbox = (sortByOptions[0].value === 'Name' || sortByOptions[0].value === 'SeriesName');
-                        ignoreArticlesContainer.style.display = showCheckbox ? '' : 'none';
-                        if (!showCheckbox) {
-                            const ignoreArticlesCheckbox = ignoreArticlesContainer.querySelector('[id^="sort-ignore-articles-"]');
-                            if (ignoreArticlesCheckbox) {
-                                ignoreArticlesCheckbox.checked = false;
-                            }
-                        }
+
+            // Determine the effective sort value (new or current)
+            var effectiveSortValue = currentValue;
+            if (!isCurrentValueValid && currentValue && sortByOptions.length > 0) {
+                sortBySelect.value = sortByOptions[0].value;
+                effectiveSortValue = sortByOptions[0].value;
+            }
+
+            // Sync Sort Order UI for the effective value
+            SmartLists.syncSortOrderUI(effectiveSortValue, sortOrderContainer, sortOrderSelect);
+
+            // Update ignore article checkbox visibility
+            const ignoreArticlesContainer = box.querySelector('.ignore-article-container');
+            if (ignoreArticlesContainer) {
+                const showIgnoreArticles = (effectiveSortValue === 'Name' || effectiveSortValue === 'SeriesName');
+                ignoreArticlesContainer.style.display = showIgnoreArticles ? '' : 'none';
+                if (!showIgnoreArticles) {
+                    const ignoreArticlesCheckbox = ignoreArticlesContainer.querySelector('[id^="sort-ignore-articles-"]');
+                    if (ignoreArticlesCheckbox) {
+                        ignoreArticlesCheckbox.checked = false;
                     }
                 }
-            } else {
-                // Sync Sort Order UI for the current value
-                SmartLists.syncSortOrderUI(sortBySelect.value, sortOrderContainer, sortOrderSelect);
-                // Update ignore article checkbox visibility for the current value
-                const ignoreArticlesContainer = box.querySelector('.ignore-article-container');
-                if (ignoreArticlesContainer) {
-                    const showCheckbox = (sortBySelect.value === 'Name' || sortBySelect.value === 'SeriesName');
-                    ignoreArticlesContainer.style.display = showCheckbox ? '' : 'none';
-                    if (!showCheckbox) {
-                        const ignoreArticlesCheckbox = ignoreArticlesContainer.querySelector('[id^="sort-ignore-articles-"]');
-                        if (ignoreArticlesCheckbox) {
-                            ignoreArticlesCheckbox.checked = false;
-                        }
+            }
+
+            // Update use child values checkbox visibility
+            const useChildValuesContainer = box.querySelector('.use-child-values-container');
+            if (useChildValuesContainer) {
+                const showUseChildValues = SmartLists.shouldShowUseChildValuesCheckbox(page, effectiveSortValue);
+                useChildValuesContainer.style.display = showUseChildValues ? '' : 'none';
+                if (!showUseChildValues) {
+                    const useChildValuesCheckbox = useChildValuesContainer.querySelector('[id^="sort-use-child-values-"]');
+                    if (useChildValuesCheckbox) {
+                        useChildValuesCheckbox.checked = false;
                     }
+                }
+            }
+        });
+    };
+
+    // Update all "Use Child Values" checkboxes visibility when list type changes
+    // Called when the list type dropdown changes between Playlist and Collection
+    SmartLists.updateUseChildValuesVisibility = function(page) {
+        const sortsContainer = page.querySelector('#sorts-container');
+        if (!sortsContainer) return;
+
+        const sortBoxes = sortsContainer.querySelectorAll('.sort-box');
+
+        sortBoxes.forEach(function(box) {
+            const sortBySelect = box.querySelector('select[id^="sort-by-"]');
+            const useChildValuesContainer = box.querySelector('.use-child-values-container');
+
+            if (!sortBySelect || !useChildValuesContainer) return;
+
+            const showUseChildValues = SmartLists.shouldShowUseChildValuesCheckbox(page, sortBySelect.value);
+            useChildValuesContainer.style.display = showUseChildValues ? '' : 'none';
+
+            // Reset checkbox when hiding
+            if (!showUseChildValues) {
+                const useChildValuesCheckbox = useChildValuesContainer.querySelector('[id^="sort-use-child-values-"]');
+                if (useChildValuesCheckbox) {
+                    useChildValuesCheckbox.checked = false;
                 }
             }
         });

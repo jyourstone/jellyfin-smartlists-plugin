@@ -78,6 +78,44 @@ Preserves the natural grouping from OR blocks by keeping items from each block t
 !!! note "Requires Multiple OR Blocks"
     This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
 
+## Sorting Collections by Child Item Values {#child-item-sorting}
+
+When creating a **Collection that contains other Collections or Playlists**, you can sort by aggregated values from the items within those child containers.
+
+### How It Works
+
+When you have a "collection of collections" (a parent collection containing child collections or playlists), you may want to sort by the most recent or highest-rated item **within** each child collection, rather than by the collection's own metadata.
+
+### Supported Sort Fields
+
+This feature is available for the following sort fields:
+
+| Sort Field | Aggregation Method |
+|------------|-------------------|
+| Production Year | Maximum (most recent year) |
+| Community Rating | Maximum (highest rating) |
+| Date Created | Maximum (most recently added) |
+| Release Date | Maximum (most recently released) |
+
+### When the Option Appears
+
+The **"Include items within child collections/playlists"** checkbox appears when **all** of these conditions are met:
+
+1. **Output type is Collection** (not Playlist)
+2. **Sort field** is one of the supported fields listed above
+3. **At least one rule** uses the Collections or Playlists field with **"Include collection/playlist only"** set to "Yes"
+
+### Configuration
+
+1. Set the output type to **Collection**
+2. Add a rule using the **Collections** field (or **Playlists** field)
+3. Set **"Include collection only"** to **"Yes - Only include the collection itself"**
+4. In the Sort section, select a supported sort field (e.g., Date Created)
+5. Check **"Include items within child collections/playlists"**
+
+!!! info "See Examples"
+    For a detailed example, see [Recently Updated Collections](../examples/advanced-examples.md#recently-updated-collections).
+
 ## Limits
 
 ### Max Items

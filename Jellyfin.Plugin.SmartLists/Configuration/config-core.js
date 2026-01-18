@@ -71,6 +71,10 @@
         { value: 'Descending', label: 'Descending' }
     ];
 
+    // Sort fields that support child value aggregation (for collections containing collections/playlists)
+    // When enabled, sort values are calculated from the Max of child items (e.g., newest DateCreated among children)
+    SmartLists.CHILD_VALUE_SORT_FIELDS = ['ProductionYear', 'CommunityRating', 'DateCreated', 'ReleaseDate'];
+
     // Constants for operators
     SmartLists.RELATIVE_DATE_OPERATORS = ['NewerThan', 'OlderThan'];
     SmartLists.MULTI_VALUE_OPERATORS = ['IsIn', 'IsNotIn'];
