@@ -52,7 +52,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var fileSystem = new SmartListFileSystem(serverApplicationPaths);
                 var playlistStore = new PlaylistStore(fileSystem);
                 var playlistService = new PlaylistService(userManager, libraryManager, playlistManager, userDataManager, playlistServiceLogger, providerManager);
-                
+
                 var collectionServiceLogger = loggerFactory.CreateLogger<CollectionService>();
                 var collectionStore = new CollectionStore(fileSystem);
                 var collectionService = new CollectionService(libraryManager, collectionManager, userManager, userDataManager, collectionServiceLogger, providerManager);

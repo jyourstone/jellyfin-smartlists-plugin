@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -10,6 +11,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
+using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Abstractions;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
@@ -42,6 +44,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         private readonly IUserDataManager _userDataManager;
         private readonly ILogger<CollectionService> _logger;
         private readonly IProviderManager _providerManager;
+        private readonly SmartListImageService? _imageService;
 
         public CollectionService(
             ILibraryManager libraryManager,
@@ -49,7 +52,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             IUserManager userManager,
             IUserDataManager userDataManager,
             ILogger<CollectionService> logger,
-            IProviderManager providerManager)
+            IProviderManager providerManager,
+            SmartListImageService? imageService = null)
         {
             _libraryManager = libraryManager;
             _collectionManager = collectionManager;
@@ -57,6 +61,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             _userDataManager = userDataManager;
             _logger = logger;
             _providerManager = providerManager;
+            _imageService = imageService;
         }
 
         /// <summary>
@@ -330,6 +335,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 }
         }
 
+        /// <summary>
+        /// Deletes a Jellyfin collection associated with the smart collection.
+        /// </summary>
+        /// <param name="dto">The smart collection DTO.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
         public Task DeleteAsync(SmartCollectionDto dto, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(dto);
@@ -476,7 +486,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             try
             {
                 _logger.LogDebug("Disabling smart collection: {CollectionName}", dto.Name);
-                await DeleteAsync(dto, cancellationToken);
+
+                await DeleteAsync(dto, cancellationToken).ConfigureAwait(false);
                 _logger.LogInformation("Successfully disabled smart collection: {CollectionName}", dto.Name);
             }
             catch (Exception ex)
@@ -513,8 +524,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Save the changes
             await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
-            // Refresh metadata to generate cover images (metadata providers may change the name)
-            await RefreshCollectionMetadataAsync(collection, cancellationToken).ConfigureAwait(false);
+            // Handle custom images and auto-generation
+            // Logic: Custom images uploaded via SmartLists take precedence over auto-generation
+            // Auto-generation only happens for Primary/Thumb if no custom versions exist
+            var hasCustomPrimary = dto.CustomImages?.ContainsKey("Primary") == true;
+            var hasCustomThumb = dto.CustomImages?.ContainsKey("Thumb") == true;
+
+            // Always call ApplyCustomImagesToCollectionAsync - it handles both:
+            // 1. Applying custom images if any exist
+            // 2. Cleaning up orphaned images when custom images are deleted
+            await ApplyCustomImagesToCollectionAsync(collection, dto, cancellationToken).ConfigureAwait(false);
+
+            // Only trigger auto-generation if no custom Primary AND no custom Thumb uploaded
+            // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
+            if (!hasCustomPrimary && !hasCustomThumb)
+            {
+                await RefreshCollectionMetadataAsync(collection, cancellationToken).ConfigureAwait(false);
+            }
 
             // Always set the name after metadata refresh to ensure it's correct
             // This prevents metadata providers from overwriting our intended name
@@ -524,15 +550,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 if (collectionAfterRefresh.Name != expectedName)
                 {
-                    _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')", 
+                    _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')",
                         expectedName, collectionAfterRefresh.Name);
                 }
                 collectionAfterRefresh.Name = expectedName;
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                
-                // Set collection image if metadata refresh didn't generate one
-                await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
-                
+
+                // Auto-generate collection images only if no custom Primary/Thumb uploaded
+                var hasCustomPrimaryAfterRefresh = dto.CustomImages?.ContainsKey("Primary") == true;
+                var hasCustomThumbAfterRefresh = dto.CustomImages?.ContainsKey("Thumb") == true;
+                if (!hasCustomPrimaryAfterRefresh && !hasCustomThumbAfterRefresh)
+                {
+                    await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
+                }
+
                 // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                 SetCollectionDisplayOrder(collectionAfterRefresh);
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -794,10 +825,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
             {
                 _logger.LogDebug("Retrieved new collection: Name = {Name}", retrievedItem.Name);
-                
-                // Refresh metadata to generate cover images (metadata providers may change the name)
-                await RefreshCollectionMetadataAsync(retrievedItem, cancellationToken).ConfigureAwait(false);
-                
+
+                // Handle custom images and auto-generation
+                // Logic: Custom images uploaded via SmartLists take precedence over auto-generation
+                // Auto-generation only happens for Primary/Thumb if no custom versions exist
+                var hasCustomPrimary = dto.CustomImages?.ContainsKey("Primary") == true;
+                var hasCustomThumb = dto.CustomImages?.ContainsKey("Thumb") == true;
+
+                // Always call ApplyCustomImagesToCollectionAsync - it handles both:
+                // 1. Applying custom images if any exist
+                // 2. Cleaning up orphaned images when custom images are deleted
+                await ApplyCustomImagesToCollectionAsync(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
+
+                // Only trigger auto-generation if no custom Primary AND no custom Thumb uploaded
+                // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
+                if (!hasCustomPrimary && !hasCustomThumb)
+                {
+                    await RefreshCollectionMetadataAsync(retrievedItem, cancellationToken).ConfigureAwait(false);
+                }
+
                 // Always set the name after metadata refresh to ensure it's correct
                 // This prevents metadata providers from overwriting our intended name
                 retrievedItem = _libraryManager.GetItemById(collectionId);
@@ -805,15 +851,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 {
                     if (retrievedItem.Name != formattedName)
                     {
-                        _logger.LogDebug("Setting collection name to '{FormattedName}' after metadata refresh (was '{CurrentName}')", 
+                        _logger.LogDebug("Setting collection name to '{FormattedName}' after metadata refresh (was '{CurrentName}')",
                             formattedName, retrievedItem.Name);
                     }
                     retrievedItem.Name = formattedName;
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                    
-                    // Set collection image if metadata refresh didn't generate one
-                    await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
-                    
+
+                    // Auto-generate collection images only if no custom Primary/Thumb uploaded
+                    var hasCustomPrimaryNew = dto.CustomImages?.ContainsKey("Primary") == true;
+                    var hasCustomThumbNew = dto.CustomImages?.ContainsKey("Thumb") == true;
+                    if (!hasCustomPrimaryNew && !hasCustomThumbNew)
+                    {
+                        await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    }
+
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -826,6 +877,262 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 _logger.LogWarning("Failed to retrieve newly created collection with ID {CollectionId}", collectionId);
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// Applies custom images from the smart list configuration to the Jellyfin collection.
+        /// Also removes orphaned images when CustomImages are deleted.
+        /// Custom images take precedence over auto-generation - auto-generation only applies
+        /// when no custom Primary/Thumb images are uploaded.
+        /// </summary>
+        /// <param name="collection">The Jellyfin collection item.</param>
+        /// <param name="dto">The smart collection DTO.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        private async Task ApplyCustomImagesToCollectionAsync(BaseItem collection, SmartCollectionDto dto, CancellationToken cancellationToken)
+        {
+            if (_imageService == null || string.IsNullOrEmpty(dto.Id))
+            {
+                return;
+            }
+
+            try
+            {
+                var itemPath = collection.ContainingFolderPath;
+                if (string.IsNullOrEmpty(itemPath) || !Directory.Exists(itemPath))
+                {
+                    _logger.LogWarning("Cannot apply custom images: collection path is invalid: {Path}", itemPath);
+                    return;
+                }
+
+                var imageInfos = collection.ImageInfos?.ToList() ?? [];
+                var appliedImages = new List<(string Path, ImageType Type)>();
+                var customImageTypes = new HashSet<ImageType>();
+
+                // Check if this smart list has ever had custom images uploaded through our system
+                // by checking if an image folder exists for this list (even if empty after deletions)
+                var hasOrHadSmartListImages = _imageService.HasImageFolder(dto.Id);
+
+                // Apply custom images if any exist
+                if (dto.CustomImages != null && dto.CustomImages.Count > 0)
+                {
+                    foreach (var (imageTypeName, fileName) in dto.CustomImages)
+                    {
+                        // Parse the image type first to check if we should skip it
+                        if (!Enum.TryParse<ImageType>(imageTypeName, ignoreCase: true, out var imageType))
+                        {
+                            _logger.LogWarning("Invalid image type: {ImageType}", imageTypeName);
+                            continue;
+                        }
+
+                        // Get the source image path from the image service
+                        var sourcePath = _imageService.GetImagePath(dto.Id, imageTypeName);
+                        if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+                        {
+                            _logger.LogDebug("Custom image not found: {ImageType} for collection {CollectionName}", imageTypeName, dto.Name);
+                            continue;
+                        }
+
+                        customImageTypes.Add(imageType);
+
+                        // Determine destination filename
+                        var extension = Path.GetExtension(sourcePath);
+                        var destFileName = GetImageFileName(imageType, extension);
+                        var destPath = Path.Combine(itemPath, destFileName);
+
+                        // Copy the image to the collection folder
+                        File.Copy(sourcePath, destPath, overwrite: true);
+                        _logger.LogDebug("Copied custom {ImageType} image to collection: {DestPath}", imageTypeName, destPath);
+
+                        // Remove existing image of the same type
+                        var existingImage = imageInfos.FirstOrDefault(i => i.Type == imageType);
+                        if (existingImage != null)
+                        {
+                            imageInfos.Remove(existingImage);
+                        }
+
+                        // Add the new image info
+                        var imageInfo = new ItemImageInfo
+                        {
+                            Path = destPath,
+                            Type = imageType,
+                            DateModified = DateTime.UtcNow
+                        };
+                        imageInfos.Add(imageInfo);
+                        appliedImages.Add((destPath, imageType));
+                    }
+                }
+
+                // Clean up orphaned images if this smart list has or had custom images
+                var removedAny = false;
+                if (hasOrHadSmartListImages)
+                {
+                    removedAny = RemoveOrphanedCustomImages(collection, itemPath, imageInfos, customImageTypes);
+                }
+
+                if (appliedImages.Count > 0 || removedAny)
+                {
+                    collection.ImageInfos = imageInfos.ToArray();
+                    await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                    _logger.LogDebug("Applied {AppliedCount} custom image(s) to collection '{CollectionName}', removed orphaned: {RemovedAny}",
+                        appliedImages.Count, dto.Name, removedAny);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to apply custom images to collection '{CollectionName}'", dto.Name);
+            }
+        }
+
+        /// <summary>
+        /// Removes custom images that are no longer in the CustomImages dictionary.
+        /// Also cleans up auto-generated collages when custom Primary/Thumb images are uploaded.
+        /// </summary>
+        /// <param name="collection">The collection item.</param>
+        /// <param name="itemPath">Path to the collection folder.</param>
+        /// <param name="imageInfos">List of image infos to update.</param>
+        /// <param name="customImageTypes">Set of image types currently in CustomImages.</param>
+        private bool RemoveOrphanedCustomImages(BaseItem collection, string itemPath, List<ItemImageInfo> imageInfos, HashSet<ImageType> customImageTypes)
+        {
+            bool removedAny = false;
+
+            // Clean up all image types that were custom-uploaded but are no longer in CustomImages
+            var cleanableImageTypes = new[] { ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb, ImageType.Logo, ImageType.Disc, ImageType.Art, ImageType.Box, ImageType.BoxRear, ImageType.Menu };
+
+            foreach (var imageType in cleanableImageTypes)
+            {
+                // Skip if this type is currently in CustomImages
+                if (customImageTypes.Contains(imageType))
+                {
+                    // If user has custom Primary, clean up auto-generated collage
+                    if (imageType == ImageType.Primary)
+                    {
+                        var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
+                        if (File.Exists(collagePath))
+                        {
+                            try
+                            {
+                                File.Delete(collagePath);
+                                _logger.LogDebug("Removed auto-generated Primary collage (custom image uploaded): {FilePath}", collagePath);
+                                removedAny = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to delete auto-generated collage file: {FilePath}", collagePath);
+                            }
+                        }
+                    }
+                    // If user has custom Thumb, clean up auto-generated thumb collage
+                    else if (imageType == ImageType.Thumb)
+                    {
+                        var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
+                        if (File.Exists(thumbCollagePath))
+                        {
+                            try
+                            {
+                                File.Delete(thumbCollagePath);
+                                _logger.LogDebug("Removed auto-generated Thumb collage (custom image uploaded): {FilePath}", thumbCollagePath);
+                                removedAny = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to delete auto-generated thumb collage file: {FilePath}", thumbCollagePath);
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // This image type is NOT in CustomImages - clean up any orphaned files
+                // Check if there's an image of this type in the collection folder with our naming convention
+                var possibleExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+                foreach (var ext in possibleExtensions)
+                {
+                    var fileName = GetImageFileName(imageType, ext);
+                    var filePath = Path.Combine(itemPath, fileName);
+
+                    if (File.Exists(filePath))
+                    {
+                        try
+                        {
+                            File.Delete(filePath);
+                            _logger.LogDebug("Removed orphaned {ImageType} image from collection: {FilePath}", imageType, filePath);
+                            removedAny = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete orphaned image file: {FilePath}", filePath);
+                        }
+                    }
+                }
+
+                // Also clean up auto-generated collage files for Primary/Thumb when no custom images exist
+                // This allows auto-generation to create fresh collages
+                if (imageType == ImageType.Primary)
+                {
+                    var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
+                    if (File.Exists(collagePath))
+                    {
+                        try
+                        {
+                            File.Delete(collagePath);
+                            _logger.LogDebug("Removed orphaned auto-generated Primary collage: {FilePath}", collagePath);
+                            removedAny = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete auto-generated collage file: {FilePath}", collagePath);
+                        }
+                    }
+                }
+                else if (imageType == ImageType.Thumb)
+                {
+                    var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
+                    if (File.Exists(thumbCollagePath))
+                    {
+                        try
+                        {
+                            File.Delete(thumbCollagePath);
+                            _logger.LogDebug("Removed orphaned auto-generated Thumb collage: {FilePath}", thumbCollagePath);
+                            removedAny = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete auto-generated thumb collage file: {FilePath}", thumbCollagePath);
+                        }
+                    }
+                }
+
+                // Remove from imageInfos
+                var imageInfo = imageInfos.FirstOrDefault(i => i.Type == imageType);
+                if (imageInfo != null)
+                {
+                    imageInfos.Remove(imageInfo);
+                    removedAny = true;
+                }
+            }
+
+            return removedAny;
+        }
+
+        /// <summary>
+        /// Gets the standard Jellyfin filename for an image type.
+        /// </summary>
+        private static string GetImageFileName(ImageType imageType, string extension)
+        {
+            return imageType switch
+            {
+                ImageType.Primary => $"folder{extension}",
+                ImageType.Backdrop => $"backdrop{extension}",
+                ImageType.Banner => $"banner{extension}",
+                ImageType.Thumb => $"thumb{extension}",
+                ImageType.Logo => $"logo{extension}",
+                ImageType.Disc => $"disc{extension}",
+                ImageType.Art => $"clearart{extension}",
+                ImageType.Box => $"box{extension}",
+                ImageType.BoxRear => $"boxrear{extension}",
+                ImageType.Menu => $"menu{extension}",
+                _ => $"{imageType.ToString().ToLowerInvariant()}{extension}"
+            };
         }
 
         private IEnumerable<BaseItem> GetAllMedia(List<string> mediaTypes, SmartCollectionDto? dto = null, User? ownerUser = null)

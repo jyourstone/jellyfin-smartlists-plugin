@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
@@ -24,6 +25,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -41,6 +43,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     [Produces("application/json")]
     public partial class SmartListController(
         ILogger<SmartListController> logger,
+        ILoggerFactory loggerFactory,
         IServerApplicationPaths applicationPaths,
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -50,8 +53,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         IProviderManager providerManager,
         IManualRefreshService manualRefreshService,
         RefreshStatusService refreshStatusService,
-        RefreshQueueService refreshQueueService) : ControllerBase
+        RefreshQueueService refreshQueueService,
+        SmartListImageService imageService) : ControllerBase
     {
+        private readonly ILoggerFactory _loggerFactory = loggerFactory;
         private readonly IServerApplicationPaths _applicationPaths = applicationPaths;
         private readonly IUserManager _userManager = userManager;
         private readonly ILibraryManager _libraryManager = libraryManager;
@@ -62,17 +67,20 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly IManualRefreshService _manualRefreshService = manualRefreshService;
         private readonly RefreshStatusService _refreshStatusService = refreshStatusService;
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
+        private readonly SmartListImageService _imageService = imageService;
 
         private Services.Playlists.PlaylistStore GetPlaylistStore()
         {
             var fileSystem = new SmartListFileSystem(_applicationPaths);
-            return new Services.Playlists.PlaylistStore(fileSystem);
+            var playlistLogger = _loggerFactory.CreateLogger<Services.Playlists.PlaylistStore>();
+            return new Services.Playlists.PlaylistStore(fileSystem, playlistLogger);
         }
 
         private Services.Collections.CollectionStore GetCollectionStore()
         {
             var fileSystem = new SmartListFileSystem(_applicationPaths);
-            return new Services.Collections.CollectionStore(fileSystem);
+            var collectionLogger = _loggerFactory.CreateLogger<Services.Collections.CollectionStore>();
+            return new Services.Collections.CollectionStore(fileSystem, collectionLogger);
         }
 
         private Services.Playlists.PlaylistService GetPlaylistService()
@@ -476,7 +484,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <returns>The created smart list.</returns>
         [HttpPost]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        public async Task<ActionResult<SmartListDto>> CreateSmartList([FromBody] SmartListDto? list)
+        public async Task<ActionResult<SmartListDto>> CreateSmartList([FromBody] SmartListDto? list, [FromQuery] bool skipRefresh = false)
         {
             if (list == null)
             {
@@ -492,16 +500,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             // Route to appropriate handler based on type
             if (list.Type == Core.Enums.SmartListType.Collection)
             {
-                return await CreateCollectionInternal(list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!);
+                return await CreateCollectionInternal(list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!, skipRefresh);
             }
             else
             {
-                return await CreatePlaylistInternal(list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!);
+                return await CreatePlaylistInternal(list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!, skipRefresh);
             }
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        private async Task<ActionResult<SmartListDto>> CreatePlaylistInternal(SmartPlaylistDto playlist)
+        private async Task<ActionResult<SmartListDto>> CreatePlaylistInternal(SmartPlaylistDto playlist, bool skipRefresh = false)
         {
 
             // Set defaults for optional fields
@@ -713,11 +721,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after creating playlist '{PlaylistName}'", playlist.Name);
 
-                // Enqueue refresh operation only if the playlist is enabled
-                if (createdPlaylist.Enabled)
+                // Enqueue refresh operation if the playlist is enabled and skipRefresh is false
+                if (createdPlaylist.Enabled && !skipRefresh)
                 {
-                    // Enqueue refresh operation - consumer will process all users from UserPlaylists
-                    logger.LogDebug("Enqueuing refresh for newly created playlist {PlaylistName} with {UserCount} users", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                    logger.LogDebug("Enqueuing refresh for newly created playlist {PlaylistName}", playlist.Name);
                     var listId = createdPlaylist.Id ?? Guid.NewGuid().ToString();
                     
                     var queueItem = new RefreshQueueItem
@@ -732,12 +739,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     };
 
                     _refreshQueueService.EnqueueOperation(queueItem);
-                    logger.LogDebug("Enqueued refresh for playlist {PlaylistName}", playlist.Name);
-                    logger.LogInformation("Created smart playlist '{PlaylistName}' with {UserCount} users and enqueued for refresh", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                    logger.LogInformation("Created smart playlist '{PlaylistName}' and enqueued for refresh", playlist.Name);
+                }
+                else if (skipRefresh)
+                {
+                    logger.LogInformation("Created smart playlist '{PlaylistName}' (refresh deferred for image uploads)", playlist.Name);
                 }
                 else
                 {
-                    logger.LogInformation("Created disabled smart playlist '{PlaylistName}' with {UserCount} users (not enqueued for refresh)", playlist.Name, createdPlaylist.UserPlaylists?.Count ?? 1);
+                    logger.LogInformation("Created disabled smart playlist '{PlaylistName}' (not enqueued for refresh)", playlist.Name);
                 }
 
                 // Return the created playlist immediately (refresh will happen in background if enabled)
@@ -761,7 +771,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        private async Task<ActionResult<SmartListDto>> CreateCollectionInternal(SmartCollectionDto collection)
+        private async Task<ActionResult<SmartListDto>> CreateCollectionInternal(SmartCollectionDto collection, bool skipRefresh = false)
         {
             // Set defaults for optional fields
             if (string.IsNullOrEmpty(collection.Id))
@@ -904,8 +914,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after creating collection '{CollectionName}'", collection.Name);
 
-                // Enqueue refresh operation only if the collection is enabled
-                if (createdCollection.Enabled)
+                // Enqueue refresh operation if the collection is enabled and skipRefresh is false
+                if (createdCollection.Enabled && !skipRefresh)
                 {
                     logger.LogDebug("Enqueuing refresh for newly created collection {CollectionName}", collection.Name);
                     var listId = createdCollection.Id ?? Guid.NewGuid().ToString();
@@ -922,6 +932,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     _refreshQueueService.EnqueueOperation(queueItem);
                     logger.LogInformation("Created smart collection '{CollectionName}' and enqueued for refresh", collection.Name);
+                }
+                else if (skipRefresh)
+                {
+                    logger.LogInformation("Created smart collection '{CollectionName}' (refresh deferred for image uploads)", collection.Name);
                 }
                 else
                 {
@@ -953,11 +967,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         /// <param name="id">The list ID.</param>
         /// <param name="list">The updated smart list.</param>
+        /// <param name="skipRefresh">If true, skip queueing refresh (caller will trigger refresh after image operations).</param>
         /// <returns>The updated smart list.</returns>
         [HttpPut("{id}")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "ID is validated as GUID before use, preventing path injection")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        public async Task<ActionResult<SmartListDto>> UpdateSmartList([FromRoute, Required] string id, [FromBody, Required] SmartListDto list)
+        public async Task<ActionResult<SmartListDto>> UpdateSmartList([FromRoute, Required] string id, [FromBody, Required] SmartListDto list, [FromQuery] bool skipRefresh = false)
         {
             if (list == null)
             {
@@ -1081,7 +1096,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
-                        
+
                         // Delete old playlist configuration from store
                         await playlistStore.DeleteAsync(guidId);
                         
@@ -1124,7 +1139,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                     
                     // Normal playlist update
-                    return await UpdatePlaylistInternal(id, guidId, list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!);
+                    return await UpdatePlaylistInternal(id, guidId, list as SmartPlaylistDto ?? JsonSerializer.Deserialize<SmartPlaylistDto>(JsonSerializer.Serialize(list))!, skipRefresh);
                 }
 
                 var collectionStore = GetCollectionStore();
@@ -1157,10 +1172,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var collectionService = GetCollectionService();
                         await collectionService.DeleteAsync(existingCollection);
-                        
+
                         // Delete old collection configuration from store
                         await collectionStore.DeleteAsync(guidId);
-                        
+
                         // Save new playlist configuration (only after successful cleanup)
                         var newPlaylistStore = GetPlaylistStore();
                         await newPlaylistStore.SaveAsync(playlistDto);
@@ -1200,7 +1215,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                     
                     // Normal collection update
-                    return await UpdateCollectionInternal(id, guidId, list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!);
+                    return await UpdateCollectionInternal(id, guidId, list as SmartCollectionDto ?? JsonSerializer.Deserialize<SmartCollectionDto>(JsonSerializer.Serialize(list))!, skipRefresh);
                 }
 
                 return NotFound("Smart list not found");
@@ -1214,7 +1229,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        private async Task<ActionResult<SmartListDto>> UpdatePlaylistInternal(string id, Guid guidId, SmartPlaylistDto playlist)
+        private async Task<ActionResult<SmartListDto>> UpdatePlaylistInternal(string id, Guid guidId, SmartPlaylistDto playlist, bool skipRefresh = false)
         {
             var stopwatch = Stopwatch.StartNew();
             try
@@ -1472,6 +1487,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     playlist.LastRefreshed = existingPlaylist.LastRefreshed;
                 }
 
+                // Preserve existing CustomImages from the stored playlist
+                // (images are managed separately via upload/delete endpoints)
+                if (existingPlaylist.CustomImages != null && existingPlaylist.CustomImages.Count > 0)
+                {
+                    playlist.CustomImages = new Dictionary<string, string>(existingPlaylist.CustomImages);
+                }
+
                 var updatedPlaylist = await playlistStore.SaveAsync(playlist);
 
                 // Update the auto-refresh cache with the updated playlist
@@ -1481,12 +1503,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after updating playlist '{PlaylistName}'", playlist.Name);
 
-                // Enqueue refresh operation(s) only if playlist is enabled
-                if (updatedPlaylist.Enabled)
+                // Enqueue refresh operation(s) only if playlist is enabled and skipRefresh is false
+                if (updatedPlaylist.Enabled && !skipRefresh)
                 {
                     logger.LogDebug("Enqueuing refresh for updated playlist {PlaylistName}", playlist.Name);
                     var listId = updatedPlaylist.Id ?? Guid.NewGuid().ToString();
-                    
+
                     // Enqueue a single refresh operation for the list
                     // Note: We enqueue a single item with deprecated UserId field, but the
                     // queue consumer (RefreshQueueService.ProcessPlaylistRefreshAsync) ignores
@@ -1505,8 +1527,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     };
 
                     _refreshQueueService.EnqueueOperation(queueItem);
-                    
+
                     logger.LogInformation("Updated SmartList: {PlaylistName} and enqueued for refresh in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
+                }
+                else if (skipRefresh)
+                {
+                    logger.LogInformation("Updated SmartList: {PlaylistName} (refresh deferred for image operations) in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
                 }
                 else
                 {
@@ -1532,7 +1558,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3012:Review code for regex injection vulnerabilities", Justification = "Regex patterns are validated with IsValidRegexPattern method including length limits and timeout")]
-        private async Task<ActionResult<SmartListDto>> UpdateCollectionInternal(string id, Guid guidId, SmartCollectionDto collection)
+        private async Task<ActionResult<SmartListDto>> UpdateCollectionInternal(string id, Guid guidId, SmartCollectionDto collection, bool skipRefresh = false)
         {
             var stopwatch = Stopwatch.StartNew();
             try
@@ -1689,6 +1715,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     collection.LastRefreshed = existingCollection.LastRefreshed;
                 }
 
+                // Preserve existing CustomImages from the stored collection
+                // (images are managed separately via upload/delete endpoints)
+                if (existingCollection.CustomImages != null && existingCollection.CustomImages.Count > 0)
+                {
+                    collection.CustomImages = new Dictionary<string, string>(existingCollection.CustomImages);
+                }
+
                 var updatedCollection = await collectionStore.SaveAsync(collection);
 
                 // Update the auto-refresh cache with the updated collection
@@ -1698,8 +1731,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 SmartList.ClearRuleCache(logger);
                 logger.LogDebug("Cleared rule cache after updating collection '{CollectionName}'", collection.Name);
 
-                // Enqueue refresh operation only if collection is enabled
-                if (updatedCollection.Enabled)
+                // Enqueue refresh operation only if collection is enabled and skipRefresh is false
+                if (updatedCollection.Enabled && !skipRefresh)
                 {
                     logger.LogDebug("Enqueuing refresh for updated collection {CollectionName}", collection.Name);
                     var listId = updatedCollection.Id ?? Guid.NewGuid().ToString();
@@ -1716,6 +1749,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     _refreshQueueService.EnqueueOperation(queueItem);
                     logger.LogInformation("Updated SmartList: {CollectionName} and enqueued for refresh in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
+                }
+                else if (skipRefresh)
+                {
+                    logger.LogInformation("Updated SmartList: {CollectionName} (refresh deferred for image operations) in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
                 }
                 else
                 {
@@ -1757,6 +1794,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return BadRequest("Invalid list ID format");
                 }
 
+                // Normalize ID to dashed format for consistent image folder operations
+                var normalizedId = guidId.ToString("D");
+
                 // Try playlist first
                 var playlistStore = GetPlaylistStore();
                 var playlist = await playlistStore.GetByIdAsync(guidId);
@@ -1774,8 +1814,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
                     }
 
+                    // Delete custom images using normalized ID
+                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+
                     await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    AutoRefreshService.Instance?.RemovePlaylistFromCache(id);
+                    AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
                     return NoContent();
                 }
 
@@ -1796,8 +1839,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         logger.LogInformation("Deleted smart collection configuration: {CollectionName}", collection.Name);
                     }
 
+                    // Delete custom images using normalized ID
+                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+
                     await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    AutoRefreshService.Instance?.RemoveCollectionFromCache(id);
+                    AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
                     return NoContent();
                 }
 
@@ -3065,5 +3111,263 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Uploads an image for a smart list.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="file">The image file.</param>
+        /// <param name="imageType">The image type (Primary, Backdrop, Banner, etc.).</param>
+        /// <returns>The uploaded image info.</returns>
+        [HttpPost("{id}/images")]
+        public async Task<ActionResult<SmartListImageDto>> UploadImage(
+            [FromRoute, Required] string id,
+            [FromForm] IFormFile file,
+            [FromForm, Required] string imageType)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "No file uploaded" });
+            }
+
+            if (!SmartListImageService.ValidImageTypes.Contains(imageType))
+            {
+                return BadRequest(new { message = $"Invalid image type: {imageType}. Valid types: {string.Join(", ", SmartListImageService.ValidImageTypes)}" });
+            }
+
+            // Validate the smart list exists
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            var playlistStore = GetPlaylistStore();
+            var collectionStore = GetCollectionStore();
+            var playlist = await playlistStore.GetByIdAsync(guidId);
+            var collection = playlist == null ? await collectionStore.GetByIdAsync(guidId) : null;
+
+            if (playlist == null && collection == null)
+            {
+                return NotFound(new { message = "Smart list not found" });
+            }
+
+            // Validate the image
+            var validation = SmartListImageService.ValidateImage(file.FileName, file.Length, file.ContentType);
+            if (!validation.IsValid)
+            {
+                return BadRequest(new { message = validation.ErrorMessage });
+            }
+
+            try
+            {
+                // Save the image using normalized ID
+                await using var stream = file.OpenReadStream();
+                var fileName = await _imageService.SaveImageAsync(normalizedId, imageType, stream, file.FileName);
+
+                // Update the smart list's CustomImages
+                var smartList = (SmartListDto?)playlist ?? collection;
+                smartList!.CustomImages ??= new Dictionary<string, string>();
+                smartList.CustomImages[imageType] = fileName;
+
+                // Save the updated smart list
+                if (playlist != null)
+                {
+                    await playlistStore.SaveAsync(playlist);
+                    AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+
+                    // Do NOT queue refresh here - let the UI trigger one manual refresh after all uploads complete
+                    // This avoids queueing multiple refreshes when uploading multiple images
+                }
+                else if (collection != null)
+                {
+                    await collectionStore.SaveAsync(collection);
+                    AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+
+                    // Do NOT queue refresh here - let the UI trigger one manual refresh after all uploads complete
+                }
+
+                logger.LogInformation("Uploaded {ImageType} image for smart list {SmartListId}", imageType, normalizedId);
+
+                return Ok(new SmartListImageDto
+                {
+                    ImageType = imageType,
+                    FileName = fileName,
+                    ContentType = file.ContentType,
+                    FileSize = file.Length
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to upload image for smart list {SmartListId}", id);
+                return StatusCode(500, new { message = "Failed to upload image", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a specific image for a smart list.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="imageType">The image type to delete.</param>
+        [HttpDelete("{id}/images/{imageType}")]
+        public async Task<ActionResult> DeleteImage(
+            [FromRoute, Required] string id,
+            [FromRoute, Required] string imageType)
+        {
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            var playlistStore = GetPlaylistStore();
+            var collectionStore = GetCollectionStore();
+            var playlist = await playlistStore.GetByIdAsync(guidId);
+            var collection = playlist == null ? await collectionStore.GetByIdAsync(guidId) : null;
+
+            if (playlist == null && collection == null)
+            {
+                return NotFound(new { message = "Smart list not found" });
+            }
+
+            try
+            {
+                var smartList = (SmartListDto?)playlist ?? collection;
+
+                // Delete the image file from smartlists/images/ folder
+                await _imageService.DeleteImageAsync(normalizedId, imageType);
+
+                // Note: Don't delete from Jellyfin playlist/collection folder here.
+                // The cleanup happens on refresh via RemoveOrphanedCustomImages, which
+                // correctly removes images we've uploaded while preserving user-added images.
+
+                // Update the smart list's CustomImages
+                if (smartList!.CustomImages != null && smartList.CustomImages.ContainsKey(imageType))
+                {
+                    smartList.CustomImages.Remove(imageType);
+                    if (smartList.CustomImages.Count == 0)
+                    {
+                        smartList.CustomImages = null;
+                    }
+
+                    // Save the updated DTO
+                    if (playlist != null)
+                    {
+                        await playlistStore.SaveAsync(playlist);
+                        AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+                    }
+                    else if (collection != null)
+                    {
+                        await collectionStore.SaveAsync(collection);
+                        AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+                    }
+                }
+
+                logger.LogInformation("Deleted {ImageType} image for smart list {SmartListId}", imageType, normalizedId);
+                return Ok(new { message = $"Image '{imageType}' deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to delete image for smart list {SmartListId}", normalizedId);
+                return StatusCode(500, new { message = "Failed to delete image", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Gets all images for a smart list.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        [HttpGet("{id}/images")]
+        public async Task<ActionResult<List<SmartListImageDto>>> GetImages([FromRoute, Required] string id)
+        {
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            var playlistStore = GetPlaylistStore();
+            var collectionStore = GetCollectionStore();
+            var playlist = await playlistStore.GetByIdAsync(guidId);
+            var collection = playlist == null ? await collectionStore.GetByIdAsync(guidId) : null;
+
+            if (playlist == null && collection == null)
+            {
+                return NotFound(new { message = "Smart list not found" });
+            }
+
+            var images = _imageService.GetImagesForSmartList(normalizedId);
+
+            var result = images.Select(kvp => new SmartListImageDto
+            {
+                ImageType = kvp.Key,
+                FileName = kvp.Value,
+                FileSize = GetImageFileSize(normalizedId, kvp.Key)
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Gets a specific image file for a smart list.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="imageType">The image type.</param>
+        [HttpGet("{id}/images/{imageType}/file")]
+        [AllowAnonymous]
+        public ActionResult GetImageFile(
+            [FromRoute, Required] string id,
+            [FromRoute, Required] string imageType)
+        {
+            // Normalize ID to dashed format for consistent image folder operations
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+            var normalizedId = guidId.ToString("D");
+
+            var imagePath = _imageService.GetImagePath(normalizedId, imageType);
+            if (string.IsNullOrEmpty(imagePath) || !System.IO.File.Exists(imagePath))
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+
+            var extension = Path.GetExtension(imagePath).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".gif" => "image/gif",
+                ".bmp" => "image/bmp",
+                ".avif" => "image/avif",
+                ".svg" => "image/svg+xml",
+                ".tiff" or ".tif" => "image/tiff",
+                ".apng" => "image/apng",
+                ".ico" => "image/x-icon",
+                _ => "application/octet-stream"
+            };
+
+            return PhysicalFile(imagePath, contentType);
+        }
+
+        /// <summary>
+        /// Gets the file size for an image.
+        /// </summary>
+        private long? GetImageFileSize(string smartListId, string imageType)
+        {
+            var imagePath = _imageService.GetImagePath(smartListId, imageType);
+            if (string.IsNullOrEmpty(imagePath) || !System.IO.File.Exists(imagePath))
+            {
+                return null;
+            }
+
+            return new FileInfo(imagePath).Length;
+        }
     }
 }

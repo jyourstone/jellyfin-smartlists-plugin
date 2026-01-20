@@ -284,12 +284,22 @@
             }
 
             const requestType = editState.editMode ? 'PUT' : 'POST';
-            const url = editState.editMode ?
-                apiClient.getUrl(SmartLists.ENDPOINTS.base + '/' + editState.editingPlaylistId) :
-                apiClient.getUrl(SmartLists.ENDPOINTS.base);
+            
+            // Get pending image uploads and deletions before making API call
+            var pendingImageUploads = SmartLists.getPendingImageUploads ? SmartLists.getPendingImageUploads(page) : [];
+            var hasPendingDeletions = SmartLists.hasPendingImageDeletions ? SmartLists.hasPendingImageDeletions() : false;
+            var hasPendingImageOps = pendingImageUploads.length > 0 || hasPendingDeletions;
 
-            // Store editingPlaylistId for error recovery
-            const editingPlaylistId = editState.editMode ? editState.editingPlaylistId : null;
+            // Add skipRefresh parameter when there are pending image operations
+            // This defers the refresh until after image ops complete to avoid race conditions
+            var urlParams = '';
+            if (hasPendingImageOps) {
+                urlParams = '?skipRefresh=true';
+            }
+
+            const url = editState.editMode ?
+                apiClient.getUrl(SmartLists.ENDPOINTS.base + '/' + editState.editingPlaylistId + urlParams) :
+                apiClient.getUrl(SmartLists.ENDPOINTS.base + urlParams);
 
             // Make API call - wait for response before updating UI
             apiClient.ajax({
@@ -319,8 +329,52 @@
                     });
                 }
 
+                // Parse response to get the created/updated list with its ID
+                return response.json().then(function (createdList) {
+                    var smartListId = createdList ? createdList.Id : (editState.editMode ? editState.editingPlaylistId : null);
+                    var imagePromises = [];
+
+                    // Apply any pending image deletions first (before uploads)
+                    if (smartListId && SmartLists.applyImageDeletions) {
+                        var deletionPromise = SmartLists.applyImageDeletions(smartListId).catch(function (err) {
+                            console.error('Failed to apply image deletions:', err);
+                            SmartLists.showNotification('List saved but some image deletions failed.', 'warn');
+                        });
+                        imagePromises.push(deletionPromise);
+                    }
+
+                    // Upload pending images if any
+                    if (pendingImageUploads.length > 0 && smartListId && SmartLists.uploadImages) {
+                        var uploadPromise = SmartLists.uploadImages(smartListId, pendingImageUploads).catch(function (err) {
+                            console.error('Failed to upload images:', err);
+                            SmartLists.showNotification('List saved but some images failed to upload.', 'warn');
+                        });
+                        imagePromises.push(uploadPromise);
+                    }
+
+                    if (imagePromises.length > 0) {
+                        // Wait for all image operations to complete, then trigger a refresh
+                        // This ensures the refresh sees the final CustomImages state
+                        return Promise.all(imagePromises).then(function () {
+                            var apiClient = SmartLists.getApiClient ? SmartLists.getApiClient() : ApiClient;
+                            var baseUrl = SmartLists.IS_USER_PAGE ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
+                            return apiClient.ajax({
+                                type: 'POST',
+                                url: apiClient.getUrl(baseUrl + '/' + smartListId + '/refresh'),
+                                contentType: 'application/json'
+                            }).then(function () {
+                                return createdList;
+                            });
+                        });
+                    }
+                    return createdList;
+                }).catch(function () {
+                    // If JSON parsing fails, continue without image upload
+                    return null;
+                });
+            }).then(function (createdList) {
                 // Success - show success notification first
-                let message;
+                var message;
                 if (editState.editMode) {
                     message = listTypeName + ' "' + playlistName + '" updated successfully.';
                 } else {
@@ -436,6 +490,11 @@
 
         // Update button visibility after initial group is created
         SmartLists.updateRuleButtonVisibility(page);
+
+        // Clear custom images container
+        if (SmartLists.initCustomImagesContainer) {
+            SmartLists.initCustomImagesContainer(page);
+        }
     };
 
     SmartLists.editPlaylist = function (page, playlistId) {
@@ -682,6 +741,11 @@
 
                 // Switch to Create tab to show edit form
                 SmartLists.switchToTab(page, 'create');
+
+                // Load existing images for this playlist
+                if (SmartLists.loadExistingImages) {
+                    SmartLists.loadExistingImages(page, playlistId);
+                }
 
             } catch (formError) {
                 console.error('Error populating form for edit:', formError);
@@ -1342,6 +1406,40 @@
         const eTotalRuntimeLong = totalRuntimeLong ? SmartLists.escapeHtml(totalRuntimeLong) : null;
         const eListType = SmartLists.escapeHtml(listType);
 
+        // Build custom images display
+        var customImagesHtml = '';
+        var hasCustomImages = playlist.CustomImages && Object.keys(playlist.CustomImages).length > 0;
+
+        if (hasCustomImages) {
+            var imageLinks = [];
+            for (var imgType in playlist.CustomImages) {
+                if (playlist.CustomImages.hasOwnProperty(imgType)) {
+                    var imgUrl = SmartLists.getImageDisplayUrl ? SmartLists.getImageDisplayUrl(playlistId, imgType) : '#';
+                    imageLinks.push('<a href="' + SmartLists.escapeHtmlAttribute(imgUrl) + '" target="_blank" rel="noopener noreferrer" style="color: var(--jf-palette-primary);">' + SmartLists.escapeHtml(imgType) + '</a>');
+                }
+            }
+            customImagesHtml = imageLinks.join(', ');
+        }
+
+        // Show custom images or auto-generated status for collections
+        if (isCollection) {
+            if (hasCustomImages) {
+                // Show custom images - auto-generation only applies for missing Primary/Thumb
+                var hasCustomPrimary = playlist.CustomImages && playlist.CustomImages.Primary;
+                var hasCustomThumb = playlist.CustomImages && playlist.CustomImages.Thumb;
+                if (!hasCustomPrimary || !hasCustomThumb) {
+                    var autoGenTypes = [];
+                    if (!hasCustomPrimary) autoGenTypes.push('Primary');
+                    if (!hasCustomThumb) autoGenTypes.push('Thumb');
+                    customImagesHtml = customImagesHtml + ' <span style="color: var(--jf-palette-text-secondary);">(Auto: ' + autoGenTypes.join(', ') + ')</span>';
+                }
+            } else {
+                customImagesHtml = '<span style="color: var(--jf-palette-text-secondary);">Auto-generated (Primary & Thumbnail)</span>';
+            }
+        } else if (!hasCustomImages) {
+            customImagesHtml = 'None';
+        }
+
         // Helper function to build Jellyfin URL from ID
         const buildJellyfinUrl = function (jellyfinId) {
             if (!jellyfinId || jellyfinId === '' || jellyfinId === '00000000-0000-0000-0000-000000000000') {
@@ -1541,6 +1639,10 @@
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Created</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eDateCreatedDisplay + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Custom Images</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + customImagesHtml + '</td>' +
             '</tr>' +
             '</table>' +
             '</div>' +

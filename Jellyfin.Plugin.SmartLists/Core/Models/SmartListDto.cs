@@ -102,6 +102,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public List<string> SimilarityComparisonFields { get; set; } = [];
 
         /// <summary>
+        /// Custom images uploaded by the user.
+        /// Key = ImageType name (Primary, Backdrop, Banner, etc.)
+        /// Value = Filename stored in the images folder
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? CustomImages { get; set; }
+
+        /// <summary>
         /// Migrates legacy IsPlayed rules to PlaybackStatus.
         /// Called after deserialization.
         /// </summary>

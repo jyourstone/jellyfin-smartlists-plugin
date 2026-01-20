@@ -245,6 +245,24 @@
                             <div class="fieldDescription">Control when this list appears in Jellyfin. Use Enable/Disable actions to automatically show or hide the list on specific dates (e.g., show Christmas movies only in December).</div>
                         </div>
 
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
+                                Custom Images
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#custom-images"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div id="custom-images-container"></div>
+                            <button type="button" id="addImageBtn" class="emby-button raised" style="margin-top: 0.5em;">
+                                <span class="material-icons" style="font-size: 1.2em;">add_photo_alternate</span>
+                                Add Image
+                            </button>
+                            <div class="fieldDescription">Upload custom cover images for this list. <span class="collection-only-description">When auto-generate is enabled, Primary and Thumbnail uploads are ignored.</span></div>
+                        </div>
+
                         <div style="margin-top: 2em;">
                             <button type="submit" id="submitBtn" class="button-submit emby-button block">Create
                                 List</button>
@@ -449,6 +467,8 @@
         <script src="configurationpage?name=config-formatters.js"></script>
         <!-- Schedule management -->
         <script src="configurationpage?name=config-schedules.js"></script>
+        <!-- Image management -->
+        <script src="configurationpage?name=config-images.js"></script>
         <!-- Sort management -->
         <script src="configurationpage?name=config-sorts.js"></script>
         <!-- Generic multi-select component -->

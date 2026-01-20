@@ -61,6 +61,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly IServerApplicationPaths _applicationPaths;
         private readonly RefreshStatusService _refreshStatusService;
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory;
+        private readonly SmartListImageService? _imageService;
 
         // Queue data structures
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
@@ -89,7 +90,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             IProviderManager providerManager,
             IServerApplicationPaths applicationPaths,
             RefreshStatusService refreshStatusService,
-            Microsoft.Extensions.Logging.ILoggerFactory loggerFactory)
+            Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
+            SmartListImageService? imageService = null)
         {
             _logger = logger;
             _userManager = userManager;
@@ -101,6 +103,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _applicationPaths = applicationPaths;
             _refreshStatusService = refreshStatusService;
             _loggerFactory = loggerFactory;
+            _imageService = imageService;
 
             // Start background processing task
             _processingTask = Task.Run(ProcessQueueAsync, _cancellationTokenSource.Token);
@@ -285,12 +288,43 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 throw new InvalidOperationException($"ListData is required for refresh operation on list {item.ListId}");
             }
 
+            // Reload the DTO from the store to get the latest version
+            // This is important because the DTO may have been updated (e.g., CustomImages added)
+            // after the queue item was created but before processing started
+            var fileSystem = new SmartListFileSystem(_applicationPaths);
+
             if (item.ListType == SmartListType.Playlist)
             {
+                var playlistStore = new PlaylistStore(fileSystem);
+                if (Guid.TryParse(item.ListId, out var listGuid))
+                {
+                    var latestDto = await playlistStore.GetByIdAsync(listGuid);
+                    if (latestDto != null)
+                    {
+                        _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
+                            latestDto.Name, latestDto.CustomImages?.Count > 0);
+                        await ProcessPlaylistRefreshAsync(latestDto, cancellationToken);
+                        return;
+                    }
+                }
+                // Fallback to original DTO if reload fails
                 await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, cancellationToken);
             }
             else if (item.ListType == SmartListType.Collection)
             {
+                var collectionStore = new CollectionStore(fileSystem);
+                if (Guid.TryParse(item.ListId, out var listGuid))
+                {
+                    var latestDto = await collectionStore.GetByIdAsync(listGuid);
+                    if (latestDto != null)
+                    {
+                        _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
+                            latestDto.Name, latestDto.CustomImages?.Count > 0);
+                        await ProcessCollectionRefreshAsync(latestDto, cancellationToken);
+                        return;
+                    }
+                }
+                // Fallback to original DTO if reload fails
                 await ProcessCollectionRefreshAsync((SmartCollectionDto)item.ListData, cancellationToken);
             }
             else
@@ -589,7 +623,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _playlistManager,
                 _userDataManager,
                 playlistServiceLogger,
-                _providerManager);
+                _providerManager,
+                _imageService);
         }
 
         /// <summary>
@@ -604,7 +639,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userManager,
                 _userDataManager,
                 collectionServiceLogger,
-                _providerManager);
+                _providerManager,
+                _imageService);
         }
 
         public void Dispose()

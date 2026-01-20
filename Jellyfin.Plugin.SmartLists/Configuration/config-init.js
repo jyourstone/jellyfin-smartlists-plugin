@@ -969,6 +969,18 @@
                     SmartLists.importPlaylists(page);
                 }
             }
+            if (target.closest('#addImageBtn')) {
+                if (SmartLists.addImageRow) {
+                    SmartLists.addImageRow(page);
+                }
+            }
+            if (target.closest('.remove-image-btn')) {
+                var button = target.closest('.remove-image-btn');
+                var rowId = button.getAttribute('data-row-id');
+                if (rowId && SmartLists.removeImageRow) {
+                    SmartLists.removeImageRow(page, rowId);
+                }
+            }
             if (target.closest('.delete-playlist-btn')) {
                 const button = target.closest('.delete-playlist-btn');
                 if (SmartLists.showDeleteConfirm) {

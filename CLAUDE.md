@@ -65,6 +65,7 @@ Adding new sort options requires updates in: `Core/Orders/`, `OrderFactory.cs`, 
 - **No ES6 template literals** - use string concatenation
 - **Never use `is="emby-input"`** - causes htmlFor errors, use `class="emby-input"` instead
 - Use `showNotification()` for user messages, not `Dashboard.alert()`
+- **New JS files must be registered in TWO places**: `.csproj` (as `<EmbeddedResource>`) AND `Plugin.cs` (in `GetPages()` as `PluginPageInfo`)
 
 ### Media Type Constants
 Use `MediaTypes.Episode` instead of `"Episode"` - see `Core/Constants/MediaTypes.cs`.

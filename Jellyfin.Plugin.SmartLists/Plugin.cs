@@ -98,6 +98,12 @@ namespace Jellyfin.Plugin.SmartLists
                     Name = "config-schedules.js",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-schedules.js",
                 },
+                // Image management
+                new PluginPageInfo
+                {
+                    Name = "config-images.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-images.js",
+                },
                 // Sort management
                 new PluginPageInfo
                 {

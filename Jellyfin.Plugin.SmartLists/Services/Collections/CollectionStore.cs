@@ -22,7 +22,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         private readonly ISmartListFileSystem _fileSystem;
         private readonly ILogger<CollectionStore>? _logger;
 
-        public CollectionStore(ISmartListFileSystem fileSystem, ILogger<CollectionStore>? logger = null)
+        public CollectionStore(
+            ISmartListFileSystem fileSystem,
+            ILogger<CollectionStore>? logger = null)
         {
             _fileSystem = fileSystem;
             _logger = logger;

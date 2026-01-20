@@ -29,6 +29,8 @@
     <EmbeddedResource Include="Configuration\config-formatters.js" />
     <!-- Schedule management -->
     <EmbeddedResource Include="Configuration\config-schedules.js" />
+    <!-- Image management -->
+    <EmbeddedResource Include="Configuration\config-images.js" />
     <!-- Sort management -->
     <EmbeddedResource Include="Configuration\config-sorts.js" />
     <!-- Generic multi-select component -->

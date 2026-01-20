@@ -23,16 +23,22 @@ namespace Jellyfin.Plugin.SmartLists
         {
             // Register RefreshStatusService first
             serviceCollection.AddSingleton<RefreshStatusService>();
-            
+
+            // Register image service for custom images
+            serviceCollection.AddSingleton<SmartListImageService>();
+
             // Register file system and stores
             serviceCollection.AddSingleton<ISmartListFileSystem, SmartListFileSystem>();
             serviceCollection.AddSingleton<PlaylistStore>();
             serviceCollection.AddSingleton<CollectionStore>();
-            
+
             // Register playlist and collection services
             serviceCollection.AddSingleton<PlaylistService>();
             serviceCollection.AddSingleton<CollectionService>();
-            
+
+            // Register scheduled task for cleanup
+            serviceCollection.AddSingleton<MediaBrowser.Model.Tasks.IScheduledTask, CleanupTask>();
+
             // Register RefreshQueueService as singleton
             serviceCollection.AddSingleton<RefreshQueueService>(sp =>
             {
@@ -46,7 +52,8 @@ namespace Jellyfin.Plugin.SmartLists
                 var applicationPaths = sp.GetRequiredService<MediaBrowser.Controller.IServerApplicationPaths>();
                 var refreshStatusService = sp.GetRequiredService<RefreshStatusService>();
                 var loggerFactory = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
-                
+                var imageService = sp.GetRequiredService<SmartListImageService>();
+
                 var queueService = new RefreshQueueService(
                     logger,
                     userManager,
@@ -57,11 +64,12 @@ namespace Jellyfin.Plugin.SmartLists
                     providerManager,
                     applicationPaths,
                     refreshStatusService,
-                    loggerFactory);
-                
+                    loggerFactory,
+                    imageService);
+
                 // Set the reference in RefreshStatusService
                 refreshStatusService.SetRefreshQueueService(queueService);
-                
+
                 return queueService;
             });
             

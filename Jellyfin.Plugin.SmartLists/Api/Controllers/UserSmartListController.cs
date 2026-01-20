@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data;
 using Jellyfin.Data.Enums;
@@ -20,6 +22,8 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Session;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Model.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -54,6 +58,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly Services.Collections.CollectionStore _collectionStore;
         private readonly Services.Playlists.PlaylistService _playlistService;
         private readonly Services.Collections.CollectionService _collectionService;
+        private readonly SmartListImageService _imageService;
 
         public UserSmartListController(
             ILogger<UserSmartListController> logger,
@@ -70,7 +75,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             Services.Playlists.PlaylistStore playlistStore,
             Services.Collections.CollectionStore collectionStore,
             Services.Playlists.PlaylistService playlistService,
-            Services.Collections.CollectionService collectionService)
+            Services.Collections.CollectionService collectionService,
+            SmartListImageService imageService)
         {
             _logger = logger;
             _applicationPaths = applicationPaths;
@@ -87,6 +93,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             _collectionStore = collectionStore;
             _playlistService = playlistService;
             _collectionService = collectionService;
+            _imageService = imageService;
         }
 
         /// <summary>
@@ -1233,6 +1240,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         collectionDto.CreatedByUserId = existingCollection.CreatedByUserId;
                     }
 
+                    // Preserve existing CustomImages from the stored collection
+                    // (images are managed separately via upload/delete endpoints)
+                    if (existingCollection.CustomImages != null && existingCollection.CustomImages.Count > 0)
+                    {
+                        collectionDto.CustomImages = new Dictionary<string, string>(existingCollection.CustomImages);
+                    }
+
                     // Validate the updated collection
                     var validationResult = ValidateSmartList(collectionDto);
                     if (!validationResult.IsValid)
@@ -1345,6 +1359,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         _logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
                     }
 
+                    // Delete custom images using normalized ID
+                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+
                     await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
                     Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
                     return NoContent();
@@ -1364,9 +1381,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Enforce collection management permission
                     if (!CanUserManageCollections())
                     {
-                        return StatusCode(StatusCodes.Status403Forbidden, new 
-                        { 
-                            message = "You do not have permission to manage collections. Contact your administrator to grant the 'Allow this user to manage collections' permission." 
+                        return StatusCode(StatusCodes.Status403Forbidden, new
+                        {
+                            message = "You do not have permission to manage collections. Contact your administrator to grant the 'Allow this user to manage collections' permission."
                         });
                     }
 
@@ -1376,6 +1393,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         await collectionService.DeleteAsync(collection);
                         _logger.LogInformation("Deleted smart collection: {CollectionName}", collection.Name);
                     }
+
+                    // Delete custom images using normalized ID
+                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
 
                     await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
                     Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
@@ -1785,6 +1805,349 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             };
 
             _refreshQueueService.EnqueueOperation(queueItem);
+        }
+
+        /// <summary>
+        /// Uploads an image for a smart list owned by the current user.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="file">The image file.</param>
+        /// <param name="imageType">The image type (Primary, Backdrop, Banner, etc.).</param>
+        /// <returns>The uploaded image info.</returns>
+        [HttpPost("{id}/images")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<SmartListImageDto>> UploadImage(
+            [FromRoute, Required] string id,
+            [FromForm] IFormFile file,
+            [FromForm, Required] string imageType)
+        {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { message = "No file uploaded" });
+            }
+
+            if (!SmartListImageService.ValidImageTypes.Contains(imageType))
+            {
+                return BadRequest(new { message = $"Invalid image type: {imageType}. Valid types: {string.Join(", ", SmartListImageService.ValidImageTypes)}" });
+            }
+
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            try
+            {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+
+                // Find the smart list and verify ownership
+                var playlist = await _playlistStore.GetByIdAsync(guidId);
+                SmartCollectionDto? collection = null;
+
+                if (playlist != null)
+                {
+                    // Verify user owns this playlist
+                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    // Try collection
+                    collection = await _collectionStore.GetByIdAsync(guidId);
+                    if (collection == null)
+                    {
+                        return NotFound(new { message = "Smart list not found" });
+                    }
+
+                    // Verify user owns this collection
+                    if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
+                    {
+                        return Forbid();
+                    }
+                }
+
+                // Validate the image
+                var validation = SmartListImageService.ValidateImage(file.FileName, file.Length, file.ContentType);
+                if (!validation.IsValid)
+                {
+                    return BadRequest(new { message = validation.ErrorMessage });
+                }
+
+                // Save the image using normalized ID
+                await using var stream = file.OpenReadStream();
+                var fileName = await _imageService.SaveImageAsync(normalizedId, imageType, stream, file.FileName);
+
+                // Update the smart list's CustomImages
+                var smartList = (SmartListDto?)playlist ?? collection;
+                smartList!.CustomImages ??= new Dictionary<string, string>();
+                smartList.CustomImages[imageType] = fileName;
+
+                // Save the updated smart list
+                if (playlist != null)
+                {
+                    await _playlistStore.SaveAsync(playlist);
+                    Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+
+                    // Enqueue a refresh to apply the custom image to the Jellyfin playlist
+                    EnqueueRefreshOperation(normalizedId, playlist.Name, SmartListType.Playlist, playlist, normalizedUserId);
+                }
+                else if (collection != null)
+                {
+                    await _collectionStore.SaveAsync(collection);
+                    Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+
+                    // Enqueue a refresh to apply the custom image to the Jellyfin collection
+                    EnqueueRefreshOperation(normalizedId, collection.Name, SmartListType.Collection, collection, normalizedUserId);
+                }
+
+                _logger.LogInformation("User {UserId} uploaded {ImageType} image for smart list {SmartListId}, queued refresh to apply", userId, imageType, normalizedId);
+
+                return Ok(new SmartListImageDto
+                {
+                    ImageType = imageType,
+                    FileName = fileName,
+                    ContentType = file.ContentType,
+                    FileSize = file.Length
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to upload image for smart list {SmartListId}", id);
+                return StatusCode(500, new { message = "Failed to upload image", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a specific image for a smart list owned by the current user.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="imageType">The image type to delete.</param>
+        [HttpDelete("{id}/images/{imageType}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult> DeleteImage(
+            [FromRoute, Required] string id,
+            [FromRoute, Required] string imageType)
+        {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            try
+            {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+
+                // Find the smart list and verify ownership
+                var playlist = await _playlistStore.GetByIdAsync(guidId);
+                SmartCollectionDto? collection = null;
+
+                if (playlist != null)
+                {
+                    // Verify user owns this playlist
+                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    // Try collection
+                    collection = await _collectionStore.GetByIdAsync(guidId);
+                    if (collection == null)
+                    {
+                        return NotFound(new { message = "Smart list not found" });
+                    }
+
+                    // Verify user owns this collection
+                    if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
+                    {
+                        return Forbid();
+                    }
+                }
+
+                // Delete the image file using normalized ID
+                await _imageService.DeleteImageAsync(normalizedId, imageType);
+
+                // Update the smart list's CustomImages
+                var smartList = (SmartListDto?)playlist ?? collection;
+                if (smartList!.CustomImages != null && smartList.CustomImages.ContainsKey(imageType))
+                {
+                    smartList.CustomImages.Remove(imageType);
+                    if (smartList.CustomImages.Count == 0)
+                    {
+                        smartList.CustomImages = null;
+                    }
+
+                    // Save the updated DTO - the next refresh will clean up orphaned images from Jellyfin
+                    if (playlist != null)
+                    {
+                        await _playlistStore.SaveAsync(playlist);
+                        Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+                    }
+                    else if (collection != null)
+                    {
+                        await _collectionStore.SaveAsync(collection);
+                        Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+                    }
+                }
+
+                _logger.LogInformation("User {UserId} deleted {ImageType} image for smart list {SmartListId}", userId, imageType, normalizedId);
+                return Ok(new { message = $"Image '{imageType}' deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete image for smart list {SmartListId}", normalizedId);
+                return StatusCode(500, new { message = "Failed to delete image", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Gets all images for a smart list owned by the current user.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        [HttpGet("{id}/images")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<List<SmartListImageDto>>> GetImages([FromRoute, Required] string id)
+        {
+            // Check if user page is enabled
+            var accessCheck = CheckUserPageAccess();
+            if (accessCheck != null) return accessCheck;
+
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return BadRequest(new { message = "Invalid smart list ID format" });
+            }
+
+            // Normalize ID to dashed format for consistent image folder operations
+            var normalizedId = guidId.ToString("D");
+
+            try
+            {
+                var userId = GetCurrentUserId();
+                var normalizedUserId = userId.ToString("N");
+
+                // Find the smart list and verify ownership
+                var playlist = await _playlistStore.GetByIdAsync(guidId);
+                SmartCollectionDto? collection = null;
+
+                if (playlist != null)
+                {
+                    // Verify user owns this playlist
+                    if (!IsUserInPlaylist(playlist, normalizedUserId))
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    // Try collection
+                    collection = await _collectionStore.GetByIdAsync(guidId);
+                    if (collection == null)
+                    {
+                        return NotFound(new { message = "Smart list not found" });
+                    }
+
+                    // Verify user owns this collection
+                    if (collection.UserId == null || !Guid.TryParse(collection.UserId, out var cUserId) || cUserId != userId)
+                    {
+                        return Forbid();
+                    }
+                }
+
+                var images = _imageService.GetImagesForSmartList(normalizedId);
+                var result = images.Select(kvp => new SmartListImageDto
+                {
+                    ImageType = kvp.Key,
+                    FileName = kvp.Value,
+                    FileSize = GetImageFileSize(normalizedId, kvp.Key)
+                }).ToList();
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get images for smart list {SmartListId}", normalizedId);
+                return StatusCode(500, new { message = "Failed to get images", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Gets a specific image file for a smart list.
+        /// Note: This endpoint does not require ownership verification as images are not sensitive.
+        /// </summary>
+        /// <param name="id">The smart list ID.</param>
+        /// <param name="imageType">The image type.</param>
+        [HttpGet("{id}/images/{imageType}/file")]
+        [AllowAnonymous]
+        public ActionResult GetImageFile(
+            [FromRoute, Required] string id,
+            [FromRoute, Required] string imageType)
+        {
+            // Normalize ID to dashed format for consistent image folder operations
+            if (!Guid.TryParse(id, out var guidId))
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+            var normalizedId = guidId.ToString("D");
+
+            var imagePath = _imageService.GetImagePath(normalizedId, imageType);
+            if (string.IsNullOrEmpty(imagePath) || !System.IO.File.Exists(imagePath))
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+
+            var extension = Path.GetExtension(imagePath).ToLowerInvariant();
+            var contentType = extension switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".gif" => "image/gif",
+                _ => "application/octet-stream"
+            };
+
+            return PhysicalFile(imagePath, contentType);
+        }
+
+        /// <summary>
+        /// Gets the file size for an image.
+        /// </summary>
+        private long? GetImageFileSize(string smartListId, string imageType)
+        {
+            var imagePath = _imageService.GetImagePath(smartListId, imageType);
+            if (string.IsNullOrEmpty(imagePath) || !System.IO.File.Exists(imagePath))
+            {
+                return null;
+            }
+
+            return new FileInfo(imagePath).Length;
         }
     }
 

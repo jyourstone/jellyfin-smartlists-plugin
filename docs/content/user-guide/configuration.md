@@ -77,30 +77,63 @@ Before creating your first list, it's important to understand the differences be
 - **Can Contain Collections**: Unlike playlists, collections can contain other collection objects (creating "meta-collections") when using the "Include collection only" option with the Collections field
 - **Use cases**: Organizing related content for browsing (e.g., "Action Movies", "Holiday Collection", "Director's Collection")
 
-#### Automatic Image Generation for Collections
+#### Automatic Image Generation
 
-SmartLists automatically generates cover images for collections based on the media items they contain. This feature works as follows:
+SmartLists automatically generates cover images for collections when no custom images have been provided. Auto-generation occurs only if:
+
+- No images have been uploaded through SmartLists for that image type
+- No images have been uploaded directly in Jellyfin for that image type
+
+This means you can override auto-generation simply by uploading your own images through SmartLists or directly in Jellyfin.
+
+#### Automatic Image Generation Details
+
+SmartLists generates cover images for collections based on the media items they contain:
 
 **Primary Images (Vertical Posters)**
+
 - **Single Item**: If a collection contains only one item with an image, that item's primary image is used directly as the collection cover
 - **Multiple Items**: If a collection contains two or more items with images, a 4-image collage is automatically created using the first items from the collection
 - **Image Selection**: The plugin prioritizes Movies and Series with images, falling back to any items with images if needed
 
 **Thumb Images (Horizontal/Landscape)**
+
 - **Automatically Generated**: In addition to the primary poster, the plugin also generates 16:9 thumb images perfect for landscape-oriented views in Jellyfin's UI
 - **Single Item**: Uses the item's thumb image directly
 - **Multiple Items**: Creates a 2x2 grid collage (1920x1080) from thumb images of the first 4 items
 - **Requires Thumb Images**: Thumb generation only occurs if the media items have actual thumb images available. If no thumb images exist, only the primary poster is generated
 
 **Automatic Updates**
+
 - Collection images are automatically regenerated when the collection is refreshed to reflect the current items
 
-!!! important "Custom Images Are Preserved"
-    Automatic image generation **only occurs** when a collection doesn't already have a custom image in place. Custom images can be set through:
-    - **Metadata cover downloads**: Images downloaded by Jellyfin's metadata providers
-    - **User image uploads**: Images manually uploaded through Jellyfin's interface
-    
-    If a custom image exists, the plugin will preserve it and skip automatic generation. This ensures that any images you specifically set or download are never overwritten. This applies to both primary and thumb images independently.
+!!! info "Image Priority for Collections"
+    Collection images are determined in this order:
+
+    1. **Images uploaded directly in Jellyfin** - Preserved, unless an image has been uploaded through SmartLists
+    2. **Images uploaded through SmartUsed ifLists** - Will overwrite any existing images of the same type
+    3. **Auto-generated collages** - Created only if no custom images exist from either source
+
+### Custom Images
+
+SmartLists allows you to upload custom images for your playlists and collections directly from the Create/Edit form. The dropdown shows all image types supported by Jellyfin (Primary, Backdrop, Banner, Logo, etc.).
+
+**How to Use:**
+
+1. When creating or editing a smart list, scroll to the **Custom Images** section
+2. Click **Add Image** to add a new image
+3. Select the image type from the dropdown (each type can only be used once)
+4. Choose an image file from your computer
+5. A preview will appear once the file is selected
+6. Add more images as needed by clicking **Add Image** again
+7. Remove images by clicking the delete button next to each row
+8. Save the list to upload the images
+
+**Benefits:**
+
+- **Persistent storage**: Custom images are stored in SmartLists' configuration folder, separate from Jellyfin
+- **Automatic restoration**: When you disable and re-enable a list, your custom images are automatically restored
+- **Easy management**: View and manage all custom images directly from the Create/Edit form
 
 !!! note "User Selection for Collections"
     When creating a collection, the user you select is used as a **reference** for rule evaluation, not as an owner. The collection itself is server-wide and visible to everyone. This user's context is important for:
@@ -224,14 +257,10 @@ The **Enable List** setting controls whether the smart list is active and visibl
 
 You can toggle this setting when creating or editing a list, or use bulk operations in the Manage Lists tab to enable/disable multiple lists at once.
 
-!!! warning "Disabling Lists Deletes Jellyfin Playlists/Collections"
-    When you **disable** a smart list, the corresponding Jellyfin playlist or collection is **permanently deleted** from Jellyfin. This means:
-    
-    - **Custom images** you manually uploaded will be removed
-    - **Custom metadata** (descriptions, tags, etc.) will be lost
-    - All customizations are permanently erased
+!!! info "Disabling Lists Temporarily Removes Jellyfin Playlists/Collections"
+    When you **disable** a smart list, the corresponding Jellyfin playlist or collection is permanently removed from Jellyfin, including metadata. Any images uploaded through SmartLists will be kept intact and re-applied when the list is enabled again.
 
-### Use Cases for Disabling Lists
+    ### Use Cases for Disabling Lists
 
 Disabling lists can be useful for:
 
