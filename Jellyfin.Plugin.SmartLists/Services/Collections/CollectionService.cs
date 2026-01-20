@@ -1116,24 +1116,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         /// <summary>
         /// Gets the standard Jellyfin filename for an image type.
+        /// Delegates to the shared helper in SmartListImageService.
         /// </summary>
         private static string GetImageFileName(ImageType imageType, string extension)
-        {
-            return imageType switch
-            {
-                ImageType.Primary => $"folder{extension}",
-                ImageType.Backdrop => $"backdrop{extension}",
-                ImageType.Banner => $"banner{extension}",
-                ImageType.Thumb => $"thumb{extension}",
-                ImageType.Logo => $"logo{extension}",
-                ImageType.Disc => $"disc{extension}",
-                ImageType.Art => $"clearart{extension}",
-                ImageType.Box => $"box{extension}",
-                ImageType.BoxRear => $"boxrear{extension}",
-                ImageType.Menu => $"menu{extension}",
-                _ => $"{imageType.ToString().ToLowerInvariant()}{extension}"
-            };
-        }
+            => SmartListImageService.GetJellyfinImageFileName(imageType, extension);
 
         private IEnumerable<BaseItem> GetAllMedia(List<string> mediaTypes, SmartCollectionDto? dto = null, User? ownerUser = null)
         {

@@ -335,8 +335,9 @@
                     var imagePromises = [];
 
                     // Apply any pending image deletions first (before uploads)
+                    // Pass pendingImageUploads so we skip deleting types that are being replaced
                     if (smartListId && SmartLists.applyImageDeletions) {
-                        var deletionPromise = SmartLists.applyImageDeletions(smartListId).catch(function (err) {
+                        var deletionPromise = SmartLists.applyImageDeletions(smartListId, pendingImageUploads).catch(function (err) {
                             console.error('Failed to apply image deletions:', err);
                             SmartLists.showNotification('List saved but some image deletions failed.', 'warn');
                         });
@@ -353,9 +354,14 @@
                     }
 
                     if (imagePromises.length > 0) {
-                        // Wait for all image operations to complete, then trigger a refresh
+                        // Wait for all image operations to complete, then trigger a refresh if list is enabled
                         // This ensures the refresh sees the final CustomImages state
                         return Promise.all(imagePromises).then(function () {
+                            // Only trigger refresh if the list is enabled
+                            var listIsEnabled = createdList ? createdList.Enabled : isEnabled;
+                            if (!listIsEnabled) {
+                                return createdList;
+                            }
                             var apiClient = SmartLists.getApiClient ? SmartLists.getApiClient() : ApiClient;
                             var baseUrl = SmartLists.IS_USER_PAGE ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
                             return apiClient.ajax({

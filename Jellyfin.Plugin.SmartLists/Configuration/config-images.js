@@ -497,11 +497,30 @@
     /**
      * Apply pending image deletions for a smart list
      * @param {string} smartListId The smart list ID
+     * @param {Array} pendingUploads Optional array of pending uploads to check for replacement
      * @returns {Promise} Promise that resolves when all deletions are applied
      */
-    SmartLists.applyImageDeletions = function (smartListId) {
+    SmartLists.applyImageDeletions = function (smartListId, pendingUploads) {
         var deletions = Object.keys(pendingImageDeletions);
         if (deletions.length === 0 || !smartListId) {
+            return Promise.resolve();
+        }
+
+        // Filter out deletions where a new image of the same type is being uploaded
+        // This handles the "replace image" scenario: user removes old Primary, adds new Primary
+        if (pendingUploads && pendingUploads.length > 0) {
+            var uploadTypes = {};
+            for (var i = 0; i < pendingUploads.length; i++) {
+                uploadTypes[pendingUploads[i].imageType] = true;
+            }
+            deletions = deletions.filter(function (imageType) {
+                return !uploadTypes[imageType];
+            });
+        }
+
+        if (deletions.length === 0) {
+            // All deletions were skipped because new images of the same types are being uploaded
+            pendingImageDeletions = {};
             return Promise.resolve();
         }
 

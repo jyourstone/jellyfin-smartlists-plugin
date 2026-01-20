@@ -337,10 +337,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         /// <summary>
         /// Gets the directory path for a smart list's images.
+        /// Validates that the smartListId is a valid GUID to prevent path traversal attacks.
         /// </summary>
+        /// <param name="smartListId">The smart list ID (must be a valid GUID).</param>
+        /// <returns>The full path to the smart list's image directory.</returns>
+        /// <exception cref="ArgumentException">Thrown if smartListId is not a valid GUID.</exception>
         private string GetSmartListImageDirectory(string smartListId)
         {
-            return Path.Combine(ImagesBasePath, smartListId);
+            // Validate GUID format to prevent path traversal attacks
+            if (string.IsNullOrEmpty(smartListId) || !Guid.TryParse(smartListId, out var parsedId) || parsedId == Guid.Empty)
+            {
+                throw new ArgumentException("Smart list ID must be a valid non-empty GUID", nameof(smartListId));
+            }
+
+            // Use the parsed GUID to ensure consistent format (prevents variations like extra dashes)
+            return Path.Combine(ImagesBasePath, parsedId.ToString("D"));
         }
 
         /// <summary>
@@ -358,6 +369,137 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Could not clean up empty directory: {Path}", directoryPath);
+            }
+        }
+
+        /// <summary>
+        /// Gets the standard Jellyfin filename for an image type.
+        /// This is a shared helper to avoid duplication between PlaylistService and CollectionService.
+        /// </summary>
+        /// <param name="imageType">The Jellyfin image type.</param>
+        /// <param name="extension">The file extension (e.g., ".jpg").</param>
+        /// <returns>The standard filename for the image type.</returns>
+        public static string GetJellyfinImageFileName(MediaBrowser.Model.Entities.ImageType imageType, string extension)
+        {
+            return imageType switch
+            {
+                MediaBrowser.Model.Entities.ImageType.Primary => $"folder{extension}",
+                MediaBrowser.Model.Entities.ImageType.Backdrop => $"backdrop{extension}",
+                MediaBrowser.Model.Entities.ImageType.Banner => $"banner{extension}",
+                MediaBrowser.Model.Entities.ImageType.Thumb => $"thumb{extension}",
+                MediaBrowser.Model.Entities.ImageType.Logo => $"logo{extension}",
+                MediaBrowser.Model.Entities.ImageType.Disc => $"disc{extension}",
+                MediaBrowser.Model.Entities.ImageType.Art => $"clearart{extension}",
+                MediaBrowser.Model.Entities.ImageType.Box => $"box{extension}",
+                MediaBrowser.Model.Entities.ImageType.BoxRear => $"boxrear{extension}",
+                MediaBrowser.Model.Entities.ImageType.Menu => $"menu{extension}",
+                _ => $"{imageType.ToString().ToLowerInvariant()}{extension}"
+            };
+        }
+
+        /// <summary>
+        /// Allowed image file extensions for cleanup operations.
+        /// </summary>
+        public static readonly string[] ImageFileExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg", ".tiff", ".tif", ".apng", ".ico" };
+
+        /// <summary>
+        /// Deletes an image from a Jellyfin item's folder (playlist or collection).
+        /// This is called when a user explicitly deletes an image through the SmartLists API.
+        /// </summary>
+        /// <param name="jellyfinItem">The Jellyfin BaseItem (playlist or collection).</param>
+        /// <param name="imageType">The image type to delete (e.g., "Primary", "Backdrop").</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>Task representing the async operation.</returns>
+        public async Task DeleteImageFromJellyfinItemAsync(
+            MediaBrowser.Controller.Entities.BaseItem jellyfinItem,
+            string imageType,
+            CancellationToken cancellationToken = default)
+        {
+            if (jellyfinItem == null)
+            {
+                return;
+            }
+
+            try
+            {
+                // Parse the image type
+                if (!Enum.TryParse<MediaBrowser.Model.Entities.ImageType>(imageType, ignoreCase: true, out var jellyfinImageType))
+                {
+                    _logger.LogWarning("Invalid image type for Jellyfin deletion: {ImageType}", imageType);
+                    return;
+                }
+
+                // First, try to delete using the actual path from ImageInfos (most reliable)
+                string? actualImagePath = null;
+                if (jellyfinItem.ImageInfos != null)
+                {
+                    var existingImage = jellyfinItem.ImageInfos.FirstOrDefault(i => i.Type == jellyfinImageType);
+                    if (existingImage != null && !string.IsNullOrEmpty(existingImage.Path))
+                    {
+                        actualImagePath = existingImage.Path;
+
+                        // Delete the actual file
+                        if (File.Exists(actualImagePath))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            try
+                            {
+                                File.Delete(actualImagePath);
+                                _logger.LogDebug("Deleted {ImageType} image from Jellyfin item: {FilePath}", imageType, actualImagePath);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to delete image file: {FilePath}", actualImagePath);
+                            }
+                        }
+
+                        // Remove from ImageInfos
+                        jellyfinItem.ImageInfos = jellyfinItem.ImageInfos.Where(i => i.Type != jellyfinImageType).ToArray();
+                        await jellyfinItem.UpdateToRepositoryAsync(
+                            MediaBrowser.Controller.Library.ItemUpdateType.ImageUpdate,
+                            cancellationToken).ConfigureAwait(false);
+                        _logger.LogDebug("Removed {ImageType} from Jellyfin item ImageInfos", imageType);
+                    }
+                }
+
+                // Also try to delete files with our naming convention (in case ImageInfos doesn't have the path)
+                var itemPath = jellyfinItem.ContainingFolderPath;
+                if (!string.IsNullOrEmpty(itemPath) && Directory.Exists(itemPath))
+                {
+                    foreach (var ext in ImageFileExtensions)
+                    {
+                        var fileName = GetJellyfinImageFileName(jellyfinImageType, ext);
+                        var filePath = Path.Combine(itemPath, fileName);
+
+                        // Skip if this is the same path we already deleted
+                        if (actualImagePath != null && string.Equals(filePath, actualImagePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (File.Exists(filePath))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            try
+                            {
+                                File.Delete(filePath);
+                                _logger.LogDebug("Deleted {ImageType} image file with standard naming: {FilePath}", imageType, filePath);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to delete image file: {FilePath}", filePath);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete image from Jellyfin item {ItemName}", jellyfinItem.Name);
             }
         }
     }

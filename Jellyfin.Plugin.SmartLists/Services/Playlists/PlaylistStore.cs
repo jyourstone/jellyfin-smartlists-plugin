@@ -47,11 +47,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     var playlist = await LoadPlaylistAsync(filePath).ConfigureAwait(false);
                     if (playlist != null && playlist.Type == Core.Enums.SmartListType.Playlist)
                     {
-                        var customImagesDebug = playlist.CustomImages != null 
-                            ? string.Join(", ", playlist.CustomImages.Select(kv => $"{kv.Key}={kv.Value}")) 
-                            : "null";
-                        _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.GetByIdAsync: Loaded playlist {Name} with CustomImages: {CustomImages}",
-                            playlist.Name, customImagesDebug);
+                        _logger?.LogDebug("PlaylistStore.GetByIdAsync: Loaded playlist {Name} with {ImageCount} custom images",
+                            playlist.Name, playlist.CustomImages?.Count ?? 0);
                         return playlist;
                     }
                 }
@@ -67,11 +64,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             var result = allPlaylists.FirstOrDefault(p => string.Equals(p.Id, id.ToString(), StringComparison.OrdinalIgnoreCase));
             if (result != null)
             {
-                var customImagesDebugFallback = result.CustomImages != null 
-                    ? string.Join(", ", result.CustomImages.Select(kv => $"{kv.Key}={kv.Value}")) 
-                    : "null";
-                _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.GetByIdAsync (fallback): Loaded playlist {Name} with CustomImages: {CustomImages}",
-                    result.Name, customImagesDebugFallback);
+                _logger?.LogDebug("PlaylistStore.GetByIdAsync (fallback): Loaded playlist {Name} with {ImageCount} custom images",
+                    result.Name, result.CustomImages?.Count ?? 0);
             }
             return result;
         }
@@ -88,11 +82,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         {
             ArgumentNullException.ThrowIfNull(smartPlaylist);
 
-            var customImagesDebug = smartPlaylist.CustomImages != null 
-                ? string.Join(", ", smartPlaylist.CustomImages.Select(kv => $"{kv.Key}={kv.Value}")) 
-                : "null";
-            _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.SaveAsync START: Saving playlist {Name} with CustomImages: {CustomImages}",
-                smartPlaylist.Name, customImagesDebug);
+            _logger?.LogDebug("PlaylistStore.SaveAsync: Saving playlist {Name} with {ImageCount} custom images",
+                smartPlaylist.Name, smartPlaylist.CustomImages?.Count ?? 0);
 
             // Ensure type is set
             smartPlaylist.Type = Core.Enums.SmartListType.Playlist;
@@ -127,19 +118,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
             try
             {
-                var customImagesBeforeSer = smartPlaylist.CustomImages != null 
-                    ? string.Join(", ", smartPlaylist.CustomImages.Select(kv => $"{kv.Key}={kv.Value}")) 
-                    : "null";
-                _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.SaveAsync: About to serialize. CustomImages right before serialization: {CustomImages}",
-                    customImagesBeforeSer);
-
                 await using (var writer = File.Create(tempPath))
                 {
                     await JsonSerializer.SerializeAsync(writer, smartPlaylist, SmartListFileSystem.SharedJsonOptions).ConfigureAwait(false);
                     await writer.FlushAsync().ConfigureAwait(false);
                 }
-
-                _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.SaveAsync: Serialization complete");
 
 
                 if (File.Exists(filePath))
@@ -152,7 +135,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     File.Move(tempPath, filePath);
                 }
 
-                _logger?.LogInformation("[IMAGE DEBUG] PlaylistStore.SaveAsync: File written successfully to {FilePath}", filePath);
+                _logger?.LogDebug("PlaylistStore.SaveAsync: File written successfully to {FilePath}", filePath);
 
                 // After successfully saving to new location, delete legacy file if it exists
                 // This migrates the playlist from old directory to new directory

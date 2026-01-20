@@ -89,7 +89,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 // Use a generic wrapper logger that implements ILogger<PlaylistService>
                 var playlistServiceLogger = new ServiceLoggerAdapter<Services.Playlists.PlaylistService>(logger);
-                return new Services.Playlists.PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _providerManager);
+                return new Services.Playlists.PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _providerManager, _imageService);
             }
             catch (Exception ex)
             {
@@ -104,7 +104,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 // Use a generic wrapper logger that implements ILogger<CollectionService>
                 var collectionServiceLogger = new ServiceLoggerAdapter<Services.Collections.CollectionService>(logger);
-                return new Services.Collections.CollectionService(_libraryManager, _collectionManager, _userManager, _userDataManager, collectionServiceLogger, _providerManager);
+                return new Services.Collections.CollectionService(_libraryManager, _collectionManager, _userManager, _userDataManager, collectionServiceLogger, _providerManager, _imageService);
             }
             catch (Exception ex)
             {
@@ -3215,6 +3215,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             [FromRoute, Required] string id,
             [FromRoute, Required] string imageType)
         {
+            // Validate imageType to prevent path traversal
+            if (!SmartListImageService.ValidImageTypes.Contains(imageType))
+            {
+                return BadRequest(new { message = $"Invalid image type: {imageType}. Valid types: {string.Join(", ", SmartListImageService.ValidImageTypes)}" });
+            }
+
             if (!Guid.TryParse(id, out var guidId))
             {
                 return BadRequest(new { message = "Invalid smart list ID format" });
@@ -3240,9 +3246,66 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Delete the image file from smartlists/images/ folder
                 await _imageService.DeleteImageAsync(normalizedId, imageType);
 
-                // Note: Don't delete from Jellyfin playlist/collection folder here.
-                // The cleanup happens on refresh via RemoveOrphanedCustomImages, which
-                // correctly removes images we've uploaded while preserving user-added images.
+                // Also delete from Jellyfin playlist/collection folder
+                // This is an explicit delete action, so we should remove the image from Jellyfin too
+                // For playlists, we need to delete from ALL user playlists (multi-user format) or the single playlist (legacy format)
+                var jellyfinItemsToUpdate = new List<MediaBrowser.Controller.Entities.BaseItem>();
+
+                if (smartList is SmartPlaylistDto playlistDto)
+                {
+                    // Check legacy single-user format first
+                    if (!string.IsNullOrEmpty(playlistDto.JellyfinPlaylistId) &&
+                        Guid.TryParse(playlistDto.JellyfinPlaylistId, out var playlistJellyfinId))
+                    {
+                        var item = _libraryManager.GetItemById(playlistJellyfinId);
+                        if (item != null)
+                        {
+                            jellyfinItemsToUpdate.Add(item);
+                        }
+                    }
+
+                    // Check multi-user format (UserPlaylists)
+                    if (playlistDto.UserPlaylists != null)
+                    {
+                        foreach (var userPlaylist in playlistDto.UserPlaylists)
+                        {
+                            if (!string.IsNullOrEmpty(userPlaylist.JellyfinPlaylistId) &&
+                                Guid.TryParse(userPlaylist.JellyfinPlaylistId, out var userJellyfinId))
+                            {
+                                var item = _libraryManager.GetItemById(userJellyfinId);
+                                if (item != null && !jellyfinItemsToUpdate.Contains(item))
+                                {
+                                    jellyfinItemsToUpdate.Add(item);
+                                }
+                            }
+                        }
+                    }
+                }
+                else if (smartList is SmartCollectionDto collectionDto)
+                {
+                    if (!string.IsNullOrEmpty(collectionDto.JellyfinCollectionId) &&
+                        Guid.TryParse(collectionDto.JellyfinCollectionId, out var collectionJellyfinId))
+                    {
+                        var item = _libraryManager.GetItemById(collectionJellyfinId);
+                        if (item != null)
+                        {
+                            jellyfinItemsToUpdate.Add(item);
+                        }
+                    }
+                }
+
+                if (jellyfinItemsToUpdate.Count > 0)
+                {
+                    foreach (var jellyfinItem in jellyfinItemsToUpdate)
+                    {
+                        await _imageService.DeleteImageFromJellyfinItemAsync(jellyfinItem, imageType);
+                    }
+                    logger.LogDebug("DeleteImage: Deleted {ImageType} from {Count} Jellyfin item(s)", imageType, jellyfinItemsToUpdate.Count);
+                }
+                else
+                {
+                    logger.LogDebug("DeleteImage: No Jellyfin items found for smart list {SmartListId}", normalizedId);
+                }
 
                 // Update the smart list's CustomImages
                 if (smartList!.CustomImages != null && smartList.CustomImages.ContainsKey(imageType))
@@ -3324,6 +3387,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             [FromRoute, Required] string id,
             [FromRoute, Required] string imageType)
         {
+            // Validate imageType to prevent path traversal
+            if (!SmartListImageService.ValidImageTypes.Contains(imageType))
+            {
+                return NotFound(new { message = "Image not found" });
+            }
+
             // Normalize ID to dashed format for consistent image folder operations
             if (!Guid.TryParse(id, out var guidId))
             {

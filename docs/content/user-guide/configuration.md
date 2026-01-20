@@ -90,20 +90,20 @@ This means you can override auto-generation simply by uploading your own images 
 
 SmartLists generates cover images for collections based on the media items they contain:
 
-**Primary Images (Vertical Posters)**
+##### Primary Images (Vertical Posters)
 
-- **Single Item**: If a collection contains only one item with an image, that item's primary image is used directly as the collection cover
-- **Multiple Items**: If a collection contains two or more items with images, a 4-image collage is automatically created using the first items from the collection
-- **Image Selection**: The plugin prioritizes Movies and Series with images, falling back to any items with images if needed
+- If a collection contains only one item with an image, that item's primary image is used directly as the collection cover
+- If a collection contains two or more items with images, a 4-image collage is automatically created using the first items from the collection
+- The plugin prioritizes Movies and Series with images, falling back to any items with images if needed
 
-**Thumb Images (Horizontal/Landscape)**
+##### Thumb Images (Horizontal/Landscape)
 
-- **Automatically Generated**: In addition to the primary poster, the plugin also generates 16:9 thumb images perfect for landscape-oriented views in Jellyfin's UI
-- **Single Item**: Uses the item's thumb image directly
-- **Multiple Items**: Creates a 2x2 grid collage (1920x1080) from thumb images of the first 4 items
-- **Requires Thumb Images**: Thumb generation only occurs if the media items have actual thumb images available. If no thumb images exist, only the primary poster is generated
+- In addition to the primary poster, the plugin also generates 16:9 thumb images perfect for landscape-oriented views in Jellyfin's UI
+- Single item collections use the item's thumb image directly
+- Multiple item collections create a 2x2 grid collage (1920x1080) from thumb images of the first 4 items
+- Thumb generation only occurs if the media items have actual thumb images available. If no thumb images exist, only the primary poster is generated
 
-**Automatic Updates**
+##### Automatic Updates
 
 - Collection images are automatically regenerated when the collection is refreshed to reflect the current items
 
@@ -111,7 +111,7 @@ SmartLists generates cover images for collections based on the media items they 
     Collection images are determined in this order:
 
     1. **Images uploaded directly in Jellyfin** - Preserved, unless an image has been uploaded through SmartLists
-    2. **Images uploaded through SmartUsed ifLists** - Will overwrite any existing images of the same type
+    2. **Images uploaded through SmartLists** - Will overwrite any existing images of the same type
     3. **Auto-generated collages** - Created only if no custom images exist from either source
 
 ### Custom Images
