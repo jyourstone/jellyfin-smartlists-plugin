@@ -25,9 +25,15 @@ public static class FileSystemHelper
     /// Checks if a directory is effectively empty (contains no files except system files like .DS_Store).
     /// </summary>
     /// <param name="directoryPath">The directory path to check.</param>
-    /// <returns>True if the directory is effectively empty, false otherwise.</returns>
+    /// <returns>True if the directory does not exist or is effectively empty, false otherwise.</returns>
     public static bool IsDirectoryEffectivelyEmpty(string directoryPath)
     {
+        // Non-existent directories are considered empty
+        if (!Directory.Exists(directoryPath))
+        {
+            return true;
+        }
+
         // Check if there are any subdirectories
         if (Directory.EnumerateDirectories(directoryPath).Any())
         {
