@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Abstractions;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -186,53 +187,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         {
             // Clean flat file: /smartlists/{guid}.json
             var flatPath = _fileSystem.GetSmartListPath(smartListId);
-            SafeDeleteFile(flatPath);
+            FileSystemHelper.SafeDeleteFile(flatPath, _logger);
 
             // Clean legacy file: /smartplaylists/{guid}.json
             var legacyPath = _fileSystem.GetLegacyPath(smartListId);
-            SafeDeleteFile(legacyPath);
+            FileSystemHelper.SafeDeleteFile(legacyPath, _logger);
 
             // Clean legacy images folder: /smartlists/images/{guid}/
             var legacyImagesPath = Path.Combine(_fileSystem.BasePath, "images", smartListId);
-            SafeDeleteDirectory(legacyImagesPath);
-        }
-
-        /// <summary>
-        /// Safely deletes a file, logging any errors.
-        /// </summary>
-        private void SafeDeleteFile(string filePath)
-        {
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                    _logger?.LogDebug("Deleted legacy file {FilePath}", filePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to delete file {FilePath}", filePath);
-            }
-        }
-
-        /// <summary>
-        /// Safely deletes a directory, logging any errors.
-        /// </summary>
-        private void SafeDeleteDirectory(string directoryPath)
-        {
-            try
-            {
-                if (Directory.Exists(directoryPath))
-                {
-                    Directory.Delete(directoryPath, recursive: true);
-                    _logger?.LogDebug("Deleted legacy directory {DirectoryPath}", directoryPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to delete directory {DirectoryPath}", directoryPath);
-            }
+            FileSystemHelper.SafeDeleteDirectory(legacyImagesPath, _logger);
         }
 
         /// <summary>

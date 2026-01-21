@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -163,7 +164,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
 
             // Try to clean up empty legacy directory
-            TryDeleteEmptyDirectory(legacyBasePath);
+            FileSystemHelper.TryDeleteEmptyDirectory(legacyBasePath, _logger);
 
             return migratedCount;
         }
@@ -180,7 +181,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             if (File.Exists(targetConfigPath))
             {
                 _logger.LogDebug("List {SmartListId} already has config.json, deleting old file", smartListId);
-                SafeDeleteFile(sourceFile);
+                FileSystemHelper.SafeDeleteFile(sourceFile, _logger);
                 return;
             }
 
@@ -197,7 +198,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
 
             // Delete source file
-            SafeDeleteFile(sourceFile);
+            FileSystemHelper.SafeDeleteFile(sourceFile, _logger);
 
             _logger.LogDebug("Migrated config for list {SmartListId}", smartListId);
         }
@@ -244,7 +245,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         // Skip if already exists in target
                         if (File.Exists(targetPath))
                         {
-                            SafeDeleteFile(imagePath);
+                            FileSystemHelper.SafeDeleteFile(imagePath, _logger);
                             continue;
                         }
 
@@ -254,7 +255,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     }
 
                     // Remove empty legacy image folder
-                    TryDeleteEmptyDirectory(imageDir);
+                    FileSystemHelper.TryDeleteEmptyDirectory(imageDir, _logger);
 
                     migratedCount++;
                     _logger.LogDebug("Migrated images for list {SmartListId}", smartListId);
@@ -266,7 +267,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
 
             // Try to clean up empty legacy images directory
-            TryDeleteEmptyDirectory(legacyImagesPath);
+            FileSystemHelper.TryDeleteEmptyDirectory(legacyImagesPath, _logger);
 
             return Task.FromResult(migratedCount);
         }
@@ -279,67 +280,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             await using var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
             await using var targetStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
             await sourceStream.CopyToAsync(targetStream, cancellationToken).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// Safely deletes a file, logging any errors.
-        /// </summary>
-        private void SafeDeleteFile(string filePath)
-        {
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to delete file {FilePath}", filePath);
-            }
-        }
-
-        /// <summary>
-        /// Tries to delete a directory if it's effectively empty (no files except system files like .DS_Store).
-        /// </summary>
-        private void TryDeleteEmptyDirectory(string directoryPath)
-        {
-            try
-            {
-                if (Directory.Exists(directoryPath) && IsDirectoryEffectivelyEmpty(directoryPath))
-                {
-                    Directory.Delete(directoryPath, recursive: true);
-                    _logger.LogDebug("Deleted empty directory {DirectoryPath}", directoryPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not delete directory {DirectoryPath}", directoryPath);
-            }
-        }
-
-        /// <summary>
-        /// Checks if a directory is effectively empty (contains no files except system files like .DS_Store).
-        /// </summary>
-        private static bool IsDirectoryEffectivelyEmpty(string directoryPath)
-        {
-            // System files that should be ignored when checking if a directory is empty
-            var systemFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ".DS_Store",
-                "Thumbs.db",
-                "desktop.ini"
-            };
-
-            // Check if there are any subdirectories
-            if (Directory.EnumerateDirectories(directoryPath).Any())
-            {
-                return false;
-            }
-
-            // Check if there are any non-system files
-            return !Directory.EnumerateFiles(directoryPath)
-                .Any(f => !systemFiles.Contains(Path.GetFileName(f)));
         }
     }
 }

@@ -306,7 +306,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Ensure folder exists
                     Directory.CreateDirectory(folderPath);
 
-                    var targetPath = Path.Combine(folderPath, entry.Name);
+                    // Use only the filename to prevent path traversal attacks
+                    var safeFileName = Path.GetFileName(entry.Name);
+                    var targetPath = Path.Combine(folderPath, safeFileName);
 
                     // Extract the image
                     using var entryStream = entry.Open();
@@ -2621,8 +2623,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var fileSystem = new SmartListFileSystem(_applicationPaths);
                 var existingPlaylists = await playlistStore.GetAllAsync();
                 var existingCollections = await collectionStore.GetAllAsync();
-                var existingPlaylistIds = existingPlaylists.Select(p => p.Id).ToHashSet();
-                var existingCollectionIds = existingCollections.Select(c => c.Id).ToHashSet();
+                var existingPlaylistIds = existingPlaylists.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var existingCollectionIds = existingCollections.Select(c => c.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var jsonOptions = new JsonSerializerOptions
                 {

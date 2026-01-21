@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -206,7 +207,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Delete empty subfolders first
                 foreach (var subDir in Directory.GetDirectories(legacyImagesPath))
                 {
-                    if (IsDirectoryEffectivelyEmpty(subDir))
+                    if (FileSystemHelper.IsDirectoryEffectivelyEmpty(subDir))
                     {
                         Directory.Delete(subDir, recursive: true);
                         _logger.LogDebug("Deleted empty legacy image folder: {FolderPath}", subDir);
@@ -214,7 +215,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
 
                 // Delete the images folder if it's now effectively empty (only system files)
-                if (IsDirectoryEffectivelyEmpty(legacyImagesPath))
+                if (FileSystemHelper.IsDirectoryEffectivelyEmpty(legacyImagesPath))
                 {
                     Directory.Delete(legacyImagesPath, recursive: true);
                     _logger.LogInformation("Deleted empty legacy images folder: {FolderPath}", legacyImagesPath);
@@ -224,30 +225,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 _logger.LogWarning(ex, "Failed to clean up legacy images folder: {FolderPath}", legacyImagesPath);
             }
-        }
-
-        /// <summary>
-        /// Checks if a directory is effectively empty (contains no files except system files like .DS_Store).
-        /// </summary>
-        private static bool IsDirectoryEffectivelyEmpty(string directoryPath)
-        {
-            // System files that should be ignored when checking if a directory is empty
-            var systemFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ".DS_Store",
-                "Thumbs.db",
-                "desktop.ini"
-            };
-
-            // Check if there are any subdirectories
-            if (Directory.EnumerateDirectories(directoryPath).Any())
-            {
-                return false;
-            }
-
-            // Check if there are any non-system files
-            return !Directory.EnumerateFiles(directoryPath)
-                .Any(f => !systemFiles.Contains(Path.GetFileName(f)));
         }
     }
 }

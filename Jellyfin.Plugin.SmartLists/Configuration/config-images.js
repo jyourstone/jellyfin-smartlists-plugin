@@ -467,10 +467,13 @@
 
                 for (var i = 0; i < sortedImages.length; i++) {
                     var img = sortedImages[i];
+                    // Add cache-busting parameter to ensure fresh images after updates
+                    var imageUrl = apiClient.getUrl(baseUrl + '/' + smartListId + '/images/' + img.ImageType + '/file');
+                    imageUrl += (imageUrl.indexOf('?') === -1 ? '?' : '&') + '_t=' + Date.now();
                     SmartLists.addImageRow(page, {
                         imageType: img.ImageType,
                         fileName: img.FileName,
-                        previewUrl: apiClient.getUrl(baseUrl + '/' + smartListId + '/images/' + img.ImageType + '/file')
+                        previewUrl: imageUrl
                     });
                     existingImages[img.ImageType] = img.FileName;
                 }

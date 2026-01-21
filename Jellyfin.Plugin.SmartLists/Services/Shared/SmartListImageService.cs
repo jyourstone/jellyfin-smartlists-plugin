@@ -455,24 +455,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Removes empty directory if it has no files.
-        /// </summary>
-        private void CleanupEmptyDirectory(string directoryPath)
-        {
-            try
-            {
-                if (Directory.Exists(directoryPath) && !Directory.EnumerateFileSystemEntries(directoryPath).Any())
-                {
-                    Directory.Delete(directoryPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not clean up empty directory: {Path}", directoryPath);
-            }
-        }
-
-        /// <summary>
         /// Gets the standard Jellyfin filename for an image type.
         /// This is a shared helper to avoid duplication between PlaylistService and CollectionService.
         /// </summary>
