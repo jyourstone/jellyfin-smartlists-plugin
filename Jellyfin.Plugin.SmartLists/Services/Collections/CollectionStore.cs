@@ -86,49 +86,38 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             // Normalize ID to canonical GUID string for consistent file lookups
             smartCollection.Id = parsedId.ToString();
-            var fileName = smartCollection.Id;
-            smartCollection.FileName = $"{fileName}.json";
+            smartCollection.FileName = "config.json";
 
-            var filePath = _fileSystem.GetSmartListPath(fileName);
-            var tempPath = filePath + ".tmp";
-
-            // Check if this collection exists in the legacy directory (for migration)
-            var legacyPath = _fileSystem.GetLegacyPath(fileName);
-            bool existsInLegacy = File.Exists(legacyPath);
+            // New unified folder structure: /smartlists/{guid}/config.json
+            var folderPath = _fileSystem.GetSmartListFolderPath(smartCollection.Id);
+            var configPath = _fileSystem.GetSmartListConfigPath(smartCollection.Id);
+            var tempPath = configPath + ".tmp";
 
             try
             {
+                // Ensure folder exists
+                Directory.CreateDirectory(folderPath);
+
                 await using (var writer = File.Create(tempPath))
                 {
                     await JsonSerializer.SerializeAsync(writer, smartCollection, SmartListFileSystem.SharedJsonOptions).ConfigureAwait(false);
                     await writer.FlushAsync().ConfigureAwait(false);
                 }
 
-                if (File.Exists(filePath))
+                if (File.Exists(configPath))
                 {
                     // Replace is atomic on the same volume
-                    File.Replace(tempPath, filePath, null);
+                    File.Replace(tempPath, configPath, null);
                 }
                 else
                 {
-                    File.Move(tempPath, filePath);
+                    File.Move(tempPath, configPath);
                 }
 
-                // After successfully saving to new location, delete legacy file if it exists
-                // This migrates the collection from old directory to new directory
-                if (existsInLegacy)
-                {
-                    try
-                    {
-                        File.Delete(legacyPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log but don't fail the save operation if legacy deletion fails
-                        // The file will be in both locations, but the new location takes precedence
-                        System.Diagnostics.Debug.WriteLine($"Warning: Failed to delete legacy collection file {legacyPath}: {ex.Message}");
-                    }
-                }
+                _logger?.LogDebug("CollectionStore.SaveAsync: File written successfully to {FilePath}", configPath);
+
+                // Clean up all legacy locations after successful save
+                CleanupLegacyLocations(smartCollection.Id);
             }
             finally
             {
@@ -139,40 +128,90 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             return smartCollection;
         }
 
-        public async Task DeleteAsync(Guid id)
+        public Task DeleteAsync(Guid id)
         {
-            var collection = await GetByIdAsync(id).ConfigureAwait(false);
-            if (collection == null)
-                return;
-
-            // Use the actual filename to construct the path
-            var fileName = string.IsNullOrWhiteSpace(collection.FileName)
-                ? collection.Id
-                : Path.GetFileNameWithoutExtension(collection.FileName);
-
-            if (string.IsNullOrWhiteSpace(fileName))
+            // Validate GUID format to prevent path injection
+            if (id == Guid.Empty)
             {
-                throw new ArgumentException("Collection ID cannot be null or empty", nameof(id));
+                throw new ArgumentException("Collection ID cannot be empty", nameof(id));
             }
 
-            // Validate that fileName is a valid GUID before constructing paths
-            // GetSmartListPath and GetLegacyPath expect a GUID to prevent path injection
-            if (!Guid.TryParse(fileName, out _))
+            var smartListId = id.ToString();
+
+            // Delete the entire folder (new unified structure)
+            var folderPath = _fileSystem.GetSmartListFolderPath(smartListId);
+            if (Directory.Exists(folderPath))
             {
-                throw new ArgumentException($"Collection ID must be a valid GUID, but got: {fileName}", nameof(id));
+                try
+                {
+                    Directory.Delete(folderPath, recursive: true);
+                    _logger?.LogDebug("Deleted collection folder {FolderPath}", folderPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to delete collection folder {FolderPath}", folderPath);
+                }
             }
 
-            var filePath = _fileSystem.GetSmartListPath(fileName);
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            // Also clean up legacy locations
+            CleanupLegacyLocations(smartListId);
 
-            // Also check legacy directory
-            var legacyPath = _fileSystem.GetLegacyPath(fileName);
-            if (File.Exists(legacyPath))
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Cleans up legacy file locations after migration or deletion.
+        /// </summary>
+        private void CleanupLegacyLocations(string smartListId)
+        {
+            // Clean flat file: /smartlists/{guid}.json
+            var flatPath = _fileSystem.GetSmartListPath(smartListId);
+            SafeDeleteFile(flatPath);
+
+            // Clean legacy file: /smartplaylists/{guid}.json
+            var legacyPath = _fileSystem.GetLegacyPath(smartListId);
+            SafeDeleteFile(legacyPath);
+
+            // Clean legacy images folder: /smartlists/images/{guid}/
+            var legacyImagesPath = Path.Combine(_fileSystem.BasePath, "images", smartListId);
+            SafeDeleteDirectory(legacyImagesPath);
+        }
+
+        /// <summary>
+        /// Safely deletes a file, logging any errors.
+        /// </summary>
+        private void SafeDeleteFile(string filePath)
+        {
+            try
             {
-                File.Delete(legacyPath);
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    _logger?.LogDebug("Deleted legacy file {FilePath}", filePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to delete file {FilePath}", filePath);
+            }
+        }
+
+        /// <summary>
+        /// Safely deletes a directory, logging any errors.
+        /// </summary>
+        private void SafeDeleteDirectory(string directoryPath)
+        {
+            try
+            {
+                if (Directory.Exists(directoryPath))
+                {
+                    Directory.Delete(directoryPath, recursive: true);
+                    _logger?.LogDebug("Deleted legacy directory {DirectoryPath}", directoryPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to delete directory {DirectoryPath}", directoryPath);
             }
         }
 

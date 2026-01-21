@@ -4,15 +4,30 @@ For advanced users who prefer direct file editing or need to perform bulk operat
 
 ## File Location
 
-Smart list files are stored in the Jellyfin data directory:
+Smart lists are stored in the Jellyfin data directory with the following structure:
 
 ```
 {DataPath}/smartlists/
+  {listId}/
+    config.json       # List configuration
+    primary.jpg       # Custom Primary image (optional)
+    backdrop.png      # Custom Backdrop image (optional)
+    thumb.jpg         # Custom Thumb image (optional)
+    ...               # Other custom images
 ```
 
 Where `{DataPath}` is your Jellyfin data path (typically `/config/data` on Linux, `C:\ProgramData\Jellyfin\Server\data` on Windows, or `~/Library/Application Support/Jellyfin/Server/data` on macOS).
 
-Each list is stored as a separate JSON file named `{listId}.json`, where `{listId}` is a unique GUID identifier for the list.
+Each smart list has its own folder named with its unique GUID identifier. The configuration is stored in `config.json`, and any custom images uploaded through SmartLists are stored alongside it.
+
+### Legacy Locations (Deprecated)
+
+For backward compatibility, the plugin also checks these legacy locations when reading configurations:
+
+- `{DataPath}/smartlists/{listId}.json` (flat file format from older versions)
+- `{DataPath}/smartplaylists/{listId}.json` (very old format)
+
+Lists in legacy locations are automatically migrated to the new folder structure on plugin startup.
 
 ## File Format
 

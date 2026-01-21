@@ -73,9 +73,12 @@ namespace Jellyfin.Plugin.SmartLists
                 return queueService;
             });
             
+            // Register storage migration service BEFORE auto-refresh to ensure storage is migrated first
+            serviceCollection.AddHostedService<StorageMigrationHostedService>();
+
             serviceCollection.AddHostedService<AutoRefreshHostedService>();
             serviceCollection.AddScoped<IManualRefreshService, ManualRefreshService>();
-            
+
             // Register Plugin Pages integration as a hosted service
             serviceCollection.AddHostedService<PluginPagesRegistrationService>();
         }

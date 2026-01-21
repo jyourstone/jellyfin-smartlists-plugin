@@ -19,10 +19,43 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
     public interface ISmartListFileSystem
     {
         string BasePath { get; }
+
+        /// <summary>
+        /// Gets the folder path for a smart list (e.g., /smartlists/{guid}/).
+        /// This is the unified location for config.json and images.
+        /// </summary>
+        string GetSmartListFolderPath(string smartListId);
+
+        /// <summary>
+        /// Gets the config file path for a smart list (e.g., /smartlists/{guid}/config.json).
+        /// This is the new unified format.
+        /// </summary>
+        string GetSmartListConfigPath(string smartListId);
+
+        /// <summary>
+        /// Finds the actual file path for a smart list config, checking all locations.
+        /// Search order: new folder format, flat format, legacy directory.
+        /// </summary>
         string? GetSmartListFilePath(string smartListId);
+
+        /// <summary>
+        /// Gets all smart list config file paths from all locations.
+        /// </summary>
         string[] GetAllSmartListFilePaths();
+
+        /// <summary>
+        /// Gets the flat file path in the smartlists directory (legacy format).
+        /// </summary>
         string GetSmartListPath(string fileName);
+
+        /// <summary>
+        /// Gets the path in the legacy smartplaylists directory.
+        /// </summary>
         string GetLegacyPath(string fileName);
+
+        /// <summary>
+        /// Reads all smart list files and returns them grouped by type.
+        /// </summary>
         Task<(SmartPlaylistDto[] Playlists, SmartCollectionDto[] Collections)> GetAllSmartListsAsync();
     }
 
@@ -63,6 +96,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         public string BasePath { get; }
 
+        /// <inheritdoc />
+        public string GetSmartListFolderPath(string smartListId)
+        {
+            // Validate ID format to prevent path injection
+            if (string.IsNullOrWhiteSpace(smartListId) || !Guid.TryParse(smartListId, out _))
+            {
+                throw new ArgumentException("Smart list ID must be a valid GUID", nameof(smartListId));
+            }
+
+            return Path.Combine(BasePath, smartListId);
+        }
+
+        /// <inheritdoc />
+        public string GetSmartListConfigPath(string smartListId)
+        {
+            return Path.Combine(GetSmartListFolderPath(smartListId), "config.json");
+        }
+
+        /// <inheritdoc />
         public string? GetSmartListFilePath(string smartListId)
         {
             // Validate ID format to prevent path injection
@@ -71,24 +123,28 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return null;
             }
 
-            // Check new directory first using the known flat layout for O(1) lookup
-            var candidatePath = Path.Combine(BasePath, $"{smartListId}.json");
-            if (File.Exists(candidatePath))
+            // 1. Check new folder format first: /smartlists/{guid}/config.json
+            var newFolderConfigPath = Path.Combine(BasePath, smartListId, "config.json");
+            if (File.Exists(newFolderConfigPath))
             {
-                return candidatePath;
-            }
-            
-            // Fallback to recursive search in case of nested structure (shouldn't happen but defensive)
-            var filePath = Directory.GetFiles(BasePath, $"{smartListId}.json", SearchOption.AllDirectories).FirstOrDefault();
-            if (!string.IsNullOrEmpty(filePath))
-            {
-                return filePath;
+                return newFolderConfigPath;
             }
 
-            // Fallback to legacy directory for backward compatibility
+            // 2. Check flat format in smartlists/: /smartlists/{guid}.json
+            var flatPath = Path.Combine(BasePath, $"{smartListId}.json");
+            if (File.Exists(flatPath))
+            {
+                return flatPath;
+            }
+
+            // 3. Fallback to legacy smartplaylists/ directory
             if (Directory.Exists(_legacyBasePath))
             {
-                return Directory.GetFiles(_legacyBasePath, $"{smartListId}.json", SearchOption.AllDirectories).FirstOrDefault();
+                var legacyPath = Path.Combine(_legacyBasePath, $"{smartListId}.json");
+                if (File.Exists(legacyPath))
+                {
+                    return legacyPath;
+                }
             }
 
             return null;
@@ -96,28 +152,50 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         public string[] GetAllSmartListFilePaths()
         {
-            var files = new System.Collections.Generic.List<string>();
+            var files = new List<string>();
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Get files from new directory
             if (Directory.Exists(BasePath))
             {
-                files.AddRange(Directory.GetFiles(BasePath, "*.json", SearchOption.AllDirectories));
+                // 1. Check for new folder format: /smartlists/{guid}/config.json
+                foreach (var dir in Directory.GetDirectories(BasePath))
+                {
+                    var dirName = Path.GetFileName(dir);
+                    if (Guid.TryParse(dirName, out _))
+                    {
+                        var configPath = Path.Combine(dir, "config.json");
+                        if (File.Exists(configPath))
+                        {
+                            files.Add(configPath);
+                            seenIds.Add(dirName);
+                        }
+                    }
+                }
+
+                // 2. Check for flat format: /smartlists/{guid}.json
+                foreach (var file in Directory.GetFiles(BasePath, "*.json"))
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(file);
+                    // Skip if this ID was already found in folder format
+                    if (Guid.TryParse(fileName, out _) && !seenIds.Contains(fileName))
+                    {
+                        files.Add(file);
+                        seenIds.Add(fileName);
+                    }
+                }
             }
 
-            // Also check legacy directory for backward compatibility
-            // Filter out legacy files whose filename already exists in new directory to avoid duplicates
+            // 3. Check legacy smartplaylists/ directory
             if (Directory.Exists(_legacyBasePath))
             {
-                var legacyFiles = Directory.GetFiles(_legacyBasePath, "*.json", SearchOption.AllDirectories);
-                var newDirectoryFileNames = files.Select(f => Path.GetFileName(f)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                
-                foreach (var legacyFile in legacyFiles)
+                foreach (var file in Directory.GetFiles(_legacyBasePath, "*.json"))
                 {
-                    var legacyFileName = Path.GetFileName(legacyFile);
-                    // Only add legacy file if it doesn't exist in new directory
-                    if (!newDirectoryFileNames.Contains(legacyFileName))
+                    var fileName = Path.GetFileNameWithoutExtension(file);
+                    // Skip if this ID was already found in new directory
+                    if (Guid.TryParse(fileName, out _) && !seenIds.Contains(fileName))
                     {
-                        files.Add(legacyFile);
+                        files.Add(file);
+                        seenIds.Add(fileName);
                     }
                 }
             }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 {
     /// <summary>
     /// Scheduled task that cleans up orphaned data from SmartLists.
-    /// This includes orphaned custom images when a smart list is deleted.
+    /// This includes orphaned folders without config.json and legacy image folders.
     /// </summary>
     public class CleanupTask : IScheduledTask
     {
@@ -75,8 +76,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             try
             {
-                // Clean up orphaned images
-                await CleanupOrphanedImagesAsync(progress, cancellationToken).ConfigureAwait(false);
+                // Clean up orphaned folders (folders without config.json)
+                await CleanupOrphanedFoldersAsync(progress, cancellationToken).ConfigureAwait(false);
+
+                // Clean up legacy images folder if it exists
+                CleanupLegacyImagesFolder();
 
                 _logger.LogInformation("Smart Lists cleanup task completed");
             }
@@ -92,16 +96,37 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
         }
 
-        private async Task CleanupOrphanedImagesAsync(IProgress<double> progress, CancellationToken cancellationToken)
+        /// <summary>
+        /// Cleans up orphaned folders in the smartlists directory.
+        /// A folder is orphaned if:
+        /// - It's a GUID folder without a config.json file
+        /// - It's a GUID folder whose ID is not in the active smart lists
+        /// </summary>
+        private async Task CleanupOrphanedFoldersAsync(IProgress<double> progress, CancellationToken cancellationToken)
         {
-            // Get all smart list IDs that have images
-            var imageSmartListIds = _imageService.GetAllSmartListIdsWithImages().ToList();
-            _logger.LogDebug("Found {Count} image folders to check", imageSmartListIds.Count);
+            var basePath = _fileSystem.BasePath;
 
-            if (imageSmartListIds.Count == 0)
+            if (!Directory.Exists(basePath))
             {
                 progress.Report(100);
-                _logger.LogInformation("No orphaned images to clean up");
+                return;
+            }
+
+            // Get all GUID folders in smartlists/
+            var guidFolders = Directory.GetDirectories(basePath)
+                .Where(d =>
+                {
+                    var dirName = Path.GetFileName(d);
+                    return Guid.TryParse(dirName, out _);
+                })
+                .ToList();
+
+            _logger.LogDebug("Found {Count} GUID folders to check", guidFolders.Count);
+
+            if (guidFolders.Count == 0)
+            {
+                progress.Report(100);
+                _logger.LogInformation("No folders to clean up");
                 return;
             }
 
@@ -125,28 +150,104 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
             }
 
-            // Find and delete orphaned image folders
+            // Find and delete orphaned folders
             var orphanedCount = 0;
             var processedCount = 0;
 
-            foreach (var smartListId in imageSmartListIds)
+            foreach (var folderPath in guidFolders)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (!existingSmartListIds.Contains(smartListId))
+                var smartListId = Path.GetFileName(folderPath);
+                var configPath = Path.Combine(folderPath, "config.json");
+
+                // Folder is orphaned if:
+                // 1. No config.json exists, OR
+                // 2. Smart list ID is not in active lists (shouldn't happen if config exists, but defensive)
+                var isOrphaned = !File.Exists(configPath) || !existingSmartListIds.Contains(smartListId);
+
+                if (isOrphaned)
                 {
-                    _logger.LogDebug("Cleaning up orphaned images for smart list: {SmartListId}", smartListId);
-                    await _imageService.DeleteAllImagesAsync(smartListId, cancellationToken).ConfigureAwait(false);
-                    orphanedCount++;
+                    _logger.LogDebug("Cleaning up orphaned folder: {FolderPath}", folderPath);
+                    try
+                    {
+                        Directory.Delete(folderPath, recursive: true);
+                        orphanedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete orphaned folder: {FolderPath}", folderPath);
+                    }
                 }
 
                 processedCount++;
-                progress.Report((double)processedCount / imageSmartListIds.Count * 100);
+                progress.Report((double)processedCount / guidFolders.Count * 100);
             }
 
             _logger.LogInformation(
-                "Image cleanup completed. Checked {TotalCount} image folders, removed {OrphanedCount} orphaned folders",
-                imageSmartListIds.Count, orphanedCount);
+                "Folder cleanup completed. Checked {TotalCount} folders, removed {OrphanedCount} orphaned folders",
+                guidFolders.Count, orphanedCount);
+        }
+
+        /// <summary>
+        /// Cleans up the legacy images folder if it exists and is empty or contains only system files.
+        /// </summary>
+        private void CleanupLegacyImagesFolder()
+        {
+            var legacyImagesPath = Path.Combine(_fileSystem.BasePath, "images");
+
+            if (!Directory.Exists(legacyImagesPath))
+            {
+                return;
+            }
+
+            try
+            {
+                // Delete empty subfolders first
+                foreach (var subDir in Directory.GetDirectories(legacyImagesPath))
+                {
+                    if (IsDirectoryEffectivelyEmpty(subDir))
+                    {
+                        Directory.Delete(subDir, recursive: true);
+                        _logger.LogDebug("Deleted empty legacy image folder: {FolderPath}", subDir);
+                    }
+                }
+
+                // Delete the images folder if it's now effectively empty (only system files)
+                if (IsDirectoryEffectivelyEmpty(legacyImagesPath))
+                {
+                    Directory.Delete(legacyImagesPath, recursive: true);
+                    _logger.LogInformation("Deleted empty legacy images folder: {FolderPath}", legacyImagesPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clean up legacy images folder: {FolderPath}", legacyImagesPath);
+            }
+        }
+
+        /// <summary>
+        /// Checks if a directory is effectively empty (contains no files except system files like .DS_Store).
+        /// </summary>
+        private static bool IsDirectoryEffectivelyEmpty(string directoryPath)
+        {
+            // System files that should be ignored when checking if a directory is empty
+            var systemFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".DS_Store",
+                "Thumbs.db",
+                "desktop.ini"
+            };
+
+            // Check if there are any subdirectories
+            if (Directory.EnumerateDirectories(directoryPath).Any())
+            {
+                return false;
+            }
+
+            // Check if there are any non-system files
+            return !Directory.EnumerateFiles(directoryPath)
+                .Any(f => !systemFiles.Contains(Path.GetFileName(f)));
         }
     }
 }
