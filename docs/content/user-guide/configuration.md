@@ -289,15 +289,18 @@ The Export/Import feature allows you to backup your smart list configurations or
 ### Export
 
 - Click the "Export All Lists" button in the Settings tab
-- Downloads a timestamped ZIP file containing all your smart list JSON configurations
+- Downloads a timestamped ZIP file containing all your smart lists
+- **Includes Custom Images**: Any custom images uploaded through SmartLists are included in the export
 - Use this as a backup or to transfer your lists to another Jellyfin server
 
 ### Import
 
 - Select a ZIP file exported from the SmartLists plugin
 - Click "Import Selected File" to upload and process the archive
+- **Includes Custom Images**: Custom images from the export are automatically restored
 - **Duplicate Detection**: Lists with the same GUID as existing lists will be automatically skipped to prevent conflicts
 - **User Reassignment**: When importing lists from another Jellyfin instance, if the original list owner doesn't exist in the destination system, the list will be automatically reassigned to the admin user performing the import
+- **Backward Compatible**: Old export files (without images) are still supported
 
 !!! note "User-Specific Rules"
     Rules like "Playback Status for [User]" or "Is Favorite for [User]" that reference non-existent users will need to be updated manually.

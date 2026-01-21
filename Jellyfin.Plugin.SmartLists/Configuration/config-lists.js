@@ -332,31 +332,37 @@
                 // Parse response to get the created/updated list with its ID
                 return response.json().then(function (createdList) {
                     var smartListId = createdList ? createdList.Id : (editState.editMode ? editState.editingPlaylistId : null);
-                    var imagePromises = [];
+                    var hasImageOps = (smartListId && SmartLists.applyImageDeletions && SmartLists.hasPendingImageDeletions && SmartLists.hasPendingImageDeletions()) ||
+                                      (pendingImageUploads.length > 0 && smartListId && SmartLists.uploadImages);
 
-                    // Apply any pending image deletions first (before uploads)
-                    // Pass pendingImageUploads so we skip deleting types that are being replaced
-                    if (smartListId && SmartLists.applyImageDeletions) {
-                        var deletionPromise = SmartLists.applyImageDeletions(smartListId, pendingImageUploads).catch(function (err) {
-                            console.error('Failed to apply image deletions:', err);
-                            SmartLists.showNotification('List saved but some image deletions failed.', 'warn');
-                        });
-                        imagePromises.push(deletionPromise);
-                    }
+                    if (hasImageOps) {
+                        // Run deletions first, then uploads sequentially to avoid race conditions
+                        var imageOpsPromise = Promise.resolve();
 
-                    // Upload pending images if any
-                    if (pendingImageUploads.length > 0 && smartListId && SmartLists.uploadImages) {
-                        var uploadPromise = SmartLists.uploadImages(smartListId, pendingImageUploads).catch(function (err) {
-                            console.error('Failed to upload images:', err);
-                            SmartLists.showNotification('List saved but some images failed to upload.', 'warn');
-                        });
-                        imagePromises.push(uploadPromise);
-                    }
+                        // Apply any pending image deletions first (before uploads)
+                        // Pass pendingImageUploads so we skip deleting types that are being replaced
+                        if (smartListId && SmartLists.applyImageDeletions) {
+                            imageOpsPromise = imageOpsPromise.then(function () {
+                                return SmartLists.applyImageDeletions(smartListId, pendingImageUploads);
+                            }).catch(function (err) {
+                                console.error('Failed to apply image deletions:', err);
+                                SmartLists.showNotification('List saved but some image deletions failed.', 'warn');
+                            });
+                        }
 
-                    if (imagePromises.length > 0) {
+                        // Upload pending images after deletions complete
+                        if (pendingImageUploads.length > 0 && smartListId && SmartLists.uploadImages) {
+                            imageOpsPromise = imageOpsPromise.then(function () {
+                                return SmartLists.uploadImages(smartListId, pendingImageUploads);
+                            }).catch(function (err) {
+                                console.error('Failed to upload images:', err);
+                                SmartLists.showNotification('List saved but some images failed to upload.', 'warn');
+                            });
+                        }
+
                         // Wait for all image operations to complete, then trigger a refresh if list is enabled
                         // This ensures the refresh sees the final CustomImages state
-                        return Promise.all(imagePromises).then(function () {
+                        return imageOpsPromise.then(function () {
                             // Only trigger refresh if the list is enabled
                             var listIsEnabled = createdList ? createdList.Enabled : isEnabled;
                             if (!listIsEnabled) {

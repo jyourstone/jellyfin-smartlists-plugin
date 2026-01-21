@@ -11,7 +11,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 {
     /// <summary>
     /// Service for managing custom images for smart lists.
-    /// Images are stored in {DataPath}/smartlists/images/{smartListId}/
+    /// Images are stored in {DataPath}/smartlists/{smartListId}/ alongside config.json.
     /// </summary>
     public class SmartListImageService
     {
@@ -19,9 +19,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly ILogger<SmartListImageService> _logger;
 
         /// <summary>
-        /// Base path for image storage.
+        /// Base path for smart list storage (unified folder for config and images).
         /// </summary>
-        public string ImagesBasePath { get; }
+        public string SmartListsBasePath { get; }
+
+        /// <summary>
+        /// Legacy base path for image storage (for backward compatibility during migration).
+        /// </summary>
+        private string LegacyImagesBasePath { get; }
 
         /// <summary>
         /// Allowed image extensions (matching Jellyfin's supported formats).
@@ -51,7 +56,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _applicationPaths = applicationPaths;
             _logger = logger;
 
-            ImagesBasePath = Path.Combine(_applicationPaths.DataPath, "smartlists", "images");
+            // New unified path: images live alongside config.json in {DataPath}/smartlists/{guid}/
+            SmartListsBasePath = Path.Combine(_applicationPaths.DataPath, "smartlists");
+
+            // Legacy path for backward compatibility during migration
+            LegacyImagesBasePath = Path.Combine(_applicationPaths.DataPath, "smartlists", "images");
         }
 
         /// <summary>
@@ -165,9 +174,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Deletes all images for a smart list.
+        /// Deletes the entire smart list folder, including config.json and all images.
+        /// This method is intended to be called when a smart list is being permanently deleted.
         /// </summary>
-        public Task DeleteAllImagesAsync(string smartListId, CancellationToken cancellationToken = default)
+        /// <param name="smartListId">The smart list ID.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>A completed task.</returns>
+        public Task DeleteSmartListFolderAsync(string smartListId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(smartListId))
             {
@@ -183,11 +196,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             try
             {
                 Directory.Delete(smartListImagePath, recursive: true);
-                _logger.LogDebug("Deleted all images for smart list {SmartListId}", smartListId);
+                _logger.LogDebug("Deleted smart list folder for {SmartListId}", smartListId);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to delete images directory for smart list {SmartListId}", smartListId);
+                _logger.LogWarning(ex, "Failed to delete smart list folder for {SmartListId}", smartListId);
             }
 
             return Task.CompletedTask;
@@ -195,6 +208,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         /// <summary>
         /// Gets the full path to a specific image for a smart list.
+        /// Checks new unified location first, then legacy location for backward compatibility.
         /// </summary>
         /// <returns>The full path if the image exists, null otherwise.</returns>
         public string? GetImagePath(string smartListId, string imageType)
@@ -204,24 +218,37 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return null;
             }
 
-            var smartListImagePath = GetSmartListImageDirectory(smartListId);
-            if (!Directory.Exists(smartListImagePath))
+            var pattern = $"{imageType.ToLowerInvariant()}.*";
+
+            // 1. Check new unified location: /smartlists/{guid}/
+            var newPath = GetSmartListImageDirectory(smartListId);
+            if (Directory.Exists(newPath))
             {
-                return null;
+                var files = Directory.GetFiles(newPath, pattern);
+                if (files.Length > 0)
+                {
+                    return files[0];
+                }
             }
 
-            // Find file matching the image type (regardless of extension)
-            var pattern = $"{imageType.ToLowerInvariant()}.*";
-            var files = Directory.GetFiles(smartListImagePath, pattern);
+            // 2. Fallback to legacy location: /smartlists/images/{guid}/
+            var legacyPath = GetLegacySmartListImageDirectory(smartListId);
+            if (Directory.Exists(legacyPath))
+            {
+                var files = Directory.GetFiles(legacyPath, pattern);
+                if (files.Length > 0)
+                {
+                    return files[0];
+                }
+            }
 
-            return files.Length > 0 ? files[0] : null;
+            return null;
         }
 
         /// <summary>
-        /// Checks if the image folder exists for a smart list.
-        /// This indicates that the smart list has/had managed images through the image service.
+        /// Checks if the smart list folder exists (used for images and config).
         /// </summary>
-        /// <returns>True if the image folder exists (even if empty).</returns>
+        /// <returns>True if the folder exists.</returns>
         public bool HasImageFolder(string smartListId)
         {
             if (string.IsNullOrEmpty(smartListId))
@@ -229,12 +256,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return false;
             }
 
-            var smartListImagePath = GetSmartListImageDirectory(smartListId);
-            return Directory.Exists(smartListImagePath);
+            // Check new unified location
+            var newPath = GetSmartListImageDirectory(smartListId);
+            if (Directory.Exists(newPath))
+            {
+                return true;
+            }
+
+            // Check legacy location
+            var legacyPath = GetLegacySmartListImageDirectory(smartListId);
+            return Directory.Exists(legacyPath);
         }
 
         /// <summary>
         /// Gets all images for a smart list.
+        /// Checks both new and legacy locations.
         /// </summary>
         /// <returns>Dictionary of ImageType -> FileName.</returns>
         public Dictionary<string, string> GetImagesForSmartList(string smartListId)
@@ -246,47 +282,98 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return result;
             }
 
-            var smartListImagePath = GetSmartListImageDirectory(smartListId);
-            if (!Directory.Exists(smartListImagePath))
+            // Check new unified location first
+            var newPath = GetSmartListImageDirectory(smartListId);
+            if (Directory.Exists(newPath))
             {
-                return result;
+                AddImagesFromDirectory(newPath, result);
             }
 
-            foreach (var file in Directory.GetFiles(smartListImagePath))
+            // Also check legacy location (images might not be migrated yet)
+            var legacyPath = GetLegacySmartListImageDirectory(smartListId);
+            if (Directory.Exists(legacyPath))
             {
-                var fileName = Path.GetFileName(file);
-                var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-
-                // Map filename back to ImageType
-                var imageType = ValidImageTypes.FirstOrDefault(t =>
-                    t.Equals(nameWithoutExt, StringComparison.OrdinalIgnoreCase));
-
-                if (imageType != null)
-                {
-                    result[imageType] = fileName;
-                }
+                AddImagesFromDirectory(legacyPath, result);
             }
 
             return result;
         }
 
         /// <summary>
+        /// Helper to add images from a directory to the result dictionary.
+        /// </summary>
+        private static void AddImagesFromDirectory(string directoryPath, Dictionary<string, string> result)
+        {
+            foreach (var file in Directory.GetFiles(directoryPath))
+            {
+                var fileName = Path.GetFileName(file);
+                var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+
+                // Skip config.json (it's in the same folder now)
+                if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // Map filename back to ImageType
+                var imageType = ValidImageTypes.FirstOrDefault(t =>
+                    t.Equals(nameWithoutExt, StringComparison.OrdinalIgnoreCase));
+
+                if (imageType != null && !result.ContainsKey(imageType))
+                {
+                    result[imageType] = fileName;
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets all smart list IDs that have images stored.
+        /// Checks both new unified location and legacy location.
         /// Used by the cleanup task to find orphaned images.
         /// </summary>
         public IEnumerable<string> GetAllSmartListIdsWithImages()
         {
-            if (!Directory.Exists(ImagesBasePath))
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Check new unified location: /smartlists/{guid}/ folders with image files
+            if (Directory.Exists(SmartListsBasePath))
             {
-                yield break;
+                foreach (var dir in Directory.GetDirectories(SmartListsBasePath))
+                {
+                    var dirName = Path.GetFileName(dir);
+                    // Must be a valid GUID
+                    if (!Guid.TryParse(dirName, out _))
+                    {
+                        continue;
+                    }
+
+                    // Check if folder has any image files (not just config.json)
+                    var hasImages = Directory.GetFiles(dir)
+                        .Any(f => !Path.GetFileName(f).Equals("config.json", StringComparison.OrdinalIgnoreCase));
+
+                    if (hasImages && seenIds.Add(dirName))
+                    {
+                        yield return dirName;
+                    }
+                }
             }
 
-            foreach (var dir in Directory.GetDirectories(ImagesBasePath))
+            // Check legacy location: /smartlists/images/{guid}/
+            if (Directory.Exists(LegacyImagesBasePath))
             {
-                var smartListId = Path.GetFileName(dir);
-                if (!string.IsNullOrEmpty(smartListId))
+                foreach (var dir in Directory.GetDirectories(LegacyImagesBasePath))
                 {
-                    yield return smartListId;
+                    var dirName = Path.GetFileName(dir);
+                    // Must be a valid GUID
+                    if (!Guid.TryParse(dirName, out _))
+                    {
+                        continue;
+                    }
+
+                    if (seenIds.Add(dirName))
+                    {
+                        yield return dirName;
+                    }
                 }
             }
         }
@@ -336,11 +423,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Gets the directory path for a smart list's images.
+        /// Gets the directory path for a smart list (unified location for config and images).
         /// Validates that the smartListId is a valid GUID to prevent path traversal attacks.
         /// </summary>
         /// <param name="smartListId">The smart list ID (must be a valid GUID).</param>
-        /// <returns>The full path to the smart list's image directory.</returns>
+        /// <returns>The full path to the smart list's directory.</returns>
         /// <exception cref="ArgumentException">Thrown if smartListId is not a valid GUID.</exception>
         private string GetSmartListImageDirectory(string smartListId)
         {
@@ -350,26 +437,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 throw new ArgumentException("Smart list ID must be a valid non-empty GUID", nameof(smartListId));
             }
 
-            // Use the parsed GUID to ensure consistent format (prevents variations like extra dashes)
-            return Path.Combine(ImagesBasePath, parsedId.ToString("D"));
+            // New unified path: /smartlists/{guid}/
+            return Path.Combine(SmartListsBasePath, parsedId.ToString("D"));
         }
 
         /// <summary>
-        /// Removes empty directory if it has no files.
+        /// Gets the legacy directory path for a smart list's images (for backward compatibility).
         /// </summary>
-        private void CleanupEmptyDirectory(string directoryPath)
+        /// <param name="smartListId">The smart list ID (must be a valid GUID).</param>
+        /// <returns>The full path to the legacy image directory.</returns>
+        private string GetLegacySmartListImageDirectory(string smartListId)
         {
-            try
+            // Validate GUID format to prevent path traversal attacks
+            if (string.IsNullOrEmpty(smartListId) || !Guid.TryParse(smartListId, out var parsedId) || parsedId == Guid.Empty)
             {
-                if (Directory.Exists(directoryPath) && !Directory.EnumerateFileSystemEntries(directoryPath).Any())
-                {
-                    Directory.Delete(directoryPath);
-                }
+                throw new ArgumentException("Smart list ID must be a valid non-empty GUID", nameof(smartListId));
             }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Could not clean up empty directory: {Path}", directoryPath);
-            }
+
+            // Legacy path: /smartlists/images/{guid}/
+            return Path.Combine(LegacyImagesBasePath, parsedId.ToString("D"));
         }
 
         /// <summary>

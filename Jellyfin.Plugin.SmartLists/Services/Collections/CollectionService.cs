@@ -556,13 +556,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 collectionAfterRefresh.Name = expectedName;
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
-                // Auto-generate collection images only if no custom Primary/Thumb uploaded
-                var hasCustomPrimaryAfterRefresh = dto.CustomImages?.ContainsKey("Primary") == true;
-                var hasCustomThumbAfterRefresh = dto.CustomImages?.ContainsKey("Thumb") == true;
-                if (!hasCustomPrimaryAfterRefresh && !hasCustomThumbAfterRefresh)
-                {
-                    await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
-                }
+                // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
+                await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
 
                 // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                 SetCollectionDisplayOrder(collectionAfterRefresh);
@@ -857,13 +852,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     retrievedItem.Name = formattedName;
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
-                    // Auto-generate collection images only if no custom Primary/Thumb uploaded
-                    var hasCustomPrimaryNew = dto.CustomImages?.ContainsKey("Primary") == true;
-                    var hasCustomThumbNew = dto.CustomImages?.ContainsKey("Thumb") == true;
-                    if (!hasCustomPrimaryNew && !hasCustomThumbNew)
-                    {
-                        await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
-                    }
+                    // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
+                    await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
 
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
@@ -984,130 +974,54 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         /// <summary>
-        /// Removes custom images that are no longer in the CustomImages dictionary.
-        /// Also cleans up auto-generated collages when custom Primary/Thumb images are uploaded.
+        /// Cleans up auto-generated collages when custom Primary/Thumb images are uploaded via SmartLists.
+        /// IMPORTANT: This method does NOT delete images like folder.png, backdrop.png, etc. because
+        /// we cannot distinguish between images uploaded via SmartLists vs. images uploaded via Jellyfin UI.
+        /// We only clean up files we KNOW we created (smartlist-collage.jpg, smartlist-thumb-collage.jpg).
         /// </summary>
         /// <param name="collection">The collection item.</param>
         /// <param name="itemPath">Path to the collection folder.</param>
         /// <param name="imageInfos">List of image infos to update.</param>
-        /// <param name="customImageTypes">Set of image types currently in CustomImages.</param>
+        /// <param name="customImageTypes">Set of image types currently in CustomImages (uploaded via SmartLists).</param>
         private bool RemoveOrphanedCustomImages(BaseItem collection, string itemPath, List<ItemImageInfo> imageInfos, HashSet<ImageType> customImageTypes)
         {
             bool removedAny = false;
 
-            // Clean up all image types that were custom-uploaded but are no longer in CustomImages
-            var cleanableImageTypes = new[] { ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb, ImageType.Logo, ImageType.Disc, ImageType.Art, ImageType.Box, ImageType.BoxRear, ImageType.Menu };
-
-            foreach (var imageType in cleanableImageTypes)
+            // If user has custom Primary via SmartLists, clean up auto-generated collage
+            if (customImageTypes.Contains(ImageType.Primary))
             {
-                // Skip if this type is currently in CustomImages
-                if (customImageTypes.Contains(imageType))
+                var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
+                if (File.Exists(collagePath))
                 {
-                    // If user has custom Primary, clean up auto-generated collage
-                    if (imageType == ImageType.Primary)
+                    try
                     {
-                        var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
-                        if (File.Exists(collagePath))
-                        {
-                            try
-                            {
-                                File.Delete(collagePath);
-                                _logger.LogDebug("Removed auto-generated Primary collage (custom image uploaded): {FilePath}", collagePath);
-                                removedAny = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to delete auto-generated collage file: {FilePath}", collagePath);
-                            }
-                        }
+                        File.Delete(collagePath);
+                        _logger.LogDebug("Removed auto-generated Primary collage (custom image uploaded): {FilePath}", collagePath);
+                        removedAny = true;
                     }
-                    // If user has custom Thumb, clean up auto-generated thumb collage
-                    else if (imageType == ImageType.Thumb)
+                    catch (Exception ex)
                     {
-                        var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
-                        if (File.Exists(thumbCollagePath))
-                        {
-                            try
-                            {
-                                File.Delete(thumbCollagePath);
-                                _logger.LogDebug("Removed auto-generated Thumb collage (custom image uploaded): {FilePath}", thumbCollagePath);
-                                removedAny = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to delete auto-generated thumb collage file: {FilePath}", thumbCollagePath);
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // This image type is NOT in CustomImages - clean up any orphaned files
-                // Check if there's an image of this type in the collection folder with our naming convention
-                var possibleExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
-                foreach (var ext in possibleExtensions)
-                {
-                    var fileName = GetImageFileName(imageType, ext);
-                    var filePath = Path.Combine(itemPath, fileName);
-
-                    if (File.Exists(filePath))
-                    {
-                        try
-                        {
-                            File.Delete(filePath);
-                            _logger.LogDebug("Removed orphaned {ImageType} image from collection: {FilePath}", imageType, filePath);
-                            removedAny = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete orphaned image file: {FilePath}", filePath);
-                        }
+                        _logger.LogWarning(ex, "Failed to delete auto-generated collage file: {FilePath}", collagePath);
                     }
                 }
+            }
 
-                // Also clean up auto-generated collage files for Primary/Thumb when no custom images exist
-                // This allows auto-generation to create fresh collages
-                if (imageType == ImageType.Primary)
+            // If user has custom Thumb via SmartLists, clean up auto-generated thumb collage
+            if (customImageTypes.Contains(ImageType.Thumb))
+            {
+                var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
+                if (File.Exists(thumbCollagePath))
                 {
-                    var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
-                    if (File.Exists(collagePath))
+                    try
                     {
-                        try
-                        {
-                            File.Delete(collagePath);
-                            _logger.LogDebug("Removed orphaned auto-generated Primary collage: {FilePath}", collagePath);
-                            removedAny = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete auto-generated collage file: {FilePath}", collagePath);
-                        }
+                        File.Delete(thumbCollagePath);
+                        _logger.LogDebug("Removed auto-generated Thumb collage (custom image uploaded): {FilePath}", thumbCollagePath);
+                        removedAny = true;
                     }
-                }
-                else if (imageType == ImageType.Thumb)
-                {
-                    var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
-                    if (File.Exists(thumbCollagePath))
+                    catch (Exception ex)
                     {
-                        try
-                        {
-                            File.Delete(thumbCollagePath);
-                            _logger.LogDebug("Removed orphaned auto-generated Thumb collage: {FilePath}", thumbCollagePath);
-                            removedAny = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete auto-generated thumb collage file: {FilePath}", thumbCollagePath);
-                        }
+                        _logger.LogWarning(ex, "Failed to delete auto-generated thumb collage file: {FilePath}", thumbCollagePath);
                     }
-                }
-
-                // Remove from imageInfos
-                var imageInfo = imageInfos.FirstOrDefault(i => i.Type == imageType);
-                if (imageInfo != null)
-                {
-                    imageInfos.Remove(imageInfo);
-                    removedAny = true;
                 }
             }
 
@@ -1172,83 +1086,35 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 
                 if (linkedChildren == null || linkedChildren.Length == 0)
                 {
-                    // Check if collection has a manually uploaded image (don't clear user-uploaded images)
-                    if (await HasManuallyUploadedImageAsync(collection, cancellationToken).ConfigureAwait(false))
+                    // Check which image types have manually uploaded images (per-type check)
+                    var (hasManualPrimary, hasManualThumb) = await GetManuallyUploadedImageFlagsAsync(collection, cancellationToken).ConfigureAwait(false);
+
+                    if (hasManualPrimary && hasManualThumb)
                     {
-                        _logger.LogDebug("Collection {CollectionName} is empty but has a manually uploaded image, preserving it", collection.Name);
+                        _logger.LogDebug("Collection {CollectionName} is empty but has manually uploaded Primary and Thumb images, preserving them", collection.Name);
                         stopwatch.Stop();
                         return;
                     }
 
-                    _logger.LogDebug("Collection {CollectionName} is empty - clearing any existing cover images", collection.Name);
+                    _logger.LogDebug("Collection {CollectionName} is empty - clearing auto-generated cover images (preserving manual: Primary={HasManualPrimary}, Thumb={HasManualThumb})",
+                        collection.Name, hasManualPrimary, hasManualThumb);
 
-                    // Clear the image by removing it directly
-                    if (collection.ImageInfos != null)
-                    {
-                        var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
-                        if (primaryImage != null)
-                        {
-                            // Remove the primary image
-                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Primary).ToArray();
-                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-                            
-                            // Also delete the auto-generated primary collage file if it exists
-                            if (!string.IsNullOrEmpty(primaryImage.Path))
-                            {
-                                var fileName = System.IO.Path.GetFileName(primaryImage.Path);
-                                if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        if (System.IO.File.Exists(primaryImage.Path))
-                                        {
-                                            System.IO.File.Delete(primaryImage.Path);
-                                            _logger.LogDebug("Deleted auto-generated collage image file for empty collection {CollectionName}", collection.Name);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex, "Failed to delete collage image file for empty collection {CollectionName}", collection.Name);
-                                    }
-                                }
-                            }
-                            
-                            _logger.LogDebug("Cleared cover image for empty collection {CollectionName}", collection.Name);
-                        }
-                        
-                        // Also clear and delete thumb image
-                        var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
-                        if (thumbImage != null)
-                        {
-                            // Remove the thumb image
-                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Thumb).ToArray();
-                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-                            
-                            // Also delete the auto-generated thumb collage file if it exists
-                            if (!string.IsNullOrEmpty(thumbImage.Path))
-                            {
-                                var fileName = System.IO.Path.GetFileName(thumbImage.Path);
-                                if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        if (System.IO.File.Exists(thumbImage.Path))
-                                        {
-                                            System.IO.File.Delete(thumbImage.Path);
-                                            _logger.LogDebug("Deleted auto-generated thumb collage image file for empty collection {CollectionName}", collection.Name);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex, "Failed to delete thumb collage image file for empty collection {CollectionName}", collection.Name);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Clear only non-manually-uploaded images
+                    await ClearAutoGeneratedImagesAsync(collection, hasManualPrimary, hasManualThumb, cancellationToken).ConfigureAwait(false);
 
                     stopwatch.Stop();
                     _logger.LogDebug("Cover image clearing completed for empty collection {CollectionName} in {ElapsedTime}ms", collection.Name, stopwatch.ElapsedMilliseconds);
+                    return;
+                }
+
+                // Check if collection has a manually uploaded image BEFORE refreshing metadata
+                // If it does, don't replace images (ReplaceAllImages would overwrite user's image)
+                var hasManualImage = await HasManuallyUploadedImageAsync(collection, cancellationToken).ConfigureAwait(false);
+
+                if (hasManualImage)
+                {
+                    _logger.LogDebug("Collection {CollectionName} has a manually uploaded image, skipping metadata image refresh", collection.Name);
+                    stopwatch.Stop();
                     return;
                 }
 
@@ -1259,7 +1125,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     MetadataRefreshMode = MetadataRefreshMode.Default,
                     ImageRefreshMode = MetadataRefreshMode.Default,
                     ReplaceAllMetadata = false, // Don't replace metadata - prevents online providers from changing the collection name
-                    ReplaceAllImages = true
+                    ReplaceAllImages = true // Safe to replace since we checked for manual images above
                 };
 
                 await _providerManager.RefreshSingleItem(collection, refreshOptions, cancellationToken).ConfigureAwait(false);
@@ -1286,143 +1152,63 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         {
             try
             {
-                // Check if collection has a manually uploaded image (don't overwrite)
-                if (await HasManuallyUploadedImageAsync(collection, cancellationToken).ConfigureAwait(false))
+                // Check which image types have manually uploaded images (per-type check)
+                var (hasManualPrimary, hasManualThumb) = await GetManuallyUploadedImageFlagsAsync(collection, cancellationToken).ConfigureAwait(false);
+
+                if (hasManualPrimary && hasManualThumb)
                 {
-                    _logger.LogDebug("Collection {CollectionName} has a manually uploaded image, skipping automatic image generation", collection.Name);
+                    _logger.LogDebug("Collection {CollectionName} has manually uploaded Primary and Thumb images, skipping automatic image generation", collection.Name);
                     return;
+                }
+
+                if (hasManualPrimary)
+                {
+                    _logger.LogDebug("Collection {CollectionName} has a manually uploaded Primary image, will only auto-generate Thumb", collection.Name);
+                }
+
+                if (hasManualThumb)
+                {
+                    _logger.LogDebug("Collection {CollectionName} has a manually uploaded Thumb image, will only auto-generate Primary", collection.Name);
                 }
 
                 // Get collection items
                 var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
-                
+
                 if (items.Count == 0)
                 {
-                    // Collection is empty - clear the image (we already checked for user-uploaded images above)
-                    _logger.LogDebug("Collection {CollectionName} has no items - clearing any existing cover images", collection.Name);
-                    
-                    // Clear the image by removing it
-                    if (collection.ImageInfos != null)
-                    {
-                        var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
-                        if (primaryImage != null)
-                        {
-                            // Remove the image
-                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Primary).ToArray();
-                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-                            
-                            // Also delete the auto-generated collage file if it exists
-                            if (!string.IsNullOrEmpty(primaryImage.Path))
-                            {
-                                var fileName = System.IO.Path.GetFileName(primaryImage.Path);
-                                if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        if (System.IO.File.Exists(primaryImage.Path))
-                                        {
-                                            System.IO.File.Delete(primaryImage.Path);
-                                            _logger.LogDebug("Deleted auto-generated collage image file for empty collection {CollectionName}", collection.Name);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex, "Failed to delete collage image file for empty collection {CollectionName}", collection.Name);
-                                    }
-                                }
-                            }
-                            
-                            _logger.LogDebug("Cleared cover image for empty collection {CollectionName}", collection.Name);
-                        }
-                    }
+                    // Collection is empty - clear auto-generated images only (preserve manual uploads)
+                    _logger.LogDebug("Collection {CollectionName} has no items - clearing auto-generated cover images", collection.Name);
+                    await ClearAutoGeneratedImagesAsync(collection, hasManualPrimary, hasManualThumb, cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
-                // Get items with images (prefer Movies/Series, fallback to any item with image)
-                var itemsWithImages = GetItemsWithImages(items);
-                
-                if (itemsWithImages.Count == 0)
+                // Get items with images for Primary (prefer Movies/Series, fallback to any item with image)
+                var itemsWithPrimaryImages = GetItemsWithImages(items);
+
+                if (itemsWithPrimaryImages.Count == 0)
                 {
-                    // No items with images - clear the image (we already checked for user-uploaded images above)
-                    _logger.LogDebug("No items with images found in collection {CollectionName}. Items: {Items}. Clearing existing cover image.",
+                    // No items with primary images - clear auto-generated images only
+                    _logger.LogDebug("No items with images found in collection {CollectionName}. Items: {Items}. Clearing auto-generated cover images.",
                         collection.Name,
                         string.Join(", ", items.Select(i => i.Name)));
-                    
-                    // Clear the primary image by removing it
-                    if (collection.ImageInfos != null)
-                    {
-                        var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
-                        if (primaryImage != null)
-                        {
-                            // Remove the primary image
-                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Primary).ToArray();
-                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-                            
-                            // Also delete the auto-generated primary collage file if it exists
-                            if (!string.IsNullOrEmpty(primaryImage.Path))
-                            {
-                                var fileName = System.IO.Path.GetFileName(primaryImage.Path);
-                                if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        if (System.IO.File.Exists(primaryImage.Path))
-                                        {
-                                            System.IO.File.Delete(primaryImage.Path);
-                                            _logger.LogDebug("Deleted auto-generated collage image file for collection {CollectionName} (no items with images)", collection.Name);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex, "Failed to delete collage image file for collection {CollectionName}", collection.Name);
-                                    }
-                                }
-                            }
-                            
-                            _logger.LogDebug("Cleared cover image for collection {CollectionName} (no items with images)", collection.Name);
-                        }
-                        
-                        // Also clear and delete thumb image
-                        var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
-                        if (thumbImage != null)
-                        {
-                            // Remove the thumb image
-                            collection.ImageInfos = collection.ImageInfos.Where(i => i.Type != ImageType.Thumb).ToArray();
-                            await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
-                            
-                            // Also delete the auto-generated thumb collage file if it exists
-                            if (!string.IsNullOrEmpty(thumbImage.Path))
-                            {
-                                var fileName = System.IO.Path.GetFileName(thumbImage.Path);
-                                if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        if (System.IO.File.Exists(thumbImage.Path))
-                                        {
-                                            System.IO.File.Delete(thumbImage.Path);
-                                            _logger.LogDebug("Deleted auto-generated thumb collage image file for collection {CollectionName} (no items with images)", collection.Name);
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex, "Failed to delete thumb collage image file for collection {CollectionName}", collection.Name);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    await ClearAutoGeneratedImagesAsync(collection, hasManualPrimary, hasManualThumb, cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
-                // Create primary image: single for 1 item, collage for 2+ items
-                await CreateCollectionImageAsync(collection, itemsWithImages, cancellationToken).ConfigureAwait(false);
-                
-                // Also create thumb image for landscape views
-                var itemsWithThumbImages = GetItemsWithThumbImages(items);
-                if (itemsWithThumbImages.Count > 0)
+                // Create primary image if no manual Primary exists
+                if (!hasManualPrimary)
                 {
-                    await CreateCollectionThumbAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
+                    await CreateCollectionImageAsync(collection, itemsWithPrimaryImages, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Create thumb image if no manual Thumb exists
+                if (!hasManualThumb)
+                {
+                    var itemsWithThumbImages = GetItemsWithThumbImages(items);
+                    if (itemsWithThumbImages.Count > 0)
+                    {
+                        await CreateCollectionThumbAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
+                    }
                 }
             }
             catch (Exception ex)
@@ -1433,56 +1219,154 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         /// <summary>
-        /// Checks if the collection has a manually uploaded image that should not be overwritten.
+        /// Clears auto-generated images from the collection, preserving manually uploaded ones.
+        /// </summary>
+        private async Task ClearAutoGeneratedImagesAsync(BaseItem collection, bool hasManualPrimary, bool hasManualThumb, CancellationToken cancellationToken)
+        {
+            if (collection.ImageInfos == null)
+            {
+                return;
+            }
+
+            var imageInfos = collection.ImageInfos.ToList();
+            var needsUpdate = false;
+
+            // Clear Primary if not manually uploaded
+            if (!hasManualPrimary)
+            {
+                var primaryImage = imageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
+                if (primaryImage != null)
+                {
+                    imageInfos.Remove(primaryImage);
+                    needsUpdate = true;
+
+                    // Delete auto-generated collage file if it exists
+                    if (!string.IsNullOrEmpty(primaryImage.Path))
+                    {
+                        var fileName = System.IO.Path.GetFileName(primaryImage.Path);
+                        if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TryDeleteFile(primaryImage.Path, "auto-generated Primary collage", collection.Name);
+                        }
+                    }
+
+                    _logger.LogDebug("Cleared auto-generated Primary image for collection {CollectionName}", collection.Name);
+                }
+            }
+
+            // Clear Thumb if not manually uploaded
+            if (!hasManualThumb)
+            {
+                var thumbImage = imageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
+                if (thumbImage != null)
+                {
+                    imageInfos.Remove(thumbImage);
+                    needsUpdate = true;
+
+                    // Delete auto-generated thumb collage file if it exists
+                    if (!string.IsNullOrEmpty(thumbImage.Path))
+                    {
+                        var fileName = System.IO.Path.GetFileName(thumbImage.Path);
+                        if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TryDeleteFile(thumbImage.Path, "auto-generated Thumb collage", collection.Name);
+                        }
+                    }
+
+                    _logger.LogDebug("Cleared auto-generated Thumb image for collection {CollectionName}", collection.Name);
+                }
+            }
+
+            if (needsUpdate)
+            {
+                collection.ImageInfos = imageInfos.ToArray();
+                await collection.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Safely attempts to delete a file, logging any errors.
+        /// </summary>
+        private void TryDeleteFile(string filePath, string description, string collectionName)
+        {
+            try
+            {
+                if (System.IO.File.Exists(filePath))
+                {
+                    System.IO.File.Delete(filePath);
+                    _logger.LogDebug("Deleted {Description} file for collection {CollectionName}", description, collectionName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete {Description} file for collection {CollectionName}", description, collectionName);
+            }
+        }
+
+        /// <summary>
+        /// Checks if the collection has manually uploaded images that should not be overwritten.
+        /// Returns flags for each image type (Primary and Thumb) separately.
         /// A manually uploaded image is one that:
         /// 1. Exists in the collection's metadata directory
         /// 2. Is NOT one of the collection items' images
         /// 3. Is NOT our auto-generated collage (smartlist-collage.jpg or smartlist-thumb-collage.jpg)
-        /// 
+        ///
         /// Note: Our auto-generated collages will be regenerated to match current items.
         /// </summary>
-        private async Task<bool> HasManuallyUploadedImageAsync(BaseItem collection, CancellationToken cancellationToken = default)
+        /// <returns>A tuple with (HasManualPrimary, HasManualThumb) flags.</returns>
+        private async Task<(bool HasManualPrimary, bool HasManualThumb)> GetManuallyUploadedImageFlagsAsync(BaseItem collection, CancellationToken cancellationToken = default)
         {
             if (collection.ImageInfos == null)
             {
-                return false;
+                return (false, false);
             }
 
-            // Check both Primary and Thumb images
             var primaryImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Primary);
             var thumbImage = collection.ImageInfos.FirstOrDefault(i => i.Type == ImageType.Thumb);
 
             var collectionPath = collection.Path;
             if (string.IsNullOrEmpty(collectionPath))
             {
-                return false;
+                return (false, false);
             }
 
             var normalizedCollectionPath = System.IO.Path.GetFullPath(collectionPath);
 
+            bool hasManualPrimary = false;
+            bool hasManualThumb = false;
+
             // Check Primary image
             if (primaryImage != null && !string.IsNullOrEmpty(primaryImage.Path))
             {
-                if (await IsManuallyUploadedImageAsync(primaryImage, normalizedCollectionPath, collection, ImageType.Primary, cancellationToken).ConfigureAwait(false))
-                {
-                    return true;
-                }
+                hasManualPrimary = await IsManuallyUploadedImageAsync(primaryImage, normalizedCollectionPath, collection, ImageType.Primary, cancellationToken).ConfigureAwait(false);
             }
 
             // Check Thumb image
             if (thumbImage != null && !string.IsNullOrEmpty(thumbImage.Path))
             {
-                if (await IsManuallyUploadedImageAsync(thumbImage, normalizedCollectionPath, collection, ImageType.Thumb, cancellationToken).ConfigureAwait(false))
-                {
-                    return true;
-                }
+                hasManualThumb = await IsManuallyUploadedImageAsync(thumbImage, normalizedCollectionPath, collection, ImageType.Thumb, cancellationToken).ConfigureAwait(false);
             }
 
-            return false;
+            return (hasManualPrimary, hasManualThumb);
+        }
+
+        /// <summary>
+        /// Checks if the collection has ANY manually uploaded image (Primary or Thumb).
+        /// Use this when you need a simple boolean check for any manual image.
+        /// For more granular control, use GetManuallyUploadedImageFlagsAsync instead.
+        /// </summary>
+        private async Task<bool> HasManuallyUploadedImageAsync(BaseItem collection, CancellationToken cancellationToken = default)
+        {
+            var (hasManualPrimary, hasManualThumb) = await GetManuallyUploadedImageFlagsAsync(collection, cancellationToken).ConfigureAwait(false);
+            return hasManualPrimary || hasManualThumb;
         }
 
         /// <summary>
         /// Helper method to check if a specific image is manually uploaded.
+        /// An image is considered manually uploaded if:
+        /// 1. It exists in the collection's metadata directory
+        /// 2. It's NOT our auto-generated collage (smartlist-collage.jpg or smartlist-thumb-collage.jpg)
+        /// 3. It doesn't match any collection item's image path
         /// </summary>
         private async Task<bool> IsManuallyUploadedImageAsync(ItemImageInfo imageInfo, string normalizedCollectionPath, BaseItem collection, ImageType imageType, CancellationToken cancellationToken)
         {
@@ -1510,12 +1394,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             try
             {
                 var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
-                
+
                 // Get the appropriate items list based on image type
-                var itemsWithImages = imageType == ImageType.Thumb 
-                    ? GetItemsWithThumbImages(items) 
+                var itemsWithImages = imageType == ImageType.Thumb
+                    ? GetItemsWithThumbImages(items)
                     : GetItemsWithImages(items);
-                
+
                 // Check if any item uses this exact image path
                 foreach (var item in itemsWithImages)
                 {
@@ -1534,10 +1418,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         }
                     }
                 }
-                
+
                 // Image is in collection's metadata directory but doesn't match any item's image
                 // and is not our auto-generated collage - this is likely a manually uploaded image
-                _logger.LogDebug("Collection {CollectionName} has {ImageType} image '{ImagePath}' in metadata directory that doesn't match any item's image - treating as manually uploaded", 
+                _logger.LogDebug("Collection {CollectionName} has {ImageType} image '{ImagePath}' in metadata directory that doesn't match any item's image - treating as manually uploaded",
                     collection.Name, imageType, fileName);
                 return true;
             }

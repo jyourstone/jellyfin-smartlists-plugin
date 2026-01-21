@@ -1359,8 +1359,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         _logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
                     }
 
-                    // Delete custom images using normalized ID
-                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+                    // Delete smart list folder (config and images)
+                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
 
                     await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
                     Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
@@ -1394,8 +1394,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         _logger.LogInformation("Deleted smart collection: {CollectionName}", collection.Name);
                     }
 
-                    // Delete custom images using normalized ID
-                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+                    // Delete smart list folder (config and images)
+                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
 
                     await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
                     Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);

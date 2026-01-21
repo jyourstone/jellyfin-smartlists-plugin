@@ -237,6 +237,97 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
+        /// Extracts the smart list ID from a ZIP entry path.
+        /// Handles both old format ({guid}.json) and new format ({guid}/config.json or {guid}/image.jpg).
+        /// </summary>
+        private static string? GetSmartListIdFromZipEntry(ZipArchiveEntry entry)
+        {
+            var fullName = entry.FullName;
+
+            // Handle new format: {guid}/config.json or {guid}/image.jpg
+            if (fullName.Contains('/'))
+            {
+                var parts = fullName.Split('/');
+                if (parts.Length >= 1 && Guid.TryParse(parts[0], out _))
+                {
+                    return parts[0];
+                }
+            }
+
+            // Handle old format: {guid}.json
+            if (entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                var nameWithoutExt = Path.GetFileNameWithoutExtension(entry.Name);
+                if (Guid.TryParse(nameWithoutExt, out _))
+                {
+                    return nameWithoutExt;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Extracts image files from ZIP entries and saves them to the smart list folder.
+        /// </summary>
+        private async Task<int> ExtractImagesForSmartListAsync(
+            List<ZipArchiveEntry> entries,
+            string smartListId,
+            ISmartListFileSystem fileSystem)
+        {
+            var imageCount = 0;
+            var folderPath = fileSystem.GetSmartListFolderPath(smartListId);
+
+            foreach (var entry in entries)
+            {
+                // Skip JSON files (config)
+                if (entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                // Skip empty entries and system files
+                if (string.IsNullOrEmpty(entry.Name) ||
+                    entry.Name.StartsWith("._") ||
+                    entry.Name.StartsWith(".DS_Store"))
+                {
+                    continue;
+                }
+
+                // Check if it's an image file
+                var extension = Path.GetExtension(entry.Name);
+                if (!SmartListImageService.ImageFileExtensions.Contains(extension.ToLowerInvariant()))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    // Ensure folder exists
+                    Directory.CreateDirectory(folderPath);
+
+                    // Use only the filename to prevent path traversal attacks
+                    var safeFileName = Path.GetFileName(entry.Name);
+                    var targetPath = Path.Combine(folderPath, safeFileName);
+
+                    // Extract the image
+                    using var entryStream = entry.Open();
+                    using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    await entryStream.CopyToAsync(fileStream);
+
+                    logger.LogDebug("Extracted image {ImageName} for smart list {SmartListId}", entry.Name, smartListId);
+                    imageCount++;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to extract image {ImageName} for smart list {SmartListId}", entry.Name, smartListId);
+                }
+            }
+
+            return imageCount;
+        }
+
+        /// <summary>
         /// Gets the current user ID from Jellyfin claims.
         /// </summary>
         /// <returns>The current user ID, or Guid.Empty if not found.</returns>
@@ -1814,8 +1905,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
                     }
 
-                    // Delete custom images using normalized ID
-                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+                    // Delete smart list folder (config and images)
+                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
 
                     await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
                     AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
@@ -1839,8 +1930,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         logger.LogInformation("Deleted smart collection configuration: {CollectionName}", collection.Name);
                     }
 
-                    // Delete custom images using normalized ID
-                    await _imageService.DeleteAllImagesAsync(normalizedId).ConfigureAwait(false);
+                    // Delete smart list folder (config and images)
+                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
 
                     await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
                     AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
@@ -2424,33 +2515,70 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
 
         /// <summary>
-        /// Export all smart playlists as a ZIP file.
+        /// Export all smart lists as a ZIP file.
+        /// Includes config.json and any custom images for each list.
         /// </summary>
-        /// <returns>ZIP file containing all playlist JSON files.</returns>
+        /// <returns>ZIP file containing all smart list folders with config and images.</returns>
         [HttpPost("export")]
         public async Task<ActionResult> ExportPlaylists()
         {
             try
             {
                 var fileSystem = new SmartListFileSystem(_applicationPaths);
-                var filePaths = fileSystem.GetAllSmartListFilePaths();
+                var (playlists, collections) = await fileSystem.GetAllSmartListsAsync();
 
-                if (filePaths.Length == 0)
+                var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
+
+                if (allLists.Count == 0)
                 {
-                    return BadRequest(new { message = "No smart playlists found to export" });
+                    return BadRequest(new { message = "No smart lists found to export" });
                 }
 
                 using var zipStream = new MemoryStream();
                 using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
                 {
-                    foreach (var filePath in filePaths)
+                    foreach (var list in allLists)
                     {
-                        var fileName = Path.GetFileName(filePath);
-                        var entry = archive.CreateEntry(fileName);
+                        if (string.IsNullOrEmpty(list.Id))
+                        {
+                            continue;
+                        }
 
-                        using var entryStream = entry.Open();
-                        using var fileStream = System.IO.File.OpenRead(filePath);
-                        await fileStream.CopyToAsync(entryStream);
+                        var folderPath = fileSystem.GetSmartListFolderPath(list.Id);
+
+                        // Add config.json
+                        var configPath = fileSystem.GetSmartListConfigPath(list.Id);
+                        if (System.IO.File.Exists(configPath))
+                        {
+                            var entryName = $"{list.Id}/config.json";
+                            var entry = archive.CreateEntry(entryName);
+                            using var entryStream = entry.Open();
+                            using var fileStream = System.IO.File.OpenRead(configPath);
+                            await fileStream.CopyToAsync(entryStream);
+                        }
+
+                        // Add any image files from the folder
+                        if (Directory.Exists(folderPath))
+                        {
+                            foreach (var imagePath in Directory.GetFiles(folderPath))
+                            {
+                                var fileName = Path.GetFileName(imagePath);
+
+                                // Skip config.json (already added) and temp files
+                                if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                                    fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    continue;
+                                }
+
+                                // Add image file
+                                var imageEntryName = $"{list.Id}/{fileName}";
+                                var imageEntry = archive.CreateEntry(imageEntryName);
+                                using var imageEntryStream = imageEntry.Open();
+                                using var imageFileStream = System.IO.File.OpenRead(imagePath);
+                                await imageFileStream.CopyToAsync(imageEntryStream);
+                            }
+                        }
                     }
                 }
 
@@ -2458,21 +2586,22 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture);
                 var zipFileName = $"smartlists_export_{timestamp}.zip";
 
-                logger.LogInformation("Exported {PlaylistCount} smart playlists to {FileName}", filePaths.Length, zipFileName);
+                logger.LogInformation("Exported {ListCount} smart lists to {FileName}", allLists.Count, zipFileName);
 
                 return File(zipStream.ToArray(), "application/zip", zipFileName);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error exporting smart playlists");
-                return StatusCode(StatusCodes.Status500InternalServerError, "Error exporting smart playlists");
+                logger.LogError(ex, "Error exporting smart lists");
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error exporting smart lists");
             }
         }
 
         /// <summary>
         /// Import smart lists (playlists and collections) from a ZIP file.
+        /// Supports both old format (flat JSON files) and new format (folders with config.json and images).
         /// </summary>
-        /// <param name="file">ZIP file containing smart list JSON files.</param>
+        /// <param name="file">ZIP file containing smart list JSON files or folders.</param>
         /// <returns>Import results with counts of imported and skipped lists.</returns>
         [HttpPost("import")]
         public async Task<ActionResult> ImportPlaylists([FromForm] IFormFile file)
@@ -2491,10 +2620,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 var playlistStore = GetPlaylistStore();
                 var collectionStore = GetCollectionStore();
+                var fileSystem = new SmartListFileSystem(_applicationPaths);
                 var existingPlaylists = await playlistStore.GetAllAsync();
                 var existingCollections = await collectionStore.GetAllAsync();
-                var existingPlaylistIds = existingPlaylists.Select(p => p.Id).ToHashSet();
-                var existingCollectionIds = existingCollections.Select(c => c.Id).ToHashSet();
+                var existingPlaylistIds = existingPlaylists.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var existingCollectionIds = existingCollections.Select(c => c.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var jsonOptions = new JsonSerializerOptions
                 {
@@ -2507,6 +2637,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 int importedCollectionCount = 0;
                 int skippedCount = 0;
                 int errorCount = 0;
+                int importedImageCount = 0;
 
                 using var zipStream = new MemoryStream();
                 await file.CopyToAsync(zipStream);
@@ -2514,17 +2645,50 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
 
+                // Group entries by smart list ID (folder name or filename without extension)
+                var entriesByListId = new Dictionary<string, List<ZipArchiveEntry>>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var entry in archive.Entries)
                 {
-                    if (!entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    // Skip empty entries (directory markers) and system files
+                    if (string.IsNullOrEmpty(entry.Name))
                     {
-                        continue; // Skip non-JSON files,
+                        continue;
                     }
 
-                    // Skip system files (like macOS ._filename files)
                     if (entry.Name.StartsWith("._") || entry.Name.StartsWith(".DS_Store"))
                     {
-                        logger.LogDebug("Skipping system file: {FileName}", entry.Name);
+                        logger.LogDebug("Skipping system file: {FileName}", entry.FullName);
+                        continue;
+                    }
+
+                    // Determine the smart list ID from the entry path
+                    var listId = GetSmartListIdFromZipEntry(entry);
+                    if (string.IsNullOrEmpty(listId))
+                    {
+                        logger.LogDebug("Skipping entry with invalid path: {FullName}", entry.FullName);
+                        continue;
+                    }
+
+                    if (!entriesByListId.TryGetValue(listId, out var entries))
+                    {
+                        entries = new List<ZipArchiveEntry>();
+                        entriesByListId[listId] = entries;
+                    }
+                    entries.Add(entry);
+                }
+
+                // Process each smart list
+                foreach (var (listId, entries) in entriesByListId)
+                {
+                    // Find the config entry (either config.json or {guid}.json)
+                    var configEntry = entries.FirstOrDefault(e =>
+                        e.Name.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                        e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+
+                    if (configEntry == null)
+                    {
+                        logger.LogDebug("No config file found for list ID {ListId}, skipping", listId);
                         continue;
                     }
 
@@ -2532,7 +2696,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         // Read JSON content to check Type property first
                         string jsonContent;
-                        using (var entryStream = entry.Open())
+                        using (var entryStream = configEntry.Open())
                         {
                             using var reader = new StreamReader(entryStream);
                             jsonContent = await reader.ReadToEndAsync();
@@ -2567,16 +2731,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             if (playlist == null || string.IsNullOrEmpty(playlist.Id))
                             {
                                 logger.LogWarning("Invalid playlist data in file {FileName}: {Issue}",
-                                    entry.Name, playlist == null ? "null playlist" : "empty ID");
-                                importResults.Add(new { fileName = entry.Name, status = "error", message = "Invalid or empty playlist data" });
+                                    configEntry.Name, playlist == null ? "null playlist" : "empty ID");
+                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Invalid or empty playlist data" });
                                 errorCount++;
                                 continue;
                             }
 
                             if (string.IsNullOrWhiteSpace(playlist.Name))
                             {
-                                logger.LogWarning("Playlist in file {FileName} has no name", entry.Name);
-                                importResults.Add(new { fileName = entry.Name, status = "error", message = "Playlist must have a name" });
+                                logger.LogWarning("Playlist in file {FileName} has no name", configEntry.Name);
+                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist must have a name" });
                                 errorCount++;
                                 continue;
                             }
@@ -2647,7 +2811,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                 if (validUserMappings.Count == 0)
                                 {
                                     logger.LogWarning("Playlist '{PlaylistName}' has no valid users in UserPlaylists after validation", playlist.Name);
-                                    importResults.Add(new { fileName = entry.Name, status = "error", message = "Playlist has no valid users" });
+                                    importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist has no valid users" });
                                     errorCount++;
                                     continue; // Skip this entire playlist
                                 }
@@ -2697,7 +2861,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                     {
                                         logger.LogWarning("Playlist '{PlaylistName}' references non-existent user {User} but cannot determine importing user for reassignment",
                                             playlist.Name, playlist.UserId);
-                                        importResults.Add(new { fileName = entry.Name, status = "error", message = "Cannot reassign playlist - unable to determine importing user" });
+                                        importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Cannot reassign playlist - unable to determine importing user" });
                                         errorCount++;
                                         continue; // Skip this entire playlist
                                     }
@@ -2715,7 +2879,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             {
                                 // No users specified at all - this is invalid
                                 logger.LogWarning("Playlist '{PlaylistName}' has no users specified (neither UserId nor UserPlaylists)", playlist.Name);
-                                importResults.Add(new { fileName = entry.Name, status = "error", message = "Playlist must have at least one user" });
+                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist must have at least one user" });
                                 errorCount++;
                                 continue; // Skip this entire playlist
                             }
@@ -2731,7 +2895,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                             if (existingPlaylistIds.Contains(playlist.Id))
                             {
-                                importResults.Add(new { fileName = entry.Name, listName = playlist.Name, listType = "Playlist", status = "skipped", message = "Playlist with this ID already exists" });
+                                importResults.Add(new { fileName = configEntry.Name, listName = playlist.Name, listType = "Playlist", status = "skipped", message = "Playlist with this ID already exists" });
                                 skippedCount++;
                                 continue;
                             }
@@ -2739,14 +2903,19 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             // Import the playlist
                             await playlistStore.SaveAsync(playlist);
 
+                            // Extract any image files for this playlist
+                            var imageCount = await ExtractImagesForSmartListAsync(entries, playlist.Id, fileSystem);
+                            importedImageCount += imageCount;
+
                             // Update the auto-refresh cache with the imported playlist
                             AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
 
-                            importResults.Add(new { fileName = entry.Name, listName = playlist.Name, listType = "Playlist", status = "imported", message = "Successfully imported" });
+                            var message = imageCount > 0 ? $"Successfully imported with {imageCount} image(s)" : "Successfully imported";
+                            importResults.Add(new { fileName = configEntry.Name, listName = playlist.Name, listType = "Playlist", status = "imported", message });
                             importedPlaylistCount++;
 
-                            logger.LogDebug("Imported playlist {PlaylistName} (ID: {PlaylistId}) from {FileName}",
-                                playlist.Name, playlist.Id, entry.Name);
+                            logger.LogDebug("Imported playlist {PlaylistName} (ID: {PlaylistId}) from {FileName} with {ImageCount} images",
+                                playlist.Name, playlist.Id, configEntry.Name, imageCount);
                         }
                         else if (listType == Core.Enums.SmartListType.Collection)
                         {
@@ -2754,16 +2923,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             if (collection == null || string.IsNullOrEmpty(collection.Id))
                             {
                                 logger.LogWarning("Invalid collection data in file {FileName}: {Issue}",
-                                    entry.Name, collection == null ? "null collection" : "empty ID");
-                                importResults.Add(new { fileName = entry.Name, status = "error", message = "Invalid or empty collection data" });
+                                    configEntry.Name, collection == null ? "null collection" : "empty ID");
+                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Invalid or empty collection data" });
                                 errorCount++;
                                 continue;
                             }
 
                             if (string.IsNullOrWhiteSpace(collection.Name))
                             {
-                                logger.LogWarning("Collection in file {FileName} has no name", entry.Name);
-                                importResults.Add(new { fileName = entry.Name, status = "error", message = "Collection must have a name" });
+                                logger.LogWarning("Collection in file {FileName} has no name", configEntry.Name);
+                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Collection must have a name" });
                                 errorCount++;
                                 continue;
                             }
@@ -2789,7 +2958,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                                         {
                                             logger.LogWarning("Collection '{CollectionName}' references non-existent user {User} but cannot determine importing user for reassignment",
                                                 collection.Name, collection.UserId);
-                                            importResults.Add(new { fileName = entry.Name, status = "error", message = "Cannot reassign collection - unable to determine importing user" });
+                                            importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Cannot reassign collection - unable to determine importing user" });
                                             errorCount++;
                                             continue; // Skip this entire collection,
                                         }
@@ -2811,7 +2980,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                             if (existingCollectionIds.Contains(collection.Id))
                             {
-                                importResults.Add(new { fileName = entry.Name, listName = collection.Name, listType = "Collection", status = "skipped", message = "Collection with this ID already exists" });
+                                importResults.Add(new { fileName = configEntry.Name, listName = collection.Name, listType = "Collection", status = "skipped", message = "Collection with this ID already exists" });
                                 skippedCount++;
                                 continue;
                             }
@@ -2819,20 +2988,25 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             // Import the collection
                             await collectionStore.SaveAsync(collection);
 
+                            // Extract any image files for this collection
+                            var imageCount = await ExtractImagesForSmartListAsync(entries, collection.Id, fileSystem);
+                            importedImageCount += imageCount;
+
                             // Update the auto-refresh cache with the imported collection
                             AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
 
-                            importResults.Add(new { fileName = entry.Name, listName = collection.Name, listType = "Collection", status = "imported", message = "Successfully imported" });
+                            var message = imageCount > 0 ? $"Successfully imported with {imageCount} image(s)" : "Successfully imported";
+                            importResults.Add(new { fileName = configEntry.Name, listName = collection.Name, listType = "Collection", status = "imported", message });
                             importedCollectionCount++;
 
-                            logger.LogDebug("Imported collection {CollectionName} (ID: {CollectionId}) from {FileName}",
-                                collection.Name, collection.Id, entry.Name);
+                            logger.LogDebug("Imported collection {CollectionName} (ID: {CollectionId}) from {FileName} with {ImageCount} images",
+                                collection.Name, collection.Id, configEntry.Name, imageCount);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "Error importing smart list from {FileName}", entry.Name);
-                        importResults.Add(new { fileName = entry.Name, status = "error", message = ex.Message });
+                        logger.LogWarning(ex, "Error importing smart list from {FileName}", configEntry.FullName);
+                        importResults.Add(new { fileName = configEntry.Name, status = "error", message = ex.Message });
                         errorCount++;
                     }
                 }
@@ -2840,17 +3014,18 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var totalImported = importedPlaylistCount + importedCollectionCount;
                 var summary = new
                 {
-                    totalFiles = archive.Entries.Count(e => e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)),
+                    totalLists = entriesByListId.Count,
                     imported = totalImported,
                     importedPlaylists = importedPlaylistCount,
                     importedCollections = importedCollectionCount,
+                    importedImages = importedImageCount,
                     skipped = skippedCount,
                     errors = errorCount,
                     details = importResults,
                 };
 
-                logger.LogInformation("Import completed: {Imported} imported ({Playlists} playlists, {Collections} collections), {Skipped} skipped, {Errors} errors",
-                    totalImported, importedPlaylistCount, importedCollectionCount, skippedCount, errorCount);
+                logger.LogInformation("Import completed: {Imported} imported ({Playlists} playlists, {Collections} collections, {Images} images), {Skipped} skipped, {Errors} errors",
+                    totalImported, importedPlaylistCount, importedCollectionCount, importedImageCount, skippedCount, errorCount);
 
                 return Ok(summary);
             }

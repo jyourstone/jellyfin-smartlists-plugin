@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Abstractions;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -106,52 +107,38 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
             // Normalize ID to canonical GUID string for consistent file lookups
             smartPlaylist.Id = parsedId.ToString();
-            var fileName = smartPlaylist.Id;
-            smartPlaylist.FileName = $"{fileName}.json";
+            smartPlaylist.FileName = "config.json";
 
-            var filePath = _fileSystem.GetSmartListPath(fileName);
-            var tempPath = filePath + ".tmp";
-
-            // Check if this playlist exists in the legacy directory (for migration)
-            var legacyPath = _fileSystem.GetLegacyPath(fileName);
-            bool existsInLegacy = File.Exists(legacyPath);
+            // New unified folder structure: /smartlists/{guid}/config.json
+            var folderPath = _fileSystem.GetSmartListFolderPath(smartPlaylist.Id);
+            var configPath = _fileSystem.GetSmartListConfigPath(smartPlaylist.Id);
+            var tempPath = configPath + ".tmp";
 
             try
             {
+                // Ensure folder exists
+                Directory.CreateDirectory(folderPath);
+
                 await using (var writer = File.Create(tempPath))
                 {
                     await JsonSerializer.SerializeAsync(writer, smartPlaylist, SmartListFileSystem.SharedJsonOptions).ConfigureAwait(false);
                     await writer.FlushAsync().ConfigureAwait(false);
                 }
 
-
-                if (File.Exists(filePath))
+                if (File.Exists(configPath))
                 {
                     // Replace is atomic on the same volume
-                    File.Replace(tempPath, filePath, null);
+                    File.Replace(tempPath, configPath, null);
                 }
                 else
                 {
-                    File.Move(tempPath, filePath);
+                    File.Move(tempPath, configPath);
                 }
 
-                _logger?.LogDebug("PlaylistStore.SaveAsync: File written successfully to {FilePath}", filePath);
+                _logger?.LogDebug("PlaylistStore.SaveAsync: File written successfully to {FilePath}", configPath);
 
-                // After successfully saving to new location, delete legacy file if it exists
-                // This migrates the playlist from old directory to new directory
-                if (existsInLegacy)
-                {
-                    try
-                    {
-                        File.Delete(legacyPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log but don't fail the save operation if legacy deletion fails
-                        // The file will be in both locations, but the new location takes precedence
-                        System.Diagnostics.Debug.WriteLine($"Warning: Failed to delete legacy playlist file {legacyPath}: {ex.Message}");
-                    }
-                }
+                // Clean up all legacy locations after successful save
+                CleanupLegacyLocations(smartPlaylist.Id);
             }
             finally
             {
@@ -170,24 +157,45 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 throw new ArgumentException("Playlist ID cannot be empty", nameof(id));
             }
 
-            // Use the passed Guid id parameter (converted to string) to construct the filename
-            // This avoids deserializing file content and prevents potential security issues
-            var fileName = id.ToString();
+            var smartListId = id.ToString();
 
-            var filePath = _fileSystem.GetSmartListPath(fileName);
-            if (File.Exists(filePath))
+            // Delete the entire folder (new unified structure)
+            var folderPath = _fileSystem.GetSmartListFolderPath(smartListId);
+            if (Directory.Exists(folderPath))
             {
-                File.Delete(filePath);
+                try
+                {
+                    Directory.Delete(folderPath, recursive: true);
+                    _logger?.LogDebug("Deleted playlist folder {FolderPath}", folderPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to delete playlist folder {FolderPath}", folderPath);
+                }
             }
 
-            // Also check legacy directory
-            var legacyPath = _fileSystem.GetLegacyPath(fileName);
-            if (File.Exists(legacyPath))
-            {
-                File.Delete(legacyPath);
-            }
+            // Also clean up legacy locations
+            CleanupLegacyLocations(smartListId);
 
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Cleans up legacy file locations after migration or deletion.
+        /// </summary>
+        private void CleanupLegacyLocations(string smartListId)
+        {
+            // Clean flat file: /smartlists/{guid}.json
+            var flatPath = _fileSystem.GetSmartListPath(smartListId);
+            FileSystemHelper.SafeDeleteFile(flatPath, _logger);
+
+            // Clean legacy file: /smartplaylists/{guid}.json
+            var legacyPath = _fileSystem.GetLegacyPath(smartListId);
+            FileSystemHelper.SafeDeleteFile(legacyPath, _logger);
+
+            // Clean legacy images folder: /smartlists/images/{guid}/
+            var legacyImagesPath = Path.Combine(_fileSystem.BasePath, "images", smartListId);
+            FileSystemHelper.SafeDeleteDirectory(legacyImagesPath, _logger);
         }
 
         /// <summary>
