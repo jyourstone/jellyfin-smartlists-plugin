@@ -25,7 +25,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     new { Value = "ProductionYear", Label = "Production Year" },
                     new { Value = "ReleaseDate", Label = "Release Date" },
                     new { Value = "LastEpisodeAirDate", Label = "Last Episode Air Date" },
-                    new { Value = "ProductionLocations", Label = "Production Location" }
+                    new { Value = "ProductionLocations", Label = "Production Locations" }
                     // Note: ItemType (Media Type) is intentionally excluded from UI fields
                     // because users select media type (Audio/Video) before creating rules
                 },

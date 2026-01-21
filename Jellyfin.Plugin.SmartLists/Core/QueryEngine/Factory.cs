@@ -1509,7 +1509,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                 if (mostRecentAirDate.HasValue)
                 {
-                    operand.LastEpisodeAirDate = new DateTimeOffset(mostRecentAirDate.Value).ToUnixTimeSeconds();
+                    operand.LastEpisodeAirDate = SafeToUnixTimeSeconds(mostRecentAirDate.Value);
                     logger?.LogDebug("Extracted last episode air date for series '{SeriesName}': {Date}",
                         series.Name, mostRecentAirDate.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                 }
