@@ -83,8 +83,8 @@ The web interface provides access to all available fields for creating list rule
 
 ### Collection Fields
 
-- **Collections** - Jellyfin collections
-- **Playlists** - Jellyfin playlists
+- **Collection name** - Jellyfin collections
+- **Playlist name** - Jellyfin playlists
 - **Genres** - Content genres
 - **Studios** - Production studios
 - **Tags** - Custom tags assigned to media items
@@ -127,47 +127,50 @@ When using the **Next Unwatched** field, you can configure:
 
 - **Include unwatched series** (default: Yes) - When enabled, includes the first episode of series that haven't been started yet. When disabled, only shows the next episode from series that have been partially watched.
 
-### Collections Options
+### Collection Name Options
 
-The **Collections** field allows you to filter items based on which Jellyfin collections they belong to. The behavior differs depending on whether you're creating a Playlist or a Collection:
+The **Collection name** field allows you to filter items based on which Jellyfin collections they belong to. The behavior differs depending on whether you're creating a Playlist or a Collection:
 
 **For Playlists:**
 - Items *from within* the specified collections are always fetched and added to the playlist
 - Playlists cannot contain collection objects themselves (Jellyfin limitation)
-- Example: A playlist with "Collections contains Marvel" will include all movies/episodes from your Marvel collection
+- Example: A playlist with "Collection name contains Marvel" will include all movies/episodes from your Marvel collection
 
 **For Collections:**
 - By default, items *from within* the specified collections are fetched (same as playlists)
 - Optionally, you can include the collection objects themselves instead (see options below)
-- Example: A collection with "Collections contains Marvel" can either contain the movies from Marvel collection, or the Marvel collection object itself
+- Example: A collection with "Collection name contains Marvel" can either contain the movies from Marvel collection, or the Marvel collection object itself
 
 **Available Options:**
 
-- **Include collection only** (Collections only, default: No) - When enabled, the collection object itself is included instead of its contents. This allows you to create "collections of collections" (meta-collections). **Important:** When this option is enabled, your selected media types are ignored for this rule, since you're fetching collection objects rather than media items.
-- **Include episodes within series** (Playlists with Episode media type, default: No) - When enabled, individual episodes from series in collections are included. When disabled, only the series themselves are included in the collection match. This option is hidden when "Include collection only" is enabled.
+- **Include collections only** (Collections only, default: No) - When enabled, the collection object itself is included instead of its contents. This allows you to create "collections of collections" (meta-collections). **Important:** When this option is enabled, your selected media types are ignored for this rule, since you're fetching collection objects rather than media items.
+- **Include episodes within series** (Playlists with Episode media type, default: No) - When enabled, individual episodes from series in collections are included. When disabled, only the series themselves are included in the collection match. This option is hidden when "Include collections only" is enabled.
+
+!!! tip "Nested Collections"
+    To traverse nested collections (collections containing other collections), set the **Collection Search Depth** option for your list. See [Collection Search Depth](#collection-search-depth) below for details.
 
 !!! important "Self-Reference Prevention"
     A smart collection will **never include itself** in its results, even if it matches the rule criteria. This prevents circular references and infinite loops.
-    
-    **Example:** If you create a smart collection called "Marvel Collection" (or "My Marvel Collection - Smart" with a prefix/suffix) and use the rule "Collections contains Marvel", the system will:
+
+    **Example:** If you create a smart collection called "Marvel Collection" (or "My Marvel Collection - Smart" with a prefix/suffix) and use the rule "Collection name contains Marvel", the system will:
     - ✅ Include other collections that match "Marvel" (e.g., a regular Jellyfin collection named "Marvel")
     - ❌ **Exclude itself** from the results, even though it technically matches the pattern
-    
+
     The system compares the base names (after removing any configured prefix/suffix) to detect and prevent self-reference. This means you can safely create smart collections with names that match your collection rules without worrying about them including themselves.
 
-### Playlists Options
+### Playlist Name Options
 
-The **Playlists** field allows you to filter items based on which Jellyfin playlists they belong to. The behavior differs depending on whether you're creating a Playlist or a Collection:
+The **Playlist name** field allows you to filter items based on which Jellyfin playlists they belong to. The behavior differs depending on whether you're creating a Playlist or a Collection:
 
 **For Playlists:**
 - Items *from within* the specified playlists are always fetched and added to the playlist
 - This allows you to create "super playlists" that combine content from multiple existing playlists
-- Example: A playlist with "Playlists contains favorite" will include all items from any playlist whose name contains "favorite"
+- Example: A playlist with "Playlist name contains favorite" will include all items from any playlist whose name contains "favorite"
 
 **For Collections:**
 - By default, items *from within* the specified playlists are fetched (same as playlists)
 - Optionally, you can include the playlist objects themselves instead (see options below)
-- Example: A collection with "Playlists contains favorite" can either contain the media items from those playlists, or the playlist objects themselves
+- Example: A collection with "Playlist name contains favorite" can either contain the media items from those playlists, or the playlist objects themselves
 
 **Available Options:**
 
@@ -203,6 +206,51 @@ When using **Tags**, **Studios**, or **Genres** fields with episodes selected as
 - **Include parent series genres** (Genres field only, default: No) - When enabled, episodes will match if either the episode or its parent series has the specified genre.
 
 These options are useful when series-level metadata is more complete than episode-level metadata, or when you want to match episodes based on series characteristics.
+
+### Collection Search Depth {#collection-search-depth}
+
+Collections in Jellyfin can contain other collections, creating nested hierarchies (e.g., "Marvel" collection containing "Phase 1", "Phase 2" sub-collections). The **Collection Search Depth** setting controls how deep SmartLists traverses these nested collections when evaluating rules.
+
+This is a **per-rule setting** that appears within the Collection name rule options.
+
+**Depth Values:**
+
+| Value | Behavior |
+|-------|----------|
+| 0 | No traversal - only matches items directly in the specified collection (default) |
+| 1 | Direct children - looks one level deep into nested collections |
+| 2+ | Nested levels - continues traversing up to the specified depth |
+
+**What It Affects:**
+
+- **Rule evaluation**: When using the Collection name field, this depth determines how deep to search within nested collections
+- **Sorting by child values**: When sorting collections by fields like Date Created, Production Year, or Community Rating, this depth controls how deep to aggregate values from nested collections. For ascending sorts, the minimum value from all children is used; for descending sorts, the maximum value is used.
+
+**Example:**
+
+Suppose you have this collection structure:
+```
+Level one (collection)
+├── Level two (collection)
+│   ├── Level three (collection)
+│   │   ├── Movie A
+│   │   ├── Movie B
+│   │   └── Movie C
+│   └── Movie D
+└── Movie E
+```
+
+With a rule "Collection name contains one":
+
+- **Depth 0**: Only finds "Movie E" (directly in Level one)
+- **Depth 1**: Finds "Movie D" and "Movie E" (Level one + Level two contents)
+- **Depth 2**: Finds all movies A through E (Level one + Level two + Level three contents)
+
+!!! warning "Performance Consideration"
+    Higher search depths require more database queries and processing time. For libraries with deeply nested collections, start with depth 0 and only increase if you specifically need to traverse nested collection hierarchies.
+
+!!! note "Playlists Don't Support Nesting"
+    Unlike collections, Jellyfin playlists can only contain media items, not other playlists or collections. However, when using the Collection name rule to search for items within collections, the depth setting still applies regardless of whether you're creating a Playlist or Collection.
 
 ### Audio Languages Options
 

@@ -23,6 +23,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         private readonly Order _innerOrder;
         private readonly bool _isDescending;
         private readonly string _sortField;
+        private readonly int _recursionDepth;
 
         public override string Name => _innerOrder.Name + " (Child Aggregate)";
 
@@ -33,11 +34,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <param name="innerOrder">The base order to wrap (e.g., DateCreatedOrder).</param>
         /// <param name="isDescending">Whether the sort is descending.</param>
         /// <param name="sortField">The field being sorted (ProductionYear, CommunityRating, DateCreated, ReleaseDate).</param>
-        public ChildAggregatingOrder(Order innerOrder, bool isDescending, string sortField)
+        /// <param name="recursionDepth">How many levels deep to traverse nested collections/playlists (0-10, default 0). 0 means no recursion.</param>
+        public ChildAggregatingOrder(Order innerOrder, bool isDescending, string sortField, int recursionDepth = 0)
         {
             _innerOrder = innerOrder ?? throw new ArgumentNullException(nameof(innerOrder));
             _isDescending = isDescending;
             _sortField = sortField ?? throw new ArgumentNullException(nameof(sortField));
+            _recursionDepth = Math.Max(0, Math.Min(10, recursionDepth));
         }
 
         /// <summary>
@@ -54,10 +57,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             Dictionary<Guid, int>? itemRandomKeys = null,
             RefreshQueueService.RefreshCache? refreshCache = null)
         {
-            // Check if item is a Collection (BoxSet) or Playlist
-            if (IsCollectionOrPlaylist(item) && refreshCache != null)
+            // Check if item is a Collection (BoxSet) or Playlist and recursion is enabled
+            // _recursionDepth of 0 means no child traversal - just use the item's own value
+            if (_recursionDepth > 0 && IsCollectionOrPlaylist(item) && refreshCache != null)
             {
-                var childItems = GetChildItems(item, user, refreshCache, logger);
+                var childItems = GetChildItemsRecursive(item, user, refreshCache, logger, 1, _recursionDepth, []);
 
                 if (childItems != null && childItems.Length > 0)
                 {
@@ -116,9 +120,74 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Gets child items for a Collection or Playlist using the cache or reflection.
+        /// Gets child items recursively for a Collection or Playlist, traversing nested collections/playlists
+        /// up to the specified depth.
         /// </summary>
-        private static BaseItem[]? GetChildItems(BaseItem item, User user, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+        /// <param name="item">The collection or playlist to get children from.</param>
+        /// <param name="user">The user context.</param>
+        /// <param name="refreshCache">Cache for child items.</param>
+        /// <param name="logger">Logger for debugging.</param>
+        /// <param name="currentDepth">Current recursion depth (starts at 1).</param>
+        /// <param name="maxDepth">Maximum depth to traverse.</param>
+        /// <param name="visitedIds">Set of already visited item IDs to prevent circular references.</param>
+        /// <returns>Array of all child items found up to maxDepth.</returns>
+        private static BaseItem[] GetChildItemsRecursive(
+            BaseItem item,
+            User user,
+            RefreshQueueService.RefreshCache refreshCache,
+            ILogger? logger,
+            int currentDepth,
+            int maxDepth,
+            HashSet<Guid> visitedIds)
+        {
+            // Circular reference protection
+            if (visitedIds.Contains(item.Id))
+            {
+                logger?.LogDebug("ChildAggregatingOrder: Circular reference detected for '{ItemName}', skipping", item.Name);
+                return [];
+            }
+            visitedIds.Add(item.Id);
+
+            // Get direct children
+            var directChildren = GetDirectChildItems(item, user, refreshCache, logger);
+            if (directChildren == null || directChildren.Length == 0)
+            {
+                return [];
+            }
+
+            // If we're at max depth or depth is 1, just return direct children
+            if (currentDepth >= maxDepth)
+            {
+                return directChildren;
+            }
+
+            // Otherwise, recursively get children from nested collections/playlists
+            var allChildren = new List<BaseItem>(directChildren);
+
+            foreach (var child in directChildren)
+            {
+                if (IsCollectionOrPlaylist(child))
+                {
+                    var nestedChildren = GetChildItemsRecursive(
+                        child,
+                        user,
+                        refreshCache,
+                        logger,
+                        currentDepth + 1,
+                        maxDepth,
+                        visitedIds);
+
+                    allChildren.AddRange(nestedChildren);
+                }
+            }
+
+            return [.. allChildren];
+        }
+
+        /// <summary>
+        /// Gets direct child items for a Collection or Playlist using the cache or reflection.
+        /// </summary>
+        private static BaseItem[]? GetDirectChildItems(BaseItem item, User user, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             var itemId = item.Id;
             var itemKind = item.GetBaseItemKind();
@@ -167,7 +236,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
                         {
                             childItems = [.. linkedEnumerable];
-                            logger?.LogDebug("ChildAggregatingOrder: '{ItemName}' GetLinkedChildren() returned {Count} items", item.Name, childItems.Length);
+                            var childNames = string.Join(", ", childItems.Select(c => c.Name + " (" + c.ProductionYear + ")"));
+                            logger?.LogDebug("ChildAggregatingOrder: '{ItemName}' GetLinkedChildren() returned {Count} items: [{ChildNames}]", item.Name, childItems.Length, childNames);
                         }
                     }
                 }
@@ -192,8 +262,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Aggregates child item values based on the sort field.
-        /// Uses Max() for all supported fields to get the "most recent" or "highest" value.
+        /// Aggregates child item values based on the sort field and sort direction.
+        /// Uses Min() for ascending sorts (earliest/lowest first) and Max() for descending sorts (latest/highest first).
+        /// This ensures consistent ordering when collections have overlapping value ranges.
         /// </summary>
         private IComparable? AggregateChildValues(
             BaseItem[] childItems,
@@ -211,21 +282,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         .Select(c => c.ProductionYear ?? 0)
                         .Where(y => y > 0)
                         .ToList();
-                    return years.Count > 0 ? years.Max() : (IComparable?)null;
+                    if (years.Count == 0) return null;
+                    // For ascending, use Min (earliest year first); for descending, use Max (latest year first)
+                    return _isDescending ? years.Max() : years.Min();
 
                 case "CommunityRating":
                     var ratings = childItems
                         .Select(c => c.CommunityRating ?? 0f)
                         .Where(r => r > 0)
                         .ToList();
-                    return ratings.Count > 0 ? ratings.Max() : (IComparable?)null;
+                    if (ratings.Count == 0) return null;
+                    // For ascending, use Min (lowest rating first); for descending, use Max (highest rating first)
+                    return _isDescending ? ratings.Max() : ratings.Min();
 
                 case "DateCreated":
                     var createdDates = childItems
                         .Select(c => c.DateCreated)
                         .Where(d => d > DateTime.MinValue)
                         .ToList();
-                    return createdDates.Count > 0 ? createdDates.Max() : (IComparable?)null;
+                    if (createdDates.Count == 0) return null;
+                    // For ascending, use Min (oldest first); for descending, use Max (newest first)
+                    return _isDescending ? createdDates.Max() : createdDates.Min();
 
                 case "ReleaseDate":
                     var releaseDates = childItems
@@ -236,8 +313,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     // Use (ticks, 1, 0, 0) to place aggregated collections after episodes on same date
                     if (releaseDates.Count > 0)
                     {
-                        var maxDate = releaseDates.Max();
-                        return new ComparableTuple4<long, int, int, int>(maxDate.Date.Ticks, 1, 0, 0);
+                        // For ascending, use Min (earliest first); for descending, use Max (latest first)
+                        var aggregatedDate = _isDescending ? releaseDates.Max() : releaseDates.Min();
+                        return new ComparableTuple4<long, int, int, int>(aggregatedDate.Date.Ticks, 1, 0, 0);
                     }
                     return null;
 

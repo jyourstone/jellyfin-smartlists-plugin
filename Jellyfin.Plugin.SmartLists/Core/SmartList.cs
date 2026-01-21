@@ -24,8 +24,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public string? FileName { get; set; }
         public Guid UserId { get; set; }
         public List<Order> Orders { get; set; }
-        public List<SortOption>? SortOptions { get; set; }  // Original sort options with UseChildValues flag
+        public List<SortOption>? SortOptions { get; set; }  // Original sort options (legacy: UseChildValues flag removed)
         public List<string>? MediaTypes { get; set; }
+        public int CollectionSearchDepth { get; set; }  // Depth for traversing nested collections/playlists (0 = no recursion, 1-10 = levels)
         public List<ExpressionSet> ExpressionSets { get; set; }
         public int MaxItems { get; set; }
         public int MaxPlayTimeMinutes { get; set; }
@@ -149,6 +150,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
             {
                 ExpressionSets = [];
             }
+
+            // Extract CollectionSearchDepth from the first Collections expression that has it set
+            // This is now stored per-rule instead of list-level for more granular control
+            CollectionSearchDepth = ExtractCollectionSearchDepthFromExpressions(dto.ExpressionSets) ?? 0;
         }
 
         private List<List<Func<Operand, bool>>> CompileRuleSets(string? defaultUserId = null, ILogger? logger = null)
@@ -699,6 +704,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var needsPeople = false;
                 var needsCollections = false;
                 var needsPlaylists = false;
+                // Use list-level CollectionSearchDepth (minimum 1 for collection extraction to work)
+                var collectionRecursionDepth = Math.Max(1, CollectionSearchDepth);
                 var needsNextUnwatched = false;
                 var needsSeriesName = false;
                 var needsParentSeriesTags = false;
@@ -724,6 +731,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         needsPeople = fieldReqs.NeedsPeople;
                         needsCollections = fieldReqs.NeedsCollections;
                         needsPlaylists = fieldReqs.NeedsPlaylists;
+                        // Note: collectionRecursionDepth is set from list-level CollectionSearchDepth above
                         needsNextUnwatched = fieldReqs.NeedsNextUnwatched;
                         needsSeriesName = fieldReqs.NeedsSeriesName;
                         needsParentSeriesTags = fieldReqs.NeedsParentSeriesTags;
@@ -1315,7 +1323,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private List<BaseItem> GetMatchingCollections(ILibraryManager libraryManager, User user, ILogger? logger)
         {
             var matchingCollections = new List<BaseItem>();
-            
+
             try
             {
                 // Query all collections (BoxSet items)
@@ -1326,7 +1334,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 };
 
                 var allCollections = libraryManager.GetItemsResult(collectionQuery).Items;
+                var allCollectionsById = allCollections.ToDictionary(c => c.Id);
                 logger?.LogDebug("Found {Count} total collections to check against Collections rules with IncludeCollectionOnly=true", allCollections.Count);
+
+                // Get max recursion depth from Collections rules with IncludeCollectionOnly=true
+                var maxRecursionDepth = GetMaxCollectionRecursionDepth();
+                logger?.LogDebug("Using recursion depth {Depth} for IncludeCollectionOnly mode", maxRecursionDepth);
+
+                // Track visited collections to prevent duplicates and circular references
+                var visitedCollectionIds = new HashSet<Guid>();
+                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
 
                 // Check each collection against Collections rules with IncludeCollectionOnly=true
                 foreach (var collection in allCollections)
@@ -1335,7 +1352,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                     // Skip if this collection is the same as the one we're currently building (prevent self-reference)
                     var collectionBaseName = NameFormatter.StripPrefixAndSuffix(collection.Name);
-                    var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
                     if (collectionBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
                     {
                         logger?.LogDebug("Skipping collection '{CollectionName}' - matches current collection being built (preventing self-reference)", collection.Name);
@@ -1346,12 +1362,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     var collectionNames = new List<string> { collection.Name };
                     if (DoCollectionsMatchRulesForIncludeCollectionOnly(collectionNames))
                     {
-                        matchingCollections.Add(collection);
-                        logger?.LogDebug("Collection '{CollectionName}' matches Collections rules with IncludeCollectionOnly=true", collection.Name);
+                        // Add this collection and recursively add nested collections
+                        AddCollectionWithNestedCollections(
+                            collection,
+                            matchingCollections,
+                            visitedCollectionIds,
+                            allCollectionsById,
+                            user,
+                            logger,
+                            0,  // Start at depth 0 (root level)
+                            maxRecursionDepth,
+                            currentListBaseName);
                     }
                 }
 
-                logger?.LogDebug("Found {Count} matching collections out of {TotalCount} total collections",
+                logger?.LogDebug("Found {Count} matching collections (including nested) out of {TotalCount} total collections",
                     matchingCollections.Count, allCollections.Count);
             }
             catch (Exception ex)
@@ -1360,6 +1385,112 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
 
             return matchingCollections;
+        }
+
+        /// <summary>
+        /// Recursively adds a collection and its nested collections up to the specified depth.
+        /// </summary>
+        private static void AddCollectionWithNestedCollections(
+            BaseItem collection,
+            List<BaseItem> matchingCollections,
+            HashSet<Guid> visitedCollectionIds,
+            Dictionary<Guid, BaseItem> allCollectionsById,
+            User user,
+            ILogger? logger,
+            int currentDepth,
+            int maxDepth,
+            string currentListBaseName)
+        {
+            // Circular reference protection
+            if (visitedCollectionIds.Contains(collection.Id))
+            {
+                logger?.LogDebug("Skipping collection '{CollectionName}' - already visited (preventing circular reference)", collection.Name);
+                return;
+            }
+            visitedCollectionIds.Add(collection.Id);
+
+            // Add this collection
+            matchingCollections.Add(collection);
+            logger?.LogDebug("Collection '{CollectionName}' matches Collections rules with IncludeCollectionOnly=true (depth={Depth})", collection.Name, currentDepth);
+
+            // If we haven't reached max depth, look for nested collections
+            if (currentDepth < maxDepth)
+            {
+                var childItems = GetCollectionChildren(collection, user, logger);
+                foreach (var child in childItems)
+                {
+                    // Check if child is a collection
+                    if (child.GetBaseItemKind() == BaseItemKind.BoxSet && allCollectionsById.ContainsKey(child.Id))
+                    {
+                        // Skip if matches current list being built
+                        var childBaseName = NameFormatter.StripPrefixAndSuffix(child.Name);
+                        if (childBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        AddCollectionWithNestedCollections(
+                            child,
+                            matchingCollections,
+                            visitedCollectionIds,
+                            allCollectionsById,
+                            user,
+                            logger,
+                            currentDepth + 1,
+                            maxDepth,
+                            currentListBaseName);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets children of a collection using reflection.
+        /// </summary>
+        private static BaseItem[] GetCollectionChildren(BaseItem collection, User user, ILogger? logger)
+        {
+            try
+            {
+                // Try GetChildren method
+                var getChildrenMethod = collection.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
+                if (getChildrenMethod != null)
+                {
+                    var children = getChildrenMethod.Invoke(collection, [user, true]);
+                    if (children is IEnumerable<BaseItem> childrenEnumerable)
+                    {
+                        return [.. childrenEnumerable];
+                    }
+                }
+
+                // Try GetLinkedChildren method
+                var getLinkedChildrenMethod = collection.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
+                if (getLinkedChildrenMethod != null)
+                {
+                    var linkedChildren = getLinkedChildrenMethod.Invoke(collection, null);
+                    if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
+                    {
+                        return [.. linkedEnumerable];
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "Error getting children for collection '{CollectionName}'", collection.Name);
+            }
+
+            return [];
+        }
+
+        /// <summary>
+        /// Gets the collection search depth for IncludeCollectionOnly mode.
+        /// Uses the list-level CollectionSearchDepth setting.
+        /// </summary>
+        private int GetMaxCollectionRecursionDepth()
+        {
+            // Use list-level CollectionSearchDepth directly
+            // depth=0 means only matched collections, no nested collections
+            // depth=1+ means include nested collections up to that depth
+            return CollectionSearchDepth;
         }
 
         /// <summary>
@@ -1383,6 +1514,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         /// <summary>
         /// Gets playlists that match Playlists rules when IncludePlaylistOnly is enabled.
+        /// Note: Playlists in Jellyfin are flat - they cannot contain other playlists or collections.
+        /// Therefore, no recursion is needed; we simply find playlists that match the rule criteria.
         /// </summary>
         /// <param name="libraryManager">Library manager to query playlists</param>
         /// <param name="user">User context</param>
@@ -1391,7 +1524,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private List<BaseItem> GetMatchingPlaylists(ILibraryManager libraryManager, User user, ILogger? logger)
         {
             var matchingPlaylists = new List<BaseItem>();
-            
+
             try
             {
                 // Query all playlists
@@ -1404,6 +1537,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var allPlaylists = libraryManager.GetItemsResult(playlistQuery).Items;
                 logger?.LogDebug("Found {Count} total playlists to check against Playlists rules with IncludePlaylistOnly=true", allPlaylists.Count);
 
+                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
+
                 // Check each playlist against Playlists rules with IncludePlaylistOnly=true
                 foreach (var playlist in allPlaylists)
                 {
@@ -1411,7 +1546,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                     // Skip if this playlist is the same as the one we're currently building (prevent self-reference)
                     var playlistBaseName = NameFormatter.StripPrefixAndSuffix(playlist.Name);
-                    var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
                     if (playlistBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
                     {
                         logger?.LogDebug("Skipping playlist '{PlaylistName}' - matches current list being built (preventing self-reference)", playlist.Name);
@@ -1520,6 +1654,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     ExtractAudioLanguages = false,
                     ExtractPeople = false,
                     ExtractCollections = true,  // Only extract Collections for this check
+                    CollectionRecursionDepth = CollectionSearchDepth,
                     ExtractNextUnwatched = false,
                     ExtractSeriesName = false,
                     IncludeUnwatchedSeries = true,
@@ -1743,6 +1878,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             ExtractVideoQuality = needsVideoQuality,
                             ExtractPeople = needsPeople,
                             ExtractCollections = needsCollections,
+                            CollectionRecursionDepth = CollectionSearchDepth,
                             ExtractPlaylists = needsPlaylists,
                             ExtractNextUnwatched = needsNextUnwatched,
                             ExtractSeriesName = needsSeriesName,
@@ -1827,14 +1963,19 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return orders;
             }
 
-            // Check if any SortOption has UseChildValues enabled
-            var hasChildAggregation = SortOptions.Any(so => so.UseChildValues && ChildAggregatingOrder.IsSupportedSortField(so.SortBy));
-            if (!hasChildAggregation)
+            // Child aggregation is enabled when CollectionSearchDepth > 0 and at least one sort field supports it
+            if (CollectionSearchDepth <= 0)
             {
                 return orders;
             }
 
-            logger?.LogDebug("Wrapping orders with child aggregation (UseChildValues enabled)");
+            var hasAggregableFields = SortOptions.Any(so => ChildAggregatingOrder.IsSupportedSortField(so.SortBy));
+            if (!hasAggregableFields)
+            {
+                return orders;
+            }
+
+            logger?.LogDebug("Wrapping orders with child aggregation (CollectionSearchDepth={Depth})", CollectionSearchDepth);
 
             var wrappedOrders = new List<Order>();
             for (int i = 0; i < orders.Count; i++)
@@ -1846,14 +1987,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     var sortOption = SortOptions[i];
 
-                    // Wrap if UseChildValues is enabled and field is supported
-                    if (sortOption.UseChildValues && ChildAggregatingOrder.IsSupportedSortField(sortOption.SortBy))
+                    // Wrap if field is supported for child value aggregation
+                    if (ChildAggregatingOrder.IsSupportedSortField(sortOption.SortBy))
                     {
                         var isDescending = IsDescendingOrder(order);
-                        var wrappedOrder = new ChildAggregatingOrder(order, isDescending, sortOption.SortBy);
+                        var wrappedOrder = new ChildAggregatingOrder(order, isDescending, sortOption.SortBy, CollectionSearchDepth);
                         wrappedOrders.Add(wrappedOrder);
-                        logger?.LogDebug("  Wrapped order #{Index} ({OrderName}) with child aggregation for field {Field}",
-                            i + 1, order.Name, sortOption.SortBy);
+                        logger?.LogDebug("  Wrapped order #{Index} ({OrderName}) with child aggregation for field {Field} (depth={Depth})",
+                            i + 1, order.Name, sortOption.SortBy, CollectionSearchDepth);
                         continue;
                     }
                 }
@@ -2198,6 +2339,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     ExtractVideoQuality = needsVideoQuality,
                                     ExtractPeople = needsPeople,
                                     ExtractCollections = needsCollections,
+                                    CollectionRecursionDepth = CollectionSearchDepth,
                                     ExtractPlaylists = needsPlaylists,
                                     ExtractNextUnwatched = needsNextUnwatched,
                                     ExtractSeriesName = needsSeriesName,
@@ -2425,6 +2567,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     ExtractVideoQuality = needsVideoQuality,
                                     ExtractPeople = needsPeople,
                                     ExtractCollections = needsCollections,
+                                    CollectionRecursionDepth = CollectionSearchDepth,
                                     ExtractPlaylists = needsPlaylists,
                                     ExtractNextUnwatched = needsNextUnwatched,
                                     ExtractSeriesName = needsSeriesName,
@@ -2605,6 +2748,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             ExtractVideoQuality = needsVideoQuality,
                             ExtractPeople = needsPeople,
                             ExtractCollections = needsCollections,
+                            CollectionRecursionDepth = CollectionSearchDepth,
                             ExtractPlaylists = needsPlaylists,
                             ExtractNextUnwatched = needsNextUnwatched,
                             ExtractSeriesName = needsSeriesName,
@@ -2721,6 +2865,37 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // {
         //     // Future enhancement: Add validation for constructor input
         // }
+
+        /// <summary>
+        /// Extracts the CollectionSearchDepth from the first Collections expression that has it set.
+        /// This allows per-rule control of collection traversal depth.
+        /// </summary>
+        /// <param name="expressionSets">The expression sets to search</param>
+        /// <returns>The depth value if found, null otherwise</returns>
+        private static int? ExtractCollectionSearchDepthFromExpressions(List<ExpressionSet>? expressionSets)
+        {
+            if (expressionSets == null || expressionSets.Count == 0)
+            {
+                return null;
+            }
+
+            // Find the first Collections expression that has CollectionSearchDepth set
+            foreach (var set in expressionSets)
+            {
+                if (set?.Expressions == null) continue;
+
+                foreach (var expr in set.Expressions)
+                {
+                    if (expr?.MemberName == "Collections" && expr.CollectionSearchDepth.HasValue)
+                    {
+                        // Clamp to valid range (0-10)
+                        return Math.Max(0, Math.Min(10, expr.CollectionSearchDepth.Value));
+                    }
+                }
+            }
+
+            return null;
+        }
     }
 
     public static class OrderFactory
@@ -2795,6 +2970,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
         public List<Expression> SimilarToExpressions { get; set; } = [];
+        public int CollectionRecursionDepth { get; set; } = 1;
 
         /// <summary>
         /// Analyzes expression sets to determine field requirements.
@@ -2837,9 +3013,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 .SelectMany(set => set?.Expressions ?? [])
                 .Any(expr => expr?.MemberName == "Collections");
 
+            // CollectionRecursionDepth is now set from list-level CollectionSearchDepth, not per-rule
+            // Default to 1 for backward compatibility (matches direct children only)
+            requirements.CollectionRecursionDepth = 1;
+
             requirements.NeedsPlaylists = expressionSets
                 .SelectMany(set => set?.Expressions ?? [])
                 .Any(expr => expr?.MemberName == "Playlists");
+            // Note: Playlists in Jellyfin don't support nesting (can only contain media items, not other playlists)
+            // so no recursion depth is needed for playlist rules
 
             requirements.NeedsNextUnwatched = expressionSets
                 .SelectMany(set => set?.Expressions ?? [])

@@ -1281,6 +1281,7 @@
             if (defaultMakePublicEl) defaultMakePublicEl.checked = config.DefaultMakePublic || false;
             if (defaultMaxItemsEl) defaultMaxItemsEl.value = config.DefaultMaxItems !== undefined && config.DefaultMaxItems !== null ? config.DefaultMaxItems : 500;
             if (defaultMaxPlayTimeMinutesEl) defaultMaxPlayTimeMinutesEl.value = config.DefaultMaxPlayTimeMinutes !== undefined && config.DefaultMaxPlayTimeMinutes !== null ? config.DefaultMaxPlayTimeMinutes : 0;
+
             if (defaultAutoRefreshEl) defaultAutoRefreshEl.value = config.DefaultAutoRefresh || 'OnLibraryChanges';
 
             if (playlistNamePrefixEl) playlistNamePrefixEl.value = config.PlaylistNamePrefix !== undefined && config.PlaylistNamePrefix !== null ? config.PlaylistNamePrefix : '';

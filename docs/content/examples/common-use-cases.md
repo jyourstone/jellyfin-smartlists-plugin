@@ -32,18 +32,18 @@ Here are some popular playlist and collection types you can create:
 - **Tags** contain "Christmas" AND **Production Year** before "2000"
 
 ### Complete Franchise Collection
-- **Collections** contains "Movie Franchise" (includes all movies in the franchise)
-- **Note**: For Playlists, this fetches all media items from within the collection. For Collections, you can optionally enable "Include collection only" to create a meta-collection that contains the collection object itself
+- **Collection name** contains "Movie Franchise" (includes all movies in the franchise)
+- **Note**: For Playlists, this fetches all media items from within the collection. For Collections, you can optionally enable "Include collections only" to create a meta-collection that contains the collection object itself
 
 ### Meta-Collection (Collection of Collections)
-- **Collections** is in "Marvel;DC;Star Wars" with "Include collection only" enabled
+- **Collection name** is in "Marvel;DC;Star Wars" with "Include collections only" enabled
 - **List Type**: Collection
-- **Note**: When "Include collection only" is enabled, your selected media types are ignored, and the collection will contain the actual collection objects rather than the media items within them
+- **Note**: When "Include collections only" is enabled, your selected media types are ignored, and the collection will contain the actual collection objects rather than the media items within them
 - Creates a single collection that organizes multiple collections together (e.g., a "Superhero Universes" collection containing your Marvel, DC, and other superhero collections)
 - **Important**: The smart collection will never include itself in the results, even if its name matches the rule. So you can safely name your meta-collection "Superhero Universes" and use rules that match "Marvel" without worrying about it including itself
 
 ### Combine Multiple Playlists
-- **Playlists** is in "Favorites;Top Rated;Recent Additions"
+- **Playlist name** is in "Favorites;Top Rated;Recent Additions"
 - **List Type**: Playlist
 - **Note**: For playlists, this fetches all media items from within the specified playlists and combines them into a single "super playlist"
 - Creates a playlist that merges content from multiple existing playlists
@@ -51,7 +51,7 @@ Here are some popular playlist and collection types you can create:
 - **Important**: Only playlists you own or that are marked as public are accessible. The smart playlist will never include itself in the results.
 
 ### Playlist Organization Collection
-- **Playlists** contains "workout" with "Include playlist only" enabled
+- **Playlist name** contains "workout" with "Include playlist only" enabled
 - **List Type**: Collection
 - **Note**: When "Include playlist only" is enabled, the collection contains the actual playlist objects (not the media items within them)
 - Creates a collection that organizes your playlists by category (e.g., a "Workout Playlists" collection containing all your workout-related playlists)

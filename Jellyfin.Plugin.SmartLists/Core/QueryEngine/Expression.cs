@@ -44,6 +44,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyDefaultAudioLanguage { get; set; } = null;
 
+        // Collections-specific depth option - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? CollectionSearchDepth { get; set; } = null;
+
         // Helper property to check if this is a user-specific expression
         // Only serialize when UserId is not null
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

@@ -104,8 +104,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 },
                 CollectionFields = new[]
                 {
-                    new { Value = "Collections", Label = "Collections" },
-                    new { Value = "Playlists", Label = "Playlists" },
+                    new { Value = "Collections", Label = "Collection name" },
+                    new { Value = "Playlists", Label = "Playlist name" },
                     new { Value = "Genres", Label = "Genres" },
                     new { Value = "Studios", Label = "Studios" },
                     new { Value = "Tags", Label = "Tags" },

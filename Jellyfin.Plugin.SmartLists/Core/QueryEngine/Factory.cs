@@ -40,6 +40,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
         public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
+        public int CollectionRecursionDepth { get; set; } = 1; // How deep to traverse nested collections (1-10). Note: Playlists don't support nesting, so no recursion depth for playlists.
     }
 
     internal sealed class OperandFactory
@@ -2255,7 +2256,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Extract collections - only when needed for performance
             if (options.ExtractCollections)
             {
-                operand.Collections = ExtractCollections(baseItem, user, libraryManager, cache, logger);
+                operand.Collections = ExtractCollections(baseItem, user, libraryManager, cache, logger, options.CollectionRecursionDepth);
             }
             else
             {
@@ -2263,6 +2264,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Extract playlists - only when needed for performance
+            // Note: Playlists don't support nesting (can't contain other playlists), so no recursion depth needed
             if (options.ExtractPlaylists)
             {
                 operand.Playlists = ExtractPlaylists(baseItem, user, libraryManager, cache, logger, options.OriginListName);
@@ -2655,12 +2657,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="cache">Per-refresh cache to avoid repeated queries</param>
         /// <param name="logger">Logger for debugging</param>
         /// <returns>List of collection names this item belongs to</returns>
-        private static List<string> ExtractCollections(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        private static List<string> ExtractCollections(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, int recursionDepth = 0)
         {
-            // Check if we already have the result cached for this item
-            if (cache.ItemCollections.TryGetValue(baseItem.Id, out var cachedCollections))
+            // Ensure recursion depth is within valid range (0 = no recursion, 1-10 = levels to traverse)
+            recursionDepth = Math.Max(0, Math.Min(10, recursionDepth));
+
+            // Check if we already have the result cached for this item (with matching depth)
+            // We use a combined key to cache results per depth level
+            var cacheKey = (baseItem.Id, recursionDepth);
+            if (cache.ItemCollectionsWithDepth.TryGetValue(cacheKey, out var cachedCollections))
             {
                 return cachedCollections;
+            }
+
+            // Fallback to legacy cache for depth=1 (backward compatibility)
+            if (recursionDepth == 1 && cache.ItemCollections.TryGetValue(baseItem.Id, out var legacyCachedCollections))
+            {
+                return legacyCachedCollections;
             }
 
             var collections = new List<string>();
@@ -2690,116 +2703,77 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     }
                 }
 
-                // Build the reverse lookup cache if it's empty (one-time expensive operation per refresh)
-                if (cache.CollectionMembershipCache.Count == 0 && cache.AllCollections.Length > 0)
+                // Build the collection direct children cache if it's empty (one-time operation)
+                if (cache.CollectionDirectChildren.Count == 0 && cache.AllCollections.Length > 0)
                 {
-                    logger?.LogDebug("Building collection membership cache for {CollectionCount} collections", cache.AllCollections.Length);
+                    logger?.LogDebug("Building collection direct children cache for {CollectionCount} collections", cache.AllCollections.Length);
 
                     foreach (var collection in cache.AllCollections)
                     {
                         try
                         {
-                            // Try multiple approaches to get collection items
-                            BaseItem[]? itemsInCollection = null;
+                            var directChildren = GetContainerDirectChildren(collection, user, libraryManager, logger, "Collection");
+                            cache.CollectionDirectChildren[collection.Id] = directChildren;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogDebug(ex, "Error getting direct children for collection '{CollectionName}'", collection.Name);
+                            cache.CollectionDirectChildren[collection.Id] = [];
+                        }
+                    }
 
-                            // Approach 1: Try GetChildren method using reflection
-                            try
+                    logger?.LogDebug("Collection direct children cache built with {CacheCount} collections", cache.CollectionDirectChildren.Count);
+                }
+
+                // Build the recursive membership cache for the requested depth
+                var membershipCacheKey = recursionDepth;
+                if (!cache.CollectionMembershipCacheByDepth.TryGetValue(membershipCacheKey, out var membershipCacheAtDepth))
+                {
+                    membershipCacheAtDepth = new Dictionary<Guid, HashSet<Guid>>();
+                    cache.CollectionMembershipCacheByDepth[membershipCacheKey] = membershipCacheAtDepth;
+
+                    logger?.LogDebug("Building collection membership cache for depth {Depth}", recursionDepth);
+
+                    foreach (var collection in cache.AllCollections)
+                    {
+                        try
+                        {
+                            var allMembers = GetContainerMembersRecursive(
+                                collection.Id,
+                                0,  // Start at depth 0 (root level)
+                                recursionDepth,
+                                [],
+                                cache.CollectionDirectChildren,
+                                BaseItemKind.BoxSet,
+                                logger);
+
+                            membershipCacheAtDepth[collection.Id] = allMembers;
+
+                            if (recursionDepth > 1)
                             {
-                                var getChildrenMethod = collection.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
-                                if (getChildrenMethod != null)
-                                {
-                                    var children = getChildrenMethod.Invoke(collection, [user, true]);
-                                    if (children is IEnumerable<BaseItem> childrenEnumerable)
-                                    {
-                                        itemsInCollection = [.. childrenEnumerable];
-                                        logger?.LogDebug("Collection '{CollectionName}' GetChildren() returned {ItemCount} items", collection.Name, itemsInCollection.Length);
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                logger?.LogDebug(ex, "GetChildren method failed for collection '{CollectionName}'", collection.Name);
-                            }
-
-                            // Approach 2: Try GetLinkedChildren method using reflection
-                            if (itemsInCollection == null || itemsInCollection.Length == 0)
-                            {
-                                try
-                                {
-                                    var getLinkedChildrenMethod = collection.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
-                                    if (getLinkedChildrenMethod != null)
-                                    {
-                                        var linkedChildren = getLinkedChildrenMethod.Invoke(collection, null);
-                                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
-                                        {
-                                            itemsInCollection = [.. linkedEnumerable];
-                                            logger?.LogDebug("Collection '{CollectionName}' GetLinkedChildren() returned {ItemCount} items", collection.Name, itemsInCollection.Length);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    logger?.LogDebug(ex, "GetLinkedChildren method failed for collection '{CollectionName}'", collection.Name);
-                                }
-                            }
-
-                            // Approach 3: Fallback to ParentId query (original approach)
-                            if (itemsInCollection == null || itemsInCollection.Length == 0)
-                            {
-                                var itemsInCollectionQuery = new InternalItemsQuery(user)
-                                {
-                                    ParentId = collection.Id,
-                                    Recursive = true,
-                                };
-
-                                itemsInCollection = [.. libraryManager.GetItemsResult(itemsInCollectionQuery).Items];
-                                logger?.LogDebug("Collection '{CollectionName}' ParentId query returned {ItemCount} items", collection.Name, itemsInCollection.Length);
-                            }
-
-                            // Build the reverse lookup set for this collection (O(1) lookups)
-                            var membershipSet = new HashSet<Guid>();
-                            if (itemsInCollection != null)
-                            {
-                                foreach (var item in itemsInCollection)
-                                {
-                                    membershipSet.Add(item.Id);
-                                }
-                            }
-
-                            cache.CollectionMembershipCache[collection.Id] = membershipSet;
-
-                            // Debug: Log first few items in collection (only for small collections)
-                            if (itemsInCollection != null && itemsInCollection.Length <= 5 && itemsInCollection.Length > 0)
-                            {
-                                foreach (var collectionItem in itemsInCollection.Take(3))
-                                {
-                                    logger?.LogDebug("  Collection item: '{ItemName}' (ID: {ItemId})", collectionItem.Name, collectionItem.Id);
-                                }
+                                logger?.LogDebug("Collection '{CollectionName}' has {MemberCount} members at depth {Depth}",
+                                    collection.Name, allMembers.Count, recursionDepth);
                             }
                         }
                         catch (Exception ex)
                         {
-                            logger?.LogDebug(ex, "Error building membership cache for collection '{CollectionName}'", collection.Name);
-                            // Create empty set for failed collections to avoid repeated attempts
-                            cache.CollectionMembershipCache[collection.Id] = [];
+                            logger?.LogDebug(ex, "Error building recursive membership for collection '{CollectionName}'", collection.Name);
+                            membershipCacheAtDepth[collection.Id] = [];
                         }
                     }
 
-                    logger?.LogDebug("Collection membership cache built with {CacheCount} collections", cache.CollectionMembershipCache.Count);
+                    logger?.LogDebug("Collection membership cache built for depth {Depth} with {CacheCount} collections", recursionDepth, membershipCacheAtDepth.Count);
                 }
 
-                // Use the reverse lookup cache for O(1) membership checks (fast!)
+                // Use the membership cache for O(1) membership checks
                 foreach (var collection in cache.AllCollections)
                 {
-                    if (cache.CollectionMembershipCache.TryGetValue(collection.Id, out var membershipSet) &&
+                    if (membershipCacheAtDepth.TryGetValue(collection.Id, out var membershipSet) &&
                         membershipSet.Contains(baseItem.Id))
                     {
                         collections.Add(collection.Name);
-
                     }
                 }
-
-
             }
             catch (Exception ex)
             {
@@ -2807,12 +2781,140 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Cache the result
-            cache.ItemCollections[baseItem.Id] = collections;
+            cache.ItemCollectionsWithDepth[cacheKey] = collections;
+            if (recursionDepth == 1)
+            {
+                cache.ItemCollections[baseItem.Id] = collections; // Backward compatibility
+            }
             return collections;
         }
 
         /// <summary>
+        /// Gets direct children of a container (collection or playlist) using reflection.
+        /// </summary>
+        private static BaseItem[] GetContainerDirectChildren(BaseItem container, User user, ILibraryManager libraryManager, ILogger? logger, string containerType)
+        {
+            BaseItem[]? children = null;
+
+            // Approach 1: Try GetChildren method using reflection
+            try
+            {
+                var getChildrenMethod = container.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
+                if (getChildrenMethod != null)
+                {
+                    var result = getChildrenMethod.Invoke(container, [user, true]);
+                    if (result is IEnumerable<BaseItem> childrenEnumerable)
+                    {
+                        children = [.. childrenEnumerable];
+                        logger?.LogDebug("{ContainerType} '{ContainerName}' GetChildren() returned {ItemCount} items", containerType, container.Name, children.Length);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "GetChildren method failed for {ContainerType} '{ContainerName}'", containerType, container.Name);
+            }
+
+            // Approach 2: Try GetLinkedChildren method using reflection
+            if (children == null || children.Length == 0)
+            {
+                try
+                {
+                    var getLinkedChildrenMethod = container.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
+                    if (getLinkedChildrenMethod != null)
+                    {
+                        var linkedChildren = getLinkedChildrenMethod.Invoke(container, null);
+                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
+                        {
+                            children = [.. linkedEnumerable];
+                            logger?.LogDebug("{ContainerType} '{ContainerName}' GetLinkedChildren() returned {ItemCount} items", containerType, container.Name, children.Length);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "GetLinkedChildren method failed for {ContainerType} '{ContainerName}'", containerType, container.Name);
+                }
+            }
+
+            // Approach 3: Fallback to ParentId query
+            if (children == null || children.Length == 0)
+            {
+                var query = new InternalItemsQuery(user)
+                {
+                    ParentId = container.Id,
+                    Recursive = true,
+                };
+
+                children = [.. libraryManager.GetItemsResult(query).Items];
+                logger?.LogDebug("{ContainerType} '{ContainerName}' ParentId query returned {ItemCount} items", containerType, container.Name, children.Length);
+            }
+
+            return children ?? [];
+        }
+
+        /// <summary>
+        /// Recursively gets all member IDs from a container, traversing nested containers up to maxDepth.
+        /// </summary>
+        private static HashSet<Guid> GetContainerMembersRecursive(
+            Guid containerId,
+            int currentDepth,
+            int maxDepth,
+            HashSet<Guid> visitedIds,
+            ConcurrentDictionary<Guid, BaseItem[]> directChildrenCache,
+            BaseItemKind containerKind,
+            ILogger? logger)
+        {
+            var result = new HashSet<Guid>();
+
+            // Circular reference protection
+            if (visitedIds.Contains(containerId))
+            {
+                logger?.LogDebug("Circular reference detected for container {ContainerId}, skipping", containerId);
+                return result;
+            }
+
+            // Get direct children from cache
+            if (!directChildrenCache.TryGetValue(containerId, out var directChildren) || directChildren.Length == 0)
+            {
+                return result;
+            }
+
+            // Track this container as visited for circular reference protection
+            var newVisitedIds = new HashSet<Guid>(visitedIds) { containerId };
+
+            foreach (var child in directChildren)
+            {
+                // Always add the child's ID (it's a member of this container)
+                result.Add(child.Id);
+
+                // If this child is also a container of the same type and we haven't reached max depth,
+                // recursively get its members too
+                // Depth semantics: 0 = direct children only, 1+ = traverse N additional levels
+                if (maxDepth > 0 && currentDepth < maxDepth && child.GetBaseItemKind() == containerKind)
+                {
+                    var nestedMembers = GetContainerMembersRecursive(
+                        child.Id,
+                        currentDepth + 1,
+                        maxDepth,
+                        newVisitedIds,
+                        directChildrenCache,
+                        containerKind,
+                        logger);
+
+                    foreach (var nestedMember in nestedMembers)
+                    {
+                        result.Add(nestedMember);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// Extracts the playlists that a media item belongs to, with caching for performance.
+        /// Note: Playlists in Jellyfin only contain media items (not other playlists), so no recursion is needed.
         /// </summary>
         /// <param name="baseItem">The media item to check</param>
         /// <param name="user">The user context for playlist access</param>
@@ -2844,15 +2946,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     };
 
                     var allPlaylists = libraryManager.GetItemsResult(playlistQuery).Items;
-                    
+
                     // Filter playlists to only include those the user owns or that are public
                     var accessiblePlaylists = new List<BaseItem>();
                     foreach (var playlist in allPlaylists)
                     {
                         // Check if user owns the playlist
-                        bool isOwner = playlist.GetType().GetProperty("OwnerUserId")?.GetValue(playlist) is Guid ownerId 
+                        bool isOwner = playlist.GetType().GetProperty("OwnerUserId")?.GetValue(playlist) is Guid ownerId
                             && ownerId == user.Id;
-                        
+
                         // Check if playlist is public
                         bool isPublic = false;
                         var openAccessProperty = playlist.GetType().GetProperty("OpenAccess");
@@ -2873,22 +2975,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 }
                             }
                         }
-                        
+
                         if (isOwner || isPublic)
                         {
                             accessiblePlaylists.Add(playlist);
-                            logger?.LogDebug("Playlist '{PlaylistName}' accessible: Owner={IsOwner}, Public={IsPublic}", 
+                            logger?.LogDebug("Playlist '{PlaylistName}' accessible: Owner={IsOwner}, Public={IsPublic}",
                                 playlist.Name, isOwner, isPublic);
                         }
                         else
                         {
-                            logger?.LogDebug("Playlist '{PlaylistName}' filtered out: not owned by user and not public", 
+                            logger?.LogDebug("Playlist '{PlaylistName}' filtered out: not owned by user and not public",
                                 playlist.Name);
                         }
                     }
-                    
+
                     cache.AllPlaylists = [.. accessiblePlaylists];
-                    logger?.LogDebug("Cached {PlaylistCount} accessible playlists for user {UserId} (filtered from {TotalCount})", 
+                    logger?.LogDebug("Cached {PlaylistCount} accessible playlists for user {UserId} (filtered from {TotalCount})",
                         cache.AllPlaylists.Length, user.Id, allPlaylists.Count);
 
                     // Debug: Log playlist names (only if debug level logging)
@@ -2901,7 +3003,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     }
                 }
 
-                // Build the reverse lookup cache if it's empty (one-time expensive operation per refresh)
+                // Build the membership cache if it's empty (one-time operation per refresh)
                 if (cache.PlaylistMembershipCache.Count == 0 && cache.AllPlaylists.Length > 0)
                 {
                     logger?.LogDebug("Building playlist membership cache for {PlaylistCount} playlists", cache.AllPlaylists.Length);
@@ -2910,119 +3012,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     {
                         try
                         {
-                            // Try multiple approaches to get playlist items
-                            BaseItem[]? itemsInPlaylist = null;
-
-                            // Approach 1: Try GetChildren method using reflection (similar to collections)
-                            try
-                            {
-                                var getChildrenMethod = playlist.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
-                                if (getChildrenMethod != null)
-                                {
-                                    var children = getChildrenMethod.Invoke(playlist, [user, true]);
-                                    if (children is IEnumerable<BaseItem> childrenEnumerable)
-                                    {
-                                        itemsInPlaylist = [.. childrenEnumerable];
-                                        logger?.LogDebug("Playlist '{PlaylistName}' GetChildren() returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                logger?.LogDebug(ex, "GetChildren method failed for playlist '{PlaylistName}'", playlist.Name);
-                            }
-
-                            // Approach 2: Try GetLinkedChildren method using reflection
-                            if (itemsInPlaylist == null || itemsInPlaylist.Length == 0)
-                            {
-                                try
-                                {
-                                    var getLinkedChildrenMethod = playlist.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
-                                    if (getLinkedChildrenMethod != null)
-                                    {
-                                        var linkedChildren = getLinkedChildrenMethod.Invoke(playlist, null);
-                                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
-                                        {
-                                            itemsInPlaylist = [.. linkedEnumerable];
-                                            logger?.LogDebug("Playlist '{PlaylistName}' GetLinkedChildren() returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    logger?.LogDebug(ex, "GetLinkedChildren method failed for playlist '{PlaylistName}'", playlist.Name);
-                                }
-                            }
-
-                            // Approach 3: Try accessing LinkedChildren property directly
-                            if (itemsInPlaylist == null || itemsInPlaylist.Length == 0)
-                            {
-                                try
-                                {
-                                    var linkedChildrenProp = playlist.GetType().GetProperty("LinkedChildren");
-                                    if (linkedChildrenProp != null)
-                                    {
-                                        var linkedChildrenValue = linkedChildrenProp.GetValue(playlist);
-                                        if (linkedChildrenValue is Array linkedChildrenArray)
-                                        {
-                                            // LinkedChildren returns LinkedChild objects, not BaseItem directly
-                                            // We need to extract ItemId from each LinkedChild
-                                            var itemIds = new List<Guid>();
-                                            foreach (var linkedChild in linkedChildrenArray)
-                                            {
-                                                var itemIdProp = linkedChild.GetType().GetProperty("ItemId");
-                                                if (itemIdProp != null)
-                                                {
-                                                    var itemIdValue = itemIdProp.GetValue(linkedChild);
-                                                    if (itemIdValue is Guid guidValue)
-                                                    {
-                                                        itemIds.Add(guidValue);
-                                                    }
-                                                }
-                                            }
-
-                                            // Convert ItemIds to BaseItems
-                                            itemsInPlaylist = itemIds
-                                                .Select(id => libraryManager.GetItemById(id))
-                                                .Where(item => item != null)
-                                                .Cast<BaseItem>()
-                                                .ToArray();
-                                            
-                                            logger?.LogDebug("Playlist '{PlaylistName}' LinkedChildren property returned {ItemCount} items", playlist.Name, itemsInPlaylist.Length);
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    logger?.LogDebug(ex, "LinkedChildren property access failed for playlist '{PlaylistName}'", playlist.Name);
-                                }
-                            }
-
-                            // Build the reverse lookup set for this playlist (O(1) lookups)
+                            var directChildren = GetPlaylistDirectChildren(playlist, user, libraryManager, logger);
                             var membershipSet = new HashSet<Guid>();
-                            if (itemsInPlaylist != null)
+                            foreach (var child in directChildren)
                             {
-                                foreach (var item in itemsInPlaylist)
-                                {
-                                    membershipSet.Add(item.Id);
-                                }
+                                membershipSet.Add(child.Id);
                             }
-
                             cache.PlaylistMembershipCache[playlist.Id] = membershipSet;
-
-                            // Debug: Log first few items in playlist (only for small playlists)
-                            if (itemsInPlaylist != null && itemsInPlaylist.Length <= 5 && itemsInPlaylist.Length > 0)
-                            {
-                                foreach (var playlistItem in itemsInPlaylist.Take(3))
-                                {
-                                    logger?.LogDebug("  Playlist item: '{ItemName}' (ID: {ItemId})", playlistItem.Name, playlistItem.Id);
-                                }
-                            }
                         }
                         catch (Exception ex)
                         {
                             logger?.LogDebug(ex, "Error building membership cache for playlist '{PlaylistName}'", playlist.Name);
-                            // Create empty set for failed playlists to avoid repeated attempts
                             cache.PlaylistMembershipCache[playlist.Id] = [];
                         }
                     }
@@ -3030,7 +3030,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     logger?.LogDebug("Playlist membership cache built with {CacheCount} playlists", cache.PlaylistMembershipCache.Count);
                 }
 
-                // Use the reverse lookup cache for O(1) membership checks (fast!)
+                // Use the membership cache for O(1) membership checks
                 foreach (var playlist in cache.AllPlaylists)
                 {
                     if (cache.PlaylistMembershipCache.TryGetValue(playlist.Id, out var membershipSet) &&
@@ -3048,7 +3048,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 continue;
                             }
                         }
-                        
+
                         playlists.Add(playlist.Name);
                         logger?.LogDebug("Item '{ItemName}' is in playlist '{PlaylistName}'", baseItem.Name, playlist.Name);
                     }
@@ -3069,6 +3069,98 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             cache.ItemPlaylists[baseItem.Id] = playlists;
             logger?.LogDebug("Cached {Count} playlists for item '{ItemName}'", playlists.Count, baseItem.Name);
             return playlists;
+        }
+
+        /// <summary>
+        /// Gets direct children of a playlist using reflection.
+        /// </summary>
+        private static BaseItem[] GetPlaylistDirectChildren(BaseItem playlist, User user, ILibraryManager libraryManager, ILogger? logger)
+        {
+            BaseItem[]? children = null;
+
+            // Approach 1: Try GetChildren method using reflection
+            try
+            {
+                var getChildrenMethod = playlist.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
+                if (getChildrenMethod != null)
+                {
+                    var result = getChildrenMethod.Invoke(playlist, [user, true]);
+                    if (result is IEnumerable<BaseItem> childrenEnumerable)
+                    {
+                        children = [.. childrenEnumerable];
+                        logger?.LogDebug("Playlist '{PlaylistName}' GetChildren() returned {ItemCount} items", playlist.Name, children.Length);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "GetChildren method failed for playlist '{PlaylistName}'", playlist.Name);
+            }
+
+            // Approach 2: Try GetLinkedChildren method using reflection
+            if (children == null || children.Length == 0)
+            {
+                try
+                {
+                    var getLinkedChildrenMethod = playlist.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
+                    if (getLinkedChildrenMethod != null)
+                    {
+                        var linkedChildren = getLinkedChildrenMethod.Invoke(playlist, null);
+                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
+                        {
+                            children = [.. linkedEnumerable];
+                            logger?.LogDebug("Playlist '{PlaylistName}' GetLinkedChildren() returned {ItemCount} items", playlist.Name, children.Length);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "GetLinkedChildren method failed for playlist '{PlaylistName}'", playlist.Name);
+                }
+            }
+
+            // Approach 3: Try accessing LinkedChildren property directly
+            if (children == null || children.Length == 0)
+            {
+                try
+                {
+                    var linkedChildrenProp = playlist.GetType().GetProperty("LinkedChildren");
+                    if (linkedChildrenProp != null)
+                    {
+                        var linkedChildrenValue = linkedChildrenProp.GetValue(playlist);
+                        if (linkedChildrenValue is Array linkedChildrenArray)
+                        {
+                            var itemIds = new List<Guid>();
+                            foreach (var linkedChild in linkedChildrenArray)
+                            {
+                                var itemIdProp = linkedChild.GetType().GetProperty("ItemId");
+                                if (itemIdProp != null)
+                                {
+                                    var itemIdValue = itemIdProp.GetValue(linkedChild);
+                                    if (itemIdValue is Guid guidValue)
+                                    {
+                                        itemIds.Add(guidValue);
+                                    }
+                                }
+                            }
+
+                            children = itemIds
+                                .Select(id => libraryManager.GetItemById(id))
+                                .Where(item => item != null)
+                                .Cast<BaseItem>()
+                                .ToArray();
+
+                            logger?.LogDebug("Playlist '{PlaylistName}' LinkedChildren property returned {ItemCount} items", playlist.Name, children.Length);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "LinkedChildren property access failed for playlist '{PlaylistName}'", playlist.Name);
+                }
+            }
+
+            return children ?? [];
         }
 
         /// <summary>

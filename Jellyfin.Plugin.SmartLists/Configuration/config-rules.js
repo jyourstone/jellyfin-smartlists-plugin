@@ -845,12 +845,15 @@
             '</div>' +
             '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<div class="rule-collections-collection-only" style="margin-bottom: 0.75em;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
-            'Include collection only:' +
+            '<label style="display: flex; align-items: center; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
+            'Include collections only:' +
+            '<a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/fields-and-operators/#collection-name-options" target="_blank" rel="noopener noreferrer" title="Documentation" style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">' +
+            '<span class="material-icons" aria-hidden="true" style="font-size: 1.1em; line-height: 0;">info_outline</span>' +
+            '</a>' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-collections-collection-only-select" style="width: 100%;">' +
-            '<option value="false">No - Include media items from the collection</option>' +
-            '<option value="true">Yes - Only include the collection itself</option>' +
+            '<option value="false">No - Include media items from the collections</option>' +
+            '<option value="true">Yes - Only include the actual collections</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-collections-episodes" style="margin-bottom: 0.75em;">' +
@@ -861,6 +864,16 @@
             '<option value="false">No - Only include the series themselves</option>' +
             '<option value="true">Yes - Include individual episodes from series in collections</option>' +
             '</select>' +
+            '</div>' +
+            '<div class="rule-collections-depth" style="margin-bottom: 0;">' +
+            '<label style="display: flex; align-items: center; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
+            'Collection search depth:' +
+            '<a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/fields-and-operators/#collection-search-depth" target="_blank" rel="noopener noreferrer" title="Documentation" style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">' +
+            '<span class="material-icons" aria-hidden="true" style="font-size: 1.1em; line-height: 0;">info_outline</span>' +
+            '</a>' +
+            '</label>' +
+            '<input type="number" class="emby-input rule-collections-depth-input" min="0" max="10" step="1" value="0" style="width: 100%;">' +
+            '<div style="font-size: 0.75em; opacity: 0.7; margin-top: 0.25em;">How deep to traverse nested collections (0 = direct members only)</div>' +
             '</div>' +
             '</div>' +
             '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1170,6 +1183,10 @@
         const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
         const collectionsValue = collectionsSelect ? collectionsSelect.value : '';
 
+        // Extract Playlists options
+        const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
+        const playlistOnlyValue = playlistOnlySelect ? playlistOnlySelect.value : '';
+
         // Extract Tags, Studios, Genres, AudioLanguages options
         const tagsSelect = ruleRow.querySelector('.rule-tags-select');
         const tagsValue = tagsSelect ? tagsSelect.value : '';
@@ -1226,6 +1243,11 @@
             }
             if (collectionsValue === 'true') {
                 expression.IncludeEpisodesWithinSeries = true;
+            }
+        }
+        if (fieldValue === 'Playlists') {
+            if (playlistOnlyValue === 'true') {
+                expression.IncludePlaylistOnly = true;
             }
         }
         if (fieldValue === 'Tags' && tagsValue === 'true') {
@@ -1809,21 +1831,20 @@
                 const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
                 const isCollection = listType === 'Collection';
 
-                // Show/hide collection-only option based on list type
+                // Show/hide collection-only option based on list type (only for Collections list type)
                 const collectionOnlyDiv = ruleRow.querySelector('.rule-collections-collection-only');
-                let collectionOnlyVisible = false;
                 if (collectionOnlyDiv) {
                     collectionOnlyDiv.style.display = isCollection ? 'block' : 'none';
-                    collectionOnlyVisible = isCollection;
                 }
+
+                // Get collection-only select value
+                const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
+                const isCollectionOnly = collectionOnlySelect && collectionOnlySelect.value === 'true';
 
                 // Show/hide episodes option (hidden if collection-only is yes OR Episode media type is not selected)
                 const episodesDiv = ruleRow.querySelector('.rule-collections-episodes');
                 let episodesVisible = false;
                 if (episodesDiv) {
-                    const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-                    const isCollectionOnly = collectionOnlySelect && collectionOnlySelect.value === 'true';
-
                     // Get selected media types to check if Episode is selected
                     const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
                     const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
@@ -1833,8 +1854,15 @@
                     episodesDiv.style.display = episodesVisible ? 'block' : 'none';
                 }
 
-                // Only show the container if at least one inner option is visible
-                collectionsOptionsDiv.style.display = (collectionOnlyVisible || episodesVisible) ? 'block' : 'none';
+                // Depth option is always visible when Collection name rule is selected
+                // It's useful for both Playlist and Collection list types
+                const depthDiv = ruleRow.querySelector('.rule-collections-depth');
+                if (depthDiv) {
+                    depthDiv.style.display = 'block';
+                }
+
+                // Show container if any inner option is visible (depth is always visible for Collections rule)
+                collectionsOptionsDiv.style.display = 'block';
             } else {
                 // Hide but preserve user's selection - don't reset value
                 collectionsOptionsDiv.style.display = 'none';
@@ -1863,7 +1891,9 @@
                     playlistOnlyDiv.style.display = isCollection ? 'block' : 'none';
                 }
 
+                // Get playlist-only select value
                 // Only show the container if we're creating a collection
+                // Note: Playlists don't support recursion depth - they can only contain media items, not other playlists
                 playlistsOptionsDiv.style.display = isCollection ? 'block' : 'none';
             } else {
                 // Hide but preserve user's selection - don't reset value
@@ -2208,6 +2238,16 @@
                                 // If false (default), don't include the parameter to save space
                             }
                         }
+
+                        // Check for collection search depth
+                        const depthInput = rule.querySelector('.rule-collections-depth-input');
+                        if (depthInput) {
+                            const depthValue = parseInt(depthInput.value, 10);
+                            if (!isNaN(depthValue) && depthValue > 0) {
+                                expression.CollectionSearchDepth = Math.min(depthValue, 10);
+                            }
+                            // If 0 (default), don't include the parameter to save space
+                        }
                     }
 
                     // Check for Playlists specific options
@@ -2378,7 +2418,7 @@
                 if (collectionOnlySelect) {
                     const includeCollectionOnlyValue = expression.IncludeCollectionOnly === true ? 'true' : 'false';
                     collectionOnlySelect.value = includeCollectionOnlyValue;
-                    // Trigger change to update visibility of episodes field
+                    // Trigger change to update visibility of episodes field and depth field
                     collectionOnlySelect.dispatchEvent(new Event('change'));
                 }
 
@@ -2387,6 +2427,13 @@
                 if (collectionsSelect) {
                     const includeValue = expression.IncludeEpisodesWithinSeries === true ? 'true' : 'false';
                     collectionsSelect.value = includeValue;
+                }
+
+                // Restore collection search depth
+                const depthInput = ruleRow.querySelector('.rule-collections-depth-input');
+                if (depthInput) {
+                    const depthValue = expression.CollectionSearchDepth !== undefined && expression.CollectionSearchDepth !== null ? expression.CollectionSearchDepth : 0;
+                    depthInput.value = depthValue;
                 }
             }
             if (expression.MemberName === 'Playlists') {

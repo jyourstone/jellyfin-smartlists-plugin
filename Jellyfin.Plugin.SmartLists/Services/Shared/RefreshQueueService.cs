@@ -698,6 +698,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // Maps Collection/Playlist ID → array of child BaseItems (with full item data for property access)
             public ConcurrentDictionary<Guid, BaseItem[]> CollectionChildItems { get; } = new();
             public ConcurrentDictionary<Guid, BaseItem[]> PlaylistChildItems { get; } = new();
+
+            // Direct children cache for collections (used for recursive traversal)
+            // Maps Collection ID → array of direct child BaseItems
+            public ConcurrentDictionary<Guid, BaseItem[]> CollectionDirectChildren { get; } = new();
+
+            // Membership cache by depth level for collections (supports different recursion depths)
+            // Outer key is recursion depth, inner maps Collection ID → set of all member IDs at that depth
+            public ConcurrentDictionary<int, Dictionary<Guid, HashSet<Guid>>> CollectionMembershipCacheByDepth { get; } = new();
+
+            // Item membership cache with depth key for collections - maps (ItemId, Depth) → list of collection names
+            public ConcurrentDictionary<(Guid ItemId, int Depth), List<string>> ItemCollectionsWithDepth { get; } = new();
         }
 
         /// <summary>

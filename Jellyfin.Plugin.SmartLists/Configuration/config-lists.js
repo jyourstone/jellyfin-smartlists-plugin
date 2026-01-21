@@ -1266,10 +1266,18 @@
                         // Add Collections configuration info
                         let collectionsInfo = '';
                         if (rule.MemberName === 'Collections') {
+                            var collectionParts = [];
                             if (rule.IncludeCollectionOnly === true) {
-                                collectionsInfo = ' (collection only)';
+                                collectionParts.push('collection only');
                             } else if (rule.IncludeEpisodesWithinSeries === true) {
-                                collectionsInfo = ' (including episodes within series)';
+                                collectionParts.push('including episodes within series');
+                            }
+                            // Add depth info if set
+                            if (rule.CollectionSearchDepth !== undefined && rule.CollectionSearchDepth !== null && rule.CollectionSearchDepth > 0) {
+                                collectionParts.push('depth: ' + rule.CollectionSearchDepth);
+                            }
+                            if (collectionParts.length > 0) {
+                                collectionsInfo = ' (' + collectionParts.join(', ') + ')';
                             }
                         }
 

@@ -74,7 +74,7 @@ Before creating your first list, it's important to understand the differences be
 - **No Max Playtime**: Collections cannot have a playtime limit
 - **User Reference**: While collections don't have an "owner" in the traditional sense, you must select a user whose context will be used when evaluating rules and filtering items. This user's library access permissions and user-specific data (like "Playback Status", "Is Favorite", etc.) are used to determine which items are included in the collection
 - **Automatic Image Generation**: Collections automatically generate cover images based on the media items they contain (see details below)
-- **Can Contain Collections**: Unlike playlists, collections can contain other collection objects (creating "meta-collections") when using the "Include collection only" option with the Collections field
+- **Can Contain Collections**: Unlike playlists, collections can contain other collection objects (creating "meta-collections") when using the "Include collections only" option with the Collection name field
 - **Use cases**: Organizing related content for browsing (e.g., "Action Movies", "Holiday Collection", "Director's Collection")
 
 #### Automatic Image Generation

@@ -27,48 +27,61 @@ Here are some more complex playlist and collection examples:
 - **Audio Channels** >= 6 (5.1 or higher)
 
 ## Dynamic Playlist from User Favorites
-- **Playlists** contains "favorites" (match any user-created favorites playlists)
+- **Playlist name** contains "favorites" (match any user-created favorites playlists)
 - **Playback Status** = Unplayed (combine with unplayed filter)
 - Creates a dynamic playlist that pulls unplayed items from any existing favorites playlists
 - Automatically updates as playlists are added/removed or items are marked as played
 
 ## Genre-Based Playlist Mixer
-- **Rule Group 1**: **Playlists** contains "Rock" AND **Community Rating** >= 8
-- **Rule Group 2**: **Playlists** contains "Electronic" AND **Play Count** = 0
+- **Rule Group 1**: **Playlist name** contains "Rock" AND **Community Rating** >= 8
+- **Rule Group 2**: **Playlist name** contains "Electronic" AND **Play Count** = 0
 - Combines highly-rated rock tracks with unplayed electronic music
 - Uses OR logic between rule groups to pull from multiple playlist categories
 
 ## Smart Collection of Music Playlists
-- **Playlists** matches regex `(?i)(workout|running|gym)` with "Include playlist only" enabled
+- **Playlist name** matches regex `(?i)(workout|running|gym)` with "Include playlist only" enabled
 - **List Type**: Collection
 - Creates a collection that contains your exercise-related playlist objects
 - Great for organizing themed playlists without duplicating content
 - Use regex for flexible pattern matching (e.g., case-insensitive matching of multiple keywords)
 
-## Recently Updated Collections {#recently-updated-collections}
+## Sorting Collections by Child Content {#sorting-collections-by-child-content}
 
-Create a collection of collections that automatically sorts by the most recently added content within each child collection.
+Create a collection of collections that automatically sorts by aggregated values from the content within each child collection.
 
-**Scenario**: You have multiple manual collections:
+**Scenario**: You have three action movie collections:
 
-- Collection A (contains movies from 2024 and 2023)
-- Collection B (contains movies from 2022)
-- Collection C (contains a movie from 2025)
+- "Action Classics" contains movies from 1985, 1988, 1990
+- "90s Hits" contains movies from 1994, 1997, 1999
+- "Modern Action" contains movies from 2010, 2015, 2020
 
 **Configuration**:
 
 - **List Type**: Collection
-- **Rule**: **Collections** contains your collection name pattern with **"Include collection only"** set to "Yes"
-- **Sort by**: Date Created Descending (or Release Date, Production Year, Community Rating)
-- **Enable**: "Include items within child collections/playlists" checkbox
+- **Rule**: **Collection name** contains "action" with:
+    - **Include collections only**: Yes
+    - **Collection search depth**: 1
+- **Sort by**: Production Year
 
-**Result**: Collections are sorted by their newest content:
+**Result with Production Year Ascending**:
 
-1. Collection C appears first (has a 2025 movie)
-2. Collection A appears second (has 2024 movies)
-3. Collection B appears last (has 2022 movies)
+Collections are sorted by their **minimum** (earliest) year:
 
-As you add new content to any collection, it automatically rises to the top of the parent collection.
+1. Action Classics (1985)
+2. 90s Hits (1994)
+3. Modern Action (2010)
+
+**Result with Production Year Descending**:
+
+Collections are sorted by their **maximum** (most recent) year:
+
+1. Modern Action (2020)
+2. 90s Hits (1999)
+3. Action Classics (1990)
+
+**Supported sort fields**: Production Year, Community Rating, Date Created, Release Date.
+
+As you add new content to any collection, the sort order automatically updates based on the new aggregated values.
 
 ## Advanced Per-Group Limit Techniques
 
