@@ -1244,6 +1244,14 @@
             if (collectionsValue === 'true') {
                 expression.IncludeEpisodesWithinSeries = true;
             }
+            // Extract collection search depth
+            var depthInput = ruleRow.querySelector('.rule-collections-depth-input');
+            if (depthInput) {
+                var depthValue = parseInt(depthInput.value, 10);
+                if (!isNaN(depthValue) && depthValue > 0) {
+                    expression.CollectionSearchDepth = Math.min(depthValue, 10);
+                }
+            }
         }
         if (fieldValue === 'Playlists') {
             if (playlistOnlyValue === 'true') {

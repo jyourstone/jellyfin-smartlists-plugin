@@ -2837,13 +2837,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 }
             }
 
-            // Approach 3: Fallback to ParentId query
+            // Approach 3: Fallback to ParentId query (direct children only, not recursive)
             if (children == null || children.Length == 0)
             {
                 var query = new InternalItemsQuery(user)
                 {
                     ParentId = container.Id,
-                    Recursive = true,
+                    Recursive = false,
                 };
 
                 children = [.. libraryManager.GetItemsResult(query).Items];
