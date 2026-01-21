@@ -1845,9 +1845,9 @@
                     collectionOnlyDiv.style.display = isCollection ? 'block' : 'none';
                 }
 
-                // Get collection-only select value
+                // Get collection-only select value (only relevant for Collection list type)
                 const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-                const isCollectionOnly = collectionOnlySelect && collectionOnlySelect.value === 'true';
+                const isCollectionOnly = isCollection && collectionOnlySelect && collectionOnlySelect.value === 'true';
 
                 // Show/hide episodes option (hidden if collection-only is yes OR Episode media type is not selected)
                 const episodesDiv = ruleRow.querySelector('.rule-collections-episodes');

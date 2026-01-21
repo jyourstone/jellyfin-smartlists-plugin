@@ -2790,12 +2790,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Gets direct children of a container (collection or playlist) using reflection.
+        /// Tries to get children using common reflection methods (GetChildren and GetLinkedChildren).
         /// </summary>
-        private static BaseItem[] GetContainerDirectChildren(BaseItem container, User user, ILibraryManager libraryManager, ILogger? logger, string containerType)
+        private static BaseItem[]? TryGetChildrenViaReflection(BaseItem container, User user, ILogger? logger, string containerType)
         {
-            BaseItem[]? children = null;
-
             // Approach 1: Try GetChildren method using reflection
             try
             {
@@ -2805,8 +2803,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     var result = getChildrenMethod.Invoke(container, [user, true]);
                     if (result is IEnumerable<BaseItem> childrenEnumerable)
                     {
-                        children = [.. childrenEnumerable];
+                        BaseItem[] children = [.. childrenEnumerable];
                         logger?.LogDebug("{ContainerType} '{ContainerName}' GetChildren() returned {ItemCount} items", containerType, container.Name, children.Length);
+                        return children;
                     }
                 }
             }
@@ -2816,39 +2815,49 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Approach 2: Try GetLinkedChildren method using reflection
-            if (children == null || children.Length == 0)
+            try
             {
-                try
+                var getLinkedChildrenMethod = container.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
+                if (getLinkedChildrenMethod != null)
                 {
-                    var getLinkedChildrenMethod = container.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
-                    if (getLinkedChildrenMethod != null)
+                    var linkedChildren = getLinkedChildrenMethod.Invoke(container, null);
+                    if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
                     {
-                        var linkedChildren = getLinkedChildrenMethod.Invoke(container, null);
-                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
-                        {
-                            children = [.. linkedEnumerable];
-                            logger?.LogDebug("{ContainerType} '{ContainerName}' GetLinkedChildren() returned {ItemCount} items", containerType, container.Name, children.Length);
-                        }
+                        BaseItem[] children = [.. linkedEnumerable];
+                        logger?.LogDebug("{ContainerType} '{ContainerName}' GetLinkedChildren() returned {ItemCount} items", containerType, container.Name, children.Length);
+                        return children;
                     }
                 }
-                catch (Exception ex)
-                {
-                    logger?.LogDebug(ex, "GetLinkedChildren method failed for {ContainerType} '{ContainerName}'", containerType, container.Name);
-                }
             }
-
-            // Approach 3: Fallback to ParentId query (direct children only, not recursive)
-            if (children == null || children.Length == 0)
+            catch (Exception ex)
             {
-                var query = new InternalItemsQuery(user)
-                {
-                    ParentId = container.Id,
-                    Recursive = false,
-                };
-
-                children = [.. libraryManager.GetItemsResult(query).Items];
-                logger?.LogDebug("{ContainerType} '{ContainerName}' ParentId query returned {ItemCount} items", containerType, container.Name, children.Length);
+                logger?.LogDebug(ex, "GetLinkedChildren method failed for {ContainerType} '{ContainerName}'", containerType, container.Name);
             }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets direct children of a container (collection or playlist) using reflection.
+        /// </summary>
+        private static BaseItem[] GetContainerDirectChildren(BaseItem container, User user, ILibraryManager libraryManager, ILogger? logger, string containerType)
+        {
+            // Try common reflection methods first
+            var children = TryGetChildrenViaReflection(container, user, logger, containerType);
+            if (children != null && children.Length > 0)
+            {
+                return children;
+            }
+
+            // Fallback to ParentId query (direct children only, not recursive)
+            var query = new InternalItemsQuery(user)
+            {
+                ParentId = container.Id,
+                Recursive = false,
+            };
+
+            children = [.. libraryManager.GetItemsResult(query).Items];
+            logger?.LogDebug("{ContainerType} '{ContainerName}' ParentId query returned {ItemCount} items", containerType, container.Name, children.Length);
 
             return children ?? [];
         }
@@ -3076,91 +3085,53 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         private static BaseItem[] GetPlaylistDirectChildren(BaseItem playlist, User user, ILibraryManager libraryManager, ILogger? logger)
         {
-            BaseItem[]? children = null;
+            // Try common reflection methods first
+            var children = TryGetChildrenViaReflection(playlist, user, logger, "Playlist");
+            if (children != null && children.Length > 0)
+            {
+                return children;
+            }
 
-            // Approach 1: Try GetChildren method using reflection
+            // Fallback: Try accessing LinkedChildren property directly (playlist-specific)
             try
             {
-                var getChildrenMethod = playlist.GetType().GetMethod("GetChildren", [typeof(User), typeof(bool)]);
-                if (getChildrenMethod != null)
+                var linkedChildrenProp = playlist.GetType().GetProperty("LinkedChildren");
+                if (linkedChildrenProp != null)
                 {
-                    var result = getChildrenMethod.Invoke(playlist, [user, true]);
-                    if (result is IEnumerable<BaseItem> childrenEnumerable)
+                    var linkedChildrenValue = linkedChildrenProp.GetValue(playlist);
+                    if (linkedChildrenValue is Array linkedChildrenArray)
                     {
-                        children = [.. childrenEnumerable];
-                        logger?.LogDebug("Playlist '{PlaylistName}' GetChildren() returned {ItemCount} items", playlist.Name, children.Length);
+                        var itemIds = new List<Guid>();
+                        foreach (var linkedChild in linkedChildrenArray)
+                        {
+                            var itemIdProp = linkedChild.GetType().GetProperty("ItemId");
+                            if (itemIdProp != null)
+                            {
+                                var itemIdValue = itemIdProp.GetValue(linkedChild);
+                                if (itemIdValue is Guid guidValue)
+                                {
+                                    itemIds.Add(guidValue);
+                                }
+                            }
+                        }
+
+                        children = itemIds
+                            .Select(id => libraryManager.GetItemById(id))
+                            .Where(item => item != null)
+                            .Cast<BaseItem>()
+                            .ToArray();
+
+                        logger?.LogDebug("Playlist '{PlaylistName}' LinkedChildren property returned {ItemCount} items", playlist.Name, children.Length);
+                        return children;
                     }
                 }
             }
             catch (Exception ex)
             {
-                logger?.LogDebug(ex, "GetChildren method failed for playlist '{PlaylistName}'", playlist.Name);
+                logger?.LogDebug(ex, "LinkedChildren property access failed for playlist '{PlaylistName}'", playlist.Name);
             }
 
-            // Approach 2: Try GetLinkedChildren method using reflection
-            if (children == null || children.Length == 0)
-            {
-                try
-                {
-                    var getLinkedChildrenMethod = playlist.GetType().GetMethod("GetLinkedChildren", Type.EmptyTypes);
-                    if (getLinkedChildrenMethod != null)
-                    {
-                        var linkedChildren = getLinkedChildrenMethod.Invoke(playlist, null);
-                        if (linkedChildren is IEnumerable<BaseItem> linkedEnumerable)
-                        {
-                            children = [.. linkedEnumerable];
-                            logger?.LogDebug("Playlist '{PlaylistName}' GetLinkedChildren() returned {ItemCount} items", playlist.Name, children.Length);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger?.LogDebug(ex, "GetLinkedChildren method failed for playlist '{PlaylistName}'", playlist.Name);
-                }
-            }
-
-            // Approach 3: Try accessing LinkedChildren property directly
-            if (children == null || children.Length == 0)
-            {
-                try
-                {
-                    var linkedChildrenProp = playlist.GetType().GetProperty("LinkedChildren");
-                    if (linkedChildrenProp != null)
-                    {
-                        var linkedChildrenValue = linkedChildrenProp.GetValue(playlist);
-                        if (linkedChildrenValue is Array linkedChildrenArray)
-                        {
-                            var itemIds = new List<Guid>();
-                            foreach (var linkedChild in linkedChildrenArray)
-                            {
-                                var itemIdProp = linkedChild.GetType().GetProperty("ItemId");
-                                if (itemIdProp != null)
-                                {
-                                    var itemIdValue = itemIdProp.GetValue(linkedChild);
-                                    if (itemIdValue is Guid guidValue)
-                                    {
-                                        itemIds.Add(guidValue);
-                                    }
-                                }
-                            }
-
-                            children = itemIds
-                                .Select(id => libraryManager.GetItemById(id))
-                                .Where(item => item != null)
-                                .Cast<BaseItem>()
-                                .ToArray();
-
-                            logger?.LogDebug("Playlist '{PlaylistName}' LinkedChildren property returned {ItemCount} items", playlist.Name, children.Length);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger?.LogDebug(ex, "LinkedChildren property access failed for playlist '{PlaylistName}'", playlist.Name);
-                }
-            }
-
-            return children ?? [];
+            return [];
         }
 
         /// <summary>
