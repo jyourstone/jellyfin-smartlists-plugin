@@ -40,7 +40,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
         public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
-        public int CollectionRecursionDepth { get; set; } = 1; // How deep to traverse nested collections (1-10). Note: Playlists don't support nesting, so no recursion depth for playlists.
+        public int CollectionRecursionDepth { get; set; } = 1; // How deep to traverse nested collections (0-10, where 0 = direct members only). Note: Playlists don't support nesting, so no recursion depth for playlists.
     }
 
     internal sealed class OperandFactory
