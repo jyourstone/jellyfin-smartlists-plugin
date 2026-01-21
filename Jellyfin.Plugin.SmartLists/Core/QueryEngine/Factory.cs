@@ -27,6 +27,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     public class MediaTypeExtractionOptions
     {
         public bool ExtractAudioLanguages { get; set; } = false;
+        public bool ExtractSubtitleLanguages { get; set; } = false;
         public bool ExtractAudioQuality { get; set; } = false;
         public bool ExtractVideoQuality { get; set; } = false;
         public bool ExtractPeople { get; set; } = false;
@@ -37,6 +38,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool ExtractParentSeriesTags { get; set; } = false;
         public bool ExtractParentSeriesStudios { get; set; } = false;
         public bool ExtractParentSeriesGenres { get; set; } = false;
+        public bool ExtractLastEpisodeAirDate { get; set; } = false;
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
         public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
@@ -921,6 +923,69 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Extracts subtitle languages from media streams.
+        /// </summary>
+        private static void ExtractSubtitleLanguages(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache? cache, ILogger? logger)
+        {
+            operand.SubtitleLanguages = [];
+            try
+            {
+                // Check cache first if available
+                IEnumerable<object> mediaStreams;
+                if (cache != null && cache.MediaStreamsCache.TryGetValue(baseItem.Id, out var cachedStreams))
+                {
+                    mediaStreams = cachedStreams;
+                }
+                else
+                {
+                    // Use shared helper to extract media streams
+                    mediaStreams = TryGetAllMediaStreams(baseItem, logger);
+                    // Cache the result if cache is available
+                    if (cache != null)
+                    {
+                        cache.MediaStreamsCache[baseItem.Id] = mediaStreams;
+                    }
+                }
+
+                // Process found streams
+                foreach (var stream in mediaStreams)
+                {
+                    try
+                    {
+                        var typeProperty = stream.GetType().GetProperty("Type");
+                        var languageProperty = stream.GetType().GetProperty("Language");
+
+                        if (typeProperty != null)
+                        {
+                            var streamType = typeProperty.GetValue(stream);
+                            var language = languageProperty?.GetValue(stream) as string;
+
+                            // Check if it's a subtitle stream
+                            if (streamType != null && streamType.ToString() == "Subtitle")
+                            {
+                                if (!string.IsNullOrEmpty(language))
+                                {
+                                    if (!operand.SubtitleLanguages.Contains(language))
+                                    {
+                                        operand.SubtitleLanguages.Add(language);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogDebug(ex, "Failed to process individual stream for item {Name}", baseItem.Name);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract subtitle languages for item {Name}", baseItem.Name);
+            }
+        }
+
+        /// <summary>
         /// Extracts resolution from media streams.
         /// </summary>
         private static void ExtractResolution(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -1392,6 +1457,73 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             catch (Exception ex)
             {
                 logger?.LogWarning(ex, "Failed to extract series name for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
+        /// Extracts the last episode air date for a Series by finding the most recent episode's air date.
+        /// This is only populated for Series items (not Episodes - they use ReleaseDate directly).
+        /// </summary>
+        private static void ExtractLastEpisodeAirDate(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.LastEpisodeAirDate = 0;
+            try
+            {
+                // Only process Series - this field is specifically for "when did the most recent episode air"
+                if (baseItem is not Series series)
+                {
+                    return;
+                }
+
+                // Check cache first
+                if (cache.LastEpisodeAirDateById.TryGetValue(series.Id, out var cachedDate))
+                {
+                    operand.LastEpisodeAirDate = cachedDate;
+                    logger?.LogDebug("Using cached last episode air date for series '{SeriesName}': {Date}",
+                        series.Name, cachedDate > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)cachedDate).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "N/A");
+                    return;
+                }
+
+                // Query all episodes for this series using AncestorIds for hierarchical lookup
+                var episodes = libraryManager.GetItemList(new MediaBrowser.Controller.Entities.InternalItemsQuery
+                {
+                    AncestorIds = new[] { series.Id },
+                    IncludeItemTypes = new[] { Jellyfin.Data.Enums.BaseItemKind.Episode },
+                    Recursive = true,
+                    IsVirtualItem = false
+                });
+
+                DateTime? mostRecentAirDate = null;
+
+                foreach (var episode in episodes)
+                {
+                    // Use PremiereDate as the episode air date
+                    if (episode.PremiereDate.HasValue)
+                    {
+                        if (!mostRecentAirDate.HasValue || episode.PremiereDate.Value > mostRecentAirDate.Value)
+                        {
+                            mostRecentAirDate = episode.PremiereDate.Value;
+                        }
+                    }
+                }
+
+                if (mostRecentAirDate.HasValue)
+                {
+                    operand.LastEpisodeAirDate = new DateTimeOffset(mostRecentAirDate.Value).ToUnixTimeSeconds();
+                    logger?.LogDebug("Extracted last episode air date for series '{SeriesName}': {Date}",
+                        series.Name, mostRecentAirDate.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    logger?.LogDebug("No episode air dates found for series '{SeriesName}'", series.Name);
+                }
+
+                // Cache the result
+                cache.LastEpisodeAirDateById[series.Id] = operand.LastEpisodeAirDate;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract last episode air date for item '{ItemName}'", baseItem.Name);
             }
         }
 
@@ -1924,6 +2056,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Extract options for easier access
             var extractAudioLanguages = options.ExtractAudioLanguages;
+            var extractSubtitleLanguages = options.ExtractSubtitleLanguages;
             var extractAudioQuality = options.ExtractAudioQuality;
             var extractVideoQuality = options.ExtractVideoQuality;
             var extractPeople = options.ExtractPeople;
@@ -1932,6 +2065,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractParentSeriesTags = options.ExtractParentSeriesTags;
             var extractParentSeriesStudios = options.ExtractParentSeriesStudios;
             var extractParentSeriesGenres = options.ExtractParentSeriesGenres;
+            var extractLastEpisodeAirDate = options.ExtractLastEpisodeAirDate;
             var includeUnwatchedSeries = options.IncludeUnwatchedSeries;
             var additionalUserIds = options.AdditionalUserIds;
 
@@ -2130,6 +2264,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             operand.OfficialRating = baseItem.OfficialRating ?? "";
 
+            // Extract CustomRating property
+            operand.CustomRating = baseItem.CustomRating ?? "";
+
+            // Extract ProductionLocations property
+            operand.ProductionLocations = baseItem.ProductionLocations?.ToList() ?? [];
+
             // Extract Overview property using reflection
             try
             {
@@ -2161,13 +2301,31 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 System.IO.Path.GetFileName(baseItem.Path) ?? "" : "";
 
             // Extract audio languages from media streams - only when needed for performance
-            if (extractAudioLanguages)
+            if (extractAudioLanguages || extractSubtitleLanguages)
             {
-                ExtractAudioLanguages(operand, baseItem, cache, logger);
+                if (extractAudioLanguages)
+                {
+                    ExtractAudioLanguages(operand, baseItem, cache, logger);
+                }
+                else
+                {
+                    operand.AudioLanguages = [];
+                }
+                
+                // Extract subtitle languages when needed (same media stream data source)
+                if (extractSubtitleLanguages)
+                {
+                    ExtractSubtitleLanguages(operand, baseItem, cache, logger);
+                }
+                else
+                {
+                    operand.SubtitleLanguages = [];
+                }
             }
             else
             {
                 operand.AudioLanguages = [];
+                operand.SubtitleLanguages = [];
             }
 
             // Extract audio quality from media streams - only when needed for performance
@@ -2382,6 +2540,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 {
                     logger?.LogWarning(ex, "Failed to extract NextUnwatched status for item {Name}", baseItem.Name);
                 }
+            }
+
+            // Extract LastEpisodeAirDate only for Series items when needed (expensive operation requiring episode queries)
+            if (extractLastEpisodeAirDate && baseItem is Series)
+            {
+                ExtractLastEpisodeAirDate(operand, baseItem, libraryManager, cache, logger);
             }
 
             return operand;

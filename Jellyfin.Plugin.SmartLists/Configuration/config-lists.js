@@ -1409,7 +1409,7 @@
 
         // Escape all dynamic content to prevent XSS
         const eName = SmartLists.escapeHtml(playlist.Name || '');
-        const eFileName = SmartLists.escapeHtml(playlist.FileName || '');
+        const eId = SmartLists.escapeHtml(playlist.Id || '');
         const eUserName = SmartLists.escapeHtml(userName || '');
         const eCreatedBy = SmartLists.escapeHtml(createdBy || 'Unknown');
         const eSortName = SmartLists.escapeHtml(sortName);
@@ -1594,8 +1594,8 @@
             // Hide File property on user pages
             (!isUserPage ?
                 '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">File</td>' +
-                '<td style="padding: 0.5em 0.75em; ">' + eFileName + '</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">ID</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eId + '</td>' +
                 '</tr>' :
                 ''
             ) +

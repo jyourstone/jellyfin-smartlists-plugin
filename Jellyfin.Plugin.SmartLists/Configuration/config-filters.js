@@ -110,11 +110,6 @@
                 return true;
             }
 
-            // Search in filename
-            if (playlist.FileName && playlist.FileName.toLowerCase().indexOf(searchTerm) !== -1) {
-                return true;
-            }
-
             // Search in list type
             if (playlist.Type && playlist.Type.toLowerCase().indexOf(searchTerm) !== -1) {
                 return true;
@@ -295,6 +290,20 @@
                 if (playlist.CreatedByUserId) {
                     const createdByUsername = page._usernameCache.get(normalizeUserId(playlist.CreatedByUserId));
                     if (createdByUsername && createdByUsername.toLowerCase().indexOf(searchTerm) !== -1) {
+                        return true;
+                    }
+                }
+            }
+
+            // Search in custom images
+            if (playlist.CustomImages && Object.keys(playlist.CustomImages).length > 0) {
+                // Match "custom images" or "customimages"
+                if (searchTerm === 'custom images' || searchTerm === 'customimages' || searchTerm === 'custom image') {
+                    return true;
+                }
+                // Search for specific image types (Primary, Backdrop, Banner, etc.)
+                for (var imgType in playlist.CustomImages) {
+                    if (playlist.CustomImages.hasOwnProperty(imgType) && imgType.toLowerCase().indexOf(searchTerm) !== -1) {
                         return true;
                     }
                 }

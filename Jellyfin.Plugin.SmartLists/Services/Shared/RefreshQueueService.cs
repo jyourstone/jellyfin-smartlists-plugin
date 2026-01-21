@@ -709,6 +709,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Item membership cache with depth key for collections - maps (ItemId, Depth) → list of collection names
             public ConcurrentDictionary<(Guid ItemId, int Depth), List<string>> ItemCollectionsWithDepth { get; } = new();
+
+            // Last episode air date cache for Series items - maps SeriesId → Unix timestamp of most recent episode
+            public ConcurrentDictionary<Guid, double> LastEpisodeAirDateById { get; } = new();
         }
 
         /// <summary>

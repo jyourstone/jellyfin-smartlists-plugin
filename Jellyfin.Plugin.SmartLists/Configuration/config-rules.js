@@ -474,7 +474,7 @@
         // Create the main container with EXACT same styling as standard Jellyfin inputs
         const tagContainer = document.createElement('div');
         tagContainer.className = 'tag-input-container emby-input';
-        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start;';
+        tagContainer.style.cssText = 'width: 100%; border: none; border-radius: 0; padding: 0.55em 0.5em; display: flex; flex-wrap: wrap; gap: 0.5em; align-items: center; box-sizing: border-box; align-content: flex-start; position: relative;';
 
         // Create the input field with standard Jellyfin styling
         const input = document.createElement('input');
@@ -498,16 +498,41 @@
         valueContainer.appendChild(tagContainer);
         valueContainer.appendChild(hiddenInput);
 
+        // Create the popup for "Create option X"
+        const popup = SmartLists.createTagPopup(tagContainer);
+
+        // Function to add tag and clean up
+        var addTagFromPopup = function (value) {
+            SmartLists.addTagToContainer(valueContainer, value);
+            input.value = '';
+            SmartLists.hideTagPopup(popup);
+            SmartLists.updateHiddenInput(valueContainer);
+            input.focus();
+        };
+
         // Add event listeners
         input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const value = input.value.trim();
                 if (value) {
-                    SmartLists.addTagToContainer(valueContainer, value);
-                    input.value = '';
-                    SmartLists.updateHiddenInput(valueContainer);
+                    addTagFromPopup(value);
                 }
+            } else if (e.key === 'ArrowDown') {
+                // If popup is visible, highlight the item
+                if (popup.style.display !== 'none') {
+                    e.preventDefault();
+                    SmartLists.highlightTagPopup(popup, true);
+                }
+            } else if (e.key === 'ArrowUp') {
+                // If popup is visible and highlighted, unhighlight
+                if (popup.style.display !== 'none' && popup._isHighlighted) {
+                    e.preventDefault();
+                    SmartLists.highlightTagPopup(popup, false);
+                }
+            } else if (e.key === 'Escape') {
+                // Hide popup on escape
+                SmartLists.hideTagPopup(popup);
             } else if (e.key === 'Backspace' && input.value === '') {
                 // Remove last tag when backspace is pressed on empty input
                 e.preventDefault();
@@ -528,8 +553,27 @@
                     }
                 });
                 input.value = '';
+                SmartLists.hideTagPopup(popup);
                 SmartLists.updateHiddenInput(valueContainer);
+            } else {
+                // Show or update the popup with current input value
+                SmartLists.showTagPopup(popup, value, addTagFromPopup);
             }
+        });
+
+        // Show popup when input is focused and has value
+        input.addEventListener('focus', function () {
+            const value = input.value.trim();
+            if (value) {
+                SmartLists.showTagPopup(popup, value, addTagFromPopup);
+            }
+        });
+
+        // Hide popup when clicking outside (with delay to allow click on popup)
+        input.addEventListener('blur', function () {
+            setTimeout(function () {
+                SmartLists.hideTagPopup(popup);
+            }, 200);
         });
 
         // Restore existing tags if any
@@ -637,6 +681,90 @@
             });
 
         hiddenInput.value = tags.join(';');
+    };
+
+    // ===== CREATE OPTION POPUP FOR TAG INPUT =====
+    SmartLists.createTagPopup = function (tagContainer) {
+        var popup = document.createElement('div');
+        popup.className = 'tag-create-popup';
+        popup.style.cssText = 'position: absolute; left: 0; right: 0; top: 100%; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-top: none; border-radius: 0 0 4px 4px; z-index: 1000; display: none; box-shadow: 0 4px 8px rgba(0,0,0,0.3);';
+
+        var popupItem = document.createElement('div');
+        popupItem.className = 'tag-create-popup-item';
+        popupItem.style.cssText = 'padding: 0.6em 0.75em; cursor: pointer; color: var(--jf-palette-text-secondary);';
+
+        popup.appendChild(popupItem);
+        tagContainer.appendChild(popup);
+
+        return popup;
+    };
+
+    SmartLists.showTagPopup = function (popup, text, onSelect) {
+        if (!text || !text.trim()) {
+            popup.style.display = 'none';
+            return;
+        }
+
+        var trimmedText = text.trim();
+        var popupItem = popup.querySelector('.tag-create-popup-item');
+
+        // Check if the value already exists as a tag
+        var valueContainer = popup.closest('.rule-value-container');
+        var existingTags = [];
+        if (valueContainer) {
+            existingTags = Array.from(valueContainer.querySelectorAll('.tag-item span'))
+                .map(function (span) {
+                    return span.textContent.toLowerCase().trim();
+                });
+        }
+
+        // Don't show popup if this value already exists
+        if (existingTags.indexOf(trimmedText.toLowerCase()) !== -1) {
+            popup.style.display = 'none';
+            return;
+        }
+
+        popupItem.textContent = 'Create option ' + trimmedText;
+        popupItem._value = trimmedText;
+        popupItem._onSelect = onSelect;
+
+        // Remove old click handler and add new one
+        var newItem = popupItem.cloneNode(true);
+        newItem.textContent = 'Create option ' + trimmedText;
+        newItem._value = trimmedText;
+
+        newItem.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onSelect(trimmedText);
+        });
+
+        newItem.addEventListener('mouseenter', function () {
+            this.style.backgroundColor = 'var(--jf-palette-action-hover)';
+        });
+
+        newItem.addEventListener('mouseleave', function () {
+            this.style.backgroundColor = 'transparent';
+        });
+
+        popup.replaceChild(newItem, popupItem);
+        popup.style.display = 'block';
+        popup._isHighlighted = false;
+    };
+
+    SmartLists.hideTagPopup = function (popup) {
+        if (popup) {
+            popup.style.display = 'none';
+        }
+    };
+
+    SmartLists.highlightTagPopup = function (popup, highlight) {
+        if (!popup) return;
+        var item = popup.querySelector('.tag-create-popup-item');
+        if (item) {
+            item.style.backgroundColor = highlight ? 'var(--jf-palette-action-hover)' : 'transparent';
+            popup._isHighlighted = highlight;
+        }
     };
 
     // ===== REGEX HELP =====
@@ -1743,6 +1871,7 @@
         }
 
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
+        const hasSeries = selectedMediaTypes.indexOf('Series') !== -1;
         const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioBook = selectedMediaTypes.indexOf('AudioBook') !== -1;
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
@@ -1750,6 +1879,11 @@
         // Episode-only fields
         if (['SeriesName', 'NextUnwatched'].indexOf(fieldValue) !== -1) {
             return hasEpisode;
+        }
+
+        // Series-only fields (TV Shows)
+        if (['LastEpisodeAirDate'].indexOf(fieldValue) !== -1) {
+            return hasSeries;
         }
 
         // Audio fields - show when any audio-capable type is selected

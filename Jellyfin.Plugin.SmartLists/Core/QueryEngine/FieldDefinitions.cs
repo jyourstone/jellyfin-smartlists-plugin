@@ -17,7 +17,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             "DateLastSaved",
             "DateModified",
             "ReleaseDate",
-            "LastPlayedDate"
+            "LastPlayedDate",
+            "LastEpisodeAirDate"
         ];
 
         /// <summary>
@@ -28,6 +29,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             "Collections",
             "Playlists",
             "AudioLanguages",
+            "SubtitleLanguages",
+            "ProductionLocations",
             "People",
             "Actors",
             "ActorRoles",

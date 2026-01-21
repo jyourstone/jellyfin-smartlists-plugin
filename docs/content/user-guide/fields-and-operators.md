@@ -13,6 +13,7 @@ The web interface provides access to all available fields for creating list rule
 - **Audio Codec** - Audio codec format (e.g., FLAC, MP3, AAC, ALAC)
 - **Audio Profile** - Audio codec profile (e.g., Dolby TrueHD, Dolby Atmos)
 - **Audio Channels** - Number of audio channels (e.g., 2 for stereo, 6 for 5.1)
+- **Subtitle Languages** - The subtitle language tracks available for the movie/TV show (e.g., eng, spa, fra)
 - **Resolution** - Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K)
 - **Framerate** - Video framerate in frames per second (e.g., 23.976, 29.97, 59.94)
 - **Video Codec** - Video codec format (e.g., HEVC, H264, AV1, VP9)
@@ -23,9 +24,12 @@ The web interface provides access to all available fields for creating list rule
 - **Series Name** - Name of the parent series (for episodes only)
 - **Similar To** - Find items similar to a reference item based on metadata
 - **Parental Rating** - Age rating (G, PG, PG-13, R, etc.)
+- **Custom Rating** - Custom/user-defined rating string (different from Parental Rating)
 - **Overview** - Description/summary of the content
 - **Production Year** - Original production year
 - **Release Date** - Original release date of the media
+- **Last Episode Air Date** - The air date of the most recently aired episode (for TV series only). Useful for finding shows that are actively airing or haven't had new episodes recently.
+- **Production Locations** - The countries or regions where the content was produced (e.g., "United States", "Japan", "United Kingdom")
 
 ### Ratings & Playback Fields
 

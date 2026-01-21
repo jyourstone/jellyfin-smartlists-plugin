@@ -87,6 +87,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Series name field - for episodes, contains the name of the parent series
         public string SeriesName { get; set; } = string.Empty;
 
+        // Production locations - countries/regions where the content was produced
+        public List<string> ProductionLocations { get; set; } = [];
+
+        // Custom rating - user-defined rating field (can be text or numeric)
+        public string CustomRating { get; set; } = string.Empty;
+
+        // Subtitle languages - available subtitle languages from media streams
+        public List<string> SubtitleLanguages { get; set; } = [];
+
+        // Last episode air date - for Series, the air date of the most recent episode (Unix timestamp)
+        public double LastEpisodeAirDate { get; set; } = 0;
+
         // User-specific data - Store user ID -> data mappings
         // These will be populated based on which users are referenced in rules
         public Dictionary<string, string> PlaybackStatusByUser { get; set; } = [];

@@ -20,9 +20,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     new { Value = "SeriesName", Label = "Series Name" },
                     new { Value = "SimilarTo", Label = "Similar To" },
                     new { Value = "OfficialRating", Label = "Parental Rating" },
+                    new { Value = "CustomRating", Label = "Custom Rating" },
                     new { Value = "Overview", Label = "Overview" },
                     new { Value = "ProductionYear", Label = "Production Year" },
-                    new { Value = "ReleaseDate", Label = "Release Date" }
+                    new { Value = "ReleaseDate", Label = "Release Date" },
+                    new { Value = "LastEpisodeAirDate", Label = "Last Episode Air Date" },
+                    new { Value = "ProductionLocations", Label = "Production Location" }
                     // Note: ItemType (Media Type) is intentionally excluded from UI fields
                     // because users select media type (Audio/Video) before creating rules
                 },
@@ -38,6 +41,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 AudioFields = new[]
                 {
                     new { Value = "AudioLanguages", Label = "Audio Languages" },
+                    new { Value = "SubtitleLanguages", Label = "Subtitle Languages" },
                     new { Value = "AudioBitrate", Label = "Audio Bitrate (kbps)" },
                     new { Value = "AudioSampleRate", Label = "Audio Sample Rate (Hz)" },
                     new { Value = "AudioBitDepth", Label = "Audio Bit Depth" },

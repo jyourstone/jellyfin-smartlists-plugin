@@ -95,7 +95,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             return fieldName switch
             {
                 // Other multi-valued fields with full operator support
-                "Genres" or "Studios" or "Tags" or "Artists" or "AlbumArtists" or "AudioLanguages"
+                "Genres" or "Studios" or "Tags" or "Artists" or "AlbumArtists" or "AudioLanguages" 
+                    or "SubtitleLanguages" or "ProductionLocations"
                     => MultiValuedFieldOperators,
 
                 // Multi-valued fields - Collections and Playlists now support all operators including NotContains and IsNotIn
@@ -121,6 +122,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
 
                 // Date fields
                 "DateCreated" or "DateLastRefreshed" or "DateLastSaved" or "DateModified" or "ReleaseDate" or "LastPlayedDate"
+                    or "LastEpisodeAirDate"
                     => DateFieldOperators,
 
                 // Resolution fields
@@ -132,7 +134,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                     => SimilarToFieldOperators,
 
                 // String fields (text-based fields)
-                "Name" or "Album" or "SeriesName" or "OfficialRating" or "Overview" or "FileName" or "FolderPath"
+                "Name" or "Album" or "SeriesName" or "OfficialRating" or "CustomRating" or "Overview" or "FileName" or "FolderPath"
                     or "AudioCodec" or "AudioProfile" or "VideoCodec" or "VideoProfile" or "VideoRange" or "VideoRangeType"
                     => StringFieldOperators,
 
@@ -159,6 +161,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 ["Artists"] = MultiValuedFieldOperators,
                 ["AlbumArtists"] = MultiValuedFieldOperators,
                 ["AudioLanguages"] = MultiValuedFieldOperators,
+                ["SubtitleLanguages"] = MultiValuedFieldOperators,
+                ["ProductionLocations"] = MultiValuedFieldOperators,
 
                 // Simple fields - single-choice fields
                 ["ItemType"] = SimpleFieldOperators,
@@ -189,6 +193,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 ["DateModified"] = DateFieldOperators,
                 ["ReleaseDate"] = DateFieldOperators,
                 ["LastPlayedDate"] = DateFieldOperators,
+                ["LastEpisodeAirDate"] = DateFieldOperators,
 
                 // Resolution fields - resolution-based fields
                 ["Resolution"] = ResolutionFieldOperators,
@@ -201,6 +206,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 ["Album"] = StringFieldOperators,
                 ["SeriesName"] = StringFieldOperators,
                 ["OfficialRating"] = StringFieldOperators,
+                ["CustomRating"] = StringFieldOperators,
                 ["Overview"] = StringFieldOperators,
                 ["FileName"] = StringFieldOperators,
                 ["FolderPath"] = StringFieldOperators,
