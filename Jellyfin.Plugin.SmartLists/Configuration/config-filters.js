@@ -295,8 +295,12 @@
                 }
             }
 
-            // Search in custom images
-            if (playlist.CustomImages && Object.keys(playlist.CustomImages).length > 0) {
+            // Search in custom images field
+            // This matches the display text in the list: "Auto-generated (Primary & Thumbnail)", image type names, or "None"
+            var hasCustomImages = playlist.CustomImages && Object.keys(playlist.CustomImages).length > 0;
+            var isCollection = playlist.Type === 'Collection';
+
+            if (hasCustomImages) {
                 // Match "custom images" or "customimages"
                 if (searchTerm === 'custom images' || searchTerm === 'customimages' || searchTerm === 'custom image') {
                     return true;
@@ -306,6 +310,35 @@
                     if (playlist.CustomImages.hasOwnProperty(imgType) && imgType.toLowerCase().indexOf(searchTerm) !== -1) {
                         return true;
                     }
+                }
+                // For collections with partial custom images, search "auto" matches auto-generated text
+                if (isCollection) {
+                    var hasCustomPrimary = playlist.CustomImages.Primary;
+                    var hasCustomThumb = playlist.CustomImages.Thumb;
+                    if (!hasCustomPrimary || !hasCustomThumb) {
+                        // Matches "Auto: Primary" or "Auto: Thumb" display text
+                        if ('auto'.indexOf(searchTerm) !== -1 || searchTerm.indexOf('auto') !== -1) {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                // No custom images - check what display text to match
+                if (isCollection) {
+                    // Collections show "Auto-generated (Primary & Thumbnail)"
+                    if ('auto-generated'.indexOf(searchTerm) !== -1 ||
+                        'auto'.indexOf(searchTerm) !== -1 ||
+                        'generated'.indexOf(searchTerm) !== -1 ||
+                        'thumbnail'.indexOf(searchTerm) !== -1 ||
+                        searchTerm.indexOf('auto') !== -1 ||
+                        searchTerm.indexOf('generated') !== -1 ||
+                        searchTerm.indexOf('thumbnail') !== -1) {
+                        return true;
+                    }
+                } else {
+                    // Playlists show "None" - but avoid conflict with other "none" searches
+                    // Only match if explicitly looking for custom images context
+                    // (searching "none" alone already has other meanings like no schedules, etc.)
                 }
             }
 
