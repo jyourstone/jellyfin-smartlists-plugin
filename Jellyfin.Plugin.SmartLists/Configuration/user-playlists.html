@@ -26,16 +26,14 @@
                     <a class="emby-button" href="#" data-role="button" data-tab="manage">My Smart Lists</a>
                 </div>
 
-                <div id="edit-mode-indicator"
-                    style="display: none; color: var(--jf-palette-warning-main); font-weight: bold; margin: 0.5em 0;">
-                    <span>✏️ Editing Mode - Modifying existing list</span>
-                    <button type="button" id="cancelEditBtn" class="emby-button raised" style="margin-left: 1em;">Cancel
-                        Edit</button>
-                </div>
-
                 <!-- Create Tab -->
                 <div id="create-tab" class="page-content hide" data-tab-content="create">
                     <form id="playlistForm" style="margin-top:2em;">
+                        <div id="edit-mode-indicator"
+                            style="display: none; align-items: center; justify-content: space-between; padding: 0.75em 1em; margin-bottom: 1em; background: var(--jf-palette-LinearProgress-warningBg); border-left: 4px solid var(--jf-palette-warning-main); border-radius: 4px;">
+                            <span style="color: var(--jf-palette-Alert-warningColor); font-weight: 500;">✏️ Editing Mode - Modifying existing list</span>
+                            <button type="button" id="cancelEditBtn" class="emby-button raised">Cancel Edit</button>
+                        </div>
                         <!-- List Type - shown/hidden based on user permissions -->
                         <div class="inputContainer" id="listTypeContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" for="listType" style="display: flex; align-items: center;">

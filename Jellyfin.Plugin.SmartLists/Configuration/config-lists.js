@@ -737,7 +737,7 @@
                 // Update UI to show edit mode
                 const editIndicator = page.querySelector('#edit-mode-indicator');
                 if (editIndicator) {
-                    editIndicator.style.display = 'block';
+                    editIndicator.style.display = 'flex';
                 }
                 const submitBtn = page.querySelector('#submitBtn');
                 if (submitBtn) {

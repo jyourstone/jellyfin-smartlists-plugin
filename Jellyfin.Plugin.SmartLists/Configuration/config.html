@@ -42,16 +42,14 @@
                     <a class="emby-button" href="#" data-role="button" data-tab="settings">Settings</a>
                 </div>
 
-                <div id="edit-mode-indicator"
-                    style="display: none; color: var(--jf-palette-warning-main); font-weight: bold; margin: 0.5em 0;">
-                    <span>✏️ Editing Mode - Modifying existing list</span>
-                    <button type="button" id="cancelEditBtn" class="emby-button raised" style="margin-left: 1em;">Cancel
-                        Edit</button>
-                </div>
-
                 <!-- Create Tab -->
                 <div id="create-tab" class="page-content hide" data-tab-content="create">
                     <form id="playlistForm" style="margin-top:2em;">
+                        <div id="edit-mode-indicator"
+                            style="display: none; align-items: center; justify-content: space-between; padding: 0.75em 1em; margin-bottom: 1em; background: var(--jf-palette-LinearProgress-warningBg); border-left: 4px solid var(--jf-palette-warning-main); border-radius: 4px;">
+                            <span style="color: var(--jf-palette-Alert-warningColor); font-weight: 500;">✏️ Editing Mode - Modifying existing list</span>
+                            <button type="button" id="cancelEditBtn" class="emby-button raised">Cancel Edit</button>
+                        </div>
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" for="listType" style="display: flex; align-items: center;">
                                 List Type
@@ -498,7 +496,15 @@
                                 to 0 for no limit.</div>
                         </div>
 
-                        <h2 class="sectionTitle" style="margin-top: 2em;">Refresh Settings</h2>
+                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
+                            Refresh Settings
+                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/auto-refresh/"
+                                target="_blank" rel="noopener noreferrer" title="Documentation"
+                                style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                <span class="material-icons" aria-hidden="true"
+                                    style="font-size: 1em; line-height: 0;">info_outline</span>
+                            </a>
+                        </h2>
 
                         <div class="selectContainer" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="selectLabel" for="defaultAutoRefresh">Default Auto-refresh Mode</label>
