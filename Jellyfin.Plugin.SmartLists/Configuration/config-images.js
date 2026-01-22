@@ -169,10 +169,11 @@
         row.className = 'image-upload-row paperList';
         SmartLists.applyStyles(row, {
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
-            gap: '1em',
+            gap: '0.75em',
             marginBottom: '0.5em',
-            padding: '0.75em 4em 0.75em 1em',
+            padding: '0.75em 3em 0.75em 1em',
             border: '1px solid var(--jf-palette-divider)',
             borderRadius: '4px',
             position: 'relative'
@@ -182,7 +183,7 @@
         var typeSelect = document.createElement('select');
         typeSelect.className = 'image-type-select emby-select-withcolor emby-select';
         typeSelect.setAttribute('is', 'emby-select');
-        typeSelect.style.flex = '0 0 180px';
+        typeSelect.style.cssText = 'flex: 0 0 auto; min-width: 140px; max-width: 180px;';
         if (isExisting) {
             typeSelect.disabled = true;
         }
@@ -199,90 +200,90 @@
         }
         row.appendChild(typeSelect);
 
-        // File input or existing image
-        if (isExisting) {
-            // Existing image - show preview link
-            var existingDiv = document.createElement('div');
-            existingDiv.style.cssText = 'flex: 1; display: flex; align-items: center; gap: 0.5em;';
-
-            var checkIcon = document.createElement('span');
-            checkIcon.className = 'material-icons';
-            checkIcon.style.color = '#4CAF50';
-            checkIcon.textContent = 'check_circle';
-            existingDiv.appendChild(checkIcon);
-
-            var link = document.createElement('a');
-            link.href = existingImage.previewUrl;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.style.color = 'var(--jf-palette-primary)';
-            link.textContent = existingImage.fileName;
-            existingDiv.appendChild(link);
-
-            var hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.className = 'existing-image';
-            hiddenInput.setAttribute('data-image-type', existingImage.imageType);
-            hiddenInput.value = existingImage.fileName;
-            existingDiv.appendChild(hiddenInput);
-
-            row.appendChild(existingDiv);
-        } else {
-            // New upload - styled file input wrapper (matching import button style)
-            var fileInputWrapper = document.createElement('div');
-            fileInputWrapper.style.cssText = 'flex: 1; display: flex; align-items: center; gap: 0.5em;';
-
+        // File input (only for new uploads, not existing images)
+        if (!isExisting) {
+            // New upload - Choose File button
             var fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.className = 'image-file-input';
             fileInput.accept = 'image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/svg+xml,image/tiff,image/apng,image/x-icon';
             fileInput.style.display = 'none';
             fileInput.id = 'file-input-' + rowId;
+            row.appendChild(fileInput);
 
             var fileLabel = document.createElement('label');
             fileLabel.htmlFor = 'file-input-' + rowId;
             fileLabel.className = 'emby-button raised';
-            fileLabel.style.cssText = 'display: inline-block; cursor: pointer; margin: 0;';
+            fileLabel.style.cssText = 'display: inline-block; cursor: pointer; margin: 0; flex: 0 0 auto; white-space: nowrap;';
             fileLabel.textContent = 'Choose File';
-
-            var fileNameSpan = document.createElement('span');
-            fileNameSpan.className = 'selected-file-name';
-            fileNameSpan.style.cssText = 'opacity: 0.8; font-size: 0.9em;';
-            fileNameSpan.textContent = 'No file selected';
-
-            fileInputWrapper.appendChild(fileInput);
-            fileInputWrapper.appendChild(fileLabel);
-            fileInputWrapper.appendChild(fileNameSpan);
-            row.appendChild(fileInputWrapper);
+            row.appendChild(fileLabel);
         }
 
-        // Preview thumbnail
+        // File info container - can shrink and will wrap on mobile if needed
+        var fileInfoDiv = document.createElement('div');
+        fileInfoDiv.className = 'image-file-info';
+        fileInfoDiv.style.cssText = 'flex: 1 1 150px; display: flex; align-items: center; gap: 0.75em; min-width: 100px;';
+
+        if (isExisting) {
+            var link = document.createElement('a');
+            link.href = existingImage.previewUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.style.cssText = 'color: var(--jf-palette-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;';
+            link.textContent = existingImage.fileName;
+            fileInfoDiv.appendChild(link);
+
+            var hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.className = 'existing-image';
+            hiddenInput.setAttribute('data-image-type', existingImage.imageType);
+            hiddenInput.value = existingImage.fileName;
+            fileInfoDiv.appendChild(hiddenInput);
+        } else {
+            var fileNameSpan = document.createElement('span');
+            fileNameSpan.className = 'selected-file-name';
+            fileNameSpan.style.cssText = 'opacity: 0.8; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;';
+            fileNameSpan.textContent = 'No file selected';
+            fileInfoDiv.appendChild(fileNameSpan);
+        }
+
+        // Preview thumbnail - right margin prevents overlap with absolute delete button
         var previewContainer = document.createElement('div');
         previewContainer.className = 'image-preview-container';
-        previewContainer.style.cssText = 'width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--jf-palette-divider); border-radius: 4px; overflow: hidden;';
+        previewContainer.style.cssText = 'width: 50px; height: 50px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border: 1px solid var(--jf-palette-divider); border-radius: 4px; overflow: hidden; margin-right: 1.5em;';
 
         if (existingImage && existingImage.previewUrl) {
+            // Wrap preview in a link for existing images
+            var previewLink = document.createElement('a');
+            previewLink.href = existingImage.previewUrl;
+            previewLink.target = '_blank';
+            previewLink.rel = 'noopener noreferrer';
+            previewLink.style.cssText = 'display: flex; width: 100%; height: 100%; align-items: center; justify-content: center;';
+
             var previewImg = document.createElement('img');
             previewImg.src = existingImage.previewUrl;
             previewImg.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
-            previewContainer.appendChild(previewImg);
+            previewLink.appendChild(previewImg);
+            previewContainer.appendChild(previewLink);
         } else {
             var placeholderIcon = document.createElement('span');
             placeholderIcon.className = 'material-icons';
-            placeholderIcon.style.cssText = 'color: var(--jf-palette-text-secondary); font-size: 24px;';
+            placeholderIcon.style.cssText = 'color: var(--jf-palette-text-secondary); font-size: 20px;';
             placeholderIcon.textContent = 'image';
             previewContainer.appendChild(placeholderIcon);
         }
-        row.appendChild(previewContainer);
+        fileInfoDiv.appendChild(previewContainer);
 
-        // Remove button - styled like schedule/sort remove buttons
+        row.appendChild(fileInfoDiv);
+
+        // Remove button - absolutely positioned to right, vertically centered
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'remove-image-btn';
         removeBtn.setAttribute('data-row-id', rowId);
         removeBtn.textContent = '\u00D7'; // × symbol
         removeBtn.title = 'Remove image';
-        SmartLists.applyStyles(removeBtn, SmartLists.STYLES.scheduleRemoveBtn);
+        removeBtn.style.cssText = 'padding: 0.3em 0.6em; font-size: 1.3em; border: none; background: var(--jf-palette-error-main); color: var(--jf-palette-error-contrastText); border-radius: 4px; cursor: pointer; font-weight: 500; line-height: 1; position: absolute; right: 0.75em; top: 50%; transform: translateY(-50%);';
         row.appendChild(removeBtn);
 
         container.appendChild(row);
