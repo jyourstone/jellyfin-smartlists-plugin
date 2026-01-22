@@ -1163,34 +1163,115 @@
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
 
-        // Add import file input event listener
+        // Add import drop zone event listeners
         const importFileInput = page.querySelector('#importPlaylistsFile');
-        const importBtn = page.querySelector('#importPlaylistsBtn');
+        const importDropZone = page.querySelector('#importDropZone');
+        const importDropZoneContent = page.querySelector('#importDropZoneContent');
+        const importFileSelected = page.querySelector('#importFileSelected');
         const selectedFileName = page.querySelector('#selectedFileName');
-        if (importFileInput && importBtn) {
+        const importCancelBtn = page.querySelector('#importCancelBtn');
+
+        // Get CSS variable values for dynamic styling
+        var styles = getComputedStyle(document.documentElement);
+        var successColor = styles.getPropertyValue('--jf-palette-success-main').trim() || '#66bb6a';
+        var successChannel = styles.getPropertyValue('--jf-palette-success-mainChannel').trim() || '102 187 106';
+        var primaryColor = styles.getPropertyValue('--jf-palette-primary-main').trim() || '#00a4dc';
+        var primaryChannel = styles.getPropertyValue('--jf-palette-primary-mainChannel').trim() || '0 164 220';
+        var dividerColor = styles.getPropertyValue('--jf-palette-divider').trim() || 'rgba(255, 255, 255, 0.12)';
+        var successBg = 'rgb(' + successChannel + ' / 0.1)';
+        var primaryBg = 'rgb(' + primaryChannel + ' / 0.1)';
+
+        function showFileSelectedState(fileName) {
+            if (importDropZoneContent) importDropZoneContent.style.display = 'none';
+            if (importFileSelected) importFileSelected.style.display = 'block';
+            if (selectedFileName) selectedFileName.textContent = fileName;
+            if (importDropZone) {
+                importDropZone.style.borderColor = successColor;
+                importDropZone.style.borderStyle = 'solid';
+                importDropZone.style.background = successBg;
+            }
+        }
+
+        function resetDropZone() {
+            if (importFileInput) importFileInput.value = '';
+            if (importDropZoneContent) importDropZoneContent.style.display = 'block';
+            if (importFileSelected) importFileSelected.style.display = 'none';
+            if (selectedFileName) selectedFileName.textContent = '';
+            if (importDropZone) {
+                importDropZone.style.borderColor = dividerColor;
+                importDropZone.style.borderStyle = 'dashed';
+                importDropZone.style.background = 'transparent';
+            }
+        }
+
+        if (importFileInput) {
             importFileInput.addEventListener('change', function () {
-                const hasFile = this.files && this.files.length > 0;
-
-                // Show/hide and enable/disable import button based on file selection
-                if (hasFile) {
-                    importBtn.style.display = 'inline-block';
-                    importBtn.disabled = false;
+                if (this.files && this.files.length > 0) {
+                    showFileSelectedState(this.files[0].name);
                 } else {
-                    importBtn.style.display = 'none';
-                    importBtn.disabled = true;
+                    resetDropZone();
                 }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
 
-                // Update filename display
-                if (selectedFileName) {
-                    if (hasFile) {
-                        selectedFileName.textContent = 'Selected: ' + this.files[0].name;
-                        selectedFileName.style.fontStyle = 'italic';
+        if (importDropZone) {
+            // Click to browse
+            importDropZone.addEventListener('click', function (e) {
+                // Don't trigger file browser if clicking on buttons
+                if (e.target.closest('button')) return;
+                if (importFileInput) importFileInput.click();
+            }, SmartLists.getEventListenerOptions(pageSignal));
+
+            // Drag and drop handling
+            importDropZone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.borderColor = primaryColor;
+                this.style.background = primaryBg;
+            }, SmartLists.getEventListenerOptions(pageSignal));
+
+            importDropZone.addEventListener('dragleave', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Restore appropriate state
+                if (importFileInput && importFileInput.files && importFileInput.files.length > 0) {
+                    this.style.borderColor = successColor;
+                    this.style.background = successBg;
+                } else {
+                    this.style.borderColor = dividerColor;
+                    this.style.background = 'transparent';
+                }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+
+            importDropZone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    var file = files[0];
+                    if (file.name.toLowerCase().endsWith('.zip')) {
+                        // Create a new DataTransfer to set files on input
+                        var dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        importFileInput.files = dataTransfer.files;
+                        showFileSelectedState(file.name);
                     } else {
-                        selectedFileName.textContent = '';
+                        SmartLists.showNotification('Please select a ZIP file', 'warn');
+                        resetDropZone();
                     }
                 }
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
+
+        if (importCancelBtn) {
+            importCancelBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                resetDropZone();
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
+        // Expose resetDropZone for use after successful import
+        SmartLists.resetImportDropZone = resetDropZone;
     };
 
     // ===== PLAYLIST NAMING =====

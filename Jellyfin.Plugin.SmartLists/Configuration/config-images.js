@@ -166,14 +166,15 @@
         // Create the row element
         var row = document.createElement('div');
         row.id = rowId;
-        row.className = 'image-upload-row paperList';
+        row.className = 'image-upload-row' + (isExisting ? '' : ' paperList');
         SmartLists.applyStyles(row, {
             display: 'flex',
-            flexWrap: 'wrap',
+            flexWrap: isExisting ? 'nowrap' : 'wrap',
             alignItems: 'center',
+            justifyContent: 'flex-start',
             gap: '0.75em',
             marginBottom: '0.5em',
-            padding: '0.75em 3em 0.75em 1em',
+            padding: '0.75em 4em 0.75em 1em',
             border: '1px solid var(--jf-palette-divider)',
             borderRadius: '4px',
             position: 'relative'
@@ -183,9 +184,13 @@
         var typeSelect = document.createElement('select');
         typeSelect.className = 'image-type-select emby-select-withcolor emby-select';
         typeSelect.setAttribute('is', 'emby-select');
-        typeSelect.style.cssText = 'flex: 0 0 auto; min-width: 140px; max-width: 180px;';
+        // For new uploads: flex: 1 1 140px allows it to grow when wrapped
+        // For existing: fixed width to leave room for file info
         if (isExisting) {
+            typeSelect.style.cssText = 'width: 140px; flex: 0 0 140px;';
             typeSelect.disabled = true;
+        } else {
+            typeSelect.style.cssText = 'flex: 1 1 140px; min-width: 140px;';
         }
 
         for (var i = 0; i < typesForDropdown.length; i++) {
@@ -202,7 +207,7 @@
 
         // File input (only for new uploads, not existing images)
         if (!isExisting) {
-            // New upload - Choose File button
+            // New upload - drop zone containing filename and preview
             var fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.className = 'image-file-input';
@@ -211,49 +216,179 @@
             fileInput.id = 'file-input-' + rowId;
             row.appendChild(fileInput);
 
-            var fileLabel = document.createElement('label');
-            fileLabel.htmlFor = 'file-input-' + rowId;
-            fileLabel.className = 'emby-button raised';
-            fileLabel.style.cssText = 'display: inline-block; cursor: pointer; margin: 0; flex: 0 0 auto; white-space: nowrap;';
-            fileLabel.textContent = 'Choose File';
-            row.appendChild(fileLabel);
-        }
+            // Create drop zone wrapper - wider to contain filename and preview
+            var dropZone = document.createElement('div');
+            dropZone.className = 'image-drop-zone';
+            // flex: 10 1 250px gives it higher grow priority than select, so it takes more space when inline
+            // but both will be full width when wrapped due to min-width constraints
+            // Row padding handles clearance from the remove button
+            dropZone.style.cssText = 'flex: 10 1 250px; border: 2px dashed var(--jf-palette-divider); border-radius: 4px; padding: 0.5em 1em; cursor: pointer; transition: all 0.2s ease; min-width: 200px;';
 
-        // File info container - can shrink and will wrap on mobile if needed
-        var fileInfoDiv = document.createElement('div');
-        fileInfoDiv.className = 'image-file-info';
-        fileInfoDiv.style.cssText = 'flex: 1 1 150px; display: flex; align-items: center; gap: 0.75em; min-width: 100px;';
+            // Default content (shown when no file selected)
+            var dropZoneDefault = document.createElement('div');
+            dropZoneDefault.className = 'drop-zone-default';
+            dropZoneDefault.style.cssText = 'display: flex; align-items: center; gap: 0.5em;';
 
-        if (isExisting) {
-            var link = document.createElement('a');
-            link.href = existingImage.previewUrl;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.style.cssText = 'color: var(--jf-palette-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;';
-            link.textContent = existingImage.fileName;
-            fileInfoDiv.appendChild(link);
+            var dropIcon = document.createElement('span');
+            dropIcon.className = 'material-icons';
+            dropIcon.style.cssText = 'font-size: 1.5em; color: var(--jf-palette-text-disabled);';
+            dropIcon.textContent = 'upload_file';
+            dropZoneDefault.appendChild(dropIcon);
 
-            var hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.className = 'existing-image';
-            hiddenInput.setAttribute('data-image-type', existingImage.imageType);
-            hiddenInput.value = existingImage.fileName;
-            fileInfoDiv.appendChild(hiddenInput);
-        } else {
+            var dropText = document.createElement('span');
+            dropText.style.cssText = 'font-size: 0.95em; color: var(--jf-palette-text-secondary);';
+            dropText.textContent = 'Drop image here or click to browse';
+            dropZoneDefault.appendChild(dropText);
+
+            dropZone.appendChild(dropZoneDefault);
+
+            // Selected content (shown when file is selected)
+            var dropZoneSelected = document.createElement('div');
+            dropZoneSelected.className = 'drop-zone-selected';
+            dropZoneSelected.style.cssText = 'display: none; align-items: center; gap: 0.75em;';
+
+            var previewContainer = document.createElement('div');
+            previewContainer.className = 'image-preview-container';
+            previewContainer.style.cssText = 'width: 40px; height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border: 1px solid var(--jf-palette-divider); border-radius: 4px; overflow: hidden; background: var(--jf-palette-background-paper);';
+
+            var placeholderIcon = document.createElement('span');
+            placeholderIcon.className = 'material-icons';
+            placeholderIcon.style.cssText = 'color: var(--jf-palette-text-secondary); font-size: 18px;';
+            placeholderIcon.textContent = 'image';
+            previewContainer.appendChild(placeholderIcon);
+            dropZoneSelected.appendChild(previewContainer);
+
             var fileNameSpan = document.createElement('span');
             fileNameSpan.className = 'selected-file-name';
-            fileNameSpan.style.cssText = 'opacity: 0.8; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;';
-            fileNameSpan.textContent = 'No file selected';
-            fileInfoDiv.appendChild(fileNameSpan);
+            fileNameSpan.style.cssText = 'flex: 1 1 auto; font-size: 0.95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;';
+            dropZoneSelected.appendChild(fileNameSpan);
+
+            var checkIcon = document.createElement('span');
+            checkIcon.className = 'material-icons';
+            checkIcon.style.cssText = 'font-size: 1.2em; color: var(--jf-palette-success-main); flex: 0 0 auto;';
+            checkIcon.textContent = 'check_circle';
+            dropZoneSelected.appendChild(checkIcon);
+
+            dropZone.appendChild(dropZoneSelected);
+            row.appendChild(dropZone);
+
+            // Get CSS variable values for styling
+            var styles = getComputedStyle(document.documentElement);
+            var primaryColor = styles.getPropertyValue('--jf-palette-primary-main').trim() || '#00a4dc';
+            var primaryChannel = styles.getPropertyValue('--jf-palette-primary-mainChannel').trim() || '0 164 220';
+            var successColor = styles.getPropertyValue('--jf-palette-success-main').trim() || '#66bb6a';
+            var successChannel = styles.getPropertyValue('--jf-palette-success-mainChannel').trim() || '102 187 106';
+            var dividerColor = styles.getPropertyValue('--jf-palette-divider').trim() || 'rgba(255, 255, 255, 0.12)';
+
+            // Helper to show file selected state
+            function showFileSelected(fileName) {
+                dropZoneDefault.style.display = 'none';
+                dropZoneSelected.style.display = 'flex';
+                fileNameSpan.textContent = fileName;
+                dropZone.style.borderColor = successColor;
+                dropZone.style.borderStyle = 'solid';
+                dropZone.style.background = 'rgb(' + successChannel + ' / 0.1)';
+            }
+
+            // Helper to reset to default state
+            function resetDropZone() {
+                dropZoneDefault.style.display = 'flex';
+                dropZoneSelected.style.display = 'none';
+                fileNameSpan.textContent = '';
+                dropZone.style.borderColor = dividerColor;
+                dropZone.style.borderStyle = 'dashed';
+                dropZone.style.background = 'transparent';
+                // Reset preview
+                previewContainer.innerHTML = '';
+                var icon = document.createElement('span');
+                icon.className = 'material-icons';
+                icon.style.cssText = 'color: var(--jf-palette-text-secondary); font-size: 18px;';
+                icon.textContent = 'image';
+                previewContainer.appendChild(icon);
+            }
+
+            // Click to browse
+            dropZone.addEventListener('click', function () {
+                fileInput.click();
+            });
+
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.style.borderColor = primaryColor;
+                this.style.background = 'rgb(' + primaryChannel + ' / 0.1)';
+            });
+
+            dropZone.addEventListener('dragleave', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Restore state based on whether file is selected
+                if (fileInput.files && fileInput.files.length > 0) {
+                    this.style.borderColor = successColor;
+                    this.style.background = 'rgb(' + successChannel + ' / 0.1)';
+                } else {
+                    this.style.borderColor = dividerColor;
+                    this.style.background = 'transparent';
+                }
+            });
+
+            dropZone.addEventListener('drop', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                var files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    var file = files[0];
+                    if (file.type.startsWith('image/')) {
+                        // Set file on the input
+                        var dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+                        fileInput.files = dataTransfer.files;
+
+                        // Trigger change event to update preview
+                        var event = new Event('change', { bubbles: true });
+                        fileInput.dispatchEvent(event);
+                    } else {
+                        SmartLists.showNotification('Please drop an image file', 'warn');
+                        resetDropZone();
+                    }
+                }
+            });
+
+            // Update drop zone when file is selected
+            fileInput.addEventListener('change', function () {
+                if (this.files && this.files.length > 0) {
+                    var file = this.files[0];
+                    showFileSelected(file.name);
+
+                    // Update preview thumbnail
+                    if (file.type.startsWith('image/')) {
+                        var reader = new FileReader();
+                        reader.onload = function (e) {
+                            previewContainer.innerHTML = '<img src="' + e.target.result + '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                } else {
+                    resetDropZone();
+                }
+            });
         }
 
-        // Preview thumbnail - right margin prevents overlap with absolute delete button
-        var previewContainer = document.createElement('div');
-        previewContainer.className = 'image-preview-container';
-        previewContainer.style.cssText = 'width: 50px; height: 50px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border: 1px solid var(--jf-palette-divider); border-radius: 4px; overflow: hidden; margin-right: 1.5em;';
+        // File info container - only for existing images now
+        var fileInfoDiv = document.createElement('div');
+        fileInfoDiv.className = 'image-file-info';
 
-        if (existingImage && existingImage.previewUrl) {
-            // Wrap preview in a link for existing images
+        if (isExisting) {
+            // flex: 1 fills remaining space, content is left-aligned via nested flex
+            fileInfoDiv.style.cssText = 'flex: 1; display: flex; align-items: center; gap: 0.75em; min-width: 0;';
+
+            // Preview thumbnail for existing images - added first (left side)
+            var existingPreviewContainer = document.createElement('div');
+            existingPreviewContainer.className = 'image-preview-container';
+            existingPreviewContainer.style.cssText = 'width: 40px; height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border: 1px solid var(--jf-palette-divider); border-radius: 4px; overflow: hidden; background: var(--jf-palette-background-paper);';
+
             var previewLink = document.createElement('a');
             previewLink.href = existingImage.previewUrl;
             previewLink.target = '_blank';
@@ -264,17 +399,27 @@
             previewImg.src = existingImage.previewUrl;
             previewImg.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
             previewLink.appendChild(previewImg);
-            previewContainer.appendChild(previewLink);
-        } else {
-            var placeholderIcon = document.createElement('span');
-            placeholderIcon.className = 'material-icons';
-            placeholderIcon.style.cssText = 'color: var(--jf-palette-text-secondary); font-size: 20px;';
-            placeholderIcon.textContent = 'image';
-            previewContainer.appendChild(placeholderIcon);
-        }
-        fileInfoDiv.appendChild(previewContainer);
+            existingPreviewContainer.appendChild(previewLink);
+            fileInfoDiv.appendChild(existingPreviewContainer);
 
-        row.appendChild(fileInfoDiv);
+            // Filename link - added second (right of preview)
+            var link = document.createElement('a');
+            link.href = existingImage.previewUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.style.cssText = 'color: var(--jf-palette-primary-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto;';
+            link.textContent = existingImage.fileName;
+            fileInfoDiv.appendChild(link);
+
+            var hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.className = 'existing-image';
+            hiddenInput.setAttribute('data-image-type', existingImage.imageType);
+            hiddenInput.value = existingImage.fileName;
+            fileInfoDiv.appendChild(hiddenInput);
+
+            row.appendChild(fileInfoDiv);
+        }
 
         // Remove button - absolutely positioned to right, vertically centered
         var removeBtn = document.createElement('button');
@@ -288,20 +433,6 @@
 
         container.appendChild(row);
 
-        // Set up event listeners
-        var fileInputEl = row.querySelector('.image-file-input');
-        if (fileInputEl) {
-            fileInputEl.addEventListener('change', function (e) {
-                var file = e.target.files[0];
-                SmartLists.handleImageFileSelect(row, file);
-                // Update file name display
-                var nameSpan = row.querySelector('.selected-file-name');
-                if (nameSpan) {
-                    nameSpan.textContent = file ? file.name : 'No file selected';
-                }
-            });
-        }
-
         // Add change listener to type select to update other dropdowns
         if (!isExisting) {
             typeSelect.addEventListener('change', function () {
@@ -311,24 +442,6 @@
 
         // Update dropdowns and button visibility
         updateImageTypeDropdowns(page);
-    };
-
-    /**
-     * Handle file selection - update preview
-     */
-    SmartLists.handleImageFileSelect = function (row, file) {
-        if (!file) {
-            return;
-        }
-
-        var previewContainer = row.querySelector('.image-preview-container');
-        if (previewContainer && file.type.startsWith('image/')) {
-            var reader = new FileReader();
-            reader.onload = function (e) {
-                previewContainer.innerHTML = '<img src="' + e.target.result + '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
-            };
-            reader.readAsDataURL(file);
-        }
     };
 
     /**

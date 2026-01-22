@@ -422,18 +422,9 @@
                 return response.json();
             })
             .then(function (result) {
-                // Clear file input and reset UI
-                fileInput.value = '';
-
-                // Hide import button and clear selected filename display
-                const importBtn = page.querySelector('#importPlaylistsBtn');
-                const selectedFileName = page.querySelector('#selectedFileName');
-                if (importBtn) {
-                    importBtn.style.display = 'none';
-                    importBtn.disabled = true;
-                }
-                if (selectedFileName) {
-                    selectedFileName.textContent = '';
+                // Reset the drop zone UI
+                if (SmartLists.resetImportDropZone) {
+                    SmartLists.resetImportDropZone();
                 }
 
                 // Backend returns: imported, skipped, errors, details
