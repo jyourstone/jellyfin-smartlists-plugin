@@ -1172,14 +1172,12 @@
         const importCancelBtn = page.querySelector('#importCancelBtn');
 
         // Get CSS variable values for dynamic styling
-        var styles = getComputedStyle(document.documentElement);
-        var successColor = styles.getPropertyValue('--jf-palette-success-main').trim() || '#66bb6a';
-        var successChannel = styles.getPropertyValue('--jf-palette-success-mainChannel').trim() || '102 187 106';
-        var primaryColor = styles.getPropertyValue('--jf-palette-primary-main').trim() || '#00a4dc';
-        var primaryChannel = styles.getPropertyValue('--jf-palette-primary-mainChannel').trim() || '0 164 220';
-        var dividerColor = styles.getPropertyValue('--jf-palette-divider').trim() || 'rgba(255, 255, 255, 0.12)';
-        var successBg = 'rgb(' + successChannel + ' / 0.1)';
-        var primaryBg = 'rgb(' + primaryChannel + ' / 0.1)';
+        var themeColors = SmartLists.getThemeColors();
+        var successColor = themeColors.successColor;
+        var primaryColor = themeColors.primaryColor;
+        var dividerColor = themeColors.dividerColor;
+        var successBg = themeColors.successBg;
+        var primaryBg = themeColors.primaryBg;
 
         function showFileSelectedState(fileName) {
             if (importDropZoneContent) importDropZoneContent.style.display = 'none';
@@ -1227,6 +1225,7 @@
                 e.preventDefault();
                 e.stopPropagation();
                 this.style.borderColor = primaryColor;
+                this.style.borderStyle = 'solid';
                 this.style.background = primaryBg;
             }, SmartLists.getEventListenerOptions(pageSignal));
 
@@ -1236,9 +1235,11 @@
                 // Restore appropriate state
                 if (importFileInput && importFileInput.files && importFileInput.files.length > 0) {
                     this.style.borderColor = successColor;
+                    this.style.borderStyle = 'solid';
                     this.style.background = successBg;
                 } else {
                     this.style.borderColor = dividerColor;
+                    this.style.borderStyle = 'dashed';
                     this.style.background = 'transparent';
                 }
             }, SmartLists.getEventListenerOptions(pageSignal));
@@ -1256,7 +1257,7 @@
                         importFileInput.files = dataTransfer.files;
                         showFileSelectedState(file.name);
                     } else {
-                        SmartLists.showNotification('Please select a ZIP file', 'warn');
+                        SmartLists.showNotification('Please select a ZIP file', 'warning');
                         resetDropZone();
                     }
                 }

@@ -673,6 +673,25 @@
         return element;
     };
 
+    /**
+     * Get theme colors from CSS variables for consistent styling.
+     * Returns an object with common color values and their channel variants for rgba backgrounds.
+     */
+    SmartLists.getThemeColors = function () {
+        var styles = getComputedStyle(document.documentElement);
+        var primaryChannel = styles.getPropertyValue('--jf-palette-primary-mainChannel').trim() || '0 164 220';
+        var successChannel = styles.getPropertyValue('--jf-palette-success-mainChannel').trim() || '102 187 106';
+        return {
+            primaryColor: styles.getPropertyValue('--jf-palette-primary-main').trim() || '#00a4dc',
+            primaryChannel: primaryChannel,
+            primaryBg: 'rgb(' + primaryChannel + ' / 0.1)',
+            successColor: styles.getPropertyValue('--jf-palette-success-main').trim() || '#66bb6a',
+            successChannel: successChannel,
+            successBg: 'rgb(' + successChannel + ' / 0.1)',
+            dividerColor: styles.getPropertyValue('--jf-palette-divider').trim() || 'rgba(255, 255, 255, 0.12)'
+        };
+    };
+
     // Notification system with stacking support
     var notificationContainer = null;
     var activeNotifications = [];

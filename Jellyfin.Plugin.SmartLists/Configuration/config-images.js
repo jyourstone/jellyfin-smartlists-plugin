@@ -273,12 +273,12 @@
             row.appendChild(dropZone);
 
             // Get CSS variable values for styling
-            var styles = getComputedStyle(document.documentElement);
-            var primaryColor = styles.getPropertyValue('--jf-palette-primary-main').trim() || '#00a4dc';
-            var primaryChannel = styles.getPropertyValue('--jf-palette-primary-mainChannel').trim() || '0 164 220';
-            var successColor = styles.getPropertyValue('--jf-palette-success-main').trim() || '#66bb6a';
-            var successChannel = styles.getPropertyValue('--jf-palette-success-mainChannel').trim() || '102 187 106';
-            var dividerColor = styles.getPropertyValue('--jf-palette-divider').trim() || 'rgba(255, 255, 255, 0.12)';
+            var themeColors = SmartLists.getThemeColors();
+            var primaryColor = themeColors.primaryColor;
+            var successColor = themeColors.successColor;
+            var successChannel = themeColors.successChannel;
+            var primaryChannel = themeColors.primaryChannel;
+            var dividerColor = themeColors.dividerColor;
 
             // Helper to show file selected state
             function showFileSelected(fileName) {
@@ -317,6 +317,7 @@
                 e.preventDefault();
                 e.stopPropagation();
                 this.style.borderColor = primaryColor;
+                this.style.borderStyle = 'solid';
                 this.style.background = 'rgb(' + primaryChannel + ' / 0.1)';
             });
 
@@ -326,9 +327,11 @@
                 // Restore state based on whether file is selected
                 if (fileInput.files && fileInput.files.length > 0) {
                     this.style.borderColor = successColor;
+                    this.style.borderStyle = 'solid';
                     this.style.background = 'rgb(' + successChannel + ' / 0.1)';
                 } else {
                     this.style.borderColor = dividerColor;
+                    this.style.borderStyle = 'dashed';
                     this.style.background = 'transparent';
                 }
             });
@@ -350,7 +353,7 @@
                         var event = new Event('change', { bubbles: true });
                         fileInput.dispatchEvent(event);
                     } else {
-                        SmartLists.showNotification('Please drop an image file', 'warn');
+                        SmartLists.showNotification('Please drop an image file', 'warning');
                         resetDropZone();
                     }
                 }
