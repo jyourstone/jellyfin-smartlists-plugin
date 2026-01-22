@@ -710,16 +710,28 @@
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
                             <input type="file" id="importPlaylistsFile" accept=".zip" style="display: none;">
-                            <label for="importPlaylistsFile" class="emby-button raised block"
-                                style="display: inline-block; margin-bottom: 0.5em; cursor: pointer;">Choose ZIP
-                                File</label>
-                            <div id="selectedFileName" style="margin-bottom: 0.5em; opacity: 0.8; font-size: 0.9em;">
+                            <div id="importDropZone" style="border: 2px dashed var(--jf-palette-divider); border-radius: 8px; padding: 2em; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                                <div id="importDropZoneContent">
+                                    <span class="material-icons" style="font-size: 3em; color: var(--jf-palette-text-disabled); display: block; margin-bottom: 0.5em;">upload_file</span>
+                                    <div style="font-size: 1.1em; margin-bottom: 0.25em;">Drop ZIP file here or click to browse</div>
+                                    <div style="color: var(--jf-palette-text-secondary); font-size: 0.9em;">Accepts .zip files exported from SmartLists</div>
+                                </div>
+                                <div id="importFileSelected" style="display: none;">
+                                    <span class="material-icons" style="font-size: 3em; color: var(--jf-palette-success-main); display: block; margin-bottom: 0.5em;">folder_zip</span>
+                                    <div id="selectedFileName" style="font-size: 1.1em; margin-bottom: 0.5em; word-break: break-all;"></div>
+                                    <div style="display: flex; gap: 0.5em; justify-content: center; flex-wrap: wrap;">
+                                        <button type="button" is="emby-button" id="importPlaylistsBtn" class="emby-button raised" style="background: var(--jf-palette-success-dark);">
+                                            <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">download</span>
+                                            Import
+                                        </button>
+                                        <button type="button" is="emby-button" id="importCancelBtn" class="emby-button raised">
+                                            <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">close</span>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <button type="button" is="emby-button" id="importPlaylistsBtn"
-                                class="emby-button raised block" style="display: none;">Import Selected File</button>
-                            <div class="fieldDescription">Select a ZIP file exported from SmartLists plugin. Lists with
-                                duplicate IDs will be skipped to avoid conflicts. After importing, you need to refresh
-                                all lists to create them in Jellyfin.</div>
+                            <div class="fieldDescription" style="margin-top: 0.75em;">Lists with duplicate IDs will be skipped to avoid conflicts. After importing, you need to refresh all lists to create them in Jellyfin.</div>
                         </div>
 
                         <div style="margin-top: 2em;">

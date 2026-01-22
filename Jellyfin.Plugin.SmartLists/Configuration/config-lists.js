@@ -346,7 +346,7 @@
                                 return SmartLists.applyImageDeletions(smartListId, pendingImageUploads);
                             }).catch(function (err) {
                                 console.error('Failed to apply image deletions:', err);
-                                SmartLists.showNotification('List saved but some image deletions failed.', 'warn');
+                                SmartLists.showNotification('List saved but some image deletions failed.', 'warning');
                             });
                         }
 
@@ -356,7 +356,7 @@
                                 return SmartLists.uploadImages(smartListId, pendingImageUploads);
                             }).catch(function (err) {
                                 console.error('Failed to upload images:', err);
-                                SmartLists.showNotification('List saved but some images failed to upload.', 'warn');
+                                SmartLists.showNotification('List saved but some images failed to upload.', 'warning');
                             });
                         }
 
