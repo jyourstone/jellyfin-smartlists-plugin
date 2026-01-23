@@ -1923,6 +1923,37 @@
         // Reload users with appropriate UI (single select for collections, multi-select for playlists)
         // Skip for user pages (admin-only endpoint)
         if (!SmartLists.IS_USER_PAGE) {
+            // When switching from playlist to collection during edit mode,
+            // transfer the user selection to _pendingCollectionUserId
+            var currentEditState = SmartLists.getPageEditState(page);
+            if (isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
+                // If we have pending playlist user IDs but no pending collection user ID,
+                // transfer the first user ID for the collection
+                if (page._pendingUserIds && Array.isArray(page._pendingUserIds) && page._pendingUserIds.length > 0 && !page._pendingCollectionUserId) {
+                    page._pendingCollectionUserId = page._pendingUserIds[0];
+                }
+                // Also check for currently selected checkboxes (if user changed selection before switching type)
+                if (!page._pendingCollectionUserId) {
+                    var selectedCheckboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
+                    if (selectedCheckboxes.length > 0) {
+                        page._pendingCollectionUserId = selectedCheckboxes[0].value;
+                    }
+                }
+            }
+            // When switching from collection to playlist during edit mode,
+            // transfer the user selection to _pendingUserIds
+            if (!isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
+                // If we have a pending collection user ID but no pending playlist user IDs,
+                // transfer the user ID for the playlist
+                if (page._pendingCollectionUserId && (!page._pendingUserIds || page._pendingUserIds.length === 0)) {
+                    page._pendingUserIds = [page._pendingCollectionUserId];
+                }
+                // Also check the current single-select value (if user changed selection before switching type)
+                var currentUserSelect = page.querySelector('#playlistUser');
+                if (currentUserSelect && currentUserSelect.value && (!page._pendingUserIds || page._pendingUserIds.length === 0)) {
+                    page._pendingUserIds = [currentUserSelect.value];
+                }
+            }
             SmartLists.loadUsers(page);
         }
 
