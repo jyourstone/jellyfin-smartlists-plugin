@@ -1923,6 +1923,29 @@
         // Reload users with appropriate UI (single select for collections, multi-select for playlists)
         // Skip for user pages (admin-only endpoint)
         if (!SmartLists.IS_USER_PAGE) {
+            // When switching types during edit mode, transfer the user selection.
+            // Priority: current UI state (most accurate) > pending IDs (may be stale from earlier toggles)
+            var currentEditState = SmartLists.getPageEditState(page);
+            if (isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
+                // Switching to Collection: check current checkbox selection first (highest priority)
+                var selectedCheckboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
+                if (selectedCheckboxes.length > 0) {
+                    page._pendingCollectionUserId = selectedCheckboxes[0].value;
+                } else if (page._pendingUserIds && Array.isArray(page._pendingUserIds) && page._pendingUserIds.length > 0) {
+                    // Fall back to pending user IDs if no checkboxes selected
+                    page._pendingCollectionUserId = page._pendingUserIds[0];
+                }
+            }
+            if (!isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
+                // Switching to Playlist: check current single-select value first (highest priority)
+                var currentUserSelect = page.querySelector('#playlistUser');
+                if (currentUserSelect && currentUserSelect.value) {
+                    page._pendingUserIds = [currentUserSelect.value];
+                } else if (page._pendingCollectionUserId) {
+                    // Fall back to pending collection user ID if no single-select value
+                    page._pendingUserIds = [page._pendingCollectionUserId];
+                }
+            }
             SmartLists.loadUsers(page);
         }
 

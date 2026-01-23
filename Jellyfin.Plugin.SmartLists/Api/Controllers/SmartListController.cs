@@ -1183,7 +1183,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         {
                             collectionDto.CreatedByUserId = existingPlaylist.CreatedByUserId;
                         }
-                        
+
+                        // Preserve DateCreated from original playlist
+                        if (existingPlaylist.DateCreated.HasValue)
+                        {
+                            collectionDto.DateCreated = existingPlaylist.DateCreated;
+                        }
+
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
@@ -1259,7 +1265,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         {
                             playlistDto.CreatedByUserId = existingCollection.CreatedByUserId;
                         }
-                        
+
+                        // Preserve DateCreated from original collection
+                        if (existingCollection.DateCreated.HasValue)
+                        {
+                            playlistDto.DateCreated = existingCollection.DateCreated;
+                        }
+
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var collectionService = GetCollectionService();
                         await collectionService.DeleteAsync(existingCollection);
