@@ -85,15 +85,15 @@
         renderStatistics(data.statistics || {}, data.ongoingOperations || []);
         renderRefreshHistory(data.history || []);
 
-        // Auto-refresh polling: Poll every 2 seconds when operations are active, every 30 seconds when idle
+        // Auto-refresh polling: Poll every 1 second when operations are active, every 30 seconds when idle
         const hasOngoing = (data.ongoingOperations || []).length > 0;
 
         if (hasOngoing) {
-            // Operations are active - use 2-second polling
+            // Operations are active - use 1-second polling
             stopAggressivePolling(); // Stop aggressive polling if operations are found
             // Always restart polling with the active interval
             stopPolling();
-            startPolling(2000); // 2 seconds when active
+            startPolling(1000); // 1 second when active
         } else {
             // No operations - use 30-second idle polling
             // Only switch to idle polling if aggressive polling is not active
