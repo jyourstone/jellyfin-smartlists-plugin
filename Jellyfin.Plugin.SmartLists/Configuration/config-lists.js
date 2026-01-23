@@ -1405,7 +1405,7 @@
         if (totalRuntime) {
             statsElements.push(totalRuntime);
         }
-        const statsDisplay = statsElements.length > 0 ? statsElements.join(' | ') : '';
+        const statsDisplay = statsElements.length > 0 ? statsElements.join(' · ') : '';
 
         // Escape all dynamic content to prevent XSS
         const eName = SmartLists.escapeHtml(playlist.Name || '');
