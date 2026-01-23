@@ -868,6 +868,18 @@
         // Initial tab already set above to prevent flash
     };
 
+    // ===== KEBAB MENU HELPERS =====
+    SmartLists.closeAllKebabMenus = function (page) {
+        var openMenus = page.querySelectorAll('.playlist-kebab-menu.open');
+        openMenus.forEach(function (menu) {
+            menu.classList.remove('open');
+            menu.style.position = '';
+            menu.style.top = '';
+            menu.style.right = '';
+            menu.style.left = '';
+        });
+    };
+
     // ===== EVENT LISTENERS SETUP =====
     SmartLists.setupEventListeners = function (page) {
         // Create AbortController for page event listeners
@@ -1027,6 +1039,103 @@
                     SmartLists.toggleAllPlaylists(page);
                 }
             }
+
+            // Kebab menu in collapsed header
+            if (target.closest('.kebab-btn')) {
+                e.stopPropagation();
+                var kebabBtn = target.closest('.kebab-btn');
+                var kebabContainer = kebabBtn.closest('.playlist-kebab-container');
+                var kebabMenu = kebabContainer ? kebabContainer.querySelector('.playlist-kebab-menu') : null;
+                if (kebabMenu) {
+                    // Close all other open kebab menus first
+                    var allMenus = page.querySelectorAll('.playlist-kebab-menu.open');
+                    allMenus.forEach(function (menu) {
+                        if (menu !== kebabMenu) {
+                            menu.classList.remove('open');
+                            menu.style.position = '';
+                            menu.style.top = '';
+                            menu.style.right = '';
+                            menu.style.left = '';
+                        }
+                    });
+                    // Toggle this menu
+                    var isOpen = kebabMenu.classList.toggle('open');
+                    if (isOpen) {
+                        // Position the menu using fixed positioning to avoid clipping
+                        var btnRect = kebabBtn.getBoundingClientRect();
+                        kebabMenu.style.position = 'fixed';
+                        kebabMenu.style.top = (btnRect.bottom + 4) + 'px';
+                        kebabMenu.style.right = (window.innerWidth - btnRect.right) + 'px';
+                        kebabMenu.style.left = 'auto';
+                    } else {
+                        kebabMenu.style.position = '';
+                        kebabMenu.style.top = '';
+                        kebabMenu.style.right = '';
+                        kebabMenu.style.left = '';
+                    }
+                }
+                return;
+            }
+            if (target.closest('.kebab-edit-btn')) {
+                e.stopPropagation();
+                var editBtn = target.closest('.kebab-edit-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.editPlaylist) {
+                    SmartLists.editPlaylist(page, editBtn.getAttribute('data-playlist-id'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-clone-btn')) {
+                e.stopPropagation();
+                var cloneBtn = target.closest('.kebab-clone-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.clonePlaylist) {
+                    SmartLists.clonePlaylist(page, cloneBtn.getAttribute('data-playlist-id'), cloneBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-refresh-btn')) {
+                e.stopPropagation();
+                var refreshBtn = target.closest('.kebab-refresh-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (!refreshBtn.classList.contains('disabled') && SmartLists.refreshPlaylist) {
+                    SmartLists.refreshPlaylist(refreshBtn.getAttribute('data-playlist-id'), refreshBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-enable-btn')) {
+                e.stopPropagation();
+                var enableBtn = target.closest('.kebab-enable-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.enablePlaylist) {
+                    SmartLists.enablePlaylist(page, enableBtn.getAttribute('data-playlist-id'), enableBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-disable-btn')) {
+                e.stopPropagation();
+                var disableBtn = target.closest('.kebab-disable-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.disablePlaylist) {
+                    SmartLists.disablePlaylist(page, disableBtn.getAttribute('data-playlist-id'), disableBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-delete-btn')) {
+                e.stopPropagation();
+                var kebabDelBtn = target.closest('.kebab-delete-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.showDeleteConfirm) {
+                    SmartLists.showDeleteConfirm(page, kebabDelBtn.getAttribute('data-playlist-id'), kebabDelBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+
+            // Close kebab menus when clicking outside
+            if (!target.closest('.playlist-kebab-container')) {
+                SmartLists.closeAllKebabMenus(page);
+            }
+
             if (target.closest('.playlist-header')) {
                 const playlistCard = target.closest('.playlist-card');
                 if (playlistCard && SmartLists.togglePlaylistCard) {
@@ -1711,6 +1820,125 @@
                     margin-left: auto !important;
                     margin-top: 0.5em !important;
                 }
+            }
+
+            /* Ensure playlist cards don't clip the kebab menu */
+            .playlist-card {
+                overflow: visible !important;
+            }
+
+            .playlist-card .playlist-header {
+                overflow: visible !important;
+            }
+
+            .playlist-card .playlist-header-right {
+                overflow: visible !important;
+            }
+
+            /* Quick action buttons in collapsed header */
+            .playlist-quick-actions {
+                display: flex;
+                align-items: center;
+                gap: 0.25em;
+                margin-left: 0.5em;
+                margin-right: 0;
+            }
+
+            .playlist-quick-action-btn {
+                background: transparent;
+                border: none;
+                color: var(--jf-palette-text-secondary);
+                cursor: pointer;
+                padding: 0.4em;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background-color 0.15s ease, color 0.15s ease;
+                min-width: 36px;
+                min-height: 36px;
+            }
+
+            .playlist-quick-action-btn:hover {
+                background: var(--jf-palette-action-hover);
+                color: var(--jf-palette-text-primary);
+            }
+
+            .playlist-quick-action-btn:focus {
+                outline: none;
+                background: var(--jf-palette-action-focus);
+            }
+
+            .playlist-quick-action-btn .material-icons {
+                font-size: 1.25em;
+            }
+
+            /* Kebab dropdown menu */
+            .playlist-kebab-container {
+                position: relative;
+            }
+
+            .playlist-kebab-menu {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                min-width: 150px;
+                background: color-mix(in srgb, var(--jf-palette-background-paper) 95%, transparent);
+                border: 1px solid var(--jf-palette-divider);
+                border-radius: 4px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                z-index: 1000;
+                display: none;
+                backdrop-filter: blur(8px);
+                overflow: hidden;
+                margin-top: 0.25em;
+            }
+
+            .playlist-kebab-menu.open {
+                display: block;
+            }
+
+            .playlist-kebab-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 0.75em;
+                padding: 0.65em 1em;
+                color: var(--jf-palette-text-primary);
+                cursor: pointer;
+                transition: background-color 0.15s ease;
+                border: none;
+                background: transparent;
+                width: 100%;
+                text-align: left;
+                font-size: 0.95em;
+            }
+
+            .playlist-kebab-menu-item:hover {
+                background: var(--jf-palette-action-hover);
+            }
+
+            .playlist-kebab-menu-item .material-icons {
+                font-size: 1.2em;
+                opacity: 0.8;
+            }
+
+            .playlist-kebab-menu-item.danger {
+                color: var(--jf-palette-error-light);
+            }
+
+            .playlist-kebab-menu-item.danger .material-icons {
+                color: var(--jf-palette-error-light);
+            }
+
+            .playlist-kebab-menu-item.disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+
+            .playlist-kebab-menu-divider {
+                height: 1px;
+                background: var(--jf-palette-divider);
+                margin: 0.25em 0;
             }
         `;
         document.head.appendChild(style);
