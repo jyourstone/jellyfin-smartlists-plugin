@@ -13,7 +13,7 @@
         // Capture the previous operator value before clearing
         const previousOperator = operatorSelect.value;
 
-        operatorSelect.innerHTML = '<option value="">-- Select Operator --</option>';
+        operatorSelect.innerHTML = '<option value="">-- Operator --</option>';
         let allowedOperators = [];
 
         // Check if availableFields is loaded - if not, return early (fields should be loaded before this is called)
@@ -812,7 +812,7 @@
             const regexLink = document.createElement('a');
             regexLink.href = 'https://regex101.com/?flavor=dotnet';
             regexLink.target = '_blank';
-            regexLink.className = 'emby-button-link';
+            regexLink.style.cssText = 'color: var(--jf-palette-primary-main); text-decoration: none;';
             regexLink.textContent = 'Regex101.com (.NET flavor)';
             helpDiv.appendChild(regexLink);
             ruleGroup.appendChild(helpDiv);
@@ -939,10 +939,10 @@
         const fieldsHtml =
             '<div class="input-group" style="display: flex; gap: 0.5em; align-items: center; margin-bottom: 1em;">' +
             '<select is="emby-select" class="emby-select rule-field-select" style="flex: 0 0 25%;">' +
-            '<option value="">-- Select Field --</option>' +
+            '<option value="">-- Field --</option>' +
             '</select>' +
             '<select is="emby-select" class="emby-select rule-operator-select" style="flex: 0 0 20%;">' +
-            '<option value="">-- Select Operator --</option>' +
+            '<option value="">-- Operator --</option>' +
             '</select>' +
             '<span class="rule-value-container" style="flex: 1;">' +
             '<input type="text" class="emby-input rule-value-input" placeholder="Value" style="width: 100%;">' +
@@ -1739,7 +1739,7 @@
         const currentValue = selectElement.value;
 
         // Clear existing options
-        selectElement.innerHTML = '<option value="">-- Select Field --</option>';
+        selectElement.innerHTML = '<option value="">-- Field --</option>';
 
         // Define field group display names and order
         const groupConfig = [
