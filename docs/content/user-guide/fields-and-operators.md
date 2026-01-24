@@ -71,6 +71,7 @@ The web interface provides access to all available fields for creating list rule
 
 ### Library Fields
 
+- **Library Name** - The name of the Jellyfin Media library the item belongs to
 - **Date Added to Library** - When added to your Jellyfin library
 - **Last Metadata Refresh** - When Jellyfin last updated metadata from online sources
 - **Last Database Save** - When the item's data was last saved to Jellyfin's database
@@ -79,13 +80,41 @@ The web interface provides access to all available fields for creating list rule
 
 - **People (All)** - All cast and crew
 - **Actors** - Actors in the movie or TV show
-- **Actor Roles** - Character names/roles
+- **Actor Roles (Character Names)** - Character names/roles played by actors
 - **Directors** - Directors of the movie or TV show
 - **Writers** - Writers/screenwriters
 - **Producers** - Producers
 - **Guest Stars** - Guest stars in TV show episodes
+- **Composers** - Music composers
+- **Conductors** - Orchestra/music conductors
+- **Lyricists** - Song lyricists
 
-### Collection Fields
+### People Fields (Music)
+
+- **Artists (Person Role)** - Track-level artists stored as person metadata
+- **Album Artists (Person Role)** - Album-level artists stored as person metadata
+
+### People Fields (Books & Comics)
+
+- **Authors** - Book authors
+- **Illustrators** - Illustrators
+- **Pencilers** - Comic book pencil artists
+- **Inkers** - Comic book inkers
+- **Colorists** - Comic book colorists
+- **Letterers** - Comic book letterers
+- **Cover Artists** - Cover artwork artists
+- **Editors** - Editors
+- **Translators** - Translators
+
+### People Fields (Audio Production)
+
+- **Arrangers** - Music arrangers
+- **Sound Engineers** - Audio/sound engineers
+- **Mixers** - Audio mixers
+- **Remixers** - Remix artists
+- **Creators** - General content creators
+
+### Membership Fields
 
 - **Collection name** - Jellyfin collections
 - **Playlist name** - Jellyfin playlists
@@ -291,17 +320,40 @@ The more fields you select, the more comprehensive the similarity matching becom
 
 When using the **People** field, you can select a specific person type to filter by:
 
+**General:**
+
 - **People (All)** - Matches any cast or crew member (default)
 - **Actors** - Only actors
-- **Actor Roles (Character Names)** - Character names
+- **Actor Roles (Character Names)** - Character names played by actors
 - **Directors** - Only directors
 - **Writers** - Only writers/screenwriters
 - **Producers** - Only producers
 - **Guest Stars** - Only guest stars (TV episodes)
+- **Creators** - General content creators
+
+**Music-related:**
+
 - **Composers** - Only composers
 - **Conductors** - Only conductors
 - **Lyricists** - Only lyricists
-- And many more specialized roles...
+- **Arrangers** - Only music arrangers
+- **Sound Engineers** - Only audio/sound engineers
+- **Mixers** - Only audio mixers
+- **Remixers** - Only remix artists
+- **Artists (Person Role)** - Track-level artists stored as person metadata
+- **Album Artists (Person Role)** - Album-level artists stored as person metadata
+
+**Books & Comics:**
+
+- **Authors** - Only authors
+- **Illustrators** - Only illustrators
+- **Pencilers** - Only comic book pencil artists
+- **Inkers** - Only comic book inkers
+- **Colorists** - Only comic book colorists
+- **Letterers** - Only comic book letterers
+- **Cover Artists** - Only cover artwork artists
+- **Editors** - Only editors
+- **Translators** - Only translators
 
 This allows you to create more specific rules, such as "Movies directed by Christopher Nolan" instead of "Movies with Christopher Nolan in any role."
 

@@ -196,3 +196,14 @@ Collections are great for organizing related content that you want to browse tog
 - **List Type**: Collection
 - Creates a collection of all movies by a specific director
 
+### Library-Specific Playlist
+- **Library Name** equals "4K Movies"
+- **Playback Status** = Unplayed
+- Creates a playlist of only unwatched content from your "4K Movies" library
+- Useful when you have multiple libraries of the same type (e.g., "Movies" and "4K Movies")
+
+### Exclude Library from Playlist
+- **Library Name** not equals "Kids Movies"
+- **Genre** contains "Animation"
+- Creates a playlist of animated content, but excludes anything from your "Kids Movies" library
+
