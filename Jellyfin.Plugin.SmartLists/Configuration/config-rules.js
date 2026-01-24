@@ -1750,7 +1750,7 @@
             { key: 'LibraryFields', label: 'Library' },
             { key: 'FileFields', label: 'File Info' },
             { key: 'PeopleFields', label: 'People' },
-            { key: 'CollectionFields', label: 'Collections' }
+            { key: 'CollectionFields', label: 'Membership' }
         ];
 
         groupConfig.forEach(function (group) {
