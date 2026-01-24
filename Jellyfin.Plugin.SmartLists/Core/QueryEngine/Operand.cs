@@ -90,6 +90,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Production locations - countries/regions where the content was produced
         public List<string> ProductionLocations { get; set; } = [];
 
+        // Library name - the Jellyfin library this item belongs to (e.g., "Movies", "TV Shows", "Music")
+        public string LibraryName { get; set; } = string.Empty;
+
         // Custom rating - user-defined rating field (can be text or numeric)
         public string CustomRating { get; set; } = string.Empty;
 

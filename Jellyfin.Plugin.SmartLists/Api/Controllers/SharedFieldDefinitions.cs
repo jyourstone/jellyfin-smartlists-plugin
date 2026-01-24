@@ -69,6 +69,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 },
                 LibraryFields = new[]
                 {
+                    new { Value = "LibraryName", Label = "Library Name" },
                     new { Value = "DateCreated", Label = "Date Added to Library" },
                     new { Value = "DateLastRefreshed", Label = "Last Metadata Refresh" },
                     new { Value = "DateLastSaved", Label = "Last Database Save" },

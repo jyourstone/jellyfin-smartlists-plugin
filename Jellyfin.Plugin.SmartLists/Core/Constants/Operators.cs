@@ -136,6 +136,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 // String fields (text-based fields)
                 "Name" or "Album" or "SeriesName" or "OfficialRating" or "CustomRating" or "Overview" or "FileName" or "FolderPath"
                     or "AudioCodec" or "AudioProfile" or "VideoCodec" or "VideoProfile" or "VideoRange" or "VideoRangeType"
+                    or "LibraryName"
                     => StringFieldOperators,
 
                 // Default: allow all operators for unknown fields
@@ -216,6 +217,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
                 ["VideoProfile"] = StringFieldOperators,
                 ["VideoRange"] = StringFieldOperators,
                 ["VideoRangeType"] = StringFieldOperators,
+                ["LibraryName"] = StringFieldOperators,
             };
 
             // Add all people role fields dynamically using centralized logic

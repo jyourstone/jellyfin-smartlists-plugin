@@ -2432,6 +2432,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.Playlists = [];
             }
 
+            // Extract library name - cheap operation using Jellyfin's GetCollectionFolders API
+            operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, logger);
+
             // Extract parent series tags for episodes - only when needed for performance
             // This is an expensive operation (database lookup), so we use caching
             if (extractParentSeriesTags)
@@ -2951,6 +2954,34 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 cache.ItemCollections[baseItem.Id] = collections; // Backward compatibility
             }
             return collections;
+        }
+
+        /// <summary>
+        /// Extracts the library name that contains this item using Jellyfin's GetCollectionFolders API.
+        /// Libraries in Jellyfin are represented as CollectionFolder items.
+        /// This is a cheap path-based lookup, no caching needed.
+        /// </summary>
+        /// <param name="baseItem">The item to extract library name from</param>
+        /// <param name="libraryManager">Library manager for library lookups</param>
+        /// <param name="logger">Logger for debugging</param>
+        /// <returns>The library name this item belongs to, or empty string if not found</returns>
+        private static string ExtractLibraryName(BaseItem baseItem, ILibraryManager libraryManager, ILogger? logger)
+        {
+            try
+            {
+                var collectionFolders = libraryManager.GetCollectionFolders(baseItem);
+
+                if (collectionFolders != null && collectionFolders.Count > 0)
+                {
+                    return collectionFolders[0].Name;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract library name for item '{ItemName}'", baseItem.Name);
+            }
+
+            return string.Empty;
         }
 
         /// <summary>

@@ -302,6 +302,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             allFields.Add("MediaType");
             allFields.Add("SeriesName");
             allFields.Add("SimilarTo");
+            allFields.Add("LibraryName");
             allFields.UnionWith(UserDataFields);
 
             return [.. allFields];
