@@ -6,9 +6,7 @@
     </p>        
 </div>
 
-### ✨✨ SmartPlaylist is now SmartLists with support for Collections! ✨✨
-
-Create smart, rule-based playlists and **collections** in Jellyfin.
+Create smart, rule-based **playlists and collections** in Jellyfin.
 
 This plugin allows you to create dynamic playlists and collections based on a set of rules, which will automatically update as your library changes. It features a modern web-based interface for easy list management - no technical knowledge required.
 
@@ -17,11 +15,12 @@ This plugin allows you to create dynamic playlists and collections based on a se
 ## ✨ Features
 
 - **Modern Web Interface** - A full-featured UI to create, manage and view status for smart playlists and collections
-- **User Selection** - Choose which user(s) should own a playlist or collection with an intuitive dropdown
+- **User Selection** - Choose which users should own a playlist or collection with an intuitive dropdown
 - **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - **Automatic Updates** - Playlists and collections refresh automatically on library updates, playback status changes, or via scheduled tasks
 - **Refresh Status & Statistics** - Monitor ongoing refresh operations with real-time progress, view refresh history, and track statistics for all your lists
 - **Media Types** - Works with all Jellyfin media types
+- **End User Config Page** - Let regular users manage their own playlists from the home screen (requires [Plugin Pages](https://github.com/IAmParadox27/jellyfin-plugin-pages) and [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugins)
 - **And more** - [View the documentation](https://jellyfin-smartlists-plugin.dinsten.se) to see all features
 
 ## 🚀 Quick Start
