@@ -12,6 +12,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     public enum ExtractionGroup
     {
         None = 0,
+
+        // Expensive extraction groups (require API calls, reflection, or database queries)
         AudioLanguages = 1 << 0,      // AudioLanguages, SubtitleLanguages
         AudioQuality = 1 << 1,        // AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels
         VideoQuality = 1 << 2,        // Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType
@@ -25,6 +27,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         ParentSeriesGenres = 1 << 10, // Genres with IncludeParentSeriesGenres
         SimilarTo = 1 << 11,          // SimilarTo field
         LastEpisodeAirDate = 1 << 12, // LastEpisodeAirDate field
+
+        // Cheap extraction groups (conditionally extracted for performance optimization)
+        FileInfo = 1 << 13,           // FolderPath, FileName, DateModified
+        LibraryInfo = 1 << 14,        // LibraryName
+        AudioMetadata = 1 << 15,      // Album, Artists, AlbumArtists
+        TextContent = 1 << 16,        // Overview, ProductionLocations, RuntimeMinutes
     }
 
     /// <summary>
@@ -147,11 +155,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "SimilarTo", "Similar To", FieldType.Similarity, FieldCategory.Content, SimilarityOperators, ExtractionGroup.SimilarTo);
             AddField(fields, "OfficialRating", "Parental Rating", FieldType.Text, FieldCategory.Content, StringOperators);
             AddField(fields, "CustomRating", "Custom Rating", FieldType.Text, FieldCategory.Content, StringOperators);
-            AddField(fields, "Overview", "Overview", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "Overview", "Overview", FieldType.Text, FieldCategory.Content, StringOperators, ExtractionGroup.TextContent);
             AddField(fields, "ProductionYear", "Production Year", FieldType.Numeric, FieldCategory.Content, NumericOperators);
             AddField(fields, "ReleaseDate", "Release Date", FieldType.Date, FieldCategory.Content, DateOperators);
             AddField(fields, "LastEpisodeAirDate", "Last Episode Air Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.LastEpisodeAirDate);
-            AddField(fields, "ProductionLocations", "Production Locations", FieldType.List, FieldCategory.Content, MultiValueOperators);
+            AddField(fields, "ProductionLocations", "Production Locations", FieldType.List, FieldCategory.Content, MultiValueOperators, ExtractionGroup.TextContent);
 
             // Video Fields
             AddField(fields, "Resolution", "Resolution", FieldType.Resolution, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
@@ -179,15 +187,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.None, isUserSpecific: true);
             AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
             AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.None, isUserSpecific: true);
-            AddField(fields, "RuntimeMinutes", "Runtime (Minutes)", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
+            AddField(fields, "RuntimeMinutes", "Runtime (Minutes)", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
 
-            // File Fields
-            AddField(fields, "FileName", "File Name", FieldType.Text, FieldCategory.File, StringOperators);
-            AddField(fields, "FolderPath", "Folder Path", FieldType.Text, FieldCategory.File, StringOperators);
-            AddField(fields, "DateModified", "Date Modified", FieldType.Date, FieldCategory.File, DateOperators);
+            // File Fields - conditionally extracted via ExtractionGroup.FileInfo
+            AddField(fields, "FileName", "File Name", FieldType.Text, FieldCategory.File, StringOperators, ExtractionGroup.FileInfo);
+            AddField(fields, "FolderPath", "Folder Path", FieldType.Text, FieldCategory.File, StringOperators, ExtractionGroup.FileInfo);
+            AddField(fields, "DateModified", "Date Modified", FieldType.Date, FieldCategory.File, DateOperators, ExtractionGroup.FileInfo);
 
-            // Library Fields
-            AddField(fields, "LibraryName", "Library Name", FieldType.Text, FieldCategory.Library, StringOperators);
+            // Library Fields - conditionally extracted via ExtractionGroup.LibraryInfo
+            AddField(fields, "LibraryName", "Library Name", FieldType.Text, FieldCategory.Library, StringOperators, ExtractionGroup.LibraryInfo);
             AddField(fields, "DateCreated", "Date Added to Library", FieldType.Date, FieldCategory.Library, DateOperators);
             AddField(fields, "DateLastRefreshed", "Last Metadata Refresh", FieldType.Date, FieldCategory.Library, DateOperators);
             AddField(fields, "DateLastSaved", "Last Database Save", FieldType.Date, FieldCategory.Library, DateOperators);
@@ -198,9 +206,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "Genres", "Genres", FieldType.List, FieldCategory.Collection, MultiValueOperators);
             AddField(fields, "Studios", "Studios", FieldType.List, FieldCategory.Collection, MultiValueOperators);
             AddField(fields, "Tags", "Tags", FieldType.List, FieldCategory.Collection, MultiValueOperators);
-            AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators);
-            AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators);
-            AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators, ExtractionGroup.AudioMetadata);
+            AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
+            AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
 
             // Simple Fields
             AddField(fields, "ItemType", "Item Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);

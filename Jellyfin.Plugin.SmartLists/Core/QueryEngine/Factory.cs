@@ -114,6 +114,31 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.LastEpisodeAirDate : RequiredGroups & ~ExtractionGroup.LastEpisodeAirDate;
         }
 
+        // Cheap extraction groups (conditionally extracted for performance optimization)
+        public bool ExtractFileInfo
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.FileInfo);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.FileInfo : RequiredGroups & ~ExtractionGroup.FileInfo;
+        }
+
+        public bool ExtractLibraryInfo
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.LibraryInfo);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.LibraryInfo : RequiredGroups & ~ExtractionGroup.LibraryInfo;
+        }
+
+        public bool ExtractAudioMetadata
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.AudioMetadata);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.AudioMetadata : RequiredGroups & ~ExtractionGroup.AudioMetadata;
+        }
+
+        public bool ExtractTextContent
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.TextContent);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.TextContent : RequiredGroups & ~ExtractionGroup.TextContent;
+        }
+
         // Non-flag properties
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
@@ -2146,6 +2171,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
 
             // Extract options for easier access
+            // Expensive extraction flags
             var extractAudioLanguages = options.ExtractAudioLanguages;
             var extractSubtitleLanguages = options.ExtractSubtitleLanguages;
             var extractAudioQuality = options.ExtractAudioQuality;
@@ -2157,6 +2183,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractParentSeriesStudios = options.ExtractParentSeriesStudios;
             var extractParentSeriesGenres = options.ExtractParentSeriesGenres;
             var extractLastEpisodeAirDate = options.ExtractLastEpisodeAirDate;
+
+            // Cheap extraction flags (for performance optimization)
+            var extractFileInfo = options.ExtractFileInfo;
+            var extractLibraryInfo = options.ExtractLibraryInfo;
+            var extractAudioMetadata = options.ExtractAudioMetadata;
+            var extractTextContent = options.ExtractTextContent;
+
             var includeUnwatchedSeries = options.IncludeUnwatchedSeries;
             var additionalUserIds = options.AdditionalUserIds;
 
@@ -2189,16 +2222,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             var operand = new Operand(baseItem.Name)
             {
+                // Tier 0: Always extract (zero cost - direct BaseItem property access)
                 Genres = baseItem.Genres is not null ? [.. baseItem.Genres] : [],
                 Studios = baseItem.Studios is not null ? [.. baseItem.Studios] : [],
                 CommunityRating = baseItem.CommunityRating.GetValueOrDefault(),
                 CriticRating = baseItem.CriticRating.GetValueOrDefault(),
                 MediaType = baseItem.MediaType.ToString(),
                 ItemType = GetItemTypeName(baseItem, logger),
-                Album = baseItem.Album,
                 ProductionYear = baseItem.ProductionYear.GetValueOrDefault(),
                 Tags = baseItem.Tags is not null ? [.. baseItem.Tags] : [],
-                RuntimeMinutes = baseItem.RunTimeTicks.HasValue ? TimeSpan.FromTicks(baseItem.RunTimeTicks.Value).TotalMinutes : 0.0,
+                OfficialRating = baseItem.OfficialRating ?? "",
+                CustomRating = baseItem.CustomRating ?? "",
+                DateCreated = SafeToUnixTimeSeconds(baseItem.DateCreated),
+                DateLastRefreshed = SafeToUnixTimeSeconds(baseItem.DateLastRefreshed),
+                DateLastSaved = SafeToUnixTimeSeconds(baseItem.DateLastSaved),
+                ReleaseDate = DateUtils.GetReleaseDateUnixTimestamp(baseItem),
+                // Note: Album, RuntimeMinutes, FileInfo, LibraryName are now conditionally extracted below
             };
 
             // Extract series name for episodes - only when needed for performance
@@ -2353,43 +2392,54 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 }
             }
 
-            operand.OfficialRating = baseItem.OfficialRating ?? "";
-
-            // Extract CustomRating property
-            operand.CustomRating = baseItem.CustomRating ?? "";
-
-            // Extract ProductionLocations property
-            operand.ProductionLocations = baseItem.ProductionLocations?.ToList() ?? [];
-
-            // Extract Overview property using reflection
-            try
+            // TextContent extraction - conditionally extracted for performance optimization
+            if (extractTextContent)
             {
-                var overviewProperty = baseItem.GetType().GetProperty("Overview");
-                if (overviewProperty != null)
+                operand.RuntimeMinutes = baseItem.RunTimeTicks.HasValue
+                    ? TimeSpan.FromTicks(baseItem.RunTimeTicks.Value).TotalMinutes
+                    : 0.0;
+                operand.ProductionLocations = baseItem.ProductionLocations?.ToList() ?? [];
+
+                // Extract Overview property using reflection
+                try
                 {
-                    var overviewValue = overviewProperty.GetValue(baseItem) as string;
-                    operand.Overview = overviewValue ?? "";
+                    var overviewProperty = baseItem.GetType().GetProperty("Overview");
+                    if (overviewProperty != null)
+                    {
+                        var overviewValue = overviewProperty.GetValue(baseItem) as string;
+                        operand.Overview = overviewValue ?? "";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "Failed to extract Overview for item {Name}", baseItem.Name);
+                    operand.Overview = string.Empty;
                 }
             }
-            catch (Exception ex)
+            else
             {
-                logger?.LogDebug(ex, "Failed to extract Overview for item {Name}", baseItem.Name);
+                operand.RuntimeMinutes = 0.0;
                 operand.Overview = string.Empty;
+                operand.ProductionLocations = [];
+                logger?.LogDebug("TextContent extraction skipped for item {Name} - not needed by rules", baseItem.Name);
             }
 
-            operand.DateCreated = SafeToUnixTimeSeconds(baseItem.DateCreated);
-            operand.DateLastRefreshed = SafeToUnixTimeSeconds(baseItem.DateLastRefreshed);
-            operand.DateLastSaved = SafeToUnixTimeSeconds(baseItem.DateLastSaved);
-            operand.DateModified = SafeToUnixTimeSeconds(baseItem.DateModified);
-
-            // Extract ReleaseDate from PremiereDate property
-            operand.ReleaseDate = DateUtils.GetReleaseDateUnixTimestamp(baseItem);
-
-            operand.FolderPath = baseItem.ContainingFolderPath;
-
-            // Fix null reference exception for Path
-            operand.FileName = !string.IsNullOrEmpty(baseItem.Path) ?
-                System.IO.Path.GetFileName(baseItem.Path) ?? "" : "";
+            // FileInfo extraction - conditionally extracted for performance optimization
+            if (extractFileInfo)
+            {
+                operand.DateModified = SafeToUnixTimeSeconds(baseItem.DateModified);
+                operand.FolderPath = baseItem.ContainingFolderPath;
+                operand.FileName = !string.IsNullOrEmpty(baseItem.Path)
+                    ? System.IO.Path.GetFileName(baseItem.Path) ?? ""
+                    : "";
+            }
+            else
+            {
+                operand.DateModified = 0;
+                operand.FolderPath = string.Empty;
+                operand.FileName = string.Empty;
+                logger?.LogDebug("FileInfo extraction skipped for item {Name} - not needed by rules", baseItem.Name);
+            }
 
             // Extract audio languages from media streams - only when needed for performance
             if (extractAudioLanguages || extractSubtitleLanguages)
@@ -2523,8 +2573,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.Playlists = [];
             }
 
-            // Extract library name - cheap operation using Jellyfin's GetCollectionFolders API
-            operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, logger);
+            // LibraryInfo extraction - conditionally extracted for performance optimization
+            if (extractLibraryInfo)
+            {
+                operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, logger);
+            }
+            else
+            {
+                operand.LibraryName = string.Empty;
+                logger?.LogDebug("LibraryInfo extraction skipped for item {Name} - not needed by rules", baseItem.Name);
+            }
 
             // Extract parent series tags for episodes - only when needed for performance
             // This is an expensive operation (database lookup), so we use caching
@@ -2559,15 +2617,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.ParentSeriesGenres = [];
             }
 
-            // Extract artists and album artists only for music-related items (cheap operations when applicable)
-            if (MediaTypes.MusicRelatedSet.Contains(operand.ItemType))
+            // AudioMetadata extraction - conditionally extracted for performance optimization
+            // Includes Album, Artists, AlbumArtists for music-related items
+            if (extractAudioMetadata && MediaTypes.MusicRelatedSet.Contains(operand.ItemType))
             {
+                operand.Album = baseItem.Album ?? string.Empty;
                 ExtractArtists(operand, baseItem, logger);
             }
             else
             {
+                operand.Album = string.Empty;
                 operand.Artists = [];
                 operand.AlbumArtists = [];
+                logger?.LogDebug("AudioMetadata extraction skipped for item {Name} - not needed by rules", baseItem.Name);
             }
 
             // Extract NextUnwatched status for each user - only when needed for performance

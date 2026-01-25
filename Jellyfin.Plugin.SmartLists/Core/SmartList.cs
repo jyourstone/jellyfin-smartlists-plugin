@@ -685,74 +685,26 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 var results = new List<BaseItem>();
 
-                // Check if any rules use expensive fields to avoid unnecessary extraction
-                var needsAudioLanguages = false;
-                var needsSubtitleLanguages = false;
-                var needsLastEpisodeAirDate = false;
-                var needsAudioQuality = false;
-                var needsVideoQuality = false;
-                var needsPeople = false;
-                var needsCollections = false;
-                var needsPlaylists = false;
+                // Analyze field requirements from expression sets - single source of truth for extraction flags
+                var fieldReqs = new FieldRequirements();
                 // Use list-level CollectionSearchDepth (minimum 1 for collection extraction to work)
                 var collectionRecursionDepth = Math.Max(1, CollectionSearchDepth);
-                var needsNextUnwatched = false;
-                var needsSeriesName = false;
-                var needsParentSeriesTags = false;
-                var needsParentSeriesStudios = false;
-                var needsParentSeriesGenres = false;
-                var needsSimilarTo = false;
-                var includeUnwatchedSeries = true; // Default to true for backwards compatibility
-                var similarToExpressions = new List<Expression>();
-                var additionalUserIds = new List<string>();
-                var similarityComparisonFields = (SimilarityComparisonFields == null || SimilarityComparisonFields.Count == 0) 
-                    ? OperandFactory.DefaultSimilarityComparisonFields.ToList() 
+                var similarityComparisonFields = (SimilarityComparisonFields == null || SimilarityComparisonFields.Count == 0)
+                    ? OperandFactory.DefaultSimilarityComparisonFields.ToList()
                     : SimilarityComparisonFields; // Default to Genre and Tags for backwards compatibility
 
                 try
                 {
                     if (ExpressionSets != null)
                     {
-                        var fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders);
+                        fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders);
+                        // Set collection recursion depth from list-level setting
+                        fieldReqs.CollectionRecursionDepth = collectionRecursionDepth;
 
-                        needsAudioLanguages = fieldReqs.NeedsAudioLanguages;
-                        needsSubtitleLanguages = fieldReqs.NeedsSubtitleLanguages;
-                        needsLastEpisodeAirDate = fieldReqs.NeedsLastEpisodeAirDate;
-                        needsAudioQuality = fieldReqs.NeedsAudioQuality;
-                        needsVideoQuality = fieldReqs.NeedsVideoQuality;
-                        needsPeople = fieldReqs.NeedsPeople;
-                        needsCollections = fieldReqs.NeedsCollections;
-                        needsPlaylists = fieldReqs.NeedsPlaylists;
-                        // Note: collectionRecursionDepth is set from list-level CollectionSearchDepth above
-                        needsNextUnwatched = fieldReqs.NeedsNextUnwatched;
-                        needsSeriesName = fieldReqs.NeedsSeriesName;
-                        needsParentSeriesTags = fieldReqs.NeedsParentSeriesTags;
-                        needsParentSeriesStudios = fieldReqs.NeedsParentSeriesStudios;
-                        needsParentSeriesGenres = fieldReqs.NeedsParentSeriesGenres;
-                        needsSimilarTo = fieldReqs.NeedsSimilarTo;
-                        similarToExpressions = fieldReqs.SimilarToExpressions;
-
-                        // Extract IncludeUnwatchedSeries parameter from NextUnwatched rules
-                        // If any rule explicitly sets it to false, use false; otherwise default to true
-                        var nextUnwatchedRules = ExpressionSets
-                            .SelectMany(set => set?.Expressions ?? [])
-                            .Where(expr => expr?.MemberName == "NextUnwatched")
-                            .ToList();
-
-                        includeUnwatchedSeries = !nextUnwatchedRules.Any(rule => rule.IncludeUnwatchedSeries == false);
-
-                        // Collect unique user IDs from user-specific expressions
-                        // Normalize to "N" format (no dashes) to match UserPlaylists format
-                        additionalUserIds = [..ExpressionSets
-                            .SelectMany(set => set?.Expressions ?? [])
-                            .Where(expr => expr?.IsUserSpecific == true && !string.IsNullOrEmpty(expr.UserId))
-                            .Select(expr => Guid.TryParse(expr.UserId, out var guid) ? guid.ToString("N") : expr.UserId!)
-                            .Distinct()];
-
-                        if (additionalUserIds.Count > 0)
+                        if (fieldReqs.AdditionalUserIds.Count > 0)
                         {
                             logger?.LogDebug("Found user-specific expressions for {Count} users: [{UserIds}]",
-                                additionalUserIds.Count, string.Join(", ", additionalUserIds));
+                                fieldReqs.AdditionalUserIds.Count, string.Join(", ", fieldReqs.AdditionalUserIds));
                         }
                     }
                 }
@@ -765,17 +717,17 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Without this, similarity matching on people/audio language fields will fail
                 try
                 {
-                    if (needsSimilarTo && similarityComparisonFields is { Count: > 0 })
+                    if (fieldReqs.NeedsSimilarTo && similarityComparisonFields is { Count: > 0 })
                     {
                         var simFields = new HashSet<string>(similarityComparisonFields, StringComparer.OrdinalIgnoreCase);
                         if (simFields.Any(f => FieldRegistry.IsPeopleField(f)))
                         {
-                            needsPeople = true;
+                            fieldReqs.RequiredGroups |= ExtractionGroup.People;
                             logger?.LogDebug("Enabled People extraction for SimilarTo comparison fields");
                         }
                         if (simFields.Contains("Audio Languages"))
                         {
-                            needsAudioLanguages = true;
+                            fieldReqs.RequiredGroups |= ExtractionGroup.AudioLanguages;
                             logger?.LogDebug("Enabled Audio Languages extraction for SimilarTo comparison fields");
                         }
                     }
@@ -864,9 +816,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 }
 
                 // Early validation of additional users to prevent exceptions during item processing
-                if (additionalUserIds.Count > 0 && userDataManager != null)
+                if (fieldReqs.AdditionalUserIds.Count > 0 && userDataManager != null)
                 {
-                    foreach (var userId in additionalUserIds)
+                    foreach (var userId in fieldReqs.AdditionalUserIds)
                     {
                         if (Guid.TryParse(userId, out var userGuid))
                         {
@@ -937,11 +889,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Build reference metadata once for SimilarTo queries (before chunking to avoid rebuilding per chunk)
                 OperandFactory.ReferenceMetadata? referenceMetadata = null;
-                if (needsSimilarTo)
+                if (fieldReqs.NeedsSimilarTo)
                 {
                     logger?.LogDebug("Building reference metadata for SimilarTo queries (once per filter run) using fields: {Fields}",
                         string.Join(", ", similarityComparisonFields));
-                    referenceMetadata = OperandFactory.BuildReferenceMetadata(similarToExpressions, itemsArray, similarityComparisonFields, libraryManager, logger);
+                    referenceMetadata = OperandFactory.BuildReferenceMetadata(fieldReqs.SimilarToExpressions, itemsArray, similarityComparisonFields, libraryManager, logger);
                 }
 
                 // RefreshCache is provided as parameter - shared across multiple playlists/collections for the same user
@@ -985,7 +937,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         // Process chunk
                         var chunkResults = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
-                            needsAudioLanguages, needsSubtitleLanguages, needsLastEpisodeAirDate, needsAudioQuality, needsVideoQuality, needsPeople, needsCollections, needsPlaylists, needsNextUnwatched, needsSeriesName, needsParentSeriesTags, needsParentSeriesStudios, needsParentSeriesGenres, needsSimilarTo, includeUnwatchedSeries, additionalUserIds, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
+                            fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
                         results.AddRange(chunkResults);
                         
                         // Report progress after chunk is complete
@@ -1843,48 +1795,19 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Check field requirements for performance optimization
                 var fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders);
-                var needsAudioLanguages = fieldReqs.NeedsAudioLanguages;
-                var needsSubtitleLanguages = fieldReqs.NeedsSubtitleLanguages;
-                var needsLastEpisodeAirDate = fieldReqs.NeedsLastEpisodeAirDate;
-                var needsAudioQuality = fieldReqs.NeedsAudioQuality;
-                var needsVideoQuality = fieldReqs.NeedsVideoQuality;
-                var needsPeople = fieldReqs.NeedsPeople;
-                var needsCollections = fieldReqs.NeedsCollections;
-                var needsPlaylists = fieldReqs.NeedsPlaylists;
-                var needsNextUnwatched = fieldReqs.NeedsNextUnwatched;
-                var needsSeriesName = fieldReqs.NeedsSeriesName;
-                var needsParentSeriesTags = fieldReqs.NeedsParentSeriesTags;
-                var needsParentSeriesStudios = fieldReqs.NeedsParentSeriesStudios;
-                var needsParentSeriesGenres = fieldReqs.NeedsParentSeriesGenres;
-                var includeUnwatchedSeries = fieldReqs.IncludeUnwatchedSeries;
-                var additionalUserIds = fieldReqs.AdditionalUserIds;
+                // Set collection recursion depth from list-level setting
+                fieldReqs.CollectionRecursionDepth = Math.Max(1, CollectionSearchDepth);
 
                 logger?.LogDebug("Filtering {EpisodeCount} episodes against playlist rules", episodes.Count);
+
+                // Create extraction options from field requirements (DRY - single source of truth)
+                var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
 
                 foreach (var episode in episodes)
                 {
                     try
                     {
-                        var operand = OperandFactory.GetMediaType(libraryManager, episode, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
-                        {
-                            ExtractAudioLanguages = needsAudioLanguages,
-                            ExtractSubtitleLanguages = needsSubtitleLanguages,
-                            ExtractLastEpisodeAirDate = needsLastEpisodeAirDate,
-                            ExtractAudioQuality = needsAudioQuality,
-                            ExtractVideoQuality = needsVideoQuality,
-                            ExtractPeople = needsPeople,
-                            ExtractCollections = needsCollections,
-                            CollectionRecursionDepth = CollectionSearchDepth,
-                            ExtractPlaylists = needsPlaylists,
-                            ExtractNextUnwatched = needsNextUnwatched,
-                            ExtractSeriesName = needsSeriesName,
-                            ExtractParentSeriesTags = needsParentSeriesTags,
-                            ExtractParentSeriesStudios = needsParentSeriesStudios,
-                            ExtractParentSeriesGenres = needsParentSeriesGenres,
-                            IncludeUnwatchedSeries = includeUnwatchedSeries,
-                            AdditionalUserIds = additionalUserIds,
-                            OriginListName = Name,
-                        }, refreshCache);
+                        var operand = OperandFactory.GetMediaType(libraryManager, episode, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
                         var matches = EvaluateLogicGroupsForEpisode(compiledRules, operand, parentSeries, logger);
 
@@ -2205,8 +2128,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         private List<BaseItem> ProcessItemChunk(IEnumerable<BaseItem> items, ILibraryManager libraryManager,
-            User user, IUserDataManager? userDataManager, ILogger? logger, bool needsAudioLanguages, bool needsSubtitleLanguages, bool needsLastEpisodeAirDate, bool needsAudioQuality, bool needsVideoQuality, bool needsPeople, bool needsCollections, bool needsPlaylists, bool needsNextUnwatched, bool needsSeriesName, bool needsParentSeriesTags, bool needsParentSeriesStudios, bool needsParentSeriesGenres, bool needsSimilarTo, bool includeUnwatchedSeries,
-            List<string> additionalUserIds, OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, RefreshQueueService.RefreshCache refreshCache)
+            User user, IUserDataManager? userDataManager, ILogger? logger, FieldRequirements fieldReqs,
+            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, RefreshQueueService.RefreshCache refreshCache)
         {
             var results = new List<BaseItem>();
 
@@ -2218,7 +2141,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     return results;
                 }
 
-                if (needsAudioLanguages || needsSubtitleLanguages || needsLastEpisodeAirDate || needsAudioQuality || needsVideoQuality || needsPeople || needsCollections || needsPlaylists || needsNextUnwatched || needsSeriesName || needsParentSeriesTags || needsParentSeriesStudios || needsParentSeriesGenres || needsSimilarTo)
+                // Check if any expensive fields are needed (RequiredGroups is non-zero indicates some extraction needed)
+                var needsExpensiveFields = fieldReqs.RequiredGroups != ExtractionGroup.None;
+
+                if (needsExpensiveFields)
                 {
                     // Use the shared RefreshCache passed from FilterPlaylistItems for optimal performance across chunks
                     // referenceMetadata is also provided by caller (built once per filter run, not per chunk)
@@ -2226,8 +2152,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Optimization: Separate rules into cheap and expensive categories
                     var cheapCompiledRules = new List<List<Func<Operand, bool>>>();
 
-                    logger?.LogDebug("Separating rules into cheap and expensive categories (AudioLanguages: {AudioNeeded}, AudioQuality: {AudioQualityNeeded}, People: {PeopleNeeded}, Collections: {CollectionsNeeded}, Playlists: {PlaylistsNeeded}, NextUnwatched: {NextUnwatchedNeeded}, SeriesName: {SeriesNameNeeded}, ParentSeriesTags: {ParentSeriesTagsNeeded}, ParentSeriesStudios: {ParentSeriesStudiosNeeded}, ParentSeriesGenres: {ParentSeriesGenresNeeded}, SimilarTo: {SimilarToNeeded})",
-                        needsAudioLanguages, needsAudioQuality, needsPeople, needsCollections, needsPlaylists, needsNextUnwatched, needsSeriesName, needsParentSeriesTags, needsParentSeriesStudios, needsParentSeriesGenres, needsSimilarTo);
+                    logger?.LogDebug("Separating rules into cheap and expensive categories (RequiredGroups: {RequiredGroups})",
+                        fieldReqs.RequiredGroups);
 
 
                     try
@@ -2299,7 +2225,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     catch (Exception ex)
                     {
                         logger?.LogWarning(ex, "Error separating rules into cheap and expensive categories. Falling back to simple processing.");
-                        return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, needsAudioLanguages, needsSubtitleLanguages, needsLastEpisodeAirDate, needsAudioQuality, needsVideoQuality, needsPeople, needsCollections, needsPlaylists, needsNextUnwatched, needsSeriesName, needsParentSeriesTags, needsParentSeriesStudios, needsParentSeriesGenres, includeUnwatchedSeries, additionalUserIds, referenceMetadata, similarityComparisonFields, needsSimilarTo, compiledRules, hasAnyRules, refreshCache);
+                        return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
                     }
 
                     if (!hasNonExpensiveRules)
@@ -2311,7 +2237,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         var itemList = items as IList<BaseItem> ?? items.ToList();
 
                         // Preload People cache in parallel if needed for performance
-                        if (needsPeople)
+                        if (fieldReqs.NeedsPeople)
                         {
                             logger?.LogDebug("Preloading People cache for all {Count} items (expensive-only path)", itemList.Count);
                             OperandFactory.PreloadPeopleCache(libraryManager, itemList, refreshCache, logger);
@@ -2322,36 +2248,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         logger?.LogDebug("Processing {Count} items sequentially (expensive-only path)", itemList.Count);
 
+                        // Create extraction options from field requirements (DRY - single source of truth)
+                        var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+
                         foreach (var item in itemList)
                         {
                             if (item == null || userNotFoundException != null) continue;
 
                             try
                             {
-                                var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
-                                {
-                                    ExtractAudioLanguages = needsAudioLanguages,
-                                    ExtractSubtitleLanguages = needsSubtitleLanguages,
-                                    ExtractLastEpisodeAirDate = needsLastEpisodeAirDate,
-                                    ExtractAudioQuality = needsAudioQuality,
-                                    ExtractVideoQuality = needsVideoQuality,
-                                    ExtractPeople = needsPeople,
-                                    ExtractCollections = needsCollections,
-                                    CollectionRecursionDepth = CollectionSearchDepth,
-                                    ExtractPlaylists = needsPlaylists,
-                                    ExtractNextUnwatched = needsNextUnwatched,
-                                    ExtractSeriesName = needsSeriesName,
-                                    ExtractParentSeriesTags = needsParentSeriesTags,
-                                    ExtractParentSeriesStudios = needsParentSeriesStudios,
-                                    ExtractParentSeriesGenres = needsParentSeriesGenres,
-                                    IncludeUnwatchedSeries = includeUnwatchedSeries,
-                                    AdditionalUserIds = additionalUserIds,
-                                    OriginListName = Name,
-                                }, refreshCache);
+                                var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
                                 // Calculate similarity score if SimilarTo is active
                                 bool passesSimilarity = true;
-                                if (needsSimilarTo && referenceMetadata != null)
+                                if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
                                 {
                                     passesSimilarity = OperandFactory.CalculateSimilarityScore(operand, referenceMetadata, similarityComparisonFields, logger);
 
@@ -2464,16 +2374,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     continue;
                                 }
 
-                                // Phase 1: Extract non-expensive properties and check non-expensive rules
+                                // Phase 1: Extract cheap (non-expensive) properties and check non-expensive rules
+                                // Filter RequiredGroups to only include cheap extraction groups
+                                var cheapGroups = fieldReqs.RequiredGroups &
+                                    (ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
+                                     ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent);
                                 var cheapOperand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
                                 {
-                                    ExtractAudioLanguages = false,
-                                    ExtractPeople = false,
-                                    ExtractCollections = false,
-                                    ExtractNextUnwatched = false,
-                                    ExtractSeriesName = false,
+                                    RequiredGroups = cheapGroups, // Only cheap extraction groups for Phase 1
                                     IncludeUnwatchedSeries = true,
-                                    AdditionalUserIds = additionalUserIds,
+                                    AdditionalUserIds = [.. fieldReqs.AdditionalUserIds],
                                     OriginListName = Name,
                                 }, refreshCache);
 
@@ -2539,7 +2449,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             phase1Survivors.Count, itemList.Count, phase1SeriesMatches.Count);
 
                         // Preload People cache for Phase 1 survivors if needed
-                        if (needsPeople && phase1Survivors.Count > 0)
+                        if (fieldReqs.NeedsPeople && phase1Survivors.Count > 0)
                         {
                             logger?.LogDebug("Preloading People cache for {Count} Phase 1 survivors", phase1Survivors.Count);
                             OperandFactory.PreloadPeopleCache(libraryManager, phase1Survivors, refreshCache, logger);
@@ -2551,6 +2461,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         logger?.LogDebug("Processing {Count} Phase 1 survivors sequentially (Phase 2)", phase1Survivors.Count);
 
+                        // Create extraction options from field requirements for Phase 2 (DRY - single source of truth)
+                        var phase2Options = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+
                         foreach (var item in phase1Survivors)
                         {
                             if (userNotFoundException != null) break;
@@ -2558,49 +2471,30 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             try
                             {
                                 // Phase 2: Extract expensive data and check complete rules
-                                var fullOperand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
-                                {
-                                    ExtractAudioLanguages = needsAudioLanguages,
-                                    ExtractSubtitleLanguages = needsSubtitleLanguages,
-                                    ExtractLastEpisodeAirDate = needsLastEpisodeAirDate,
-                                    ExtractAudioQuality = needsAudioQuality,
-                                    ExtractVideoQuality = needsVideoQuality,
-                                    ExtractPeople = needsPeople,
-                                    ExtractCollections = needsCollections,
-                                    CollectionRecursionDepth = CollectionSearchDepth,
-                                    ExtractPlaylists = needsPlaylists,
-                                    ExtractNextUnwatched = needsNextUnwatched,
-                                    ExtractSeriesName = needsSeriesName,
-                                    ExtractParentSeriesTags = needsParentSeriesTags,
-                                    ExtractParentSeriesStudios = needsParentSeriesStudios,
-                                    ExtractParentSeriesGenres = needsParentSeriesGenres,
-                                    IncludeUnwatchedSeries = includeUnwatchedSeries,
-                                    AdditionalUserIds = additionalUserIds,
-                                    OriginListName = Name,
-                                }, refreshCache);
+                                var fullOperand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, phase2Options, refreshCache);
 
                                 // Debug: Log expensive data found for first few items
                                 bool shouldLog = debugItemCount < 5;
                                 if (shouldLog)
                                 {
                                     debugItemCount++;
-                                    
-                                    if (needsAudioLanguages)
+
+                                    if (fieldReqs.NeedsAudioLanguages)
                                     {
                                         logger?.LogDebug("Item '{Name}': Found {Count} audio languages: [{Languages}]",
                                             item.Name, fullOperand.AudioLanguages?.Count ?? 0, fullOperand.AudioLanguages != null ? string.Join(", ", fullOperand.AudioLanguages) : "none");
                                     }
-                                    if (needsPeople)
+                                    if (fieldReqs.NeedsPeople)
                                     {
                                         logger?.LogDebug("Item '{Name}': Found {Count} people: [{People}]",
                                             item.Name, fullOperand.People?.Count ?? 0, fullOperand.People != null ? string.Join(", ", fullOperand.People.Take(5)) : "none");
                                     }
-                                    if (needsCollections)
+                                    if (fieldReqs.NeedsCollections)
                                     {
                                         logger?.LogDebug("Item '{Name}': Found {Count} collections: [{Collections}]",
                                             item.Name, fullOperand.Collections?.Count ?? 0, fullOperand.Collections != null ? string.Join(", ", fullOperand.Collections) : "none");
                                     }
-                                    if (needsNextUnwatched)
+                                    if (fieldReqs.NeedsNextUnwatched)
                                     {
                                         logger?.LogDebug("Item '{Name}': NextUnwatched status: {NextUnwatchedUsers}",
                                             item.Name, fullOperand.NextUnwatchedByUser?.Count > 0 ? string.Join(", ", fullOperand.NextUnwatchedByUser.Select(x => $"{x.Key}={x.Value}")) : "none");
@@ -2609,7 +2503,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                                 // Calculate similarity score if SimilarTo is active
                                 bool passesSimilarity = true;
-                                if (needsSimilarTo && referenceMetadata != null)
+                                if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
                                 {
                                     passesSimilarity = OperandFactory.CalculateSimilarityScore(fullOperand, referenceMetadata, similarityComparisonFields, logger);
 
@@ -2690,7 +2584,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 else
                 {
                     // No expensive fields needed - use simple filtering
-                    return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, needsAudioLanguages, needsSubtitleLanguages, needsLastEpisodeAirDate, needsAudioQuality, needsVideoQuality, needsPeople, needsCollections, needsPlaylists, needsNextUnwatched, needsSeriesName, needsParentSeriesTags, needsParentSeriesStudios, needsParentSeriesGenres, includeUnwatchedSeries, additionalUserIds, referenceMetadata, similarityComparisonFields, needsSimilarTo, compiledRules, hasAnyRules, refreshCache);
+                    return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
                 }
 
                 return results;
@@ -2712,8 +2606,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// Simple item processing fallback method with error handling.
         /// </summary>
         private List<BaseItem> ProcessItemsSimple(IEnumerable<BaseItem> items, ILibraryManager libraryManager,
-            User user, IUserDataManager? userDataManager, ILogger? logger, bool needsAudioLanguages, bool needsSubtitleLanguages, bool needsLastEpisodeAirDate, bool needsAudioQuality, bool needsVideoQuality, bool needsPeople, bool needsCollections, bool needsPlaylists, bool needsNextUnwatched, bool needsSeriesName, bool needsParentSeriesTags, bool needsParentSeriesStudios, bool needsParentSeriesGenres, bool includeUnwatchedSeries,
-            List<string> additionalUserIds, OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, bool needsSimilarTo,
+            User user, IUserDataManager? userDataManager, ILogger? logger, FieldRequirements fieldReqs,
+            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields,
             List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, RefreshQueueService.RefreshCache refreshCache)
         {
             var results = new List<BaseItem>();
@@ -2722,7 +2616,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var itemList = items as IList<BaseItem> ?? items.ToList();
 
             // Preload People cache if needed for performance
-            if (needsPeople)
+            if (fieldReqs.NeedsPeople)
             {
                 logger?.LogDebug("Preloading People cache for simple processing ({Count} items)", itemList.Count);
                 OperandFactory.PreloadPeopleCache(libraryManager, itemList, refreshCache, logger);
@@ -2733,6 +2627,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             logger?.LogDebug("Processing {Count} items sequentially (simple path)", itemList.Count);
 
+            // Create extraction options from field requirements (DRY - single source of truth)
+            var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+
             try
             {
                 foreach (var item in itemList)
@@ -2741,30 +2638,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                     try
                     {
-                        var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
-                        {
-                            ExtractAudioLanguages = needsAudioLanguages,
-                            ExtractSubtitleLanguages = needsSubtitleLanguages,
-                            ExtractLastEpisodeAirDate = needsLastEpisodeAirDate,
-                            ExtractAudioQuality = needsAudioQuality,
-                            ExtractVideoQuality = needsVideoQuality,
-                            ExtractPeople = needsPeople,
-                            ExtractCollections = needsCollections,
-                            CollectionRecursionDepth = CollectionSearchDepth,
-                            ExtractPlaylists = needsPlaylists,
-                            ExtractNextUnwatched = needsNextUnwatched,
-                            ExtractSeriesName = needsSeriesName,
-                            ExtractParentSeriesTags = needsParentSeriesTags,
-                            ExtractParentSeriesStudios = needsParentSeriesStudios,
-                            ExtractParentSeriesGenres = needsParentSeriesGenres,
-                            IncludeUnwatchedSeries = includeUnwatchedSeries,
-                            AdditionalUserIds = additionalUserIds,
-                            OriginListName = Name,
-                        }, refreshCache);
+                        var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
                         // Check similarity first if SimilarTo is active
                         bool passesSimilarity = true;
-                        if (needsSimilarTo && referenceMetadata != null)
+                        if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
                         {
                             passesSimilarity = OperandFactory.CalculateSimilarityScore(operand, referenceMetadata, similarityComparisonFields, logger);
                             if (operand.SimilarityScore.HasValue)
@@ -2983,7 +2861,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         public int CollectionRecursionDepth { get; set; } = 1;
 
-        // Computed accessors for RequiredGroups flags
+        // Computed accessors for RequiredGroups flags - expensive extraction groups
         public bool NeedsAudioLanguages => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
         public bool NeedsSubtitleLanguages => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
         public bool NeedsAudioQuality => RequiredGroups.HasFlag(ExtractionGroup.AudioQuality);
@@ -2998,6 +2876,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
         public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
         public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
+
+        // Computed accessors for cheap extraction groups
+        public bool NeedsFileInfo => RequiredGroups.HasFlag(ExtractionGroup.FileInfo);
+        public bool NeedsLibraryInfo => RequiredGroups.HasFlag(ExtractionGroup.LibraryInfo);
+        public bool NeedsAudioMetadata => RequiredGroups.HasFlag(ExtractionGroup.AudioMetadata);
+        public bool NeedsTextContent => RequiredGroups.HasFlag(ExtractionGroup.TextContent);
 
         /// <summary>
         /// Analyzes expression sets to determine field requirements.
@@ -3035,19 +2919,41 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (expr.MemberName == "SimilarTo")
                     requirements.SimilarToExpressions.Add(expr);
 
-                // Collect user IDs from user-specific rules
+                // Collect user IDs from user-specific rules (normalize to "N" format for consistency)
                 if (!string.IsNullOrEmpty(expr.UserId))
-                    requirements.AdditionalUserIds.Add(expr.UserId);
+                {
+                    var normalizedUserId = Guid.TryParse(expr.UserId, out var guid) ? guid.ToString("N") : expr.UserId;
+                    requirements.AdditionalUserIds.Add(normalizedUserId);
+                }
             }
 
             // Deduplicate user IDs
             requirements.AdditionalUserIds = [.. requirements.AdditionalUserIds.Distinct()];
 
-            // Check if SeriesName is used in sorting
-            if (orders != null && !requirements.RequiredGroups.HasFlag(ExtractionGroup.SeriesName))
+            // Check if certain fields are used in sorting (ensure extraction happens even if not used in rules)
+            if (orders != null)
             {
-                if (orders.Any(o => o.Name.Contains("SeriesName", StringComparison.OrdinalIgnoreCase)))
-                    requirements.RequiredGroups |= ExtractionGroup.SeriesName;
+                // SeriesName sort requires SeriesName extraction
+                if (!requirements.RequiredGroups.HasFlag(ExtractionGroup.SeriesName))
+                {
+                    if (orders.Any(o => o.Name.Contains("SeriesName", StringComparison.OrdinalIgnoreCase)))
+                        requirements.RequiredGroups |= ExtractionGroup.SeriesName;
+                }
+
+                // Runtime sort requires TextContent extraction (for RuntimeMinutes)
+                if (!requirements.RequiredGroups.HasFlag(ExtractionGroup.TextContent))
+                {
+                    if (orders.Any(o => o.Name.Contains("Runtime", StringComparison.OrdinalIgnoreCase)))
+                        requirements.RequiredGroups |= ExtractionGroup.TextContent;
+                }
+
+                // Artist/Album sorts require AudioMetadata extraction
+                if (!requirements.RequiredGroups.HasFlag(ExtractionGroup.AudioMetadata))
+                {
+                    if (orders.Any(o => o.Name.Contains("Artist", StringComparison.OrdinalIgnoreCase) ||
+                                       o.Name.Contains("Album", StringComparison.OrdinalIgnoreCase)))
+                        requirements.RequiredGroups |= ExtractionGroup.AudioMetadata;
+                }
             }
 
             // Extract IncludeUnwatchedSeries parameter from NextUnwatched rules
