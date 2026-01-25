@@ -317,12 +317,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         public static IEnumerable<FieldMetadata> GetFieldsByCategory(FieldCategory category)
         {
-            return _fieldsByCategory.TryGetValue(category, out var fields) ? fields : [];
+            // Return defensive copy to prevent external mutation of internal state
+            return _fieldsByCategory.TryGetValue(category, out var fields) ? fields.ToArray() : [];
         }
 
         public static IEnumerable<string> GetFieldsInExtractionGroup(ExtractionGroup group)
         {
-            return _fieldsByExtractionGroup.TryGetValue(group, out var fields) ? fields : [];
+            // Return defensive copy to prevent external mutation of internal state
+            return _fieldsByExtractionGroup.TryGetValue(group, out var fields) ? fields.ToArray() : [];
         }
 
         // Public API - backward compatibility with FieldDefinitions
@@ -425,7 +427,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 FileFields = GetFieldsForCategoryAsApiFormat(FieldCategory.File),
                 LibraryFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Library),
                 PeopleFields = new[] { new { Value = "People", Label = "People" } },
-                PeopleSubFields = GetFieldsForCategoryAsApiFormat(FieldCategory.PeopleSubFields),
+                PeopleSubFields = GetFieldsForCategoryAsApiFormat(FieldCategory.PeopleSubFields)
+                    .Where(f => f.Value != "People") // "People" is already in PeopleFields
+                    .ToArray(),
                 CollectionFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Collection),
                 SimilarityComparisonFields = GetSimilarityComparisonFieldsForApi(),
                 Operators = Constants.Operators.AllOperators,

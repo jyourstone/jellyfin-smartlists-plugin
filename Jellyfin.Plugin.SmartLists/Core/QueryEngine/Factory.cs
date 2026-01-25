@@ -32,7 +32,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         public ExtractionGroup RequiredGroups { get; set; } = ExtractionGroup.None;
 
-        // Convenience properties for backward compatibility - get/set that modify RequiredGroups
+        // Convenience properties that modify RequiredGroups flags
+        // NOTE: AudioLanguages and SubtitleLanguages share ExtractionGroup.AudioLanguages intentionally.
+        // Both require parsing the same media streams (GetMediaStreams API), so extracting one
+        // effectively extracts both. This coupling is a performance optimization, not a bug.
         public bool ExtractAudioLanguages
         {
             get => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
@@ -41,7 +44,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         public bool ExtractSubtitleLanguages
         {
-            get => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages); // Same group as AudioLanguages
+            get => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.AudioLanguages : RequiredGroups & ~ExtractionGroup.AudioLanguages;
         }
 
