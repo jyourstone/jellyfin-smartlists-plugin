@@ -14,10 +14,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// 1. ExtractionGroup.None (Tier 0 - Always Extracted):
     ///    - Direct BaseItem property access (~0.01ms/item)
     ///    - No caching needed
-    ///    - Examples: Name, ProductionYear, Genres, DateCreated
+    ///    - Examples: Name, Id, MediaType, CommunityRating
     ///
     /// 2. Cheap Groups (Tier 1 - Conditional, Fast):
-    ///    - FileInfo, LibraryInfo, AudioMetadata, TextContent
+    ///    - FileInfo, LibraryInfo, AudioMetadata, TextContent, ItemLists, UserData, Dates
     ///    - Only extracted when rules use these fields
     ///    - Don't trigger two-phase filtering
     ///    - LibraryInfo uses caching (LibraryNameById in RefreshCache)
@@ -75,7 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
 
         // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
-        // Defined in FieldMetadata.CheapExtractionGroups
+        // Defined in FieldRegistry.CheapExtractionGroups
         FileInfo = 1 << 13,           // Fields: FolderPath, FileName, DateModified | No cache (file system)
         LibraryInfo = 1 << 14,        // Fields: LibraryName | Cache: LibraryNameById
         AudioMetadata = 1 << 15,      // Fields: Album, Artists, AlbumArtists | No cache (reflection, fast)
