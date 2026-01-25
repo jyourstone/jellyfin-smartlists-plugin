@@ -1244,7 +1244,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <returns>True if it's a date field, false otherwise</returns>
         private static bool IsDateField(string fieldName)
         {
-            return FieldDefinitions.IsDateField(fieldName);
+            return FieldRegistry.IsDateField(fieldName);
         }
 
         /// <summary>
@@ -1254,12 +1254,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <returns>True if it's a resolution field, false otherwise</returns>
         private static bool IsResolutionField(string fieldName)
         {
-            return FieldDefinitions.IsResolutionField(fieldName);
+            return FieldRegistry.IsResolutionField(fieldName);
         }
 
         private static bool IsFramerateField(string fieldName)
         {
-            return FieldDefinitions.IsFramerateField(fieldName);
+            return FieldRegistry.IsFramerateField(fieldName);
         }
 
         /// <summary>
