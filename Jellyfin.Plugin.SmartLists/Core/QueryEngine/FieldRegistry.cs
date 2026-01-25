@@ -74,12 +74,26 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// </summary>
     public record FieldMetadata
     {
+        /// <summary>
+        /// Cheap extraction groups that don't require API calls, reflection, or database queries.
+        /// These are conditionally extracted but fast - used for rule categorization in two-phase filtering.
+        /// </summary>
+        private const ExtractionGroup CheapExtractionGroups =
+            ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
+            ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent;
+
         public required string Name { get; init; }
         public required string DisplayLabel { get; init; }
         public required FieldType Type { get; init; }
         public required FieldCategory Category { get; init; }
         public ExtractionGroup ExtractionGroup { get; init; } = ExtractionGroup.None;
-        public bool IsExpensive => ExtractionGroup != ExtractionGroup.None;
+
+        /// <summary>
+        /// Whether this field requires expensive extraction (API calls, reflection, database queries).
+        /// Cheap extraction groups (FileInfo, LibraryInfo, AudioMetadata, TextContent) are NOT expensive.
+        /// </summary>
+        public bool IsExpensive => ExtractionGroup != ExtractionGroup.None &&
+                                   (ExtractionGroup & CheapExtractionGroups) == ExtractionGroup.None;
         public string[] AllowedOperators { get; init; } = [];
         public bool IsUserSpecific { get; init; } = false;
         public bool IsPeopleField { get; init; } = false;

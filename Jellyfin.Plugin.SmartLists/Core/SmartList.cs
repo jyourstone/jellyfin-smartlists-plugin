@@ -968,7 +968,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     Name, stopwatch.ElapsedMilliseconds, totalItems, results.Count);
 
                 // Check if we need to expand Collections based on media type selection
-                var expandedResults = ExpandCollectionsBasedOnMediaType(results, libraryManager, user, userDataManager, logger, refreshCache);
+                var expandedResults = ExpandCollectionsBasedOnMediaType(results, libraryManager, user, userDataManager, logger, refreshCache, fieldReqs);
                 logger?.LogDebug("Playlist '{PlaylistName}' expanded from {OriginalCount} items to {ExpandedCount} items after Collections processing",
                     Name, results.Count, expandedResults.Count);
 
@@ -1664,7 +1664,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
         }
 
-        private List<BaseItem> ExpandCollectionsBasedOnMediaType(List<BaseItem> items, ILibraryManager libraryManager, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        private List<BaseItem> ExpandCollectionsBasedOnMediaType(List<BaseItem> items, ILibraryManager libraryManager, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache, FieldRequirements fieldReqs)
         {
             try
             {
@@ -1706,7 +1706,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 logger?.LogDebug("Expanding series '{SeriesName}' with {TotalEpisodes} episodes", series.Name, seriesEpisodes.Count);
 
                                 // Filter episodes against rules (excluding Collections rules since parent series matched)
-                                var matchingEpisodes = FilterEpisodesAgainstRules(seriesEpisodes, libraryManager, user, userDataManager, logger, refreshCache, series);
+                                var matchingEpisodes = FilterEpisodesAgainstRules(seriesEpisodes, libraryManager, user, userDataManager, logger, refreshCache, fieldReqs, series);
 
                                 // Add unique matching episodes
                                 int addedCount = 0;
@@ -1777,7 +1777,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
         }
 
-        private List<BaseItem> FilterEpisodesAgainstRules(List<BaseItem> episodes, ILibraryManager libraryManager, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache, Series? parentSeries = null)
+        private List<BaseItem> FilterEpisodesAgainstRules(List<BaseItem> episodes, ILibraryManager libraryManager, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache, FieldRequirements fieldReqs, Series? parentSeries = null)
         {
             try
             {
@@ -1792,11 +1792,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     return episodes; // No rules to check against,
                 }
-
-                // Check field requirements for performance optimization
-                var fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders);
-                // Set collection recursion depth from list-level setting
-                fieldReqs.CollectionRecursionDepth = Math.Max(1, CollectionSearchDepth);
 
                 logger?.LogDebug("Filtering {EpisodeCount} episodes against playlist rules", episodes.Count);
 
@@ -2920,10 +2915,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     requirements.SimilarToExpressions.Add(expr);
 
                 // Collect user IDs from user-specific rules (normalize to "N" format for consistency)
-                if (!string.IsNullOrEmpty(expr.UserId))
+                // Skip invalid user IDs - validation will catch them later during processing
+                if (!string.IsNullOrEmpty(expr.UserId) && Guid.TryParse(expr.UserId, out var guid))
                 {
-                    var normalizedUserId = Guid.TryParse(expr.UserId, out var guid) ? guid.ToString("N") : expr.UserId;
-                    requirements.AdditionalUserIds.Add(normalizedUserId);
+                    requirements.AdditionalUserIds.Add(guid.ToString("N"));
                 }
             }
 
