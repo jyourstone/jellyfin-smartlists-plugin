@@ -134,10 +134,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         /// <summary>
         /// Whether this field requires expensive extraction (API calls, reflection, database queries).
-        /// Cheap extraction groups are NOT expensive.
+        /// Returns true if ANY bit in ExtractionGroup is not covered by CheapExtractionGroups.
         /// </summary>
-        public bool IsExpensive => ExtractionGroup != ExtractionGroup.None &&
-                                   (ExtractionGroup & FieldRegistry.CheapExtractionGroups) == ExtractionGroup.None;
+        public bool IsExpensive => (ExtractionGroup & ~FieldRegistry.CheapExtractionGroups) != ExtractionGroup.None;
         public string[] AllowedOperators { get; init; } = [];
         public bool IsUserSpecific { get; init; } = false;
         public bool IsPeopleField { get; init; } = false;
@@ -504,7 +503,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 LibraryFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Library),
                 PeopleFields = new[] { new { Value = "People", Label = "People" } },
                 PeopleSubFields = GetFieldsForCategoryAsApiFormat(FieldCategory.PeopleSubFields)
-                    .Where(f => f.Value != "People") // "People" is already in PeopleFields
                     .ToArray(),
                 CollectionFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Collection),
                 SimilarityComparisonFields = GetSimilarityComparisonFieldsForApi(),
