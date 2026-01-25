@@ -460,6 +460,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             ];
         }
 
+        /// <summary>
+        /// Returns a compact set of common sort options for the API.
+        /// This is intentionally a subset - the backend OrderFactory supports 38+ order types
+        /// (Runtime, SeriesName, Album/Artist, Episode/Season/Track numbers, Rule Block Order, etc.)
+        /// and the frontend SORT_OPTIONS provides context-aware filtering based on media type and rules.
+        /// See: OrderFactory.OrderMap, Configuration/config-sorts.js SORT_OPTIONS
+        /// </summary>
         private static object[] GetOrderOptionsForApi()
         {
             return

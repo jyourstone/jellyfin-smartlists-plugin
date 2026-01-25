@@ -126,7 +126,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 RequiredGroups = requirements.RequiredGroups,
                 IncludeUnwatchedSeries = requirements.IncludeUnwatchedSeries,
-                AdditionalUserIds = requirements.AdditionalUserIds,
+                AdditionalUserIds = [.. requirements.AdditionalUserIds], // Defensive copy
                 OriginListName = originListName,
                 CollectionRecursionDepth = collectionDepth,
             };
