@@ -2136,8 +2136,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     return results;
                 }
 
-                // Check if any expensive fields are needed (RequiredGroups is non-zero indicates some extraction needed)
-                var needsExpensiveFields = fieldReqs.RequiredGroups != ExtractionGroup.None;
+                // Check if any truly expensive fields are needed (exclude cheap extraction groups)
+                // Cheap groups (FileInfo, LibraryInfo, AudioMetadata, TextContent) don't require two-phase filtering
+                const ExtractionGroup cheapGroups =
+                    ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
+                    ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent;
+                var expensiveGroups = fieldReqs.RequiredGroups & ~cheapGroups;
+                var needsExpensiveFields = expensiveGroups != ExtractionGroup.None;
 
                 if (needsExpensiveFields)
                 {
@@ -2147,8 +2152,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Optimization: Separate rules into cheap and expensive categories
                     var cheapCompiledRules = new List<List<Func<Operand, bool>>>();
 
-                    logger?.LogDebug("Separating rules into cheap and expensive categories (RequiredGroups: {RequiredGroups})",
-                        fieldReqs.RequiredGroups);
+                    logger?.LogDebug("Using two-phase filtering for expensive field optimization (RequiredGroups: {RequiredGroups}, ExpensiveGroups: {ExpensiveGroups})",
+                        fieldReqs.RequiredGroups, expensiveGroups);
 
 
                     try
@@ -2370,13 +2375,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 }
 
                                 // Phase 1: Extract cheap (non-expensive) properties and check non-expensive rules
-                                // Filter RequiredGroups to only include cheap extraction groups
-                                var cheapGroups = fieldReqs.RequiredGroups &
-                                    (ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
-                                     ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent);
+                                // Filter RequiredGroups to only include cheap extraction groups (using constant from outer scope)
+                                var phase1Groups = fieldReqs.RequiredGroups & cheapGroups;
                                 var cheapOperand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
                                 {
-                                    RequiredGroups = cheapGroups, // Only cheap extraction groups for Phase 1
+                                    RequiredGroups = phase1Groups, // Only cheap extraction groups for Phase 1
                                     IncludeUnwatchedSeries = true,
                                     AdditionalUserIds = [.. fieldReqs.AdditionalUserIds],
                                     OriginListName = Name,
