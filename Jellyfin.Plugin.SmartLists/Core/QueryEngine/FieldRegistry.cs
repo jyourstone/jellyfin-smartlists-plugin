@@ -1,0 +1,486 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
+{
+    /// <summary>
+    /// Extraction groups for expensive field operations.
+    /// Uses [Flags] to allow combining multiple groups.
+    /// </summary>
+    [Flags]
+    public enum ExtractionGroup
+    {
+        None = 0,
+        AudioLanguages = 1 << 0,      // AudioLanguages, SubtitleLanguages
+        AudioQuality = 1 << 1,        // AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels
+        VideoQuality = 1 << 2,        // Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType
+        People = 1 << 3,              // All PeopleRoleFields (Actors, Directors, etc.)
+        Collections = 1 << 4,         // Collections field
+        Playlists = 1 << 5,           // Playlists field
+        NextUnwatched = 1 << 6,       // NextUnwatched field
+        SeriesName = 1 << 7,          // SeriesName field
+        ParentSeriesTags = 1 << 8,    // Tags with IncludeParentSeriesTags
+        ParentSeriesStudios = 1 << 9, // Studios with IncludeParentSeriesStudios
+        ParentSeriesGenres = 1 << 10, // Genres with IncludeParentSeriesGenres
+        SimilarTo = 1 << 11,          // SimilarTo field
+        LastEpisodeAirDate = 1 << 12, // LastEpisodeAirDate field
+    }
+
+    /// <summary>
+    /// Type of field for operator and value handling.
+    /// </summary>
+    public enum FieldType
+    {
+        Text,           // String fields
+        Numeric,
+        Date,
+        Boolean,
+        List,           // IEnumerable&lt;string&gt;
+        Resolution,
+        Framerate,
+        UserData,       // User-specific fields (PlaybackStatus, IsFavorite, etc.)
+        Similarity,
+        Simple,         // Predefined values (ItemType)
+    }
+
+    /// <summary>
+    /// UI category for field organization in the frontend.
+    /// </summary>
+    public enum FieldCategory
+    {
+        Content,
+        Video,
+        Audio,
+        RatingsPlayback,
+        File,
+        Library,
+        People,
+        PeopleSubFields,
+        Collection,
+        SimilarityComparison,
+    }
+
+    /// <summary>
+    /// Complete metadata for a single field.
+    /// </summary>
+    public record FieldMetadata
+    {
+        public required string Name { get; init; }
+        public required string DisplayLabel { get; init; }
+        public required FieldType Type { get; init; }
+        public required FieldCategory Category { get; init; }
+        public ExtractionGroup ExtractionGroup { get; init; } = ExtractionGroup.None;
+        public bool IsExpensive => ExtractionGroup != ExtractionGroup.None;
+        public string[] AllowedOperators { get; init; } = [];
+        public bool IsUserSpecific { get; init; } = false;
+        public bool IsPeopleField { get; init; } = false;
+
+        /// <summary>
+        /// Operand property name (must match Operand.cs property exactly).
+        /// </summary>
+        public string OperandPropertyName => Name;
+    }
+
+    /// <summary>
+    /// Central registry for all field definitions.
+    /// Single source of truth for field metadata.
+    /// </summary>
+    public static class FieldRegistry
+    {
+        // Operator arrays for reuse
+        private static readonly string[] StringOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
+        private static readonly string[] MultiValueOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
+        private static readonly string[] NumericOperators = ["Equal", "NotEqual", "GreaterThan", "LessThan", "GreaterThanOrEqual", "LessThanOrEqual"];
+        private static readonly string[] DateOperators = ["Equal", "NotEqual", "After", "Before", "NewerThan", "OlderThan", "Weekday"];
+        private static readonly string[] BooleanOperators = ["Equal", "NotEqual"];
+        private static readonly string[] SimpleOperators = ["Equal", "NotEqual"];
+        private static readonly string[] SimilarityOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
+
+        // The canonical registry - all field metadata in one place
+        private static readonly Dictionary<string, FieldMetadata> _fields;
+
+        // Derived lookup tables (computed once at startup)
+        private static readonly HashSet<string> _dateFields;
+        private static readonly HashSet<string> _listFields;
+        private static readonly HashSet<string> _peopleFields;
+        private static readonly HashSet<string> _numericFields;
+        private static readonly HashSet<string> _booleanFields;
+        private static readonly HashSet<string> _expensiveFields;
+        private static readonly HashSet<string> _userDataFields;
+        private static readonly HashSet<string> _simpleFields;
+        private static readonly HashSet<string> _resolutionFields;
+        private static readonly HashSet<string> _framerateFields;
+        private static readonly HashSet<string> _similarityFields;
+        private static readonly Dictionary<string, string[]> _fieldOperators;
+        private static readonly Dictionary<FieldCategory, List<FieldMetadata>> _fieldsByCategory;
+        private static readonly Dictionary<ExtractionGroup, List<string>> _fieldsByExtractionGroup;
+
+        static FieldRegistry()
+        {
+            _fields = BuildFieldRegistry();
+
+            // Build derived collections for backward compatibility
+            _dateFields = BuildFieldSet(f => f.Type == FieldType.Date);
+            _listFields = BuildFieldSet(f => f.Type == FieldType.List);
+            _peopleFields = BuildFieldSet(f => f.IsPeopleField);
+            _numericFields = BuildFieldSet(f => f.Type == FieldType.Numeric);
+            _booleanFields = BuildFieldSet(f => f.Type == FieldType.Boolean);
+            _expensiveFields = BuildFieldSet(f => f.IsExpensive);
+            _userDataFields = BuildFieldSet(f => f.IsUserSpecific);
+            _simpleFields = BuildFieldSet(f => f.Type == FieldType.Simple);
+            _resolutionFields = BuildFieldSet(f => f.Type == FieldType.Resolution);
+            _framerateFields = BuildFieldSet(f => f.Type == FieldType.Framerate);
+            _similarityFields = BuildFieldSet(f => f.Type == FieldType.Similarity);
+            _fieldOperators = _fields.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedOperators, StringComparer.OrdinalIgnoreCase);
+            _fieldsByCategory = BuildCategoryMap();
+            _fieldsByExtractionGroup = BuildExtractionGroupMap();
+        }
+
+        private static Dictionary<string, FieldMetadata> BuildFieldRegistry()
+        {
+            var fields = new Dictionary<string, FieldMetadata>(StringComparer.OrdinalIgnoreCase);
+
+            // Content Fields
+            AddField(fields, "Name", "Name", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "SeriesName", "Series Name", FieldType.Text, FieldCategory.Content, StringOperators, ExtractionGroup.SeriesName);
+            AddField(fields, "SimilarTo", "Similar To", FieldType.Similarity, FieldCategory.Content, SimilarityOperators, ExtractionGroup.SimilarTo);
+            AddField(fields, "OfficialRating", "Parental Rating", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "CustomRating", "Custom Rating", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "Overview", "Overview", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "ProductionYear", "Production Year", FieldType.Numeric, FieldCategory.Content, NumericOperators);
+            AddField(fields, "ReleaseDate", "Release Date", FieldType.Date, FieldCategory.Content, DateOperators);
+            AddField(fields, "LastEpisodeAirDate", "Last Episode Air Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.LastEpisodeAirDate);
+            AddField(fields, "ProductionLocations", "Production Locations", FieldType.List, FieldCategory.Content, MultiValueOperators);
+
+            // Video Fields
+            AddField(fields, "Resolution", "Resolution", FieldType.Resolution, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "Framerate", "Framerate", FieldType.Framerate, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "VideoCodec", "Video Codec", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "VideoProfile", "Video Profile", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "VideoRange", "Video Range", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "VideoRangeType", "Video Range Type", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
+
+            // Audio Fields
+            AddField(fields, "AudioLanguages", "Audio Languages", FieldType.List, FieldCategory.Audio, MultiValueOperators, ExtractionGroup.AudioLanguages);
+            AddField(fields, "SubtitleLanguages", "Subtitle Languages", FieldType.List, FieldCategory.Audio, MultiValueOperators, ExtractionGroup.AudioLanguages);
+            AddField(fields, "AudioBitrate", "Audio Bitrate (kbps)", FieldType.Numeric, FieldCategory.Audio, NumericOperators, ExtractionGroup.AudioQuality);
+            AddField(fields, "AudioSampleRate", "Audio Sample Rate (Hz)", FieldType.Numeric, FieldCategory.Audio, NumericOperators, ExtractionGroup.AudioQuality);
+            AddField(fields, "AudioBitDepth", "Audio Bit Depth", FieldType.Numeric, FieldCategory.Audio, NumericOperators, ExtractionGroup.AudioQuality);
+            AddField(fields, "AudioCodec", "Audio Codec", FieldType.Text, FieldCategory.Audio, StringOperators, ExtractionGroup.AudioQuality);
+            AddField(fields, "AudioProfile", "Audio Profile", FieldType.Text, FieldCategory.Audio, StringOperators, ExtractionGroup.AudioQuality);
+            AddField(fields, "AudioChannels", "Audio Channels", FieldType.Numeric, FieldCategory.Audio, NumericOperators, ExtractionGroup.AudioQuality);
+
+            // Ratings/Playback Fields (User-specific)
+            AddField(fields, "CommunityRating", "Community Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
+            AddField(fields, "CriticRating", "Critic Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
+            AddField(fields, "IsFavorite", "Is Favorite", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "PlaybackStatus", "Playback Status", FieldType.UserData, FieldCategory.RatingsPlayback, SimpleOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
+            AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "RuntimeMinutes", "Runtime (Minutes)", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
+
+            // File Fields
+            AddField(fields, "FileName", "File Name", FieldType.Text, FieldCategory.File, StringOperators);
+            AddField(fields, "FolderPath", "Folder Path", FieldType.Text, FieldCategory.File, StringOperators);
+            AddField(fields, "DateModified", "Date Modified", FieldType.Date, FieldCategory.File, DateOperators);
+
+            // Library Fields
+            AddField(fields, "LibraryName", "Library Name", FieldType.Text, FieldCategory.Library, StringOperators);
+            AddField(fields, "DateCreated", "Date Added to Library", FieldType.Date, FieldCategory.Library, DateOperators);
+            AddField(fields, "DateLastRefreshed", "Last Metadata Refresh", FieldType.Date, FieldCategory.Library, DateOperators);
+            AddField(fields, "DateLastSaved", "Last Database Save", FieldType.Date, FieldCategory.Library, DateOperators);
+
+            // Collection Fields
+            AddField(fields, "Collections", "Collection name", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.Collections);
+            AddField(fields, "Playlists", "Playlist name", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.Playlists);
+            AddField(fields, "Genres", "Genres", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "Studios", "Studios", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "Tags", "Tags", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators);
+            AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+
+            // Simple Fields
+            AddField(fields, "ItemType", "Item Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);
+
+            // People Fields (all expensive - require People extraction group)
+            AddPeopleField(fields, "People", "People (All)");
+            AddPeopleField(fields, "Actors", "Actors");
+            AddPeopleField(fields, "ActorRoles", "Actor Roles (Character Names)");
+            AddPeopleField(fields, "Directors", "Directors");
+            AddPeopleField(fields, "Composers", "Composers");
+            AddPeopleField(fields, "Writers", "Writers");
+            AddPeopleField(fields, "GuestStars", "Guest Stars");
+            AddPeopleField(fields, "Producers", "Producers");
+            AddPeopleField(fields, "Conductors", "Conductors");
+            AddPeopleField(fields, "Lyricists", "Lyricists");
+            AddPeopleField(fields, "Arrangers", "Arrangers");
+            AddPeopleField(fields, "SoundEngineers", "Sound Engineers");
+            AddPeopleField(fields, "Mixers", "Mixers");
+            AddPeopleField(fields, "Remixers", "Remixers");
+            AddPeopleField(fields, "Creators", "Creators");
+            AddPeopleField(fields, "PersonArtists", "Artists (Person Role)");
+            AddPeopleField(fields, "PersonAlbumArtists", "Album Artists (Person Role)");
+            AddPeopleField(fields, "Authors", "Authors");
+            AddPeopleField(fields, "Illustrators", "Illustrators");
+            AddPeopleField(fields, "Pencilers", "Pencilers");
+            AddPeopleField(fields, "Inkers", "Inkers");
+            AddPeopleField(fields, "Colorists", "Colorists");
+            AddPeopleField(fields, "Letterers", "Letterers");
+            AddPeopleField(fields, "CoverArtists", "Cover Artists");
+            AddPeopleField(fields, "Editors", "Editors");
+            AddPeopleField(fields, "Translators", "Translators");
+
+            return fields;
+        }
+
+        private static void AddField(
+            Dictionary<string, FieldMetadata> fields,
+            string name,
+            string label,
+            FieldType type,
+            FieldCategory category,
+            string[] operators,
+            ExtractionGroup extraction = ExtractionGroup.None,
+            bool isUserSpecific = false)
+        {
+            fields[name] = new FieldMetadata
+            {
+                Name = name,
+                DisplayLabel = label,
+                Type = type,
+                Category = category,
+                ExtractionGroup = extraction,
+                AllowedOperators = operators,
+                IsUserSpecific = isUserSpecific,
+                IsPeopleField = false,
+            };
+        }
+
+        private static void AddPeopleField(Dictionary<string, FieldMetadata> fields, string name, string label)
+        {
+            fields[name] = new FieldMetadata
+            {
+                Name = name,
+                DisplayLabel = label,
+                Type = FieldType.List,
+                Category = FieldCategory.PeopleSubFields,
+                ExtractionGroup = ExtractionGroup.People,
+                AllowedOperators = MultiValueOperators,
+                IsUserSpecific = false,
+                IsPeopleField = true,
+            };
+        }
+
+        // Helper method for building derived collections
+        private static HashSet<string> BuildFieldSet(Func<FieldMetadata, bool> predicate)
+        {
+            return new HashSet<string>(
+                _fields.Values.Where(predicate).Select(f => f.Name),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static Dictionary<FieldCategory, List<FieldMetadata>> BuildCategoryMap()
+        {
+            return _fields.Values
+                .GroupBy(f => f.Category)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+
+        private static Dictionary<ExtractionGroup, List<string>> BuildExtractionGroupMap()
+        {
+            var map = new Dictionary<ExtractionGroup, List<string>>();
+            foreach (ExtractionGroup group in Enum.GetValues<ExtractionGroup>())
+            {
+                if (group == ExtractionGroup.None) continue;
+                map[group] = _fields.Values
+                    .Where(f => f.ExtractionGroup.HasFlag(group))
+                    .Select(f => f.Name)
+                    .ToList();
+            }
+
+            return map;
+        }
+
+        // Public API - field lookup
+        public static FieldMetadata? GetField(string fieldName)
+        {
+            return _fields.TryGetValue(fieldName, out var field) ? field : null;
+        }
+
+        public static ExtractionGroup GetExtractionGroup(string fieldName)
+        {
+            return _fields.TryGetValue(fieldName, out var field) ? field.ExtractionGroup : ExtractionGroup.None;
+        }
+
+        public static IEnumerable<FieldMetadata> GetFieldsByCategory(FieldCategory category)
+        {
+            return _fieldsByCategory.TryGetValue(category, out var fields) ? fields : [];
+        }
+
+        public static IEnumerable<string> GetFieldsInExtractionGroup(ExtractionGroup group)
+        {
+            return _fieldsByExtractionGroup.TryGetValue(group, out var fields) ? fields : [];
+        }
+
+        // Public API - backward compatibility with FieldDefinitions
+        public static bool IsDateField(string fieldName) => _dateFields.Contains(fieldName);
+        public static bool IsListField(string fieldName) => _listFields.Contains(fieldName);
+        public static bool IsPeopleField(string fieldName) => _peopleFields.Contains(fieldName);
+        public static bool IsNumericField(string fieldName) => _numericFields.Contains(fieldName);
+        public static bool IsBooleanField(string fieldName) => _booleanFields.Contains(fieldName);
+        public static bool IsExpensiveField(string fieldName) => _expensiveFields.Contains(fieldName);
+        public static bool IsUserDataField(string fieldName) => _userDataFields.Contains(fieldName);
+        public static bool IsSimpleField(string fieldName) => _simpleFields.Contains(fieldName);
+        public static bool IsResolutionField(string fieldName) => _resolutionFields.Contains(fieldName);
+        public static bool IsFramerateField(string fieldName) => _framerateFields.Contains(fieldName);
+        public static bool IsSimilarityField(string fieldName) => _similarityFields.Contains(fieldName);
+
+        // Public API - backward compatibility with Operators
+        public static string[] GetOperatorsForField(string fieldName)
+        {
+            return _fieldOperators.TryGetValue(fieldName, out var ops) ? ops : [];
+        }
+
+        public static Dictionary<string, string[]> GetFieldOperatorsDictionary()
+        {
+            return new Dictionary<string, string[]>(_fieldOperators, StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Public API - for HashSet access (backward compatibility)
+        public static HashSet<string> GetPeopleRoleFields()
+        {
+            return new HashSet<string>(_peopleFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetDateFields()
+        {
+            return new HashSet<string>(_dateFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetListFields()
+        {
+            return new HashSet<string>(_listFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetNumericFields()
+        {
+            return new HashSet<string>(_numericFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetBooleanFields()
+        {
+            return new HashSet<string>(_booleanFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetSimpleFields()
+        {
+            return new HashSet<string>(_simpleFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetResolutionFields()
+        {
+            return new HashSet<string>(_resolutionFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetFramerateFields()
+        {
+            return new HashSet<string>(_framerateFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetUserDataFields()
+        {
+            return new HashSet<string>(_userDataFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetSimilarityFields()
+        {
+            return new HashSet<string>(_similarityFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Gets all available field names for API responses.
+        /// </summary>
+        public static string[] GetAllFieldNames()
+        {
+            return [.. _fields.Keys];
+        }
+
+        /// <summary>
+        /// Returns field data formatted for the UI API endpoint.
+        /// Matches the existing structure from SharedFieldDefinitions.GetAvailableFields().
+        /// </summary>
+        public static object GetAvailableFieldsForApi()
+        {
+            return new
+            {
+                ContentFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Content)
+                    .Where(f => f.Value != "ItemType") // ItemType excluded from UI fields
+                    .ToArray(),
+                VideoFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Video),
+                AudioFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Audio),
+                RatingsPlaybackFields = GetFieldsForCategoryAsApiFormat(FieldCategory.RatingsPlayback),
+                FileFields = GetFieldsForCategoryAsApiFormat(FieldCategory.File),
+                LibraryFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Library),
+                PeopleFields = new[] { new { Value = "People", Label = "People" } },
+                PeopleSubFields = GetFieldsForCategoryAsApiFormat(FieldCategory.PeopleSubFields),
+                CollectionFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Collection),
+                SimilarityComparisonFields = GetSimilarityComparisonFieldsForApi(),
+                Operators = Constants.Operators.AllOperators,
+                FieldOperators = GetFieldOperatorsDictionary(),
+                OrderOptions = GetOrderOptionsForApi(),
+            };
+        }
+
+        private static IEnumerable<dynamic> GetFieldsForCategoryAsApiFormat(FieldCategory category)
+        {
+            return GetFieldsByCategory(category)
+                .Select(f => new { Value = f.Name, Label = f.DisplayLabel });
+        }
+
+        private static object[] GetSimilarityComparisonFieldsForApi()
+        {
+            // These are specific fields used for similarity comparison, not all fields in a category
+            return
+            [
+                new { Value = "Genre", Label = "Genre" },
+                new { Value = "Tags", Label = "Tags" },
+                new { Value = "Actors", Label = "Actors" },
+                new { Value = "ActorRoles", Label = "Actor Roles (Character Names)" },
+                new { Value = "Writers", Label = "Writers" },
+                new { Value = "Producers", Label = "Producers" },
+                new { Value = "Directors", Label = "Directors" },
+                new { Value = "Studios", Label = "Studios" },
+                new { Value = "Audio Languages", Label = "Audio Languages" },
+                new { Value = "Name", Label = "Name" },
+                new { Value = "Production Year", Label = "Production Year" },
+                new { Value = "Parental Rating", Label = "Parental Rating" },
+            ];
+        }
+
+        private static object[] GetOrderOptionsForApi()
+        {
+            return
+            [
+                new { Value = "NoOrder", Label = "No Order" },
+                new { Value = "Random", Label = "Random" },
+                new { Value = "Name Ascending", Label = "Name Ascending" },
+                new { Value = "Name Descending", Label = "Name Descending" },
+                new { Value = "ProductionYear Ascending", Label = "Production Year Ascending" },
+                new { Value = "ProductionYear Descending", Label = "Production Year Descending" },
+                new { Value = "DateCreated Ascending", Label = "Date Created Ascending" },
+                new { Value = "DateCreated Descending", Label = "Date Created Descending" },
+                new { Value = "ReleaseDate Ascending", Label = "Release Date Ascending" },
+                new { Value = "ReleaseDate Descending", Label = "Release Date Descending" },
+                new { Value = "CommunityRating Ascending", Label = "Community Rating Ascending" },
+                new { Value = "CommunityRating Descending", Label = "Community Rating Descending" },
+                new { Value = "Similarity Ascending", Label = "Similarity Ascending" },
+                new { Value = "Similarity Descending", Label = "Similarity Descending" },
+                new { Value = "PlayCount (owner) Ascending", Label = "Play Count (owner) Ascending" },
+                new { Value = "PlayCount (owner) Descending", Label = "Play Count (owner) Descending" },
+            ];
+        }
+    }
+}

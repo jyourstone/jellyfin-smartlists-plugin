@@ -51,18 +51,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private static DateTime _lastCleanupTime = DateTime.MinValue;
         private static readonly TimeSpan MIN_CLEANUP_INTERVAL = TimeSpan.FromMinutes(5); // Minimum time between cleanups
 
-        // Expensive fields that require database queries or complex extraction
-        private static readonly HashSet<string> ExpensiveFields = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "AudioLanguages", "SubtitleLanguages", "AudioBitrate", "AudioSampleRate", "AudioBitDepth", "AudioCodec", "AudioProfile", "AudioChannels",
-            "Resolution", "Framerate", "VideoCodec", "VideoProfile", "VideoRange", "VideoRangeType",
-            "People", "Actors", "ActorRoles", "Directors", "Composers", "Writers", "GuestStars", "Producers", "Conductors",
-            "Lyricists", "Arrangers", "SoundEngineers", "Mixers", "Remixers", "Creators", "PersonArtists",
-            "PersonAlbumArtists", "Authors", "Illustrators", "Pencilers", "Inkers", "Colorists", "Letterers",
-            "CoverArtists", "Editors", "Translators",
-            "Collections", "Playlists", "NextUnwatched", "SeriesName", "LastEpisodeAirDate",
-        };
-
         public SmartList(SmartPlaylistDto dto)
         {
             ArgumentNullException.ThrowIfNull(dto);
@@ -780,7 +768,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (needsSimilarTo && similarityComparisonFields is { Count: > 0 })
                     {
                         var simFields = new HashSet<string>(similarityComparisonFields, StringComparer.OrdinalIgnoreCase);
-                        if (simFields.Any(f => FieldDefinitions.IsPeopleField(f)))
+                        if (simFields.Any(f => FieldRegistry.IsPeopleField(f)))
                         {
                             needsPeople = true;
                             logger?.LogDebug("Enabled People extraction for SimilarTo comparison fields");
@@ -935,7 +923,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hasNonExpensiveRules = ExpressionSets
                             .SelectMany(set => set?.Expressions ?? [])
                             .Any(expr => expr != null
-                                && !ExpensiveFields.Contains(expr.MemberName)
+                                && !FieldRegistry.IsExpensiveField(expr.MemberName)
                                 && !(expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
                                 && !(expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
                                 && !(expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true));
@@ -2278,7 +2266,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     var compiledRule = compiledRules[setIndex][compiledIndex++];
 
                                     // Check if this is an expensive field
-                                    bool isExpensive = ExpensiveFields.Contains(expr.MemberName) ||
+                                    bool isExpensive = FieldRegistry.IsExpensiveField(expr.MemberName) ||
                                                       (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
                                                       (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
                                                       (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true);
@@ -2966,30 +2954,54 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
     /// <summary>
     /// Helper class to analyze field requirements from expression sets.
+    /// Uses ExtractionGroup flags for efficient storage and lookup.
     /// </summary>
     public class FieldRequirements
     {
-        public bool NeedsAudioLanguages { get; set; }
-        public bool NeedsSubtitleLanguages { get; set; }
-        public bool NeedsAudioQuality { get; set; }
-        public bool NeedsVideoQuality { get; set; }
-        public bool NeedsPeople { get; set; }
-        public bool NeedsCollections { get; set; }
-        public bool NeedsPlaylists { get; set; }
-        public bool NeedsNextUnwatched { get; set; }
-        public bool NeedsSeriesName { get; set; }
-        public bool NeedsParentSeriesTags { get; set; }
-        public bool NeedsParentSeriesStudios { get; set; }
-        public bool NeedsParentSeriesGenres { get; set; }
-        public bool NeedsSimilarTo { get; set; }
-        public bool NeedsLastEpisodeAirDate { get; set; }
+        /// <summary>
+        /// Flags indicating which extraction groups are required.
+        /// </summary>
+        public ExtractionGroup RequiredGroups { get; set; } = ExtractionGroup.None;
+
+        /// <summary>
+        /// Whether to include unwatched series in NextUnwatched filtering.
+        /// </summary>
         public bool IncludeUnwatchedSeries { get; set; } = true;
+
+        /// <summary>
+        /// User IDs from user-specific rules.
+        /// </summary>
         public List<string> AdditionalUserIds { get; set; } = [];
+
+        /// <summary>
+        /// SimilarTo expressions for reference item lookup.
+        /// </summary>
         public List<Expression> SimilarToExpressions { get; set; } = [];
+
+        /// <summary>
+        /// How deep to traverse nested collections.
+        /// </summary>
         public int CollectionRecursionDepth { get; set; } = 1;
+
+        // Computed accessors for RequiredGroups flags
+        public bool NeedsAudioLanguages => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
+        public bool NeedsSubtitleLanguages => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
+        public bool NeedsAudioQuality => RequiredGroups.HasFlag(ExtractionGroup.AudioQuality);
+        public bool NeedsVideoQuality => RequiredGroups.HasFlag(ExtractionGroup.VideoQuality);
+        public bool NeedsPeople => RequiredGroups.HasFlag(ExtractionGroup.People);
+        public bool NeedsCollections => RequiredGroups.HasFlag(ExtractionGroup.Collections);
+        public bool NeedsPlaylists => RequiredGroups.HasFlag(ExtractionGroup.Playlists);
+        public bool NeedsNextUnwatched => RequiredGroups.HasFlag(ExtractionGroup.NextUnwatched);
+        public bool NeedsSeriesName => RequiredGroups.HasFlag(ExtractionGroup.SeriesName);
+        public bool NeedsParentSeriesTags => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
+        public bool NeedsParentSeriesStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
+        public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
+        public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
+        public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
 
         /// <summary>
         /// Analyzes expression sets to determine field requirements.
+        /// Uses FieldRegistry for efficient extraction group lookup.
         /// </summary>
         /// <param name="expressionSets">Filter expression sets to analyze</param>
         /// <param name="orders">Optional sorting orders to check for field requirements</param>
@@ -2999,108 +3011,53 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             if (expressionSets == null) return requirements;
 
-            // Check if AudioLanguages or SubtitleLanguages are needed (both use same media stream extraction)
-            requirements.NeedsAudioLanguages = expressionSets
+            var allExpressions = expressionSets
                 .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "AudioLanguages");
+                .Where(expr => expr != null)
+                .ToList();
 
-            requirements.NeedsSubtitleLanguages = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "SubtitleLanguages");
-
-            // Check if any rules use audio quality fields (expensive operations)
-            var audioQualityFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            // Single pass through expressions to gather all required groups
+            foreach (var expr in allExpressions)
             {
-                "AudioBitrate", "AudioSampleRate", "AudioBitDepth", "AudioCodec", "AudioProfile", "AudioChannels",
-            };
-            requirements.NeedsAudioQuality = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName != null && audioQualityFields.Contains(expr.MemberName));
+                // Get the extraction group for this field from the registry
+                var group = FieldRegistry.GetExtractionGroup(expr.MemberName);
+                requirements.RequiredGroups |= group;
 
-            // Check if any rules use video quality fields (expensive operations)
-            var videoQualityFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "Resolution", "Framerate", "VideoCodec", "VideoProfile", "VideoRange", "VideoRangeType",
-            };
-            requirements.NeedsVideoQuality = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName != null && videoQualityFields.Contains(expr.MemberName));
+                // Handle special cases for parent series fields (conditional on expression flags)
+                if (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
+                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesTags;
+                if (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
+                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesStudios;
+                if (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true)
+                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesGenres;
 
-            requirements.NeedsPeople = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName != null && FieldDefinitions.IsPeopleField(expr.MemberName));
+                // Collect SimilarTo expressions for reference item lookup
+                if (expr.MemberName == "SimilarTo")
+                    requirements.SimilarToExpressions.Add(expr);
 
-            requirements.NeedsCollections = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "Collections");
-
-            // CollectionRecursionDepth is now set from list-level CollectionSearchDepth, not per-rule
-            // Default to 1 for backward compatibility (matches direct children only)
-            requirements.CollectionRecursionDepth = 1;
-
-            requirements.NeedsPlaylists = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "Playlists");
-            // Note: Playlists in Jellyfin don't support nesting (can only contain media items, not other playlists)
-            // so no recursion depth is needed for playlist rules
-
-            requirements.NeedsNextUnwatched = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "NextUnwatched");
-
-            requirements.NeedsSeriesName = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "SeriesName");
-
-            // Also check if SeriesName is used in sorting
-            if (orders != null && !requirements.NeedsSeriesName)
-            {
-                requirements.NeedsSeriesName = orders.Any(o => 
-                    o.Name.Contains("SeriesName", StringComparison.OrdinalIgnoreCase));
+                // Collect user IDs from user-specific rules
+                if (!string.IsNullOrEmpty(expr.UserId))
+                    requirements.AdditionalUserIds.Add(expr.UserId);
             }
 
-            // Check if any Tags rule has IncludeParentSeriesTags = true
-            requirements.NeedsParentSeriesTags = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "Tags" && expr.IncludeParentSeriesTags == true);
+            // Deduplicate user IDs
+            requirements.AdditionalUserIds = [.. requirements.AdditionalUserIds.Distinct()];
 
-            // Check if any Studios rule has IncludeParentSeriesStudios = true
-            requirements.NeedsParentSeriesStudios = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true);
-
-            // Check if any Genres rule has IncludeParentSeriesGenres = true
-            requirements.NeedsParentSeriesGenres = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true);
-
-            // Check if any rules use SimilarTo field
-            requirements.NeedsSimilarTo = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "SimilarTo");
-
-            // Check if any rules use LastEpisodeAirDate field (expensive - requires episode lookup)
-            requirements.NeedsLastEpisodeAirDate = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Any(expr => expr?.MemberName == "LastEpisodeAirDate");
-
-            // Extract SimilarTo expressions for reference item lookup
-            requirements.SimilarToExpressions = [.. expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Where(expr => expr?.MemberName == "SimilarTo")];
+            // Check if SeriesName is used in sorting
+            if (orders != null && !requirements.RequiredGroups.HasFlag(ExtractionGroup.SeriesName))
+            {
+                if (orders.Any(o => o.Name.Contains("SeriesName", StringComparison.OrdinalIgnoreCase)))
+                    requirements.RequiredGroups |= ExtractionGroup.SeriesName;
+            }
 
             // Extract IncludeUnwatchedSeries parameter from NextUnwatched rules
-            requirements.IncludeUnwatchedSeries = expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Where(e => e?.MemberName == "NextUnwatched")
+            requirements.IncludeUnwatchedSeries = allExpressions
+                .Where(e => e.MemberName == "NextUnwatched")
                 .All(e => e.IncludeUnwatchedSeries != false);
 
-            // Extract additional user IDs from user-specific rules
-            requirements.AdditionalUserIds = [.. expressionSets
-                .SelectMany(set => set?.Expressions ?? [])
-                .Where(e => !string.IsNullOrEmpty(e?.UserId))
-                .Select(e => e.UserId!)
-                .Distinct()];
+            // CollectionRecursionDepth is set from list-level CollectionSearchDepth, not per-rule
+            // Default to 1 for backward compatibility (matches direct children only)
+            requirements.CollectionRecursionDepth = 1;
 
             return requirements;
         }

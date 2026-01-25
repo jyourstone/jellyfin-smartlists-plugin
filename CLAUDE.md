@@ -21,7 +21,7 @@ Jellyfin.Plugin.SmartLists/
 │   ├── Enums/               # SmartListType, RuleLogic, AutoRefreshMode, etc.
 │   ├── Models/              # DTOs: SmartListDto, SmartPlaylistDto, SmartCollectionDto
 │   ├── Orders/              # 25+ sort implementations (NameOrder, RandomOrder, etc.)
-│   ├── QueryEngine/         # Rule evaluation: Engine, Expression, Factory, Operand
+│   ├── QueryEngine/         # Rule evaluation: Engine, Expression, Factory, Operand, FieldRegistry
 │   └── SmartList.cs         # Main filtering logic
 ├── Api/Controllers/         # SmartListController, UserSmartListController
 ├── Services/
@@ -44,9 +44,14 @@ Extract duplicated code into helpers. Check `Utilities/` and existing helpers be
 Lists are processed with threading. Use thread-safe collections (`ConcurrentDictionary`, `ConcurrentBag`) and proper locking for shared state.
 
 ### Two-Phase Filtering
-Expensive fields (People, AudioLanguages, Collections) use two-phase filtering in `SmartList.cs`:
+Expensive fields (People, AudioLanguages, Collections, etc.) use two-phase filtering in `SmartList.cs`:
 1. Phase 1: Evaluate cheap rules first
 2. Phase 2: Only extract expensive data for items passing Phase 1
+
+Expensive fields are defined in `FieldRegistry.cs` via `ExtractionGroup` flags. Use `FieldRegistry.IsExpensiveField(fieldName)` to check if a field is expensive.
+
+### Adding New Rule Fields
+`FieldRegistry.cs` is the single source of truth for field definitions. Adding a new field requires updates in: `FieldRegistry.cs` (definition), `Operand.cs` (property), and `Factory.cs` (extraction logic). The UI automatically updates from the API.
 
 ## Critical Gotchas
 

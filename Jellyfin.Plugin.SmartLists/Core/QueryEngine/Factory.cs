@@ -23,26 +23,114 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 {
     /// <summary>
     /// Parameters object for GetMediaType operations to improve readability and maintainability.
+    /// Uses ExtractionGroup flags for efficient storage while providing backward-compatible convenience properties.
     /// </summary>
     public class MediaTypeExtractionOptions
     {
-        public bool ExtractAudioLanguages { get; set; } = false;
-        public bool ExtractSubtitleLanguages { get; set; } = false;
-        public bool ExtractAudioQuality { get; set; } = false;
-        public bool ExtractVideoQuality { get; set; } = false;
-        public bool ExtractPeople { get; set; } = false;
-        public bool ExtractCollections { get; set; } = false;
-        public bool ExtractPlaylists { get; set; } = false;
-        public bool ExtractNextUnwatched { get; set; } = false;
-        public bool ExtractSeriesName { get; set; } = false;
-        public bool ExtractParentSeriesTags { get; set; } = false;
-        public bool ExtractParentSeriesStudios { get; set; } = false;
-        public bool ExtractParentSeriesGenres { get; set; } = false;
-        public bool ExtractLastEpisodeAirDate { get; set; } = false;
+        /// <summary>
+        /// Flags indicating which extraction groups are required.
+        /// </summary>
+        public ExtractionGroup RequiredGroups { get; set; } = ExtractionGroup.None;
+
+        // Convenience properties for backward compatibility - get/set that modify RequiredGroups
+        public bool ExtractAudioLanguages
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.AudioLanguages : RequiredGroups & ~ExtractionGroup.AudioLanguages;
+        }
+
+        public bool ExtractSubtitleLanguages
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.AudioLanguages); // Same group as AudioLanguages
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.AudioLanguages : RequiredGroups & ~ExtractionGroup.AudioLanguages;
+        }
+
+        public bool ExtractAudioQuality
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.AudioQuality);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.AudioQuality : RequiredGroups & ~ExtractionGroup.AudioQuality;
+        }
+
+        public bool ExtractVideoQuality
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.VideoQuality);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.VideoQuality : RequiredGroups & ~ExtractionGroup.VideoQuality;
+        }
+
+        public bool ExtractPeople
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.People);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.People : RequiredGroups & ~ExtractionGroup.People;
+        }
+
+        public bool ExtractCollections
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.Collections);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.Collections : RequiredGroups & ~ExtractionGroup.Collections;
+        }
+
+        public bool ExtractPlaylists
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.Playlists);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.Playlists : RequiredGroups & ~ExtractionGroup.Playlists;
+        }
+
+        public bool ExtractNextUnwatched
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.NextUnwatched);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.NextUnwatched : RequiredGroups & ~ExtractionGroup.NextUnwatched;
+        }
+
+        public bool ExtractSeriesName
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.SeriesName);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.SeriesName : RequiredGroups & ~ExtractionGroup.SeriesName;
+        }
+
+        public bool ExtractParentSeriesTags
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesTags : RequiredGroups & ~ExtractionGroup.ParentSeriesTags;
+        }
+
+        public bool ExtractParentSeriesStudios
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesStudios : RequiredGroups & ~ExtractionGroup.ParentSeriesStudios;
+        }
+
+        public bool ExtractParentSeriesGenres
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesGenres : RequiredGroups & ~ExtractionGroup.ParentSeriesGenres;
+        }
+
+        public bool ExtractLastEpisodeAirDate
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.LastEpisodeAirDate : RequiredGroups & ~ExtractionGroup.LastEpisodeAirDate;
+        }
+
+        // Non-flag properties
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
         public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
         public int CollectionRecursionDepth { get; set; } = 1; // How deep to traverse nested collections (0-10, where 0 = direct members only). Note: Playlists don't support nesting, so no recursion depth for playlists.
+
+        /// <summary>
+        /// Creates extraction options from FieldRequirements.
+        /// </summary>
+        public static MediaTypeExtractionOptions FromRequirements(FieldRequirements requirements, string? originListName = null, int collectionDepth = 1)
+        {
+            return new MediaTypeExtractionOptions
+            {
+                RequiredGroups = requirements.RequiredGroups,
+                IncludeUnwatchedSeries = requirements.IncludeUnwatchedSeries,
+                AdditionalUserIds = requirements.AdditionalUserIds,
+                OriginListName = originListName,
+                CollectionRecursionDepth = collectionDepth,
+            };
+        }
     }
 
     internal sealed class OperandFactory
@@ -3544,7 +3632,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 // Pre-fetch people data once per item if any people fields are needed (performance optimization)
                 CategorizedPeople? categorizedPeople = null;
-                bool needsPeople = comparisonFields.Any(f => FieldDefinitions.IsPeopleField(f));
+                bool needsPeople = comparisonFields.Any(f => FieldRegistry.IsPeopleField(f));
 
                 if (needsPeople && libraryManager != null)
                 {
