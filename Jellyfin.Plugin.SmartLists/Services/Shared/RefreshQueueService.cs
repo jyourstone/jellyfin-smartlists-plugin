@@ -712,6 +712,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Last episode air date cache for Series items - maps SeriesId → Unix timestamp of most recent episode
             public ConcurrentDictionary<Guid, double> LastEpisodeAirDateById { get; } = new();
+
+            // Library name cache - maps ItemId → library name (from GetCollectionFolders API)
+            public ConcurrentDictionary<Guid, string> LibraryNameById { get; } = new();
         }
 
         /// <summary>

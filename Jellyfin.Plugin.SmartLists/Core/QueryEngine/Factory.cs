@@ -139,6 +139,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.TextContent : RequiredGroups & ~ExtractionGroup.TextContent;
         }
 
+        public bool ExtractItemLists
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ItemLists);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ItemLists : RequiredGroups & ~ExtractionGroup.ItemLists;
+        }
+
+        public bool ExtractUserData
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.UserData);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.UserData : RequiredGroups & ~ExtractionGroup.UserData;
+        }
+
+        public bool ExtractDates
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.Dates);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.Dates : RequiredGroups & ~ExtractionGroup.Dates;
+        }
+
         // Non-flag properties
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
@@ -2189,54 +2207,67 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractLibraryInfo = options.ExtractLibraryInfo;
             var extractAudioMetadata = options.ExtractAudioMetadata;
             var extractTextContent = options.ExtractTextContent;
+            var extractItemLists = options.ExtractItemLists;
+            var extractUserData = options.ExtractUserData;
+            var extractDates = options.ExtractDates;
 
             var includeUnwatchedSeries = options.IncludeUnwatchedSeries;
             var additionalUserIds = options.AdditionalUserIds;
 
             // Get user data first for Jellyfin 10.11 compatibility - check cache first
             MediaBrowser.Controller.Entities.UserItemData? userData = null;
-            var userDataCacheKey = (baseItem.Id, user.Id);
-            if (cache.UserDataCache.TryGetValue(userDataCacheKey, out var cachedUserData))
-            {
-                userData = cachedUserData;
-            }
-            else if (userDataManager != null)
-            {
-                userData = userDataManager.GetUserData(user, baseItem);
-                // Cache the result
-                if (userData != null)
-                {
-                    cache.UserDataCache[userDataCacheKey] = userData;
-                }
-            }
+            string playbackStatus = "Unplayed";
 
-            // Calculate playback status based on item type
-            string playbackStatus = CalculatePlaybackStatusForUser(
-                baseItem,
-                user,
-                libraryManager,
-                userDataManager,
-                userData,
-                cache,
-                logger);
+            // Only extract user data if specifically requested or if NextUnwatched is needed (which depends on it)
+            if (extractUserData || extractNextUnwatched)
+            {
+                var userDataCacheKey = (baseItem.Id, user.Id);
+                if (cache.UserDataCache.TryGetValue(userDataCacheKey, out var cachedUserData))
+                {
+                    userData = cachedUserData;
+                }
+                else if (userDataManager != null)
+                {
+                    userData = userDataManager.GetUserData(user, baseItem);
+                    // Cache the result
+                    if (userData != null)
+                    {
+                        cache.UserDataCache[userDataCacheKey] = userData;
+                    }
+                }
+
+                // Calculate playback status based on item type
+                playbackStatus = CalculatePlaybackStatusForUser(
+                    baseItem,
+                    user,
+                    libraryManager,
+                    userDataManager,
+                    userData,
+                    cache,
+                    logger);
+            }
 
             var operand = new Operand(baseItem.Name)
             {
                 // Tier 0: Always extract (zero cost - direct BaseItem property access)
-                Genres = baseItem.Genres is not null ? [.. baseItem.Genres] : [],
-                Studios = baseItem.Studios is not null ? [.. baseItem.Studios] : [],
                 CommunityRating = baseItem.CommunityRating.GetValueOrDefault(),
                 CriticRating = baseItem.CriticRating.GetValueOrDefault(),
                 MediaType = baseItem.MediaType.ToString(),
                 ItemType = GetItemTypeName(baseItem, logger),
-                ProductionYear = baseItem.ProductionYear.GetValueOrDefault(),
-                Tags = baseItem.Tags is not null ? [.. baseItem.Tags] : [],
+
+                // Tier 1: Conditional Cheap Groups
+                Genres = extractItemLists && baseItem.Genres is not null ? [.. baseItem.Genres] : [],
+                Studios = extractItemLists && baseItem.Studios is not null ? [.. baseItem.Studios] : [],
+                Tags = extractItemLists && baseItem.Tags is not null ? [.. baseItem.Tags] : [],
+                
+                ProductionYear = extractDates ? baseItem.ProductionYear.GetValueOrDefault() : 0,
+                DateCreated = extractDates ? SafeToUnixTimeSeconds(baseItem.DateCreated) : 0,
+                DateLastRefreshed = extractDates ? SafeToUnixTimeSeconds(baseItem.DateLastRefreshed) : 0,
+                DateLastSaved = extractDates ? SafeToUnixTimeSeconds(baseItem.DateLastSaved) : 0,
+                ReleaseDate = extractDates ? DateUtils.GetReleaseDateUnixTimestamp(baseItem) : 0,
+                
                 OfficialRating = baseItem.OfficialRating ?? "",
                 CustomRating = baseItem.CustomRating ?? "",
-                DateCreated = SafeToUnixTimeSeconds(baseItem.DateCreated),
-                DateLastRefreshed = SafeToUnixTimeSeconds(baseItem.DateLastRefreshed),
-                DateLastSaved = SafeToUnixTimeSeconds(baseItem.DateLastSaved),
-                ReleaseDate = DateUtils.GetReleaseDateUnixTimestamp(baseItem),
                 // Note: Album, RuntimeMinutes, FileInfo, LibraryName are now conditionally extracted below
             };
 
@@ -2252,62 +2283,70 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Try to access user data properly
-            try
+            if (extractUserData || extractNextUnwatched)
             {
-                if (userDataManager != null && userData != null)
+                try
                 {
-                    // Populate user-specific data for playlist user
-                    // Normalize to "N" format (no dashes) to match UserPlaylists format
-                    var normalizedUserId = user.Id.ToString("N");
-                    PopulateUserData(operand, normalizedUserId, playbackStatus, userData!, baseItem, user, libraryManager, userDataManager, cache, logger);
-                }
-                else if (userDataManager != null)
-                {
-                    // Fallback when userData is null - treat as never played for playlist user
-                    // Normalize to "N" format (no dashes) to match UserPlaylists format
-                    SetUserDataFallbacks(operand, user.Id.ToString("N"), playbackStatus);
-                }
-                else
-                {
-                    // Fallback approach - try reflection and populate dictionaries for playlist user
-                    var userDataProperty = baseItem.GetType().GetProperty("UserData");
-                    if (userDataProperty != null)
+                    if (userDataManager != null && userData != null)
                     {
-                        var reflectedUserData = userDataProperty.GetValue(baseItem);
-                        if (reflectedUserData != null)
+                        // Populate user-specific data for playlist user
+                        // Normalize to "N" format (no dashes) to match UserPlaylists format
+                        var normalizedUserId = user.Id.ToString("N");
+                        PopulateUserData(operand, normalizedUserId, playbackStatus, userData!, baseItem, user, libraryManager, userDataManager, cache, logger);
+                    }
+                    else if (userDataManager != null)
+                    {
+                        // Fallback when userData is null - treat as never played for playlist user
+                        // Normalize to "N" format (no dashes) to match UserPlaylists format
+                        SetUserDataFallbacks(operand, user.Id.ToString("N"), playbackStatus);
+                    }
+                    else
+                    {
+                        // Fallback approach - try reflection and populate dictionaries for playlist user
+                        var userDataProperty = baseItem.GetType().GetProperty("UserData");
+                        if (userDataProperty != null)
                         {
-                            // Recalculate playback status from reflected data to ensure consistency
-                            // The initial playbackStatus was calculated with null userData, so it's "Unplayed"
-                            // but reflectedUserData might have actual playback information
-                            var recalculatedPlaybackStatus = CalculatePlaybackStatusFromReflected(reflectedUserData);
-                            
-                            // Use our helper method to populate user data consistently
-                            // Normalize to "N" format (no dashes) to match UserPlaylists format
-                            PopulateUserData(operand, user.Id.ToString("N"), recalculatedPlaybackStatus, reflectedUserData, baseItem, user, libraryManager, userDataManager, cache, logger);
+                            var reflectedUserData = userDataProperty.GetValue(baseItem);
+                            if (reflectedUserData != null)
+                            {
+                                // Recalculate playback status from reflected data to ensure consistency
+                                // The initial playbackStatus was calculated with null userData, so it's "Unplayed"
+                                // but reflectedUserData might have actual playback information
+                                var recalculatedPlaybackStatus = CalculatePlaybackStatusFromReflected(reflectedUserData);
+                                
+                                // Use our helper method to populate user data consistently
+                                // Normalize to "N" format (no dashes) to match UserPlaylists format
+                                PopulateUserData(operand, user.Id.ToString("N"), recalculatedPlaybackStatus, reflectedUserData, baseItem, user, libraryManager, userDataManager, cache, logger);
+                            }
+                            else
+                            {
+                                // UserData is null - set fallback values for playlist user
+                                // Normalize to "N" format (no dashes) to match UserPlaylists format
+                                SetUserDataFallbacks(operand, user.Id.ToString("N"), playbackStatus);
+                            }
                         }
                         else
                         {
-                            // UserData is null - set fallback values for playlist user
+                            // UserData property not found - set fallback values for playlist user
                             // Normalize to "N" format (no dashes) to match UserPlaylists format
                             SetUserDataFallbacks(operand, user.Id.ToString("N"), playbackStatus);
                         }
                     }
-                    else
-                    {
-                        // UserData property not found - set fallback values for playlist user
-                        // Normalize to "N" format (no dashes) to match UserPlaylists format
-                        SetUserDataFallbacks(operand, user.Id.ToString("N"), playbackStatus);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "Error accessing user data for item {Name}", baseItem.Name);
+                    // Keep the fallback values we set above
                 }
             }
-            catch (Exception ex)
+            else
             {
-                logger?.LogWarning(ex, "Error accessing user data for item {Name}", baseItem.Name);
-                // Keep the fallback values we set above
+                 // Fast path: Just set empty/default values without logic
+                 SetUserDataFallbacks(operand, user.Id.ToString("N"), "Unplayed");
             }
 
             // Extract user-specific data for additional users
-            if (additionalUserIds != null && additionalUserIds.Count > 0 && userDataManager != null)
+            if ((extractUserData || extractNextUnwatched) && additionalUserIds != null && additionalUserIds.Count > 0 && userDataManager != null)
             {
                 foreach (var userId in additionalUserIds)
                 {
@@ -2576,7 +2615,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // LibraryInfo extraction - conditionally extracted for performance optimization
             if (extractLibraryInfo)
             {
-                operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, logger);
+                operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, cache, logger);
             }
             else
             {
@@ -3112,21 +3151,30 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Extracts the library name that contains this item using Jellyfin's GetCollectionFolders API.
         /// Libraries in Jellyfin are represented as CollectionFolder items.
-        /// This is a cheap path-based lookup, no caching needed.
+        /// Results are cached per-item to avoid repeated API calls during playlist processing.
         /// </summary>
         /// <param name="baseItem">The item to extract library name from</param>
         /// <param name="libraryManager">Library manager for library lookups</param>
+        /// <param name="cache">Cache for storing library name lookups</param>
         /// <param name="logger">Logger for debugging</param>
         /// <returns>The library name this item belongs to, or empty string if not found</returns>
-        private static string ExtractLibraryName(BaseItem baseItem, ILibraryManager libraryManager, ILogger? logger)
+        private static string ExtractLibraryName(BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
+            // Check cache first
+            if (cache.LibraryNameById.TryGetValue(baseItem.Id, out var cachedName))
+            {
+                return cachedName;
+            }
+
             try
             {
                 var collectionFolders = libraryManager.GetCollectionFolders(baseItem);
 
                 if (collectionFolders != null && collectionFolders.Count > 0)
                 {
-                    return collectionFolders[0].Name;
+                    var libraryName = collectionFolders[0].Name;
+                    cache.LibraryNameById[baseItem.Id] = libraryName;
+                    return libraryName;
                 }
             }
             catch (Exception ex)
@@ -3134,6 +3182,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 logger?.LogWarning(ex, "Failed to extract library name for item '{ItemName}'", baseItem.Name);
             }
 
+            // Cache empty result too to avoid repeated failed lookups
+            cache.LibraryNameById[baseItem.Id] = string.Empty;
             return string.Empty;
         }
 

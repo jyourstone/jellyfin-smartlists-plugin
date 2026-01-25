@@ -2137,10 +2137,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 }
 
                 // Check if any truly expensive fields are needed (exclude cheap extraction groups)
-                // Cheap groups (FileInfo, LibraryInfo, AudioMetadata, TextContent) don't require two-phase filtering
-                const ExtractionGroup cheapGroups =
-                    ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
-                    ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent;
+                // Cheap groups (FileInfo, LibraryInfo, AudioMetadata, TextContent, ItemLists, UserData, Dates) don't require two-phase filtering
+                // Use the centralized definition from FieldRegistry to ensure consistency
+                var cheapGroups = FieldRegistry.CheapExtractionGroups;
+                
                 var expensiveGroups = fieldReqs.RequiredGroups & ~cheapGroups;
                 var needsExpensiveFields = expensiveGroups != ExtractionGroup.None;
 

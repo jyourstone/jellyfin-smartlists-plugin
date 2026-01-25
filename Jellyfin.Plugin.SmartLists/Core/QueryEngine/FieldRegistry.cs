@@ -5,34 +5,86 @@ using System.Linq;
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 {
     /// <summary>
-    /// Extraction groups for expensive field operations.
+    /// Extraction groups for field operations. Controls when fields are extracted.
     /// Uses [Flags] to allow combining multiple groups.
+    ///
+    /// FIELD CATEGORIZATION GUIDE:
+    /// ===========================
+    ///
+    /// 1. ExtractionGroup.None (Tier 0 - Always Extracted):
+    ///    - Direct BaseItem property access (~0.01ms/item)
+    ///    - No caching needed
+    ///    - Examples: Name, ProductionYear, Genres, DateCreated
+    ///
+    /// 2. Cheap Groups (Tier 1 - Conditional, Fast):
+    ///    - FileInfo, LibraryInfo, AudioMetadata, TextContent
+    ///    - Only extracted when rules use these fields
+    ///    - Don't trigger two-phase filtering
+    ///    - LibraryInfo uses caching (LibraryNameById in RefreshCache)
+    ///
+    /// 3. Expensive Groups (Tier 2 - Conditional, Cached):
+    ///    - All other groups (People, Collections, VideoQuality, etc.)
+    ///    - Trigger two-phase filtering for optimization
+    ///    - MUST have caching in RefreshCache (see Services/Shared/RefreshQueueService.cs)
+    ///
+    /// ADDING NEW FIELDS:
+    /// ==================
+    /// 1. Add to Operand.cs (property)
+    /// 2. Add to FieldRegistry.cs (this file, with correct ExtractionGroup)
+    /// 3. Add to Factory.cs (extraction logic)
+    /// 4. If ExtractionGroup != None AND makes API/DB calls:
+    ///    - Add cache in RefreshQueueService.RefreshCache
+    ///    - Update extraction to use cache
+    /// 5. If expensive: ensure field goes to expensive group for two-phase filtering
+    ///
+    /// CACHING REQUIREMENTS BY GROUP:
+    /// ==============================
+    /// - AudioLanguages: MediaStreamsCache
+    /// - AudioQuality: MediaStreamsCache
+    /// - VideoQuality: MediaStreamsCache
+    /// - People: ItemPeople
+    /// - Collections: ItemCollections, CollectionMembershipCache
+    /// - Playlists: ItemPlaylists, PlaylistMembershipCache
+    /// - NextUnwatched: NextUnwatched cache
+    /// - SeriesName: SeriesNameById
+    /// - ParentSeriesTags: SeriesTagsById
+    /// - ParentSeriesStudios: SeriesStudiosById
+    /// - ParentSeriesGenres: SeriesGenresById
+    /// - LastEpisodeAirDate: LastEpisodeAirDateById
+    /// - LibraryInfo: LibraryNameById
     /// </summary>
     [Flags]
     public enum ExtractionGroup
     {
         None = 0,
 
-        // Expensive extraction groups (require API calls, reflection, or database queries)
-        AudioLanguages = 1 << 0,      // AudioLanguages, SubtitleLanguages
-        AudioQuality = 1 << 1,        // AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels
-        VideoQuality = 1 << 2,        // Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType
-        People = 1 << 3,              // All PeopleRoleFields (Actors, Directors, etc.)
-        Collections = 1 << 4,         // Collections field
-        Playlists = 1 << 5,           // Playlists field
-        NextUnwatched = 1 << 6,       // NextUnwatched field
-        SeriesName = 1 << 7,          // SeriesName field
-        ParentSeriesTags = 1 << 8,    // Tags with IncludeParentSeriesTags
-        ParentSeriesStudios = 1 << 9, // Studios with IncludeParentSeriesStudios
-        ParentSeriesGenres = 1 << 10, // Genres with IncludeParentSeriesGenres
-        SimilarTo = 1 << 11,          // SimilarTo field
-        LastEpisodeAirDate = 1 << 12, // LastEpisodeAirDate field
+        // Expensive extraction groups (require API calls, DB queries - MUST have caching)
+        // These trigger two-phase filtering for optimization
+        AudioLanguages = 1 << 0,      // Fields: AudioLanguages, SubtitleLanguages | Cache: MediaStreamsCache
+        AudioQuality = 1 << 1,        // Fields: AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels | Cache: MediaStreamsCache
+        VideoQuality = 1 << 2,        // Fields: Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType | Cache: MediaStreamsCache
+        People = 1 << 3,              // Fields: All people roles (Actors, Directors, etc.) | Cache: ItemPeople
+        Collections = 1 << 4,         // Fields: Collections | Cache: ItemCollections, CollectionMembershipCache
+        Playlists = 1 << 5,           // Fields: Playlists | Cache: ItemPlaylists, PlaylistMembershipCache
+        NextUnwatched = 1 << 6,       // Fields: NextUnwatched | Cache: NextUnwatched
+        SeriesName = 1 << 7,          // Fields: SeriesName | Cache: SeriesNameById
+        ParentSeriesTags = 1 << 8,    // Fields: Tags (with IncludeParentSeriesTags) | Cache: SeriesTagsById
+        ParentSeriesStudios = 1 << 9, // Fields: Studios (with IncludeParentSeriesStudios) | Cache: SeriesStudiosById
+        ParentSeriesGenres = 1 << 10, // Fields: Genres (with IncludeParentSeriesGenres) | Cache: SeriesGenresById
+        SimilarTo = 1 << 11,          // Fields: SimilarTo | Special handling in Engine
+        LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
 
-        // Cheap extraction groups (conditionally extracted for performance optimization)
-        FileInfo = 1 << 13,           // FolderPath, FileName, DateModified
-        LibraryInfo = 1 << 14,        // LibraryName
-        AudioMetadata = 1 << 15,      // Album, Artists, AlbumArtists
-        TextContent = 1 << 16,        // Overview, ProductionLocations, RuntimeMinutes
+        // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
+        // Defined in FieldMetadata.CheapExtractionGroups
+        FileInfo = 1 << 13,           // Fields: FolderPath, FileName, DateModified | No cache (file system)
+        LibraryInfo = 1 << 14,        // Fields: LibraryName | Cache: LibraryNameById
+        AudioMetadata = 1 << 15,      // Fields: Album, Artists, AlbumArtists | No cache (reflection, fast)
+        TextContent = 1 << 16,        // Fields: Overview, ProductionLocations, RuntimeMinutes | No cache (property/reflection)
+        
+        // Optimization Groups: Cheap but Conditional (Tier 1)
+        ItemLists = 1 << 17,          // Fields: Genres, Tags, Studios | Array allocations
+        UserData = 1 << 18,           // Fields: IsFavorite, PlayCount, PlaybackStatus, LastPlayedDate | UserDataManager lookup
+        Dates = 1 << 19,              // Fields: PremiereDate, DateCreated, ProductionYear, etc. | Struct copying
     }
 
     /// <summary>
@@ -74,14 +126,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// </summary>
     public record FieldMetadata
     {
-        /// <summary>
-        /// Cheap extraction groups that don't require API calls, reflection, or database queries.
-        /// These are conditionally extracted but fast - used for rule categorization in two-phase filtering.
-        /// </summary>
-        private const ExtractionGroup CheapExtractionGroups =
-            ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
-            ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent;
-
         public required string Name { get; init; }
         public required string DisplayLabel { get; init; }
         public required FieldType Type { get; init; }
@@ -90,10 +134,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         /// <summary>
         /// Whether this field requires expensive extraction (API calls, reflection, database queries).
-        /// Cheap extraction groups (FileInfo, LibraryInfo, AudioMetadata, TextContent) are NOT expensive.
+        /// Cheap extraction groups are NOT expensive.
         /// </summary>
         public bool IsExpensive => ExtractionGroup != ExtractionGroup.None &&
-                                   (ExtractionGroup & CheapExtractionGroups) == ExtractionGroup.None;
+                                   (ExtractionGroup & FieldRegistry.CheapExtractionGroups) == ExtractionGroup.None;
         public string[] AllowedOperators { get; init; } = [];
         public bool IsUserSpecific { get; init; } = false;
         public bool IsPeopleField { get; init; } = false;
@@ -110,6 +154,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// </summary>
     public static class FieldRegistry
     {
+        /// <summary>
+        /// Global definition of cheap extraction groups.
+        /// These are conditionally extracted but fast enough to run in Phase 1 filtering.
+        /// Includes: FileInfo, LibraryInfo, AudioMetadata, TextContent, ItemLists, UserData, Dates.
+        /// </summary>
+        public const ExtractionGroup CheapExtractionGroups =
+            ExtractionGroup.FileInfo | ExtractionGroup.LibraryInfo |
+            ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent |
+            ExtractionGroup.ItemLists | ExtractionGroup.UserData | ExtractionGroup.Dates;
+
         // Operator arrays for reuse
         private static readonly string[] StringOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
         private static readonly string[] MultiValueOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
@@ -170,8 +224,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "OfficialRating", "Parental Rating", FieldType.Text, FieldCategory.Content, StringOperators);
             AddField(fields, "CustomRating", "Custom Rating", FieldType.Text, FieldCategory.Content, StringOperators);
             AddField(fields, "Overview", "Overview", FieldType.Text, FieldCategory.Content, StringOperators, ExtractionGroup.TextContent);
-            AddField(fields, "ProductionYear", "Production Year", FieldType.Numeric, FieldCategory.Content, NumericOperators);
-            AddField(fields, "ReleaseDate", "Release Date", FieldType.Date, FieldCategory.Content, DateOperators);
+            AddField(fields, "ProductionYear", "Production Year", FieldType.Numeric, FieldCategory.Content, NumericOperators, ExtractionGroup.Dates);
+            AddField(fields, "ReleaseDate", "Release Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.Dates);
             AddField(fields, "LastEpisodeAirDate", "Last Episode Air Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.LastEpisodeAirDate);
             AddField(fields, "ProductionLocations", "Production Locations", FieldType.List, FieldCategory.Content, MultiValueOperators, ExtractionGroup.TextContent);
 
@@ -196,11 +250,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Ratings/Playback Fields (User-specific)
             AddField(fields, "CommunityRating", "Community Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
             AddField(fields, "CriticRating", "Critic Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
-            AddField(fields, "IsFavorite", "Is Favorite", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.None, isUserSpecific: true);
-            AddField(fields, "PlaybackStatus", "Playback Status", FieldType.UserData, FieldCategory.RatingsPlayback, SimpleOperators, ExtractionGroup.None, isUserSpecific: true);
-            AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "IsFavorite", "Is Favorite", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.UserData, isUserSpecific: true);
+            AddField(fields, "PlaybackStatus", "Playback Status", FieldType.UserData, FieldCategory.RatingsPlayback, SimpleOperators, ExtractionGroup.UserData, isUserSpecific: true);
+            AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
-            AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.None, isUserSpecific: true);
+            AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "RuntimeMinutes", "Runtime (Minutes)", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
 
             // File Fields - conditionally extracted via ExtractionGroup.FileInfo
@@ -210,16 +264,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Library Fields - conditionally extracted via ExtractionGroup.LibraryInfo
             AddField(fields, "LibraryName", "Library Name", FieldType.Text, FieldCategory.Library, StringOperators, ExtractionGroup.LibraryInfo);
-            AddField(fields, "DateCreated", "Date Added to Library", FieldType.Date, FieldCategory.Library, DateOperators);
-            AddField(fields, "DateLastRefreshed", "Last Metadata Refresh", FieldType.Date, FieldCategory.Library, DateOperators);
-            AddField(fields, "DateLastSaved", "Last Database Save", FieldType.Date, FieldCategory.Library, DateOperators);
+            AddField(fields, "DateCreated", "Date Added to Library", FieldType.Date, FieldCategory.Library, DateOperators, ExtractionGroup.Dates);
+            AddField(fields, "DateLastRefreshed", "Last Metadata Refresh", FieldType.Date, FieldCategory.Library, DateOperators, ExtractionGroup.Dates);
+            AddField(fields, "DateLastSaved", "Last Database Save", FieldType.Date, FieldCategory.Library, DateOperators, ExtractionGroup.Dates);
 
             // Collection Fields
             AddField(fields, "Collections", "Collection name", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.Collections);
             AddField(fields, "Playlists", "Playlist name", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.Playlists);
-            AddField(fields, "Genres", "Genres", FieldType.List, FieldCategory.Collection, MultiValueOperators);
-            AddField(fields, "Studios", "Studios", FieldType.List, FieldCategory.Collection, MultiValueOperators);
-            AddField(fields, "Tags", "Tags", FieldType.List, FieldCategory.Collection, MultiValueOperators);
+            AddField(fields, "Genres", "Genres", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.ItemLists);
+            AddField(fields, "Studios", "Studios", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.ItemLists);
+            AddField(fields, "Tags", "Tags", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.ItemLists);
             AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
