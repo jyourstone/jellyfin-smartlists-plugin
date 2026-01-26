@@ -713,22 +713,40 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     logger?.LogWarning(ex, "Error analyzing expression sets for expensive fields in playlist '{PlaylistName}'. Assuming no expensive fields needed.", Name);
                 }
 
-                // CRITICAL: Enable expensive extraction when SimilarTo requires it (people/audio languages)
-                // Without this, similarity matching on people/audio language fields will fail
+                // CRITICAL: Enable extraction when SimilarTo requires it for comparison fields
+                // Without this, similarity matching will fail for fields that need conditional extraction
                 try
                 {
                     if (fieldReqs.NeedsSimilarTo && similarityComparisonFields is { Count: > 0 })
                     {
                         var simFields = new HashSet<string>(similarityComparisonFields, StringComparer.OrdinalIgnoreCase);
+
+                        // Genre, Tags, Studios require ItemLists extraction
+                        if (simFields.Contains("Genre") || simFields.Contains("Tags") || simFields.Contains("Studios"))
+                        {
+                            fieldReqs.RequiredGroups |= ExtractionGroup.ItemLists;
+                            logger?.LogDebug("Enabled ItemLists extraction for SimilarTo comparison fields (Genre/Tags/Studios)");
+                        }
+
+                        // People fields (Actors, Directors, Writers, etc.) require People extraction
                         if (simFields.Any(f => FieldRegistry.IsPeopleField(f)))
                         {
                             fieldReqs.RequiredGroups |= ExtractionGroup.People;
                             logger?.LogDebug("Enabled People extraction for SimilarTo comparison fields");
                         }
+
+                        // Audio Languages requires AudioLanguages extraction
                         if (simFields.Contains("Audio Languages"))
                         {
                             fieldReqs.RequiredGroups |= ExtractionGroup.AudioLanguages;
-                            logger?.LogDebug("Enabled Audio Languages extraction for SimilarTo comparison fields");
+                            logger?.LogDebug("Enabled AudioLanguages extraction for SimilarTo comparison fields");
+                        }
+
+                        // Production Year requires Dates extraction
+                        if (simFields.Contains("Production Year"))
+                        {
+                            fieldReqs.RequiredGroups |= ExtractionGroup.Dates;
+                            logger?.LogDebug("Enabled Dates extraction for SimilarTo comparison fields (Production Year)");
                         }
                     }
                 }
