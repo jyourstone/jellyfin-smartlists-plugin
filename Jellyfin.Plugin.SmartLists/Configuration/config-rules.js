@@ -8,6 +8,39 @@
         { Value: 'Unplayed', Label: 'Unplayed (Not Started)' }
     ];
 
+    // ===== FIELD TYPE COMPATIBILITY =====
+    // Returns the category of a field type for value preservation purposes
+    SmartLists.getFieldTypeCategory = function (fieldValue) {
+        if (!fieldValue) return 'unknown';
+        if (SmartLists.FIELD_TYPES.LIST_FIELDS.indexOf(fieldValue) !== -1) return 'list';
+        if (SmartLists.FIELD_TYPES.NUMERIC_FIELDS.indexOf(fieldValue) !== -1) return 'numeric';
+        if (SmartLists.FIELD_TYPES.DATE_FIELDS.indexOf(fieldValue) !== -1) return 'date';
+        if (SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) return 'boolean';
+        if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) return 'simple';
+        if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'resolution';
+        if (fieldValue === 'PlaybackStatus') return 'playback';
+        // Default to string for STRING_FIELDS and any unknown fields
+        return 'string';
+    };
+
+    // Checks if values can be preserved when switching between two field types
+    SmartLists.areFieldTypesCompatible = function (oldField, newField) {
+        var oldCategory = SmartLists.getFieldTypeCategory(oldField);
+        var newCategory = SmartLists.getFieldTypeCategory(newField);
+
+        // Same category - always compatible
+        if (oldCategory === newCategory) return true;
+
+        // String and list fields are compatible (both use text input)
+        if ((oldCategory === 'string' && newCategory === 'list') ||
+            (oldCategory === 'list' && newCategory === 'string')) {
+            return true;
+        }
+
+        // All other combinations are incompatible
+        return false;
+    };
+
     // ===== OPERATOR OPTIONS MANAGEMENT =====
     SmartLists.updateOperatorOptions = function (fieldValue, operatorSelect) {
         // Capture the previous operator value before clearing
@@ -85,7 +118,9 @@
         // For relative date operators, we need to capture both number and unit
         let currentValue = explicitCurrentValue;
 
-        if (!currentValue) {
+        // Only auto-capture value from DOM if explicitCurrentValue was not provided (null/undefined)
+        // An explicit empty string means "clear the value"
+        if (explicitCurrentValue === null || explicitCurrentValue === undefined) {
             // Check if this is a multi-value operator
             if (SmartLists.MULTI_VALUE_OPERATORS.indexOf(operatorValue) !== -1) {
                 // For multi-value fields, get the value from the hidden input directly
@@ -318,7 +353,7 @@
         // Add placeholder option
         const placeholderOption = document.createElement('option');
         placeholderOption.value = '';
-        placeholderOption.textContent = '-- Select Resolution --';
+        placeholderOption.textContent = '-- Resolution --';
         placeholderOption.disabled = true;
         // Only select placeholder if no currentValue
         if (!currentValue) {
@@ -1127,9 +1162,23 @@
 
         // Add event listeners with AbortController signal (if supported)
         const listenerOptions = SmartLists.getEventListenerOptions(signal);
+        // Store the initial field value for compatibility checking on change
+        fieldSelect.setAttribute('data-previous-field', fieldSelect.value || '');
         fieldSelect.addEventListener('change', function () {
-            SmartLists.setValueInput(fieldSelect.value, valueContainer, operatorSelect.value);
-            SmartLists.updateOperatorOptions(fieldSelect.value, operatorSelect);
+            var previousField = fieldSelect.getAttribute('data-previous-field') || '';
+            var newField = fieldSelect.value;
+            var explicitValue = null;
+
+            // Clear value when switching between incompatible field types
+            if (previousField && newField && !SmartLists.areFieldTypesCompatible(previousField, newField)) {
+                explicitValue = '';
+            }
+
+            SmartLists.setValueInput(newField, valueContainer, operatorSelect.value, explicitValue);
+            SmartLists.updateOperatorOptions(newField, operatorSelect);
+
+            // Update the stored previous field for next change
+            fieldSelect.setAttribute('data-previous-field', newField);
             SmartLists.updateUserSelectorVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
@@ -1632,10 +1681,24 @@
 
                 // Re-add event listeners
                 const listenerOptions = SmartLists.getEventListenerOptions(signal);
+                // Store the initial field value for compatibility checking on change
+                fieldSelect.setAttribute('data-previous-field', fieldSelect.value || '');
                 fieldSelect.addEventListener('change', function () {
-                    SmartLists.setValueInput(fieldSelect.value, valueContainer, operatorSelect.value);
-                    SmartLists.updateOperatorOptions(fieldSelect.value, operatorSelect);
-                    SmartLists.updateUserSelectorVisibility(ruleRow, fieldSelect.value);
+                    var previousField = fieldSelect.getAttribute('data-previous-field') || '';
+                    var newField = fieldSelect.value;
+                    var explicitValue = null;
+
+                    // Clear value when switching between incompatible field types
+                    if (previousField && newField && !SmartLists.areFieldTypesCompatible(previousField, newField)) {
+                        explicitValue = '';
+                    }
+
+                    SmartLists.setValueInput(newField, valueContainer, operatorSelect.value, explicitValue);
+                    SmartLists.updateOperatorOptions(newField, operatorSelect);
+
+                    // Update the stored previous field for next change
+                    fieldSelect.setAttribute('data-previous-field', newField);
+                    SmartLists.updateUserSelectorVisibility(ruleRow, newField);
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldSelect.value, page);
