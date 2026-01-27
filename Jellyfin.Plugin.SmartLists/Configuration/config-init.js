@@ -1149,24 +1149,9 @@
                     SmartLists.toggleSelectAll(page);
                 }
             }
-            if (target.closest('#bulkEnableBtn')) {
-                if (SmartLists.bulkEnablePlaylists) {
-                    SmartLists.bulkEnablePlaylists(page);
-                }
-            }
-            if (target.closest('#bulkDisableBtn')) {
-                if (SmartLists.bulkDisablePlaylists) {
-                    SmartLists.bulkDisablePlaylists(page);
-                }
-            }
-            if (target.closest('#bulkDeleteBtn')) {
-                if (SmartLists.bulkDeletePlaylists) {
-                    SmartLists.bulkDeletePlaylists(page);
-                }
-            }
-            if (target.closest('#bulkRefreshBtn')) {
-                if (SmartLists.bulkRefreshPlaylists) {
-                    SmartLists.bulkRefreshPlaylists(page);
+            if (target.closest('#bulkApplyBtn')) {
+                if (SmartLists.handleBulkApply) {
+                    SmartLists.handleBulkApply(page);
                 }
             }
             if (target.classList.contains('playlist-checkbox')) {

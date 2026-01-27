@@ -1549,7 +1549,7 @@
         }
 
         // Generate collapsible playlist card with improved styling
-        return '<div class="inputContainer playlist-card paperList" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" style="border: 1px solid var(--jf-palette-divider); margin-bottom: 1em;">' +
+        return '<div class="inputContainer playlist-card paperList" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-enabled="' + (isEnabled ? 'true' : 'false') + '" data-list-type="' + SmartLists.escapeHtmlAttribute(listType) + '" style="border: 1px solid var(--jf-palette-divider); margin-bottom: 1em;">' +
             // Compact header (always visible)
             '<div class="playlist-header" style="padding: 0.75em; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">' +
             '<div class="playlist-header-left" style="display: flex; align-items: center; flex: 1; min-width: 0;">' +

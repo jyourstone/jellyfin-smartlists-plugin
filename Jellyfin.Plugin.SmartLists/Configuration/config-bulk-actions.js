@@ -49,15 +49,17 @@
         // If enabling, show notification about refresh starting
         if (options.actionType === 'enable' && listsToProcess.length > 0) {
             var statusLink = SmartLists.createStatusPageLink('status page');
+            var enableListWord = listsToProcess.length === 1 ? 'List has' : 'Lists have';
             var refreshMessage = SmartLists.IS_USER_PAGE
-                ? 'List(s) have been enabled. A refresh will be triggered automatically in the background.'
-                : 'List(s) have been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
+                ? enableListWord + ' been enabled. A refresh will be triggered automatically in the background.'
+                : enableListWord + ' been enabled. A refresh will be triggered automatically, check the ' + statusLink + ' for progress.';
             SmartLists.showNotification(refreshMessage, 'info', { html: true });
         }
 
         // If disabling, show notification about Jellyfin list removal
         if (options.actionType === 'disable' && listsToProcess.length > 0) {
-            SmartLists.showNotification('Disabling list(s) and removing Jellyfin list(s)...', 'info', { html: true });
+            var disableListWord = listsToProcess.length === 1 ? 'list' : 'lists';
+            SmartLists.showNotification('Disabling ' + disableListWord + ' and removing Jellyfin ' + disableListWord + '...', 'info', { html: true });
         }
 
         // Process sequentially in background
@@ -103,9 +105,10 @@
             // Show success notification after all API calls complete
             // Skip success notification for enable actions (info notification already shown)
             if (successCount > 0 && options.actionType !== 'enable') {
+                const successListWord = successCount === 1 ? 'list' : 'lists';
                 const message = options.formatSuccessMessage
                     ? options.formatSuccessMessage(successCount, page)
-                    : 'Successfully ' + options.actionType + ' ' + successCount + ' list(s).';
+                    : 'Successfully ' + options.actionType + ' ' + successCount + ' ' + successListWord + '.';
 
                 if (message) {
                     SmartLists.showNotification(message, 'success');
@@ -114,9 +117,10 @@
 
             // If there were errors, show error notification
             if (errorCount > 0) {
+                const errorListWord = errorCount === 1 ? 'list' : 'lists';
                 const message = options.formatErrorMessage
                     ? options.formatErrorMessage(errorCount, successCount)
-                    : 'Failed to ' + options.actionType + ' ' + errorCount + ' list(s).';
+                    : 'Failed to ' + options.actionType + ' ' + errorCount + ' ' + errorListWord + '.';
                 SmartLists.showNotification(message, 'error');
             }
 
@@ -202,14 +206,28 @@
             page._bulkActionElements = {
                 bulkContainer: page.querySelector('#bulkActionsContainer'),
                 countDisplay: page.querySelector('#selectedCountDisplay'),
-                bulkEnableBtn: page.querySelector('#bulkEnableBtn'),
-                bulkDisableBtn: page.querySelector('#bulkDisableBtn'),
-                bulkDeleteBtn: page.querySelector('#bulkDeleteBtn'),
-                bulkRefreshBtn: page.querySelector('#bulkRefreshBtn'),
+                bulkActionSelect: page.querySelector('#bulkActionSelect'),
+                bulkApplyBtn: page.querySelector('#bulkApplyBtn'),
                 selectAllCheckbox: page.querySelector('#selectAllCheckbox')
             };
         }
         return page._bulkActionElements;
+    };
+
+    // Setup change listener for the bulk action dropdown to enable/disable Apply button
+    SmartLists.setupBulkActionDropdownListener = function (page, pageSignal) {
+        const elements = SmartLists.getBulkActionElements(page, true);
+        if (elements.bulkActionSelect) {
+            elements.bulkActionSelect.addEventListener('change', function () {
+                const hasAction = this.value !== '';
+                const selectedCheckboxes = page.querySelectorAll('.playlist-checkbox:checked');
+                const hasSelection = selectedCheckboxes.length > 0;
+
+                if (elements.bulkApplyBtn) {
+                    elements.bulkApplyBtn.disabled = !hasSelection || !hasAction;
+                }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
     };
 
     // Bulk operations functionality
@@ -221,6 +239,9 @@
         if (elements.bulkContainer) {
             elements.bulkContainer.style.display = checkboxes.length > 0 ? 'block' : 'none';
         }
+
+        // Setup dropdown change listener (safe to call multiple times since HTML is regenerated)
+        SmartLists.setupBulkActionDropdownListener(page);
 
         // Update selected count and button states
         SmartLists.updateSelectedCount(page);
@@ -236,12 +257,19 @@
             elements.countDisplay.textContent = '(' + selectedCount + ')';
         }
 
-        // Update button states
+        // Update apply button state (dropdown always enabled for better UX)
         const hasSelection = selectedCount > 0;
-        if (elements.bulkEnableBtn) elements.bulkEnableBtn.disabled = !hasSelection;
-        if (elements.bulkDisableBtn) elements.bulkDisableBtn.disabled = !hasSelection;
-        if (elements.bulkDeleteBtn) elements.bulkDeleteBtn.disabled = !hasSelection;
-        if (elements.bulkRefreshBtn) elements.bulkRefreshBtn.disabled = !hasSelection;
+        if (elements.bulkActionSelect) {
+            // Reset dropdown selection when no items are selected
+            if (!hasSelection) {
+                elements.bulkActionSelect.value = '';
+            }
+        }
+        if (elements.bulkApplyBtn) {
+            // Apply button is enabled only when there's a selection AND an action is chosen
+            const hasAction = elements.bulkActionSelect && elements.bulkActionSelect.value !== '';
+            elements.bulkApplyBtn.disabled = !hasSelection || !hasAction;
+        }
 
         // Update Select All checkbox state
         if (elements.selectAllCheckbox) {
@@ -291,7 +319,8 @@
                 };
             },
             formatSuccessMessage: function (count) {
-                return count + ' list(s) enabled successfully';
+                var listWord = count === 1 ? 'list' : 'lists';
+                return count + ' ' + listWord + ' enabled successfully';
             },
             formatErrorMessage: function (errorCount, successCount) {
                 return (successCount || 0) + ' enabled, ' + errorCount + ' failed';
@@ -324,7 +353,8 @@
                 };
             },
             formatSuccessMessage: function (count) {
-                return count + ' list(s) disabled successfully';
+                var listWord = count === 1 ? 'list' : 'lists';
+                return count + ' ' + listWord + ' disabled successfully';
             },
             formatErrorMessage: function (errorCount, successCount) {
                 return (successCount || 0) + ' disabled, ' + errorCount + ' failed';
@@ -377,17 +407,20 @@
         // Show notification about what we're doing
         var statusLink = SmartLists.createStatusPageLink('status page');
         var refreshMessage;
-        
+
         if (disabledListIds.length > 0) {
             // Some lists were skipped
+            var skippedWord = disabledListIds.length === 1 ? 'list' : 'lists';
+            var refreshingWord = enabledListIds.length === 1 ? 'list' : 'lists';
             refreshMessage = SmartLists.IS_USER_PAGE
-                ? 'Skipped ' + disabledListIds.length + ' disabled list(s). Refreshing ' + enabledListIds.length + ' enabled list(s) in the background.'
-                : 'Skipped ' + disabledListIds.length + ' disabled list(s). Refreshing ' + enabledListIds.length + ' enabled list(s). Check the ' + statusLink + ' for progress.';
+                ? 'Skipped ' + disabledListIds.length + ' disabled ' + skippedWord + '. Refreshing ' + enabledListIds.length + ' enabled ' + refreshingWord + ' in the background.'
+                : 'Skipped ' + disabledListIds.length + ' disabled ' + skippedWord + '. Refreshing ' + enabledListIds.length + ' enabled ' + refreshingWord + '. Check the ' + statusLink + ' for progress.';
         } else {
             // All lists are enabled
+            var selectedWord = enabledListIds.length === 1 ? 'list' : 'lists';
             refreshMessage = SmartLists.IS_USER_PAGE
-                ? 'Refresh started for selected list(s). Your lists will be updated in the background.'
-                : 'Refresh started for selected list(s). Check the ' + statusLink + ' for progress.';
+                ? 'Refresh started for ' + enabledListIds.length + ' ' + selectedWord + '. Your ' + selectedWord + ' will be updated in the background.'
+                : 'Refresh started for ' + enabledListIds.length + ' ' + selectedWord + '. Check the ' + statusLink + ' for progress.';
         }
         
         SmartLists.showNotification(refreshMessage, 'info', { html: true });
@@ -435,7 +468,8 @@
 
             // If there were errors, show error notification
             if (errorCount > 0) {
-                SmartLists.showNotification('Failed to trigger refresh for ' + errorCount + ' list(s).', 'error');
+                var refreshErrorWord = errorCount === 1 ? 'list' : 'lists';
+                SmartLists.showNotification('Failed to trigger refresh for ' + errorCount + ' ' + refreshErrorWord + '.', 'error');
             }
 
             // Reload list to show updated state
@@ -613,10 +647,12 @@
 
         if (successCount > 0) {
             const action = deleteJellyfinList ? 'deleted' : 'suffix/prefix removed (if any) and configuration deleted';
-            SmartLists.showNotification('Successfully ' + action + ' ' + successCount + ' list(s).', 'success');
+            const deleteSuccessWord = successCount === 1 ? 'list' : 'lists';
+            SmartLists.showNotification('Successfully ' + action + ' ' + successCount + ' ' + deleteSuccessWord + '.', 'success');
         }
         if (errorCount > 0) {
-            SmartLists.showNotification('Failed to delete ' + errorCount + ' list(s).', 'error');
+            const deleteErrorWord = errorCount === 1 ? 'list' : 'lists';
+            SmartLists.showNotification('Failed to delete ' + errorCount + ' ' + deleteErrorWord + '.', 'error');
         }
 
         // Clear selections and reload
@@ -648,6 +684,176 @@
 
         // Show the custom modal instead of browser confirm
         SmartLists.showBulkDeleteConfirm(page, listIds, listNames);
+    };
+
+    // Handler for the bulk action Apply button
+    SmartLists.handleBulkApply = function (page) {
+        const elements = SmartLists.getBulkActionElements(page);
+        const action = elements.bulkActionSelect ? elements.bulkActionSelect.value : '';
+
+        if (!action) {
+            SmartLists.showNotification('Please select an action', 'error');
+            return;
+        }
+
+        switch (action) {
+            case 'enable':
+                SmartLists.bulkEnablePlaylists(page);
+                break;
+            case 'disable':
+                SmartLists.bulkDisablePlaylists(page);
+                break;
+            case 'refresh':
+                SmartLists.bulkRefreshPlaylists(page);
+                break;
+            case 'delete':
+                SmartLists.bulkDeletePlaylists(page);
+                break;
+            case 'convertToPlaylist':
+                SmartLists.bulkConvertToPlaylist(page);
+                break;
+            case 'convertToCollection':
+                SmartLists.bulkConvertToCollection(page);
+                break;
+            default:
+                SmartLists.showNotification('Unknown action: ' + action, 'error');
+        }
+
+        // Reset dropdown after action
+        if (elements.bulkActionSelect) {
+            elements.bulkActionSelect.value = '';
+        }
+        if (elements.bulkApplyBtn) {
+            elements.bulkApplyBtn.disabled = true;
+        }
+    };
+
+    // Bulk convert selected lists to playlists
+    SmartLists.bulkConvertToPlaylist = async function (page) {
+        const selectedCheckboxes = page.querySelectorAll('.playlist-checkbox:checked');
+        const listsToConvert = [];
+
+        // Filter to only collections (can't convert playlists to playlists)
+        for (var i = 0; i < selectedCheckboxes.length; i++) {
+            const checkbox = selectedCheckboxes[i];
+            const listId = checkbox.getAttribute('data-playlist-id');
+            const playlistCard = checkbox.closest('.playlist-card');
+            const listType = playlistCard ? playlistCard.dataset.listType : null;
+
+            if (listType === 'Collection') {
+                listsToConvert.push(listId);
+            }
+        }
+
+        if (listsToConvert.length === 0) {
+            SmartLists.showNotification('No collections selected. Only collections can be converted to playlists.', 'info');
+            return;
+        }
+
+        await SmartLists.performBulkConversion(page, listsToConvert, 'Playlist');
+    };
+
+    // Bulk convert selected lists to collections
+    SmartLists.bulkConvertToCollection = async function (page) {
+        const selectedCheckboxes = page.querySelectorAll('.playlist-checkbox:checked');
+        const listsToConvert = [];
+
+        // Filter to only playlists (can't convert collections to collections)
+        for (var i = 0; i < selectedCheckboxes.length; i++) {
+            const checkbox = selectedCheckboxes[i];
+            const listId = checkbox.getAttribute('data-playlist-id');
+            const playlistCard = checkbox.closest('.playlist-card');
+            const listType = playlistCard ? playlistCard.dataset.listType : null;
+
+            if (listType === 'Playlist') {
+                listsToConvert.push(listId);
+            }
+        }
+
+        if (listsToConvert.length === 0) {
+            SmartLists.showNotification('No playlists selected. Only playlists can be converted to collections.', 'info');
+            return;
+        }
+
+        await SmartLists.performBulkConversion(page, listsToConvert, 'Collection');
+    };
+
+    // Perform bulk conversion to target type
+    SmartLists.performBulkConversion = async function (page, listIds, targetType) {
+        const apiClient = SmartLists.getApiClient();
+        let successCount = 0;
+        let errorCount = 0;
+
+        // Clear selections immediately
+        const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = false;
+        }
+
+        // Process sequentially - need to fetch each list, modify type, and PUT back
+        for (const listId of listIds) {
+            try {
+                // First, get the current list data
+                const getUrl = SmartLists.ENDPOINTS.base + '/' + listId;
+                const getResponse = await apiClient.ajax({
+                    type: 'GET',
+                    url: apiClient.getUrl(getUrl),
+                    contentType: 'application/json'
+                });
+
+                if (!getResponse.ok) {
+                    console.error('Error fetching list for conversion:', listId);
+                    errorCount++;
+                    continue;
+                }
+
+                const listData = await getResponse.json();
+
+                // Reconstruct object with Type FIRST - required for System.Text.Json polymorphic deserialization
+                // The discriminator property must appear early in the JSON for proper type resolution
+                const { Type: _oldType, ...rest } = listData;
+                const convertedData = { Type: targetType, ...rest };
+
+                // PUT the updated list back
+                const putUrl = SmartLists.ENDPOINTS.base + '/' + listId;
+                const putResponse = await apiClient.ajax({
+                    type: 'PUT',
+                    url: apiClient.getUrl(putUrl),
+                    contentType: 'application/json',
+                    data: JSON.stringify(convertedData)
+                });
+
+                if (!putResponse.ok) {
+                    const errorMessage = await SmartLists.extractErrorMessage(putResponse, 'HTTP ' + putResponse.status);
+                    console.error('Error converting list:', listId, errorMessage);
+                    errorCount++;
+                } else {
+                    successCount++;
+                }
+            } catch (err) {
+                console.error('Error converting list:', listId, err);
+                errorCount++;
+            }
+        }
+
+        // Show results
+        if (successCount > 0) {
+            var statusLink = SmartLists.createStatusPageLink('status page');
+            var listWord = successCount === 1 ? 'list' : 'lists';
+            var successMessage = SmartLists.IS_USER_PAGE
+                ? 'Conversion started for ' + successCount + ' ' + listWord + '. Refresh will run automatically in the background.'
+                : 'Conversion started for ' + successCount + ' ' + listWord + '. Check the ' + statusLink + ' for progress.';
+            SmartLists.showNotification(successMessage, 'success', { html: true });
+        }
+        if (errorCount > 0) {
+            var errorListWord = errorCount === 1 ? 'list' : 'lists';
+            SmartLists.showNotification('Failed to convert ' + errorCount + ' ' + errorListWord + '.', 'error');
+        }
+
+        // Reload list to show updated state
+        if (SmartLists.loadPlaylistList) {
+            SmartLists.loadPlaylistList(page);
+        }
     };
 
     // Collapsible playlist functionality

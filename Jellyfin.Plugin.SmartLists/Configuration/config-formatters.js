@@ -348,20 +348,22 @@
         html += '</span>';
         html += '</label>';
 
-        // Selected count display
-        html += '<span id="selectedCountDisplay" class="fieldDescription" style="opacity: 0.6; margin-right: 0.75em; font-style: italic;">(0)</span>';
+        // Selected count display (min-width prevents layout shift when count changes)
+        html += '<span id="selectedCountDisplay" class="fieldDescription" style="opacity: 0.6; font-style: italic; display: inline-block; min-width: 2.5em;">(0)</span>';
 
-        // 2. Enable button
-        html += '<button type="button" id="bulkEnableBtn" class="emby-button raised" disabled>Enable</button>';
+        // 2. Action dropdown (always enabled for better UX, max-width keeps it compact when closed)
+        html += '<select id="bulkActionSelect" is="emby-select" class="emby-select-withcolor emby-select" style="width: auto; min-width: 205px;">';
+        html += '<option value="">Bulk action...</option>';
+        html += '<option value="enable">Enable</option>';
+        html += '<option value="disable">Disable</option>';
+        html += '<option value="refresh">Refresh</option>';
+        html += '<option value="delete">Delete</option>';
+        html += '<option value="convertToPlaylist">Convert to Playlist</option>';
+        html += '<option value="convertToCollection">Convert to Collection</option>';
+        html += '</select>';
 
-        // 3. Disable button
-        html += '<button type="button" id="bulkDisableBtn" class="emby-button raised" disabled>Disable</button>';
-
-        // 4. Refresh button
-        html += '<button type="button" id="bulkRefreshBtn" class="emby-button raised" disabled>Refresh</button>';
-
-        // 5. Delete button
-        html += '<button type="button" id="bulkDeleteBtn" class="emby-button raised button-delete" disabled>Delete</button>';
+        // 3. Apply button (styled to match dropdown height)
+        html += '<button type="button" id="bulkApplyBtn" class="emby-button raised" style="height: 2.7em; padding: 0 1.5em;" disabled>Apply</button>';
 
         html += '</div>'; // End left side
 
