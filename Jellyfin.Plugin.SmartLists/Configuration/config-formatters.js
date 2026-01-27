@@ -362,8 +362,9 @@
         html += '<option value="convertToCollection">Convert to Collection</option>';
         html += '</select>';
 
-        // 3. Apply button (styled to match dropdown height)
-        html += '<button type="button" id="bulkApplyBtn" class="emby-button raised" style="height: 2.7em; padding: 0 1.5em;" disabled>Apply</button>';
+        // 3. Apply button (styled to match dropdown height, with disabled state styling)
+        html += '<style>#bulkApplyBtn:disabled { opacity: 0.5; cursor: not-allowed; }</style>';
+        html += '<button type="button" id="bulkApplyBtn" class="emby-button raised" style="height: 2.7em; padding: 0 1.5em;" title="Select items and choose an action" disabled>Apply</button>';
 
         html += '</div>'; // End left side
 

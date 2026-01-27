@@ -224,7 +224,18 @@
                 const hasSelection = selectedCheckboxes.length > 0;
 
                 if (elements.bulkApplyBtn) {
-                    elements.bulkApplyBtn.disabled = !hasSelection || !hasAction;
+                    const isDisabled = !hasSelection || !hasAction;
+                    elements.bulkApplyBtn.disabled = isDisabled;
+                    // Update tooltip based on state
+                    if (isDisabled) {
+                        if (!hasSelection) {
+                            elements.bulkApplyBtn.title = 'Select items first';
+                        } else {
+                            elements.bulkApplyBtn.title = 'Choose an action from the dropdown';
+                        }
+                    } else {
+                        elements.bulkApplyBtn.title = 'Apply the selected action';
+                    }
                 }
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
@@ -268,7 +279,18 @@
         if (elements.bulkApplyBtn) {
             // Apply button is enabled only when there's a selection AND an action is chosen
             const hasAction = elements.bulkActionSelect && elements.bulkActionSelect.value !== '';
-            elements.bulkApplyBtn.disabled = !hasSelection || !hasAction;
+            const isDisabled = !hasSelection || !hasAction;
+            elements.bulkApplyBtn.disabled = isDisabled;
+            // Update tooltip based on state
+            if (isDisabled) {
+                if (!hasSelection) {
+                    elements.bulkApplyBtn.title = 'Select items first';
+                } else {
+                    elements.bulkApplyBtn.title = 'Choose an action from the dropdown';
+                }
+            } else {
+                elements.bulkApplyBtn.title = 'Apply the selected action';
+            }
         }
 
         // Update Select All checkbox state
