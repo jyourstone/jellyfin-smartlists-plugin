@@ -1147,6 +1147,66 @@
         });
     };
 
+    SmartLists.convertPlaylist = async function (page, listId, listName, targetType) {
+        const apiClient = SmartLists.getApiClient();
+
+        try {
+            // First, get the current list data
+            const getUrl = SmartLists.ENDPOINTS.base + '/' + listId;
+            const getResponse = await apiClient.ajax({
+                type: 'GET',
+                url: apiClient.getUrl(getUrl),
+                contentType: 'application/json'
+            });
+
+            if (!getResponse.ok) {
+                const errorMessage = await SmartLists.extractErrorMessage(getResponse, 'HTTP ' + getResponse.status);
+                SmartLists.showNotification('Failed to fetch list: ' + errorMessage, 'error');
+                return;
+            }
+
+            const listData = await getResponse.json();
+
+            // Reconstruct object with Type FIRST - required for System.Text.Json polymorphic deserialization
+            const { Type: _oldType, ...rest } = listData;
+            const convertedData = { Type: targetType, ...rest };
+
+            // PUT the updated list back
+            const putUrl = SmartLists.ENDPOINTS.base + '/' + listId;
+            const putResponse = await apiClient.ajax({
+                type: 'PUT',
+                url: apiClient.getUrl(putUrl),
+                contentType: 'application/json',
+                data: JSON.stringify(convertedData)
+            });
+
+            if (!putResponse.ok) {
+                const errorMessage = await SmartLists.extractErrorMessage(putResponse, 'HTTP ' + putResponse.status);
+                SmartLists.showNotification('Failed to convert list: ' + errorMessage, 'error');
+                return;
+            }
+
+            // Show success message
+            var successMessage = 'List "' + listName + '" converted to ' + targetType.toLowerCase() + '.';
+            var isEnabled = listData.Enabled !== false;
+
+            // Only show status page link if list is enabled (will refresh)
+            if (!SmartLists.IS_USER_PAGE && isEnabled) {
+                var statusLink = SmartLists.createStatusPageLink('status page');
+                successMessage += ' Check the ' + statusLink + ' for progress.';
+            }
+            SmartLists.showNotification(successMessage, 'success', { html: isEnabled });
+
+            // Reload list to show updated state
+            if (SmartLists.loadPlaylistList) {
+                SmartLists.loadPlaylistList(page);
+            }
+        } catch (err) {
+            console.error('Error converting list:', listId, err);
+            SmartLists.showNotification('Failed to convert list: ' + (err.message || 'Unknown error'), 'error');
+        }
+    };
+
     SmartLists.showDeleteConfirm = function (page, listId, listName) {
         const confirmText = 'Are you sure you want to delete the smart list "' + listName + '"? This cannot be undone.';
 
@@ -1597,6 +1657,9 @@
                 '<span class="material-icons">play_circle</span><span>Enable</span>' +
                 '</button>'
             ) +
+            '<button type="button" class="playlist-kebab-menu-item kebab-convert-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '" data-target-type="' + (listType === 'Playlist' ? 'Collection' : 'Playlist') + '">' +
+            '<span class="material-icons">swap_horiz</span><span>Convert to ' + (listType === 'Playlist' ? 'Collection' : 'Playlist') + '</span>' +
+            '</button>' +
             '<div class="playlist-kebab-menu-divider"></div>' +
             '<button type="button" class="playlist-kebab-menu-item kebab-delete-btn danger" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">' +
             '<span class="material-icons">delete</span><span>Delete</span>' +
@@ -1730,6 +1793,7 @@
                 '<button is="emby-button" type="button" class="emby-button raised disable-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Disable</button>' :
                 '<button is="emby-button" type="button" class="emby-button raised enable-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Enable</button>'
             ) +
+            '<button is="emby-button" type="button" class="emby-button raised convert-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '" data-target-type="' + (listType === 'Playlist' ? 'Collection' : 'Playlist') + '">Convert to ' + (listType === 'Playlist' ? 'Collection' : 'Playlist') + '</button>' +
             '<button is="emby-button" type="button" class="emby-button raised danger delete-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Delete</button>' +
             '</div>' +
             '</div>' +

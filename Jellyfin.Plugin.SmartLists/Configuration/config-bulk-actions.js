@@ -806,6 +806,20 @@
         let successCount = 0;
         let errorCount = 0;
 
+        // Count enabled lists to determine if we should show status page link
+        let enabledCount = 0;
+        listIds.forEach(function (listId) {
+            if (page._allPlaylists) {
+                const playlist = page._allPlaylists.find(function (p) { return p.Id === listId; });
+                if (playlist && playlist.Enabled !== false) {
+                    enabledCount++;
+                }
+            } else {
+                // If no data available, assume enabled
+                enabledCount++;
+            }
+        });
+
         // Clear selections immediately
         const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
         if (selectAllCheckbox) {
@@ -860,12 +874,16 @@
 
         // Show results
         if (successCount > 0) {
-            var statusLink = SmartLists.createStatusPageLink('status page');
             var listWord = successCount === 1 ? 'list' : 'lists';
-            var successMessage = SmartLists.IS_USER_PAGE
-                ? 'Conversion started for ' + successCount + ' ' + listWord + '. Refresh will run automatically in the background.'
-                : 'Conversion started for ' + successCount + ' ' + listWord + '. Check the ' + statusLink + ' for progress.';
-            SmartLists.showNotification(successMessage, 'success', { html: true });
+            var targetWord = successCount === 1 ? targetType.toLowerCase() : targetType.toLowerCase() + 's';
+            var successMessage = 'Converted ' + successCount + ' ' + listWord + ' to ' + targetWord + '.';
+
+            // Only show status page link if at least one enabled list will refresh
+            if (!SmartLists.IS_USER_PAGE && enabledCount > 0) {
+                var statusLink = SmartLists.createStatusPageLink('status page');
+                successMessage += ' Check the ' + statusLink + ' for progress.';
+            }
+            SmartLists.showNotification(successMessage, 'success', { html: enabledCount > 0 });
         }
         if (errorCount > 0) {
             var errorListWord = errorCount === 1 ? 'list' : 'lists';

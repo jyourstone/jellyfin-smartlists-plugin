@@ -354,12 +354,14 @@
         // 2. Action dropdown (always enabled for better UX, max-width keeps it compact when closed)
         html += '<select id="bulkActionSelect" is="emby-select" class="emby-select-withcolor emby-select" style="width: auto; min-width: 205px;">';
         html += '<option value="">Bulk action...</option>';
+        html += '<option value="refresh">Refresh</option>';
         html += '<option value="enable">Enable</option>';
         html += '<option value="disable">Disable</option>';
-        html += '<option value="refresh">Refresh</option>';
-        html += '<option value="delete">Delete</option>';
         html += '<option value="convertToPlaylist">Convert to Playlist</option>';
         html += '<option value="convertToCollection">Convert to Collection</option>';
+        html += '<option disabled>──────────</option>';
+        html += '<option value="delete">Delete</option>';
+
         html += '</select>';
 
         // 3. Apply button (styled to match dropdown height, with disabled state styling)

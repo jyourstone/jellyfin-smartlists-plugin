@@ -1029,6 +1029,12 @@
                     SmartLists.disablePlaylist(page, button.getAttribute('data-playlist-id'), button.getAttribute('data-playlist-name'));
                 }
             }
+            if (target.closest('.convert-playlist-btn')) {
+                const button = target.closest('.convert-playlist-btn');
+                if (SmartLists.convertPlaylist) {
+                    SmartLists.convertPlaylist(page, button.getAttribute('data-playlist-id'), button.getAttribute('data-playlist-name'), button.getAttribute('data-target-type'));
+                }
+            }
             if (target.closest('#cancelEditBtn')) {
                 if (SmartLists.cancelEdit) {
                     SmartLists.cancelEdit(page);
@@ -1118,6 +1124,15 @@
                 SmartLists.closeAllKebabMenus(page);
                 if (SmartLists.disablePlaylist) {
                     SmartLists.disablePlaylist(page, disableBtn.getAttribute('data-playlist-id'), disableBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-convert-btn')) {
+                e.stopPropagation();
+                var convertBtn = target.closest('.kebab-convert-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.convertPlaylist) {
+                    SmartLists.convertPlaylist(page, convertBtn.getAttribute('data-playlist-id'), convertBtn.getAttribute('data-playlist-name'), convertBtn.getAttribute('data-target-type'));
                 }
                 return;
             }
