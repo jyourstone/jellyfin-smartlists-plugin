@@ -211,6 +211,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <inheritdoc />
         public async Task<BackupResult> CreateBackupAsync(CancellationToken cancellationToken = default)
         {
+            string? backupFilePath = null;
             try
             {
                 var backupPath = GetBackupDirectory();
@@ -222,7 +223,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
                 var backupFileName = $"smartlists_backup_{timestamp}.zip";
-                var backupFilePath = Path.Combine(backupPath, backupFileName);
+                backupFilePath = Path.Combine(backupPath, backupFileName);
 
                 var listCount = await CreateBackupZipAsync(backupFilePath, cancellationToken).ConfigureAwait(false);
 
@@ -239,6 +240,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating backup");
+
+                // Clean up partially created backup file if it exists
+                if (backupFilePath != null && File.Exists(backupFilePath))
+                {
+                    try
+                    {
+                        File.Delete(backupFilePath);
+                        _logger.LogDebug("Cleaned up partial backup file: {BackupFile}", backupFilePath);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        _logger.LogWarning(deleteEx, "Failed to clean up partial backup file: {BackupFile}", backupFilePath);
+                    }
+                }
+
                 return new BackupResult
                 {
                     Success = false,
@@ -267,6 +283,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return (zipStream, 0);
             }
 
+            var archivedCount = 0;
             using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
             {
                 foreach (var list in allLists)
@@ -279,11 +296,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     }
 
                     await AddSmartListToArchiveAsync(archive, list.Id, cancellationToken).ConfigureAwait(false);
+                    archivedCount++;
                 }
             }
 
             zipStream.Position = 0;
-            return (zipStream, allLists.Count);
+            return (zipStream, archivedCount);
         }
 
         /// <inheritdoc />
@@ -446,6 +464,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return 0;
             }
 
+            var archivedCount = 0;
             using var zipStream = new FileStream(backupFilePath, FileMode.Create);
             using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true);
 
@@ -459,10 +478,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
 
                 await AddSmartListToArchiveAsync(archive, list.Id, cancellationToken).ConfigureAwait(false);
+                archivedCount++;
             }
 
-            _logger.LogDebug("Backed up {ListCount} smart lists to {BackupFile}", allLists.Count, backupFilePath);
-            return allLists.Count;
+            _logger.LogDebug("Backed up {ListCount} smart lists to {BackupFile}", archivedCount, backupFilePath);
+            return archivedCount;
         }
 
         /// <summary>
