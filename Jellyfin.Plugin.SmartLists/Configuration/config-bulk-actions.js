@@ -805,20 +805,7 @@
         const apiClient = SmartLists.getApiClient();
         let successCount = 0;
         let errorCount = 0;
-
-        // Count enabled lists to determine if we should show status page link
-        let enabledCount = 0;
-        listIds.forEach(function (listId) {
-            if (page._allPlaylists) {
-                const playlist = page._allPlaylists.find(function (p) { return p.Id === listId; });
-                if (playlist && playlist.Enabled !== false) {
-                    enabledCount++;
-                }
-            } else {
-                // If no data available, assume enabled
-                enabledCount++;
-            }
-        });
+        let enabledSuccessCount = 0;
 
         // Clear selections immediately
         const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
@@ -844,6 +831,7 @@
                 }
 
                 const listData = await getResponse.json();
+                const isEnabled = listData.Enabled !== false;
 
                 // Reconstruct object with Type FIRST - required for System.Text.Json polymorphic deserialization
                 // The discriminator property must appear early in the JSON for proper type resolution
@@ -865,6 +853,9 @@
                     errorCount++;
                 } else {
                     successCount++;
+                    if (isEnabled) {
+                        enabledSuccessCount++;
+                    }
                 }
             } catch (err) {
                 console.error('Error converting list:', listId, err);
@@ -878,9 +869,9 @@
             var targetWord = successCount === 1 ? targetType.toLowerCase() : targetType.toLowerCase() + 's';
             var successMessage = 'Converted ' + successCount + ' ' + listWord + ' to ' + targetWord + '.';
 
-            // Only show status page link if at least one enabled list will refresh and on admin page
+            // Only show status page link if at least one enabled list was successfully converted (will refresh)
             // Note: html option should only be true when we actually include HTML content (the statusLink)
-            var includeStatusLink = !SmartLists.IS_USER_PAGE && enabledCount > 0;
+            var includeStatusLink = !SmartLists.IS_USER_PAGE && enabledSuccessCount > 0;
             if (includeStatusLink) {
                 var statusLink = SmartLists.createStatusPageLink('status page');
                 successMessage += ' Check the ' + statusLink + ' for progress.';
