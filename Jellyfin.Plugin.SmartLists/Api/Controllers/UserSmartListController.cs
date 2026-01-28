@@ -1617,13 +1617,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save collection. Original playlist was not modified." });
             }
             
-            // Delete old Jellyfin playlists and remove from playlist cache
+            // Delete old Jellyfin playlists
             // Note: We don't call playlistStore.DeleteAsync() because SaveAsync already overwrote the config file
             // (both stores use the same folder structure: /smartlists/{guid}/config.json)
             try
             {
                 await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist).ConfigureAwait(false);
-                Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
             }
             catch (Exception deleteEx)
             {
@@ -1631,7 +1630,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 _logger.LogWarning(deleteEx, "Failed to delete old Jellyfin playlists during conversion for user {UserId}, list '{Name}'. Collection was created successfully.",
                     userId.ToString(), collectionDto.Name);
             }
-            
+
+            // Always remove from playlist cache - the smart list is now a collection regardless of Jellyfin cleanup status
+            Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
+
             // Enqueue refresh if enabled
             if (collectionDto.Enabled)
             {
@@ -1728,13 +1730,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save playlist. Original collection was not modified." });
             }
             
-            // Delete old Jellyfin collection and remove from collection cache
+            // Delete old Jellyfin collection
             // Note: We don't call collectionStore.DeleteAsync() because SaveAsync already overwrote the config file
             // (both stores use the same folder structure: /smartlists/{guid}/config.json)
             try
             {
                 await _collectionService.DeleteAsync(existingCollection).ConfigureAwait(false);
-                Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
             }
             catch (Exception deleteEx)
             {
@@ -1742,7 +1743,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 _logger.LogWarning(deleteEx, "Failed to delete old Jellyfin collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully.",
                     userId.ToString(), playlistDto.Name);
             }
-            
+
+            // Always remove from collection cache - the smart list is now a playlist regardless of Jellyfin cleanup status
+            Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
+
             // Enqueue refresh if enabled
             if (playlistDto.Enabled)
             {

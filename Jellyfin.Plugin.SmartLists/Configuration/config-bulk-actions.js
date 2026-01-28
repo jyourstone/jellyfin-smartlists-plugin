@@ -878,12 +878,14 @@
             var targetWord = successCount === 1 ? targetType.toLowerCase() : targetType.toLowerCase() + 's';
             var successMessage = 'Converted ' + successCount + ' ' + listWord + ' to ' + targetWord + '.';
 
-            // Only show status page link if at least one enabled list will refresh
-            if (!SmartLists.IS_USER_PAGE && enabledCount > 0) {
+            // Only show status page link if at least one enabled list will refresh and on admin page
+            // Note: html option should only be true when we actually include HTML content (the statusLink)
+            var includeStatusLink = !SmartLists.IS_USER_PAGE && enabledCount > 0;
+            if (includeStatusLink) {
                 var statusLink = SmartLists.createStatusPageLink('status page');
                 successMessage += ' Check the ' + statusLink + ' for progress.';
             }
-            SmartLists.showNotification(successMessage, 'success', { html: enabledCount > 0 });
+            SmartLists.showNotification(successMessage, 'success', { html: includeStatusLink });
         }
         if (errorCount > 0) {
             var errorListWord = errorCount === 1 ? 'list' : 'lists';

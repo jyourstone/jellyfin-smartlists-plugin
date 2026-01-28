@@ -1190,12 +1190,15 @@
             var successMessage = 'List "' + listName + '" converted to ' + targetType.toLowerCase() + '.';
             var isEnabled = listData.Enabled !== false;
 
-            // Only show status page link if list is enabled (will refresh)
-            if (!SmartLists.IS_USER_PAGE && isEnabled) {
+            // Only show status page link if list is enabled (will refresh) and on admin page
+            // Note: html option should only be true when we actually include HTML content (the statusLink)
+            // to avoid XSS from user-controlled listName being interpreted as HTML
+            var includeStatusLink = !SmartLists.IS_USER_PAGE && isEnabled;
+            if (includeStatusLink) {
                 var statusLink = SmartLists.createStatusPageLink('status page');
                 successMessage += ' Check the ' + statusLink + ' for progress.';
             }
-            SmartLists.showNotification(successMessage, 'success', { html: isEnabled });
+            SmartLists.showNotification(successMessage, 'success', { html: includeStatusLink });
 
             // Reload list to show updated state
             if (SmartLists.loadPlaylistList) {
