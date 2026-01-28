@@ -987,21 +987,21 @@
                 }
             }
             if (target.closest('.backup-restore-btn')) {
-                var filename = target.closest('.backup-restore-btn').getAttribute('data-filename');
-                if (filename && SmartLists.showBackupRestoreConfirm) {
-                    SmartLists.showBackupRestoreConfirm(filename);
+                const restoreFilename = target.closest('.backup-restore-btn').getAttribute('data-filename');
+                if (restoreFilename && SmartLists.showBackupRestoreConfirm) {
+                    SmartLists.showBackupRestoreConfirm(restoreFilename);
                 }
             }
             if (target.closest('.backup-download-btn')) {
-                var filename = target.closest('.backup-download-btn').getAttribute('data-filename');
-                if (filename && SmartLists.downloadBackup) {
-                    SmartLists.downloadBackup(filename);
+                const downloadFilename = target.closest('.backup-download-btn').getAttribute('data-filename');
+                if (downloadFilename && SmartLists.downloadBackup) {
+                    SmartLists.downloadBackup(downloadFilename);
                 }
             }
             if (target.closest('.backup-delete-btn')) {
-                var filename = target.closest('.backup-delete-btn').getAttribute('data-filename');
-                if (filename && SmartLists.showBackupDeleteConfirm) {
-                    SmartLists.showBackupDeleteConfirm(filename);
+                const deleteFilename = target.closest('.backup-delete-btn').getAttribute('data-filename');
+                if (deleteFilename && SmartLists.showBackupDeleteConfirm) {
+                    SmartLists.showBackupDeleteConfirm(deleteFilename);
                 }
             }
             if (target.closest('#addImageBtn')) {
@@ -1301,6 +1301,7 @@
         const restoreDropZoneContent = page.querySelector('#restoreDropZoneContent');
         const restoreFileSelected = page.querySelector('#restoreFileSelected');
         const restoreSelectedFileName = page.querySelector('#restoreSelectedFileName');
+        const restoreSelectedListCount = page.querySelector('#restoreSelectedListCount');
         const restoreCancelBtn = page.querySelector('#restoreCancelBtn');
 
         // Get CSS variable values for dynamic styling
@@ -1311,10 +1312,19 @@
         var successBg = themeColors.successBg;
         var primaryBg = themeColors.primaryBg;
 
-        function showRestoreFileSelectedState(fileName) {
+        function showRestoreFileSelectedState(fileName, listCount) {
             if (restoreDropZoneContent) restoreDropZoneContent.style.display = 'none';
             if (restoreFileSelected) restoreFileSelected.style.display = 'block';
             if (restoreSelectedFileName) restoreSelectedFileName.textContent = fileName;
+            if (restoreSelectedListCount) {
+                if (listCount !== undefined && listCount >= 0) {
+                    restoreSelectedListCount.textContent = listCount + ' list' + (listCount !== 1 ? 's' : '') + ' in backup';
+                } else if (listCount === -1) {
+                    restoreSelectedListCount.textContent = 'Unable to read backup contents';
+                } else {
+                    restoreSelectedListCount.textContent = 'Analyzing...';
+                }
+            }
             if (restoreDropZone) {
                 restoreDropZone.style.borderColor = successColor;
                 restoreDropZone.style.borderStyle = 'solid';
@@ -1327,6 +1337,7 @@
             if (restoreDropZoneContent) restoreDropZoneContent.style.display = 'block';
             if (restoreFileSelected) restoreFileSelected.style.display = 'none';
             if (restoreSelectedFileName) restoreSelectedFileName.textContent = '';
+            if (restoreSelectedListCount) restoreSelectedListCount.textContent = '';
             if (restoreDropZone) {
                 restoreDropZone.style.borderColor = dividerColor;
                 restoreDropZone.style.borderStyle = 'dashed';
@@ -1337,7 +1348,27 @@
         if (restoreFileInput) {
             restoreFileInput.addEventListener('change', function () {
                 if (this.files && this.files.length > 0) {
-                    showRestoreFileSelectedState(this.files[0].name);
+                    var file = this.files[0];
+                    showRestoreFileSelectedState(file.name);
+                    // Preview the file to get list count
+                    if (SmartLists.previewBackupFile) {
+                        SmartLists.previewBackupFile(file)
+                            .then(function (preview) {
+                                if (restoreSelectedListCount) {
+                                    var count = preview.listCount;
+                                    if (count >= 0) {
+                                        restoreSelectedListCount.textContent = count + ' list' + (count !== 1 ? 's' : '') + ' in backup';
+                                    } else {
+                                        restoreSelectedListCount.textContent = 'Unable to read backup contents';
+                                    }
+                                }
+                            })
+                            .catch(function () {
+                                if (restoreSelectedListCount) {
+                                    restoreSelectedListCount.textContent = '';
+                                }
+                            });
+                    }
                 } else {
                     resetRestoreDropZone();
                 }
@@ -1388,6 +1419,25 @@
                         dataTransfer.items.add(file);
                         restoreFileInput.files = dataTransfer.files;
                         showRestoreFileSelectedState(file.name);
+                        // Preview the file to get list count
+                        if (SmartLists.previewBackupFile) {
+                            SmartLists.previewBackupFile(file)
+                                .then(function (preview) {
+                                    if (restoreSelectedListCount) {
+                                        var count = preview.listCount;
+                                        if (count >= 0) {
+                                            restoreSelectedListCount.textContent = count + ' list' + (count !== 1 ? 's' : '') + ' in backup';
+                                        } else {
+                                            restoreSelectedListCount.textContent = 'Unable to read backup contents';
+                                        }
+                                    }
+                                })
+                                .catch(function () {
+                                    if (restoreSelectedListCount) {
+                                        restoreSelectedListCount.textContent = '';
+                                    }
+                                });
+                        }
                     } else {
                         SmartLists.showNotification('Please select a ZIP file', 'warning');
                         resetRestoreDropZone();
@@ -1406,8 +1456,10 @@
         // Expose resetRestoreDropZone for use after successful restore
         SmartLists.resetRestoreDropZone = resetRestoreDropZone;
 
-        // Initialize backup list and delete modal
-        SmartLists.initializeBackupFeatures(page, pageSignal);
+        // Initialize backup list and delete modal (admin pages only)
+        if (!SmartLists.IS_USER_PAGE && page.querySelector('#backupListTable')) {
+            SmartLists.initializeBackupFeatures(page, pageSignal);
+        }
     };
 
     // ===== BACKUP FEATURES =====
@@ -1531,14 +1583,18 @@
         for (var i = 0; i < backups.length; i++) {
             var backup = backups[i];
             var date = new Date(backup.createdAt);
-            var formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            var formattedDatePart = date.toLocaleDateString();
+            var formattedTimePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             var formattedSize = SmartLists.formatFileSize(backup.sizeBytes);
             var escapedFilename = SmartLists.escapeHtmlAttribute(backup.filename);
 
+            var listCountDisplay = backup.listCount >= 0 ? String(backup.listCount) : '-';
+
             html += '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">';
             html += '<td style="padding: 0.5em 0.75em; font-family: monospace; font-size: 0.85em; word-break: break-all;">' + SmartLists.escapeHtml(backup.filename) + '</td>';
-            html += '<td style="padding: 0.5em 0.75em; white-space: nowrap;">' + SmartLists.escapeHtml(formattedDate) + '</td>';
-            html += '<td style="padding: 0.5em 0.75em; text-align: right; white-space: nowrap;">' + SmartLists.escapeHtml(formattedSize) + '</td>';
+            html += '<td style="padding: 0.5em 0.75em;"><span style="white-space: nowrap;">' + SmartLists.escapeHtml(formattedDatePart) + '</span> <span style="white-space: nowrap; opacity: 0.7;">' + SmartLists.escapeHtml(formattedTimePart) + '</span></td>';
+            html += '<td style="padding: 0.5em 0.5em; text-align: center; white-space: nowrap;">' + SmartLists.escapeHtml(listCountDisplay) + '</td>';
+            html += '<td style="padding: 0.5em 0.5em; text-align: right; white-space: nowrap;">' + SmartLists.escapeHtml(formattedSize) + '</td>';
             html += '<td style="padding: 0.5em 0.75em; text-align: center; white-space: nowrap;">';
             html += '<button is="emby-button" type="button" class="backup-restore-btn emby-button raised" data-filename="' + escapedFilename + '" title="Restore" style="padding: 0.3em 0.6em; margin: 0 0.2em; min-width: auto;">';
             html += '<span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">restore</span>';
@@ -1562,8 +1618,8 @@
     SmartLists.formatFileSize = function (bytes) {
         if (bytes === 0) return '0 B';
         var k = 1024;
-        var sizes = ['B', 'KB', 'MB', 'GB'];
-        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        var sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        var i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     };
 
@@ -2357,8 +2413,8 @@
             // Re-apply list type visibility after cleanup
             if (page._pageInitialized) {
                 SmartLists.handleListTypeChange(page);
-                // Reload backup list when navigating back to the page
-                if (SmartLists.loadBackupList) {
+                // Reload backup list when navigating back to the page (admin pages only)
+                if (!SmartLists.IS_USER_PAGE && SmartLists.loadBackupList) {
                     SmartLists.loadBackupList();
                 }
             }

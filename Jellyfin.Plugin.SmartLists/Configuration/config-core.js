@@ -17,7 +17,8 @@
         refresh: endpointPrefix + '/refresh',
         refreshDirect: endpointPrefix + '/refresh-direct',
         backups: 'Plugins/SmartLists/backups',
-        backupUpload: 'Plugins/SmartLists/backups/upload'
+        backupUpload: 'Plugins/SmartLists/backups/upload',
+        backupPreview: 'Plugins/SmartLists/backups/preview'
     };
 
     // Field type constants to avoid duplication

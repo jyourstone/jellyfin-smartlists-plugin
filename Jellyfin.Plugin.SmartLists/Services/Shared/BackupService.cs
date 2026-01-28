@@ -30,6 +30,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// Gets or sets the file size in bytes.
         /// </summary>
         public long SizeBytes { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of smart lists in the backup.
+        /// </summary>
+        public int ListCount { get; set; }
     }
 
     /// <summary>
@@ -183,16 +188,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return new List<BackupFileInfo>();
             }
 
-            return Directory.GetFiles(backupPath, "smartlists_backup_*.zip")
+            var files = Directory.GetFiles(backupPath, "smartlists_backup_*.zip")
                 .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.CreationTime)
-                .Select(f => new BackupFileInfo
+                .OrderByDescending(f => f.LastWriteTime)
+                .ToList();
+
+            var result = new List<BackupFileInfo>();
+            foreach (var f in files)
+            {
+                result.Add(new BackupFileInfo
                 {
                     Filename = f.Name,
-                    CreatedAt = f.CreationTime,
-                    SizeBytes = f.Length
-                })
-                .ToList();
+                    CreatedAt = f.LastWriteTime,
+                    SizeBytes = f.Length,
+                    ListCount = CountListsInBackup(f.FullName)
+                });
+            }
+
+            return result;
         }
 
         /// <inheritdoc />
@@ -341,7 +354,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             var backupFiles = Directory.GetFiles(backupPath, "smartlists_backup_*.zip")
                 .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.CreationTime)
+                .OrderByDescending(f => f.LastWriteTime)
                 .ToList();
 
             if (backupFiles.Count <= retentionCount)
@@ -371,6 +384,48 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             if (deletedCount > 0)
             {
                 _logger.LogInformation("Cleaned up {DeletedCount} old backup files", deletedCount);
+            }
+        }
+
+        /// <summary>
+        /// Counts the number of smart lists in a backup zip file.
+        /// </summary>
+        /// <param name="filePath">Path to the zip file.</param>
+        /// <returns>The number of smart lists in the backup.</returns>
+        public int CountListsInBackup(string filePath)
+        {
+            try
+            {
+                using var zipStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                return CountListsInBackupStream(zipStream);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error counting lists in backup {FilePath}", filePath);
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// Counts the number of smart lists in a backup stream.
+        /// </summary>
+        /// <param name="stream">Stream containing the zip archive.</param>
+        /// <returns>The number of smart lists in the backup.</returns>
+        public static int CountListsInBackupStream(Stream stream)
+        {
+            try
+            {
+                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, true);
+                var configEntries = archive.Entries
+                    .Where(e => e.FullName.EndsWith("/config.json", StringComparison.OrdinalIgnoreCase) ||
+                                e.FullName.Equals("config.json", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                return configEntries.Count;
+            }
+            catch
+            {
+                return -1;
             }
         }
 

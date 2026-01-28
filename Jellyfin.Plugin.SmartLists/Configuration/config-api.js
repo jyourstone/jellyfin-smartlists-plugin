@@ -494,6 +494,33 @@
     };
 
     /**
+     * Preview an uploaded backup file to get metadata like list count
+     * @param {File} file - The file to preview
+     * @returns {Promise<{filename: string, sizeBytes: number, listCount: number}>}
+     */
+    SmartLists.previewBackupFile = function (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const apiClient = SmartLists.getApiClient();
+        const url = apiClient.getUrl(SmartLists.ENDPOINTS.backupPreview);
+
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+            },
+            body: formData
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('Failed to preview backup');
+                }
+                return response.json();
+            });
+    };
+
+    /**
      * Upload and restore from a file
      */
     SmartLists.uploadAndRestore = function (page) {
@@ -511,10 +538,10 @@
             return;
         }
 
-        // File size limit: 10MB
-        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        // File size limit: 1GB
+        const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024;
         if (file.size > MAX_FILE_SIZE) {
-            SmartLists.showNotification('File is too large (max 10MB)', 'error');
+            SmartLists.showNotification('File is too large (max 1GB)', 'error');
             return;
         }
 

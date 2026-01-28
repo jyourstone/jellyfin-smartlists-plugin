@@ -2537,11 +2537,19 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("backups/upload")]
         public async Task<ActionResult> RestoreFromUpload([FromForm] IFormFile file, [FromQuery] bool overwrite = false)
         {
+            // Maximum upload size: 1GB
+            const long MaxUploadSize = 1L * 1024 * 1024 * 1024;
+
             try
             {
                 if (file == null || file.Length == 0)
                 {
                     return BadRequest(new { message = "No file uploaded" });
+                }
+
+                if (file.Length > MaxUploadSize)
+                {
+                    return BadRequest(new { message = "File is too large (max 1GB)" });
                 }
 
                 if (!file.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -2556,6 +2564,50 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 logger.LogError(ex, "Error restoring from uploaded file");
                 return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error restoring from uploaded file" });
+            }
+        }
+
+        /// <summary>
+        /// Previews an uploaded backup file to get metadata like list count.
+        /// </summary>
+        /// <param name="file">ZIP file to preview.</param>
+        /// <returns>Preview information including list count.</returns>
+        [HttpPost("backups/preview")]
+        public ActionResult PreviewUploadedBackup([FromForm] IFormFile file)
+        {
+            const long MaxUploadSize = 1L * 1024 * 1024 * 1024;
+
+            try
+            {
+                if (file == null || file.Length == 0)
+                {
+                    return BadRequest(new { message = "No file uploaded" });
+                }
+
+                if (file.Length > MaxUploadSize)
+                {
+                    return BadRequest(new { message = "File is too large (max 1GB)" });
+                }
+
+                if (!file.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "File must be a ZIP archive" });
+                }
+
+                using var stream = file.OpenReadStream();
+                var listCount = BackupService.CountListsInBackupStream(stream);
+
+                return Ok(new
+                {
+                    filename = file.FileName,
+                    sizeBytes = file.Length,
+                    listCount = listCount
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error previewing uploaded backup");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error previewing backup" });
             }
         }
 
@@ -3155,7 +3207,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         filename = b.Filename,
                         createdAt = b.CreatedAt.ToString("o"),
-                        sizeBytes = b.SizeBytes
+                        sizeBytes = b.SizeBytes,
+                        listCount = b.ListCount
                     }),
                     backupPath = backupPath
                 });
@@ -3712,20 +3765,27 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         private Task<(bool Success, string Message)> ValidateAndReassignCollectionUserAsync(SmartCollectionDto collection)
         {
-            if (!string.IsNullOrEmpty(collection.UserId) && Guid.TryParse(collection.UserId, out var collectionUserIdParsed) && collectionUserIdParsed != Guid.Empty)
+            // Check if we have a valid, existing user
+            if (!string.IsNullOrEmpty(collection.UserId) &&
+                Guid.TryParse(collection.UserId, out var collectionUserIdParsed) &&
+                collectionUserIdParsed != Guid.Empty)
             {
                 var user = _userManager.GetUserById(collectionUserIdParsed);
-                if (user == null)
+                if (user != null)
                 {
-                    var currentUserId = GetCurrentUserId();
-                    if (currentUserId == Guid.Empty)
-                    {
-                        return Task.FromResult((false, "Cannot reassign collection - unable to determine user"));
-                    }
-                    collection.UserId = currentUserId.ToString("D");
+                    // User exists, validation passed
+                    return Task.FromResult((true, string.Empty));
                 }
             }
 
+            // UserId is empty/invalid or user doesn't exist - try to reassign to current user
+            var currentUserId = GetCurrentUserId();
+            if (currentUserId == Guid.Empty)
+            {
+                return Task.FromResult((false, "Cannot reassign collection - unable to determine user"));
+            }
+
+            collection.UserId = currentUserId.ToString("D");
             return Task.FromResult((true, string.Empty));
         }
     }

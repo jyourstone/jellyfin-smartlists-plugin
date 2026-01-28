@@ -719,7 +719,7 @@
                                 <div class="fieldDescription">
                                     Custom directory path for backup files. Leave empty to use the default location inside the SmartLists data folder.
                                     Relative paths are resolved from the SmartLists data folder.<br>
-                                    <span style="opacity: 0.8;">Examples: <code>D:\Backups\SmartLists</code> (Windows) or <code>/mnt/backups/smartlists</code> (Linux/Docker)</span>
+                                    <span style="opacity: 0.8;">Examples: <code>D:\Backups\SmartLists</code> (Windows) or <code>/mnt/backups/smartlists</code> (Linux)</span>
                                 </div>
                             </div>
                         </div>
@@ -742,7 +742,8 @@
                                             <tr style="border-bottom: 1px solid var(--jf-palette-divider);">
                                                 <th style="text-align: left; padding: 0.5em 0.75em; font-weight: 600;">Filename</th>
                                                 <th style="text-align: left; padding: 0.5em 0.75em; font-weight: 600;">Date</th>
-                                                <th style="text-align: right; padding: 0.5em 0.75em; font-weight: 600;">Size</th>
+                                                <th style="text-align: center; padding: 0.5em 0.5em; font-weight: 600; width: 1%; white-space: nowrap;">Lists</th>
+                                                <th style="text-align: right; padding: 0.5em 0.5em; font-weight: 600; width: 1%; white-space: nowrap;">Size</th>
                                                 <th style="text-align: center; padding: 0.5em 0.75em; font-weight: 600; width: 120px;">Actions</th>
                                             </tr>
                                         </thead>
@@ -779,7 +780,8 @@
                                 </div>
                                 <div id="restoreFileSelected" style="display: none;">
                                     <span class="material-icons" style="font-size: 3em; color: var(--jf-palette-success-main); display: block; margin-bottom: 0.5em;">folder_zip</span>
-                                    <div id="restoreSelectedFileName" style="font-size: 1.1em; margin-bottom: 0.5em; word-break: break-all;"></div>
+                                    <div id="restoreSelectedFileName" style="font-size: 1.1em; margin-bottom: 0.25em; word-break: break-all;"></div>
+                                    <div id="restoreSelectedListCount" style="color: var(--jf-palette-text-secondary); font-size: 0.9em; margin-bottom: 0.5em;"></div>
                                     <div style="display: flex; gap: 0.5em; justify-content: center; flex-wrap: wrap;">
                                         <button type="button" is="emby-button" id="restoreBtn" class="emby-button raised" style="background: var(--jf-palette-success-dark);">
                                             <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">restore</span>
