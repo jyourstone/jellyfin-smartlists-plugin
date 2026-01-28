@@ -3246,10 +3246,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
-        /// Creates a new backup and returns it for download.
-        /// The backup is also saved to the server's backup directory.
+        /// Creates a new backup of all smart lists.
+        /// The backup is saved to the server's backup directory.
+        /// Use the download endpoint to retrieve the file.
         /// </summary>
-        /// <returns>The backup ZIP file.</returns>
+        /// <returns>Information about the created backup.</returns>
         [HttpPost("backups")]
         public async Task<ActionResult> CreateBackup()
         {
@@ -3272,8 +3273,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 logger.LogInformation("Created manual backup: {Filename} ({ListCount} lists)", result.Filename, result.ListCount);
 
-                // Return the file for download
-                return PhysicalFile(result.FilePath!, "application/zip", result.Filename);
+                // Return backup metadata (use GET /backups/{filename} to download the file)
+                return Ok(new
+                {
+                    success = true,
+                    filename = result.Filename,
+                    listCount = result.ListCount,
+                    message = $"Backup created successfully with {result.ListCount} list(s)"
+                });
             }
             catch (Exception ex)
             {

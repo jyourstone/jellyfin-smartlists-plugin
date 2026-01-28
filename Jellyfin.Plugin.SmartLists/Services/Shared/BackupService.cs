@@ -91,13 +91,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         Task<BackupResult> CreateBackupAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Creates a backup and returns it as a memory stream (for download without saving to disk).
-        /// </summary>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>Tuple containing the memory stream and the number of lists backed up.</returns>
-        Task<(MemoryStream Stream, int ListCount)> CreateBackupStreamAsync(CancellationToken cancellationToken = default);
-
-        /// <summary>
         /// Gets the full path to a backup file.
         /// </summary>
         /// <param name="filename">The backup filename.</param>
@@ -188,24 +181,33 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return new List<BackupFileInfo>();
             }
 
-            var files = Directory.GetFiles(backupPath, "smartlists_backup_*.zip")
-                .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.LastWriteTime)
-                .ToList();
-
+            var filePaths = Directory.GetFiles(backupPath, "smartlists_backup_*.zip");
             var result = new List<BackupFileInfo>();
-            foreach (var f in files)
+
+            foreach (var filePath in filePaths)
             {
-                result.Add(new BackupFileInfo
+                try
                 {
-                    Filename = f.Name,
-                    CreatedAt = f.LastWriteTime,
-                    SizeBytes = f.Length,
-                    ListCount = CountListsInBackup(f.FullName)
-                });
+                    var fileInfo = new FileInfo(filePath);
+                    result.Add(new BackupFileInfo
+                    {
+                        Filename = fileInfo.Name,
+                        CreatedAt = fileInfo.LastWriteTime,
+                        SizeBytes = fileInfo.Length,
+                        ListCount = CountListsInBackup(fileInfo.FullName)
+                    });
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogDebug(ex, "Skipping backup file that could not be accessed: {FilePath}", filePath);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    _logger.LogDebug(ex, "Skipping backup file due to access denied: {FilePath}", filePath);
+                }
             }
 
-            return result;
+            return result.OrderByDescending(f => f.CreatedAt).ToList();
         }
 
         /// <inheritdoc />
@@ -261,47 +263,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     ErrorMessage = ex.Message
                 };
             }
-        }
-
-        /// <inheritdoc />
-        public async Task<(MemoryStream Stream, int ListCount)> CreateBackupStreamAsync(CancellationToken cancellationToken = default)
-        {
-            var (playlists, collections) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
-            var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
-
-            var zipStream = new MemoryStream();
-
-            if (allLists.Count == 0)
-            {
-                // Create empty zip
-                using (var emptyArchive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
-                {
-                    // Empty archive
-                }
-
-                zipStream.Position = 0;
-                return (zipStream, 0);
-            }
-
-            var archivedCount = 0;
-            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
-            {
-                foreach (var list in allLists)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    if (string.IsNullOrEmpty(list.Id))
-                    {
-                        continue;
-                    }
-
-                    await AddSmartListToArchiveAsync(archive, list.Id, cancellationToken).ConfigureAwait(false);
-                    archivedCount++;
-                }
-            }
-
-            zipStream.Position = 0;
-            return (zipStream, archivedCount);
         }
 
         /// <inheritdoc />

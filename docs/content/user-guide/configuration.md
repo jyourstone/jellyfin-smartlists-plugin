@@ -346,11 +346,7 @@ Use the refresh button next to "Available Backups" to reload the list after crea
 
 ### Manual Backup
 
-Click **Create Backup Now** to create a backup on demand. This:
-
-1. Creates a timestamped backup file on the server
-2. Automatically downloads the backup to your computer
-3. The new backup appears in the "Available Backups" table
+Click **Create Backup Now** to create a backup on demand. This creates a timestamped backup file on the server and adds it to the "Available Backups" table. Use the download button in the table to download the backup to your computer.
 
 This is useful for creating a backup before making significant changes to your lists.
 

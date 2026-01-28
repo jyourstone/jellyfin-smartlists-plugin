@@ -307,12 +307,12 @@
     };
 
     /**
-     * Create a new backup and download it
+     * Create a new backup (saved on server, use downloadBackup to download)
      */
     SmartLists.createBackup = function () {
         try {
-            const apiClient = SmartLists.getApiClient();
-            const url = apiClient.getUrl(SmartLists.ENDPOINTS.backups);
+            var apiClient = SmartLists.getApiClient();
+            var url = apiClient.getUrl(SmartLists.ENDPOINTS.backups);
 
             SmartLists.showNotification('Creating backup...', 'info');
 
@@ -323,47 +323,23 @@
                     'Content-Type': 'application/json'
                 }
             })
-                .then(async function (response) {
+                .then(function (response) {
                     if (!response.ok) {
-                        let errorMessage = 'Backup creation failed';
-                        try {
-                            const errorData = await response.json();
-                            errorMessage = errorData.message || errorData.detail || errorMessage;
-                        } catch (e) {
-                            try {
-                                const errorText = await response.text();
-                                if (errorText && errorText.trim()) {
-                                    errorMessage = errorText;
-                                }
-                            } catch (textError) {
-                                // Ignore text parsing errors
-                            }
-                        }
-                        throw new Error(errorMessage);
+                        return response.json().then(function (errorData) {
+                            throw new Error(errorData.message || errorData.detail || 'Backup creation failed');
+                        }).catch(function () {
+                            throw new Error('Backup creation failed');
+                        });
                     }
-
-                    // Get filename from Content-Disposition header
-                    const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = 'smartlists_backup.zip';
-                    if (contentDisposition) {
-                        const matches = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                        if (matches && matches[1]) {
-                            filename = matches[1].replace(/['"]/g, '');
-                        }
+                    return response.json();
+                })
+                .then(function (data) {
+                    var message = 'Backup created successfully';
+                    if (data.listCount !== undefined) {
+                        var listWord = data.listCount === 1 ? 'list' : 'lists';
+                        message = 'Backup created with ' + data.listCount + ' ' + listWord;
                     }
-
-                    // Get the blob from response
-                    const blob = await response.blob();
-                    // Create download link
-                    const blobUrl = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = blobUrl;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(blobUrl);
-                    document.body.removeChild(a);
-                    SmartLists.showNotification('Backup created successfully!', 'success');
+                    SmartLists.showNotification(message, 'success');
 
                     // Refresh backup list if function exists
                     if (SmartLists.loadBackupList) {
