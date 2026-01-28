@@ -239,6 +239,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     ListCount = listCount
                 };
             }
+            catch (OperationCanceledException)
+            {
+                // Let cancellation propagate so callers (e.g., BackupTask) can handle it properly
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating backup");
