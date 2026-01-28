@@ -1617,33 +1617,23 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save collection. Original playlist was not modified." });
             }
             
-            // Now delete old playlist (original data is safe if this fails)
+            // Delete old Jellyfin playlists
+            // Note: We don't call playlistStore.DeleteAsync() because SaveAsync already overwrote the config file
+            // (both stores use the same folder structure: /smartlists/{guid}/config.json)
             try
             {
                 await _playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist).ConfigureAwait(false);
-                await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
             }
             catch (Exception deleteEx)
             {
-                _logger.LogError(deleteEx, "Failed to delete old playlist during conversion for user {UserId}, list '{Name}'. Collection was created successfully but old playlist remains. Attempting rollback...", 
+                // Log but don't fail - the conversion itself succeeded, just cleanup of old Jellyfin playlists failed
+                _logger.LogWarning(deleteEx, "Failed to delete old Jellyfin playlists during conversion for user {UserId}, list '{Name}'. Collection was created successfully.",
                     userId.ToString(), collectionDto.Name);
-                
-                // Attempt rollback: delete the newly created collection
-                try
-                {
-                    await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
-                    _logger.LogWarning("Rollback successful: deleted newly created collection '{Name}' after playlist deletion failed", collectionDto.Name);
-                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original playlist preserved." });
-                }
-                catch (Exception rollbackEx)
-                {
-                    _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both playlist and collection may exist. Manual cleanup may be required.", 
-                        userId.ToString(), collectionDto.Name);
-                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both playlist and collection may exist." });
-                }
             }
-            
+
+            // Always remove from playlist cache - the smart list is now a collection regardless of Jellyfin cleanup status
+            Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
+
             // Enqueue refresh if enabled
             if (collectionDto.Enabled)
             {
@@ -1740,33 +1730,23 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to save playlist. Original collection was not modified." });
             }
             
-            // Now delete old collection (original data is safe if this fails)
+            // Delete old Jellyfin collection
+            // Note: We don't call collectionStore.DeleteAsync() because SaveAsync already overwrote the config file
+            // (both stores use the same folder structure: /smartlists/{guid}/config.json)
             try
             {
                 await _collectionService.DeleteAsync(existingCollection).ConfigureAwait(false);
-                await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
             }
             catch (Exception deleteEx)
             {
-                _logger.LogError(deleteEx, "Failed to delete old collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully but old collection remains. Attempting rollback...", 
+                // Log but don't fail - the conversion itself succeeded, just cleanup of old Jellyfin collection failed
+                _logger.LogWarning(deleteEx, "Failed to delete old Jellyfin collection during conversion for user {UserId}, list '{Name}'. Playlist was created successfully.",
                     userId.ToString(), playlistDto.Name);
-                
-                // Attempt rollback: delete the newly created playlist
-                try
-                {
-                    await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    Services.Shared.AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
-                    _logger.LogWarning("Rollback successful: deleted newly created playlist '{Name}' after collection deletion failed", playlistDto.Name);
-                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion failed during cleanup. Original collection preserved." });
-                }
-                catch (Exception rollbackEx)
-                {
-                    _logger.LogError(rollbackEx, "Rollback failed for user {UserId}, list '{Name}'. Both collection and playlist may exist. Manual cleanup may be required.", 
-                        userId.ToString(), playlistDto.Name);
-                    return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Conversion partially succeeded. Please contact administrator - both collection and playlist may exist." });
-                }
             }
-            
+
+            // Always remove from collection cache - the smart list is now a playlist regardless of Jellyfin cleanup status
+            Services.Shared.AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
+
             // Enqueue refresh if enabled
             if (playlistDto.Enabled)
             {
