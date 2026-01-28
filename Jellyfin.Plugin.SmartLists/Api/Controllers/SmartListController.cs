@@ -54,7 +54,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         IManualRefreshService manualRefreshService,
         RefreshStatusService refreshStatusService,
         RefreshQueueService refreshQueueService,
-        SmartListImageService imageService) : ControllerBase
+        SmartListImageService imageService,
+        IBackupService backupService) : ControllerBase
     {
         private readonly ILoggerFactory _loggerFactory = loggerFactory;
         private readonly IServerApplicationPaths _applicationPaths = applicationPaths;
@@ -68,6 +69,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly RefreshStatusService _refreshStatusService = refreshStatusService;
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
         private readonly SmartListImageService _imageService = imageService;
+        private readonly IBackupService _backupService = backupService;
 
         private Services.Playlists.PlaylistStore GetPlaylistStore()
         {
@@ -2525,98 +2527,15 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
         }
 
-
         /// <summary>
-        /// Export all smart lists as a ZIP file.
-        /// Includes config.json and any custom images for each list.
-        /// </summary>
-        /// <returns>ZIP file containing all smart list folders with config and images.</returns>
-        [HttpPost("export")]
-        public async Task<ActionResult> ExportPlaylists()
-        {
-            try
-            {
-                var fileSystem = new SmartListFileSystem(_applicationPaths);
-                var (playlists, collections) = await fileSystem.GetAllSmartListsAsync();
-
-                var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
-
-                if (allLists.Count == 0)
-                {
-                    return BadRequest(new { message = "No smart lists found to export" });
-                }
-
-                using var zipStream = new MemoryStream();
-                using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true))
-                {
-                    foreach (var list in allLists)
-                    {
-                        if (string.IsNullOrEmpty(list.Id))
-                        {
-                            continue;
-                        }
-
-                        var folderPath = fileSystem.GetSmartListFolderPath(list.Id);
-
-                        // Add config.json
-                        var configPath = fileSystem.GetSmartListConfigPath(list.Id);
-                        if (System.IO.File.Exists(configPath))
-                        {
-                            var entryName = $"{list.Id}/config.json";
-                            var entry = archive.CreateEntry(entryName);
-                            using var entryStream = entry.Open();
-                            using var fileStream = System.IO.File.OpenRead(configPath);
-                            await fileStream.CopyToAsync(entryStream);
-                        }
-
-                        // Add any image files from the folder
-                        if (Directory.Exists(folderPath))
-                        {
-                            foreach (var imagePath in Directory.GetFiles(folderPath))
-                            {
-                                var fileName = Path.GetFileName(imagePath);
-
-                                // Skip config.json (already added) and temp files
-                                if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                                    fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    continue;
-                                }
-
-                                // Add image file
-                                var imageEntryName = $"{list.Id}/{fileName}";
-                                var imageEntry = archive.CreateEntry(imageEntryName);
-                                using var imageEntryStream = imageEntry.Open();
-                                using var imageFileStream = System.IO.File.OpenRead(imagePath);
-                                await imageFileStream.CopyToAsync(imageEntryStream);
-                            }
-                        }
-                    }
-                }
-
-                zipStream.Position = 0;
-                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-                var zipFileName = $"smartlists_export_{timestamp}.zip";
-
-                logger.LogInformation("Exported {ListCount} smart lists to {FileName}", allLists.Count, zipFileName);
-
-                return File(zipStream.ToArray(), "application/zip", zipFileName);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error exporting smart lists");
-                return StatusCode(StatusCodes.Status500InternalServerError, "Error exporting smart lists");
-            }
-        }
-
-        /// <summary>
-        /// Import smart lists (playlists and collections) from a ZIP file.
+        /// Restore smart lists (playlists and collections) from an uploaded ZIP file.
         /// Supports both old format (flat JSON files) and new format (folders with config.json and images).
         /// </summary>
         /// <param name="file">ZIP file containing smart list JSON files or folders.</param>
-        /// <returns>Import results with counts of imported and skipped lists.</returns>
-        [HttpPost("import")]
-        public async Task<ActionResult> ImportPlaylists([FromForm] IFormFile file)
+        /// <param name="overwrite">If true, overwrites existing lists with the same ID. If false, skips them.</param>
+        /// <returns>Restore results with counts of imported and skipped lists.</returns>
+        [HttpPost("backups/upload")]
+        public async Task<ActionResult> RestoreFromUpload([FromForm] IFormFile file, [FromQuery] bool overwrite = false)
         {
             try
             {
@@ -2630,421 +2549,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return BadRequest(new { message = "File must be a ZIP archive" });
                 }
 
-                var playlistStore = GetPlaylistStore();
-                var collectionStore = GetCollectionStore();
-                var fileSystem = new SmartListFileSystem(_applicationPaths);
-                var existingPlaylists = await playlistStore.GetAllAsync();
-                var existingCollections = await collectionStore.GetAllAsync();
-                var existingPlaylistIds = existingPlaylists.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var existingCollectionIds = existingCollections.Select(c => c.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var jsonOptions = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Converters = { new JsonStringEnumConverter() }
-                };
-
-                var importResults = new List<object>();
-                int importedPlaylistCount = 0;
-                int importedCollectionCount = 0;
-                int skippedCount = 0;
-                int errorCount = 0;
-                int importedImageCount = 0;
-
-                using var zipStream = new MemoryStream();
-                await file.CopyToAsync(zipStream);
-                zipStream.Position = 0;
-
-                using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-
-                // Group entries by smart list ID (folder name or filename without extension)
-                var entriesByListId = new Dictionary<string, List<ZipArchiveEntry>>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var entry in archive.Entries)
-                {
-                    // Skip empty entries (directory markers) and system files
-                    if (string.IsNullOrEmpty(entry.Name))
-                    {
-                        continue;
-                    }
-
-                    if (entry.Name.StartsWith("._") || entry.Name.StartsWith(".DS_Store"))
-                    {
-                        logger.LogDebug("Skipping system file: {FileName}", entry.FullName);
-                        continue;
-                    }
-
-                    // Determine the smart list ID from the entry path
-                    var listId = GetSmartListIdFromZipEntry(entry);
-                    if (string.IsNullOrEmpty(listId))
-                    {
-                        logger.LogDebug("Skipping entry with invalid path: {FullName}", entry.FullName);
-                        continue;
-                    }
-
-                    if (!entriesByListId.TryGetValue(listId, out var entries))
-                    {
-                        entries = new List<ZipArchiveEntry>();
-                        entriesByListId[listId] = entries;
-                    }
-                    entries.Add(entry);
-                }
-
-                // Process each smart list
-                foreach (var (listId, entries) in entriesByListId)
-                {
-                    // Find the config entry (either config.json or {guid}.json)
-                    var configEntry = entries.FirstOrDefault(e =>
-                        e.Name.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                        e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
-
-                    if (configEntry == null)
-                    {
-                        logger.LogDebug("No config file found for list ID {ListId}, skipping", listId);
-                        continue;
-                    }
-
-                    try
-                    {
-                        // Read JSON content to check Type property first
-                        string jsonContent;
-                        using (var entryStream = configEntry.Open())
-                        {
-                            using var reader = new StreamReader(entryStream);
-                            jsonContent = await reader.ReadToEndAsync();
-                        }
-                        using var jsonDoc = JsonDocument.Parse(jsonContent);
-
-                        // Determine if this is a playlist or collection based on Type property
-                        Core.Enums.SmartListType listType = Core.Enums.SmartListType.Playlist; // Default to Playlist for backward compatibility
-                        bool hasTypeProperty = jsonDoc.RootElement.TryGetProperty("Type", out var typeElement);
-
-                        if (hasTypeProperty)
-                        {
-                            if (typeElement.ValueKind == JsonValueKind.String)
-                            {
-                                var typeString = typeElement.GetString();
-                                if (Enum.TryParse<Core.Enums.SmartListType>(typeString, ignoreCase: true, out var parsedType))
-                                {
-                                    listType = parsedType;
-                                }
-                            }
-                            else if (typeElement.ValueKind == JsonValueKind.Number)
-                            {
-                                var typeValue = typeElement.GetInt32();
-                                listType = typeValue == 1 ? Core.Enums.SmartListType.Collection : Core.Enums.SmartListType.Playlist;
-                            }
-                        }
-
-                        // Deserialize to the correct type based on the Type field
-                        if (listType == Core.Enums.SmartListType.Playlist)
-                        {
-                            var playlist = JsonSerializer.Deserialize<SmartPlaylistDto>(jsonContent, jsonOptions);
-                            if (playlist == null || string.IsNullOrEmpty(playlist.Id))
-                            {
-                                logger.LogWarning("Invalid playlist data in file {FileName}: {Issue}",
-                                    configEntry.Name, playlist == null ? "null playlist" : "empty ID");
-                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Invalid or empty playlist data" });
-                                errorCount++;
-                                continue;
-                            }
-
-                            if (string.IsNullOrWhiteSpace(playlist.Name))
-                            {
-                                logger.LogWarning("Playlist in file {FileName} has no name", configEntry.Name);
-                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist must have a name" });
-                                errorCount++;
-                                continue;
-                            }
-
-                            // Ensure type is set
-                            playlist.Type = Core.Enums.SmartListType.Playlist;
-
-                            // Validate and potentially reassign user references
-                            bool reassignedUsers = false;
-                            Guid currentUserId = Guid.Empty;
-
-                            // Helper function to get current user ID for reassignment
-                            Guid GetCurrentUserIdForReassignment()
-                            {
-                                if (currentUserId == Guid.Empty)
-                                {
-                                    currentUserId = GetCurrentUserId();
-                                }
-                                return currentUserId;
-                            }
-
-                            // Check multi-user playlists (UserPlaylists array)
-                            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
-                            {
-                                var validUserMappings = new List<SmartPlaylistDto.UserPlaylistMapping>();
-
-                                foreach (var userMapping in playlist.UserPlaylists)
-                                {
-                                    if (string.IsNullOrEmpty(userMapping.UserId) || 
-                                        !Guid.TryParse(userMapping.UserId, out var userId) || 
-                                        userId == Guid.Empty)
-                                    {
-                                        continue;
-                                    }
-
-                                    var user = _userManager.GetUserById(userId);
-                                    if (user == null)
-                                    {
-                                        // Get current user ID for reassignment
-                                        var reassignmentUserId = GetCurrentUserIdForReassignment();
-                                        if (reassignmentUserId == Guid.Empty)
-                                        {
-                                            logger.LogWarning("Playlist '{PlaylistName}' references non-existent user {User} in UserPlaylists but cannot determine importing user for reassignment",
-                                                playlist.Name, userMapping.UserId);
-                                            // Continue to next user - we'll handle the case where all users are invalid below
-                                            continue;
-                                        }
-
-                                        logger.LogWarning("Playlist '{PlaylistName}' references non-existent user {User} in UserPlaylists, reassigning to importing user {CurrentUserId}",
-                                            playlist.Name, userMapping.UserId, reassignmentUserId);
-
-                                        // Reassign to importing user
-                                        validUserMappings.Add(new SmartPlaylistDto.UserPlaylistMapping
-                                        {
-                                            UserId = reassignmentUserId.ToString("N"),
-                                            JellyfinPlaylistId = null  // Clear old ID - playlist doesn't exist for new user
-                                        });
-                                        reassignedUsers = true;
-                                    }
-                                    else
-                                    {
-                                        // User exists, keep the mapping
-                                        validUserMappings.Add(userMapping);
-                                    }
-                                }
-
-                                // Check if we have any valid users left
-                                if (validUserMappings.Count == 0)
-                                {
-                                    logger.LogWarning("Playlist '{PlaylistName}' has no valid users in UserPlaylists after validation", playlist.Name);
-                                    importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist has no valid users" });
-                                    errorCount++;
-                                    continue; // Skip this entire playlist
-                                }
-
-                                // Update UserPlaylists with valid/reassigned users
-                                playlist.UserPlaylists = validUserMappings;
-
-                                // Normalize and deduplicate UserPlaylists (consistent with create/update paths)
-                                var normalizedUserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>();
-                                var seenUserIds = new HashSet<Guid>();
-
-                                foreach (var userMapping in validUserMappings)
-                                {
-                                    if (Guid.TryParse(userMapping.UserId, out var userId) && seenUserIds.Add(userId))
-                                    {
-                                        normalizedUserPlaylists.Add(new SmartPlaylistDto.UserPlaylistMapping
-                                        {
-                                            UserId = userId.ToString("N"), // Standard format without dashes
-                                            JellyfinPlaylistId = userMapping.JellyfinPlaylistId
-                                        });
-                                    }
-                                    else
-                                    {
-                                        logger.LogDebug("Duplicate user ID {UserId} detected during import for playlist {Name}, skipping", userId, playlist.Name);
-                                    }
-                                }
-
-                                playlist.UserPlaylists = normalizedUserPlaylists;
-
-                                // Also update the deprecated UserId field for backwards compatibility (first user's ID)
-                                if (normalizedUserPlaylists.Count > 0 && Guid.TryParse(normalizedUserPlaylists[0].UserId, out var firstUserId))
-                                {
-                                    playlist.UserId = firstUserId.ToString("D");
-                                }
-                            }
-                            // Check single-user playlist (backwards compatibility - top-level UserId)
-                            // DEPRECATED: playlist.UserId is for backwards compatibility with old single-user playlists.
-                            // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
-                            else if (!string.IsNullOrEmpty(playlist.UserId) && Guid.TryParse(playlist.UserId, out var playlistUserIdParsed) && playlistUserIdParsed != Guid.Empty)
-                            {
-                                var user = _userManager.GetUserById(playlistUserIdParsed);
-                                if (user == null)
-                                {
-                                    // Get current user ID for reassignment
-                                    var reassignmentUserId = GetCurrentUserIdForReassignment();
-                                    if (reassignmentUserId == Guid.Empty)
-                                    {
-                                        logger.LogWarning("Playlist '{PlaylistName}' references non-existent user {User} but cannot determine importing user for reassignment",
-                                            playlist.Name, playlist.UserId);
-                                        importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Cannot reassign playlist - unable to determine importing user" });
-                                        errorCount++;
-                                        continue; // Skip this entire playlist
-                                    }
-
-                                    logger.LogWarning("Playlist '{PlaylistName}' references non-existent user {User}, reassigning to importing user {CurrentUserId}",
-                                        playlist.Name, playlist.UserId, reassignmentUserId);
-
-                                    // DEPRECATED: playlist.UserId is for backwards compatibility with old single-user playlists.
-                                    // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
-                                    playlist.UserId = reassignmentUserId.ToString("D");
-                                    reassignedUsers = true;
-                                }
-                            }
-                            else
-                            {
-                                // No users specified at all - this is invalid
-                                logger.LogWarning("Playlist '{PlaylistName}' has no users specified (neither UserId nor UserPlaylists)", playlist.Name);
-                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Playlist must have at least one user" });
-                                errorCount++;
-                                continue; // Skip this entire playlist
-                            }
-
-                            // Note: We don't reassign user-specific expression rules if the referenced user doesn't exist.
-                            // The system will naturally fall back to the playlist user for such rules.
-
-                            // Add note to import results if users were reassigned
-                            if (reassignedUsers)
-                            {
-                                logger.LogInformation("Reassigned user references in playlist '{PlaylistName}' due to non-existent users", playlist.Name);
-                            }
-
-                            if (existingPlaylistIds.Contains(playlist.Id))
-                            {
-                                importResults.Add(new { fileName = configEntry.Name, listName = playlist.Name, listType = "Playlist", status = "skipped", message = "Playlist with this ID already exists" });
-                                skippedCount++;
-                                continue;
-                            }
-
-                            // Import the playlist
-                            await playlistStore.SaveAsync(playlist);
-
-                            // Extract any image files for this playlist
-                            var imageCount = await ExtractImagesForSmartListAsync(entries, playlist.Id, fileSystem);
-                            importedImageCount += imageCount;
-
-                            // Update the auto-refresh cache with the imported playlist
-                            AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
-
-                            var message = imageCount > 0 ? $"Successfully imported with {imageCount} image(s)" : "Successfully imported";
-                            importResults.Add(new { fileName = configEntry.Name, listName = playlist.Name, listType = "Playlist", status = "imported", message });
-                            importedPlaylistCount++;
-
-                            logger.LogDebug("Imported playlist {PlaylistName} (ID: {PlaylistId}) from {FileName} with {ImageCount} images",
-                                playlist.Name, playlist.Id, configEntry.Name, imageCount);
-                        }
-                        else if (listType == Core.Enums.SmartListType.Collection)
-                        {
-                            var collection = JsonSerializer.Deserialize<SmartCollectionDto>(jsonContent, jsonOptions);
-                            if (collection == null || string.IsNullOrEmpty(collection.Id))
-                            {
-                                logger.LogWarning("Invalid collection data in file {FileName}: {Issue}",
-                                    configEntry.Name, collection == null ? "null collection" : "empty ID");
-                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Invalid or empty collection data" });
-                                errorCount++;
-                                continue;
-                            }
-
-                            if (string.IsNullOrWhiteSpace(collection.Name))
-                            {
-                                logger.LogWarning("Collection in file {FileName} has no name", configEntry.Name);
-                                importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Collection must have a name" });
-                                errorCount++;
-                                continue;
-                            }
-
-                            // Ensure type is set
-                            collection.Type = Core.Enums.SmartListType.Collection;
-
-                            // Validate and potentially reassign user references (collections use User property from base class)
-                            bool reassignedUsers = false;
-                            Guid currentUserId = Guid.Empty;
-
-                            // Check collection user
-                            if (!string.IsNullOrEmpty(collection.UserId) && Guid.TryParse(collection.UserId, out var collectionUserIdParsed) && collectionUserIdParsed != Guid.Empty)
-                            {
-                                var user = _userManager.GetUserById(collectionUserIdParsed);
-                                if (user == null)
-                                {
-                                    // Only get current user ID when we need to reassign
-                                    if (currentUserId == Guid.Empty)
-                                    {
-                                        currentUserId = GetCurrentUserId();
-                                        if (currentUserId == Guid.Empty)
-                                        {
-                                            logger.LogWarning("Collection '{CollectionName}' references non-existent user {User} but cannot determine importing user for reassignment",
-                                                collection.Name, collection.UserId);
-                                            importResults.Add(new { fileName = configEntry.Name, status = "error", message = "Cannot reassign collection - unable to determine importing user" });
-                                            errorCount++;
-                                            continue; // Skip this entire collection,
-                                        }
-                                    }
-
-                                    logger.LogWarning("Collection '{CollectionName}' references non-existent user {User}, reassigning to importing user {CurrentUserId}",
-                                        collection.Name, collection.UserId, currentUserId);
-
-                                    collection.UserId = currentUserId.ToString("D");
-                                    reassignedUsers = true;
-                                }
-                            }
-
-                            // Add note to import results if users were reassigned
-                            if (reassignedUsers)
-                            {
-                                logger.LogInformation("Reassigned user references in collection '{CollectionName}' due to non-existent users", collection.Name);
-                            }
-
-                            if (existingCollectionIds.Contains(collection.Id))
-                            {
-                                importResults.Add(new { fileName = configEntry.Name, listName = collection.Name, listType = "Collection", status = "skipped", message = "Collection with this ID already exists" });
-                                skippedCount++;
-                                continue;
-                            }
-
-                            // Import the collection
-                            await collectionStore.SaveAsync(collection);
-
-                            // Extract any image files for this collection
-                            var imageCount = await ExtractImagesForSmartListAsync(entries, collection.Id, fileSystem);
-                            importedImageCount += imageCount;
-
-                            // Update the auto-refresh cache with the imported collection
-                            AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
-
-                            var message = imageCount > 0 ? $"Successfully imported with {imageCount} image(s)" : "Successfully imported";
-                            importResults.Add(new { fileName = configEntry.Name, listName = collection.Name, listType = "Collection", status = "imported", message });
-                            importedCollectionCount++;
-
-                            logger.LogDebug("Imported collection {CollectionName} (ID: {CollectionId}) from {FileName} with {ImageCount} images",
-                                collection.Name, collection.Id, configEntry.Name, imageCount);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Error importing smart list from {FileName}", configEntry.FullName);
-                        importResults.Add(new { fileName = configEntry.Name, status = "error", message = ex.Message });
-                        errorCount++;
-                    }
-                }
-
-                var totalImported = importedPlaylistCount + importedCollectionCount;
-                var summary = new
-                {
-                    totalLists = entriesByListId.Count,
-                    imported = totalImported,
-                    importedPlaylists = importedPlaylistCount,
-                    importedCollections = importedCollectionCount,
-                    importedImages = importedImageCount,
-                    skipped = skippedCount,
-                    errors = errorCount,
-                    details = importResults,
-                };
-
-                logger.LogInformation("Import completed: {Imported} imported ({Playlists} playlists, {Collections} collections, {Images} images), {Skipped} skipped, {Errors} errors",
-                    totalImported, importedPlaylistCount, importedCollectionCount, importedImageCount, skippedCount, errorCount);
-
-                return Ok(summary);
+                await using var stream = file.OpenReadStream();
+                return await ProcessRestoreAsync(stream, file.FileName, overwrite);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error importing smart lists");
-                return StatusCode(StatusCodes.Status500InternalServerError, "Error importing smart lists");
+                logger.LogError(ex, "Error restoring from uploaded file");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error restoring from uploaded file" });
             }
         }
 
@@ -3624,6 +3135,598 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             return new FileInfo(imagePath).Length;
+        }
+
+        /// <summary>
+        /// Gets a list of all available backup files.
+        /// </summary>
+        /// <returns>List of backup files with metadata.</returns>
+        [HttpGet("backups")]
+        public ActionResult<object> GetBackups()
+        {
+            try
+            {
+                var backups = _backupService.GetBackupFiles();
+                var backupPath = _backupService.GetBackupDirectory();
+
+                return Ok(new
+                {
+                    backups = backups.Select(b => new
+                    {
+                        filename = b.Filename,
+                        createdAt = b.CreatedAt.ToString("o"),
+                        sizeBytes = b.SizeBytes
+                    }),
+                    backupPath = backupPath
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error getting backup list");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error getting backup list" });
+            }
+        }
+
+        /// <summary>
+        /// Downloads a specific backup file.
+        /// </summary>
+        /// <param name="filename">The backup filename.</param>
+        /// <returns>The backup ZIP file.</returns>
+        [HttpGet("backups/{filename}")]
+        public ActionResult DownloadBackup([FromRoute, Required] string filename)
+        {
+            try
+            {
+                var filePath = _backupService.GetBackupFilePath(filename);
+                if (filePath == null)
+                {
+                    return NotFound(new { message = "Backup not found" });
+                }
+
+                return PhysicalFile(filePath, "application/zip", filename);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error downloading backup {Filename}", filename);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error downloading backup" });
+            }
+        }
+
+        /// <summary>
+        /// Creates a new backup and returns it for download.
+        /// The backup is also saved to the server's backup directory.
+        /// </summary>
+        /// <returns>The backup ZIP file.</returns>
+        [HttpPost("backups")]
+        public async Task<ActionResult> CreateBackup()
+        {
+            try
+            {
+                // Create backup on server
+                var result = await _backupService.CreateBackupAsync();
+
+                if (!result.Success)
+                {
+                    return StatusCode(StatusCodes.Status500InternalServerError, new { message = result.ErrorMessage });
+                }
+
+                // Also apply retention cleanup
+                var config = Plugin.Instance?.Configuration;
+                if (config != null)
+                {
+                    _backupService.CleanupOldBackups(config.BackupRetentionCount);
+                }
+
+                logger.LogInformation("Created manual backup: {Filename} ({ListCount} lists)", result.Filename, result.ListCount);
+
+                // Return the file for download
+                return PhysicalFile(result.FilePath!, "application/zip", result.Filename);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error creating backup");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error creating backup" });
+            }
+        }
+
+        /// <summary>
+        /// Restores smart lists from a server-side backup file.
+        /// </summary>
+        /// <param name="filename">The backup filename.</param>
+        /// <param name="overwrite">If true, overwrites existing lists with the same ID. If false, skips them.</param>
+        /// <returns>Restore results with counts of imported and skipped lists.</returns>
+        [HttpPost("backups/{filename}/restore")]
+        public async Task<ActionResult> RestoreFromBackup([FromRoute, Required] string filename, [FromQuery] bool overwrite = false)
+        {
+            try
+            {
+                var filePath = _backupService.GetBackupFilePath(filename);
+                if (filePath == null)
+                {
+                    return NotFound(new { message = "Backup not found" });
+                }
+
+                // Read the backup file and process it
+                using var fileStream = System.IO.File.OpenRead(filePath);
+                return await ProcessRestoreAsync(fileStream, filename, overwrite);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error restoring from backup {Filename}", filename);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error restoring from backup" });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a specific backup file.
+        /// </summary>
+        /// <param name="filename">The backup filename.</param>
+        /// <returns>Success status.</returns>
+        [HttpDelete("backups/{filename}")]
+        public ActionResult DeleteBackup([FromRoute, Required] string filename)
+        {
+            try
+            {
+                var deleted = _backupService.DeleteBackup(filename);
+                if (!deleted)
+                {
+                    return NotFound(new { message = "Backup not found or could not be deleted" });
+                }
+
+                return Ok(new { message = "Backup deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error deleting backup {Filename}", filename);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error deleting backup" });
+            }
+        }
+
+        /// <summary>
+        /// Processes a restore operation from a stream (used by both upload and server-side restore).
+        /// </summary>
+        /// <param name="stream">The stream containing the backup ZIP file.</param>
+        /// <param name="sourceName">The name of the backup source for logging.</param>
+        /// <param name="overwrite">If true, overwrites existing lists with the same ID. If false, skips them.</param>
+        private async Task<ActionResult> ProcessRestoreAsync(Stream stream, string sourceName, bool overwrite = false)
+        {
+            var playlistStore = GetPlaylistStore();
+            var collectionStore = GetCollectionStore();
+            var fileSystem = new SmartListFileSystem(_applicationPaths);
+            var existingPlaylists = await playlistStore.GetAllAsync();
+            var existingCollections = await collectionStore.GetAllAsync();
+            var existingPlaylistIds = existingPlaylists.Where(p => !string.IsNullOrEmpty(p.Id)).Select(p => p.Id!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingCollectionIds = existingCollections.Where(c => !string.IsNullOrEmpty(c.Id)).Select(c => c.Id!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new JsonStringEnumConverter() }
+            };
+
+            var restoreResults = new List<object>();
+            int restoredPlaylistCount = 0;
+            int restoredCollectionCount = 0;
+            int overwrittenPlaylistCount = 0;
+            int overwrittenCollectionCount = 0;
+            int skippedCount = 0;
+            int errorCount = 0;
+            int restoredImageCount = 0;
+
+            using var zipStream = new MemoryStream();
+            await stream.CopyToAsync(zipStream);
+            zipStream.Position = 0;
+
+            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+
+            // Group entries by smart list ID
+            var entriesByListId = new Dictionary<string, List<ZipArchiveEntry>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in archive.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    continue;
+                }
+
+                if (entry.Name.StartsWith("._") || entry.Name.StartsWith(".DS_Store"))
+                {
+                    continue;
+                }
+
+                var listId = GetSmartListIdFromZipEntry(entry);
+                if (string.IsNullOrEmpty(listId))
+                {
+                    continue;
+                }
+
+                if (!entriesByListId.TryGetValue(listId, out var entries))
+                {
+                    entries = new List<ZipArchiveEntry>();
+                    entriesByListId[listId] = entries;
+                }
+                entries.Add(entry);
+            }
+
+            // Process each smart list
+            foreach (var (listId, entries) in entriesByListId)
+            {
+                var configEntry = entries.FirstOrDefault(e =>
+                    e.Name.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                    e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+
+                if (configEntry == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    string jsonContent;
+                    using (var entryStream = configEntry.Open())
+                    {
+                        using var reader = new StreamReader(entryStream);
+                        jsonContent = await reader.ReadToEndAsync();
+                    }
+                    using var jsonDoc = JsonDocument.Parse(jsonContent);
+
+                    Core.Enums.SmartListType listType = Core.Enums.SmartListType.Playlist;
+                    bool hasTypeProperty = jsonDoc.RootElement.TryGetProperty("Type", out var typeElement);
+
+                    if (hasTypeProperty)
+                    {
+                        if (typeElement.ValueKind == JsonValueKind.String)
+                        {
+                            var typeString = typeElement.GetString();
+                            if (Enum.TryParse<Core.Enums.SmartListType>(typeString, ignoreCase: true, out var parsedType))
+                            {
+                                listType = parsedType;
+                            }
+                        }
+                        else if (typeElement.ValueKind == JsonValueKind.Number)
+                        {
+                            var typeValue = typeElement.GetInt32();
+                            listType = typeValue == 1 ? Core.Enums.SmartListType.Collection : Core.Enums.SmartListType.Playlist;
+                        }
+                    }
+
+                    if (listType == Core.Enums.SmartListType.Playlist)
+                    {
+                        var (success, message, imageCount, wasOverwritten) = await RestorePlaylistAsync(
+                            configEntry, jsonContent, jsonOptions, playlistStore, fileSystem,
+                            entries, existingPlaylistIds, overwrite);
+
+                        if (success)
+                        {
+                            if (wasOverwritten)
+                            {
+                                overwrittenPlaylistCount++;
+                                restoreResults.Add(new { fileName = configEntry.Name, listType = "Playlist", status = "overwritten", message });
+                            }
+                            else
+                            {
+                                restoredPlaylistCount++;
+                                restoreResults.Add(new { fileName = configEntry.Name, listType = "Playlist", status = "restored", message });
+                            }
+                            restoredImageCount += imageCount;
+                        }
+                        else if (message?.Contains("already exists") == true)
+                        {
+                            skippedCount++;
+                            restoreResults.Add(new { fileName = configEntry.Name, listType = "Playlist", status = "skipped", message });
+                        }
+                        else
+                        {
+                            errorCount++;
+                            restoreResults.Add(new { fileName = configEntry.Name, listType = "Playlist", status = "error", message });
+                        }
+                    }
+                    else if (listType == Core.Enums.SmartListType.Collection)
+                    {
+                        var (success, message, imageCount, wasOverwritten) = await RestoreCollectionAsync(
+                            configEntry, jsonContent, jsonOptions, collectionStore, fileSystem,
+                            entries, existingCollectionIds, overwrite);
+
+                        if (success)
+                        {
+                            if (wasOverwritten)
+                            {
+                                overwrittenCollectionCount++;
+                                restoreResults.Add(new { fileName = configEntry.Name, listType = "Collection", status = "overwritten", message });
+                            }
+                            else
+                            {
+                                restoredCollectionCount++;
+                                restoreResults.Add(new { fileName = configEntry.Name, listType = "Collection", status = "restored", message });
+                            }
+                            restoredImageCount += imageCount;
+                        }
+                        else if (message?.Contains("already exists") == true)
+                        {
+                            skippedCount++;
+                            restoreResults.Add(new { fileName = configEntry.Name, listType = "Collection", status = "skipped", message });
+                        }
+                        else
+                        {
+                            errorCount++;
+                            restoreResults.Add(new { fileName = configEntry.Name, listType = "Collection", status = "error", message });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Error restoring smart list from {FileName}", configEntry.FullName);
+                    restoreResults.Add(new { fileName = configEntry.Name, status = "error", message = ex.Message });
+                    errorCount++;
+                }
+            }
+
+            var totalRestored = restoredPlaylistCount + restoredCollectionCount;
+            var totalOverwritten = overwrittenPlaylistCount + overwrittenCollectionCount;
+            var summary = new
+            {
+                source = sourceName,
+                totalLists = entriesByListId.Count,
+                restored = totalRestored,
+                restoredPlaylists = restoredPlaylistCount,
+                restoredCollections = restoredCollectionCount,
+                overwritten = totalOverwritten,
+                overwrittenPlaylists = overwrittenPlaylistCount,
+                overwrittenCollections = overwrittenCollectionCount,
+                restoredImages = restoredImageCount,
+                skipped = skippedCount,
+                errors = errorCount,
+                details = restoreResults,
+            };
+
+            logger.LogInformation("Restore from {Source} completed: {Restored} restored, {Overwritten} overwritten ({Playlists} playlists, {Collections} collections, {Images} images), {Skipped} skipped, {Errors} errors",
+                sourceName, totalRestored, totalOverwritten, restoredPlaylistCount + overwrittenPlaylistCount, restoredCollectionCount + overwrittenCollectionCount, restoredImageCount, skippedCount, errorCount);
+
+            return Ok(summary);
+        }
+
+        /// <summary>
+        /// Restores a single playlist from backup data.
+        /// </summary>
+        /// <param name="configEntry">The ZIP entry containing the config file.</param>
+        /// <param name="jsonContent">The JSON content of the playlist.</param>
+        /// <param name="jsonOptions">JSON serializer options.</param>
+        /// <param name="playlistStore">The playlist store.</param>
+        /// <param name="fileSystem">The file system for images.</param>
+        /// <param name="entries">All ZIP entries for this playlist.</param>
+        /// <param name="existingPlaylistIds">Set of existing playlist IDs.</param>
+        /// <param name="overwrite">If true, overwrites existing playlists with the same ID.</param>
+        /// <returns>Tuple indicating success, message, image count, and whether it was an overwrite.</returns>
+        private async Task<(bool Success, string Message, int ImageCount, bool WasOverwritten)> RestorePlaylistAsync(
+            ZipArchiveEntry configEntry,
+            string jsonContent,
+            JsonSerializerOptions jsonOptions,
+            PlaylistStore playlistStore,
+            ISmartListFileSystem fileSystem,
+            List<ZipArchiveEntry> entries,
+            HashSet<string> existingPlaylistIds,
+            bool overwrite = false)
+        {
+            var playlist = JsonSerializer.Deserialize<SmartPlaylistDto>(jsonContent, jsonOptions);
+            if (playlist == null || string.IsNullOrEmpty(playlist.Id))
+            {
+                return (false, "Invalid or empty playlist data", 0, false);
+            }
+
+            if (string.IsNullOrWhiteSpace(playlist.Name))
+            {
+                return (false, "Playlist must have a name", 0, false);
+            }
+
+            playlist.Type = Core.Enums.SmartListType.Playlist;
+
+            // Validate and reassign user references
+            var (validationSuccess, validationMessage) = await ValidateAndReassignPlaylistUsersAsync(playlist);
+            if (!validationSuccess)
+            {
+                return (false, validationMessage, 0, false);
+            }
+
+            bool wasOverwritten = false;
+            if (existingPlaylistIds.Contains(playlist.Id))
+            {
+                if (!overwrite)
+                {
+                    return (false, $"Playlist '{playlist.Name}' with this ID already exists", 0, false);
+                }
+                wasOverwritten = true;
+            }
+
+            await playlistStore.SaveAsync(playlist);
+            var imageCount = await ExtractImagesForSmartListAsync(entries, playlist.Id, fileSystem);
+            AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
+
+            var action = wasOverwritten ? "Overwritten" : "Restored";
+            var message = imageCount > 0 ? $"{action} '{playlist.Name}' with {imageCount} image(s)" : $"{action} '{playlist.Name}'";
+            return (true, message, imageCount, wasOverwritten);
+        }
+
+        /// <summary>
+        /// Restores a single collection from backup data.
+        /// </summary>
+        /// <param name="configEntry">The ZIP entry containing the config file.</param>
+        /// <param name="jsonContent">The JSON content of the collection.</param>
+        /// <param name="jsonOptions">JSON serializer options.</param>
+        /// <param name="collectionStore">The collection store.</param>
+        /// <param name="fileSystem">The file system for images.</param>
+        /// <param name="entries">All ZIP entries for this collection.</param>
+        /// <param name="existingCollectionIds">Set of existing collection IDs.</param>
+        /// <param name="overwrite">If true, overwrites existing collections with the same ID.</param>
+        /// <returns>Tuple indicating success, message, image count, and whether it was an overwrite.</returns>
+        private async Task<(bool Success, string Message, int ImageCount, bool WasOverwritten)> RestoreCollectionAsync(
+            ZipArchiveEntry configEntry,
+            string jsonContent,
+            JsonSerializerOptions jsonOptions,
+            CollectionStore collectionStore,
+            ISmartListFileSystem fileSystem,
+            List<ZipArchiveEntry> entries,
+            HashSet<string> existingCollectionIds,
+            bool overwrite = false)
+        {
+            var collection = JsonSerializer.Deserialize<SmartCollectionDto>(jsonContent, jsonOptions);
+            if (collection == null || string.IsNullOrEmpty(collection.Id))
+            {
+                return (false, "Invalid or empty collection data", 0, false);
+            }
+
+            if (string.IsNullOrWhiteSpace(collection.Name))
+            {
+                return (false, "Collection must have a name", 0, false);
+            }
+
+            collection.Type = Core.Enums.SmartListType.Collection;
+
+            // Validate and reassign user references
+            var (validationSuccess, validationMessage) = await ValidateAndReassignCollectionUserAsync(collection);
+            if (!validationSuccess)
+            {
+                return (false, validationMessage, 0, false);
+            }
+
+            bool wasOverwritten = false;
+            if (existingCollectionIds.Contains(collection.Id))
+            {
+                if (!overwrite)
+                {
+                    return (false, $"Collection '{collection.Name}' with this ID already exists", 0, false);
+                }
+                wasOverwritten = true;
+            }
+
+            await collectionStore.SaveAsync(collection);
+            var imageCount = await ExtractImagesForSmartListAsync(entries, collection.Id, fileSystem);
+            AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
+
+            var action = wasOverwritten ? "Overwritten" : "Restored";
+            var message = imageCount > 0 ? $"{action} '{collection.Name}' with {imageCount} image(s)" : $"{action} '{collection.Name}'";
+            return (true, message, imageCount, wasOverwritten);
+        }
+
+        /// <summary>
+        /// Validates and reassigns playlist users if they don't exist.
+        /// </summary>
+        private Task<(bool Success, string Message)> ValidateAndReassignPlaylistUsersAsync(SmartPlaylistDto playlist)
+        {
+            Guid currentUserId = Guid.Empty;
+
+            Guid GetCurrentUserIdForReassignment()
+            {
+                if (currentUserId == Guid.Empty)
+                {
+                    currentUserId = GetCurrentUserId();
+                }
+                return currentUserId;
+            }
+
+            // Check multi-user playlists
+            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
+            {
+                var validUserMappings = new List<SmartPlaylistDto.UserPlaylistMapping>();
+
+                foreach (var userMapping in playlist.UserPlaylists)
+                {
+                    if (string.IsNullOrEmpty(userMapping.UserId) ||
+                        !Guid.TryParse(userMapping.UserId, out var userId) ||
+                        userId == Guid.Empty)
+                    {
+                        continue;
+                    }
+
+                    var user = _userManager.GetUserById(userId);
+                    if (user == null)
+                    {
+                        var reassignmentUserId = GetCurrentUserIdForReassignment();
+                        if (reassignmentUserId == Guid.Empty)
+                        {
+                            continue;
+                        }
+
+                        validUserMappings.Add(new SmartPlaylistDto.UserPlaylistMapping
+                        {
+                            UserId = reassignmentUserId.ToString("N"),
+                            JellyfinPlaylistId = null
+                        });
+                    }
+                    else
+                    {
+                        validUserMappings.Add(userMapping);
+                    }
+                }
+
+                if (validUserMappings.Count == 0)
+                {
+                    return Task.FromResult((false, "Playlist has no valid users"));
+                }
+
+                // Normalize and deduplicate
+                var normalizedUserPlaylists = new List<SmartPlaylistDto.UserPlaylistMapping>();
+                var seenUserIds = new HashSet<Guid>();
+
+                foreach (var userMapping in validUserMappings)
+                {
+                    if (Guid.TryParse(userMapping.UserId, out var userId) && seenUserIds.Add(userId))
+                    {
+                        normalizedUserPlaylists.Add(new SmartPlaylistDto.UserPlaylistMapping
+                        {
+                            UserId = userId.ToString("N"),
+                            JellyfinPlaylistId = userMapping.JellyfinPlaylistId
+                        });
+                    }
+                }
+
+                playlist.UserPlaylists = normalizedUserPlaylists;
+
+                if (normalizedUserPlaylists.Count > 0 && Guid.TryParse(normalizedUserPlaylists[0].UserId, out var firstUserId))
+                {
+                    playlist.UserId = firstUserId.ToString("D");
+                }
+            }
+            else if (!string.IsNullOrEmpty(playlist.UserId) && Guid.TryParse(playlist.UserId, out var playlistUserIdParsed) && playlistUserIdParsed != Guid.Empty)
+            {
+                var user = _userManager.GetUserById(playlistUserIdParsed);
+                if (user == null)
+                {
+                    var reassignmentUserId = GetCurrentUserIdForReassignment();
+                    if (reassignmentUserId == Guid.Empty)
+                    {
+                        return Task.FromResult((false, "Cannot reassign playlist - unable to determine user"));
+                    }
+                    playlist.UserId = reassignmentUserId.ToString("D");
+                }
+            }
+            else
+            {
+                return Task.FromResult((false, "Playlist must have at least one user"));
+            }
+
+            return Task.FromResult((true, string.Empty));
+        }
+
+        /// <summary>
+        /// Validates and reassigns collection user if they don't exist.
+        /// </summary>
+        private Task<(bool Success, string Message)> ValidateAndReassignCollectionUserAsync(SmartCollectionDto collection)
+        {
+            if (!string.IsNullOrEmpty(collection.UserId) && Guid.TryParse(collection.UserId, out var collectionUserIdParsed) && collectionUserIdParsed != Guid.Empty)
+            {
+                var user = _userManager.GetUserById(collectionUserIdParsed);
+                if (user == null)
+                {
+                    var currentUserId = GetCurrentUserId();
+                    if (currentUserId == Guid.Empty)
+                    {
+                        return Task.FromResult((false, "Cannot reassign collection - unable to determine user"));
+                    }
+                    collection.UserId = currentUserId.ToString("D");
+                }
+            }
+
+            return Task.FromResult((true, string.Empty));
         }
     }
 }

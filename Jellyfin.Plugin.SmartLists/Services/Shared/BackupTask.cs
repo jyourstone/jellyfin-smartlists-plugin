@@ -1,12 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.SmartLists.Core.Models;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -18,14 +13,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
     /// </summary>
     public class BackupTask : IScheduledTask
     {
-        private readonly ISmartListFileSystem _fileSystem;
+        private readonly IBackupService _backupService;
         private readonly ILogger<BackupTask> _logger;
 
         public BackupTask(
-            ISmartListFileSystem fileSystem,
+            IBackupService backupService,
             ILogger<BackupTask> logger)
         {
-            _fileSystem = fileSystem;
+            _backupService = backupService;
             _logger = logger;
         }
 
@@ -86,30 +81,22 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 progress.Report(10);
 
-                // Get backup directory
-                var backupPath = GetBackupDirectory(config);
-                if (!Directory.Exists(backupPath))
+                // Create backup using the service
+                var result = await _backupService.CreateBackupAsync(cancellationToken).ConfigureAwait(false);
+
+                if (!result.Success)
                 {
-                    Directory.CreateDirectory(backupPath);
-                    _logger.LogDebug("Created backup directory: {BackupPath}", backupPath);
+                    _logger.LogError("Backup task failed: {ErrorMessage}", result.ErrorMessage);
+                    throw new InvalidOperationException(result.ErrorMessage);
                 }
-
-                progress.Report(20);
-
-                // Create backup
-                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-                var backupFileName = $"smartlists_backup_{timestamp}.zip";
-                var backupFilePath = Path.Combine(backupPath, backupFileName);
-
-                var listCount = await CreateBackupZipAsync(backupFilePath, progress, cancellationToken).ConfigureAwait(false);
 
                 progress.Report(80);
 
                 // Cleanup old backups
-                CleanupOldBackups(backupPath, config.BackupRetentionCount, cancellationToken);
+                _backupService.CleanupOldBackups(config.BackupRetentionCount, cancellationToken);
 
                 progress.Report(100);
-                _logger.LogInformation("SmartLists backup completed: {BackupFile} ({ListCount} lists)", backupFileName, listCount);
+                _logger.LogInformation("SmartLists backup completed: {BackupFile} ({ListCount} lists)", result.Filename, result.ListCount);
             }
             catch (OperationCanceledException)
             {
@@ -120,190 +107,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 _logger.LogError(ex, "Error during SmartLists backup task");
                 throw;
-            }
-        }
-
-        /// <summary>
-        /// Gets the backup directory path from configuration or default.
-        /// </summary>
-        private string GetBackupDirectory(Configuration.PluginConfiguration config)
-        {
-            var defaultPath = Path.Combine(_fileSystem.BasePath, "backups");
-
-            if (!string.IsNullOrWhiteSpace(config.BackupCustomPath))
-            {
-                var customPath = config.BackupCustomPath.Trim();
-
-                // Detect Windows-style paths on non-Windows systems (e.g., "D:\path" on Linux)
-                if (!OperatingSystem.IsWindows() && IsWindowsStylePath(customPath))
-                {
-                    _logger.LogWarning(
-                        "Custom backup path '{CustomPath}' appears to be a Windows path but Jellyfin is running on Linux/macOS. " +
-                        "Using default backup location instead. Please use a Unix-style path (e.g., /mnt/backups/smartlists)",
-                        customPath);
-                    return defaultPath;
-                }
-
-                // Detect Unix-style paths on Windows (e.g., "/mnt/path" on Windows)
-                if (OperatingSystem.IsWindows() && IsUnixStyleAbsolutePath(customPath))
-                {
-                    _logger.LogWarning(
-                        "Custom backup path '{CustomPath}' appears to be a Unix path but Jellyfin is running on Windows. " +
-                        "Using default backup location instead. Please use a Windows-style path (e.g., D:\\Backups\\SmartLists)",
-                        customPath);
-                    return defaultPath;
-                }
-
-                // If path is absolute for this OS, use it directly
-                if (Path.IsPathRooted(customPath))
-                {
-                    return Path.GetFullPath(customPath);
-                }
-
-                // Relative paths are resolved against the SmartLists data folder
-                return Path.GetFullPath(Path.Combine(_fileSystem.BasePath, customPath));
-            }
-
-            // Default: {DataPath}/smartlists/backups/
-            return defaultPath;
-        }
-
-        /// <summary>
-        /// Checks if a path looks like a Windows absolute path (e.g., "C:\path" or "D:/path").
-        /// </summary>
-        private static bool IsWindowsStylePath(string path)
-        {
-            return path.Length >= 3 &&
-                   char.IsLetter(path[0]) &&
-                   path[1] == ':' &&
-                   (path[2] == '\\' || path[2] == '/');
-        }
-
-        /// <summary>
-        /// Checks if a path looks like a Unix absolute path (starts with /).
-        /// </summary>
-        private static bool IsUnixStyleAbsolutePath(string path)
-        {
-            return path.Length >= 1 && path[0] == '/';
-        }
-
-        /// <summary>
-        /// Creates the backup ZIP file containing all smart lists and their images.
-        /// </summary>
-        /// <returns>The number of lists backed up.</returns>
-        private async Task<int> CreateBackupZipAsync(string backupFilePath, IProgress<double> progress, CancellationToken cancellationToken)
-        {
-            var (playlists, collections) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
-            var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
-
-            if (allLists.Count == 0)
-            {
-                _logger.LogInformation("No smart lists found to backup");
-                // Create empty zip to indicate backup ran successfully
-                using var emptyZip = new FileStream(backupFilePath, FileMode.Create);
-                using var emptyArchive = new ZipArchive(emptyZip, ZipArchiveMode.Create, true);
-                return 0;
-            }
-
-            using var zipStream = new FileStream(backupFilePath, FileMode.Create);
-            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, true);
-
-            var processedCount = 0;
-            foreach (var list in allLists)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (string.IsNullOrEmpty(list.Id))
-                {
-                    continue;
-                }
-
-                var folderPath = _fileSystem.GetSmartListFolderPath(list.Id);
-
-                // Add config.json
-                var configPath = _fileSystem.GetSmartListConfigPath(list.Id);
-                if (File.Exists(configPath))
-                {
-                    var entryName = $"{list.Id}/config.json";
-                    var entry = archive.CreateEntry(entryName);
-                    using var entryStream = entry.Open();
-                    using var fileStream = File.OpenRead(configPath);
-                    await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
-                }
-
-                // Add any image files from the folder
-                if (Directory.Exists(folderPath))
-                {
-                    foreach (var imagePath in Directory.GetFiles(folderPath))
-                    {
-                        var fileName = Path.GetFileName(imagePath);
-
-                        // Skip config.json (already added) and temp files
-                        if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                            fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        var imageEntryName = $"{list.Id}/{fileName}";
-                        var imageEntry = archive.CreateEntry(imageEntryName);
-                        using var imageEntryStream = imageEntry.Open();
-                        using var imageFileStream = File.OpenRead(imagePath);
-                        await imageFileStream.CopyToAsync(imageEntryStream, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                processedCount++;
-                var progressPercent = 20 + (60 * processedCount / allLists.Count);
-                progress.Report(progressPercent);
-            }
-
-            _logger.LogDebug("Backed up {ListCount} smart lists to {BackupFile}", allLists.Count, backupFilePath);
-            return allLists.Count;
-        }
-
-        /// <summary>
-        /// Deletes old backup files exceeding the retention count.
-        /// </summary>
-        private void CleanupOldBackups(string backupPath, int retentionCount, CancellationToken cancellationToken)
-        {
-            if (retentionCount <= 0)
-            {
-                return;
-            }
-
-            var backupFiles = Directory.GetFiles(backupPath, "smartlists_backup_*.zip")
-                .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.CreationTime)
-                .ToList();
-
-            if (backupFiles.Count <= retentionCount)
-            {
-                return;
-            }
-
-            var filesToDelete = backupFiles.Skip(retentionCount);
-            var deletedCount = 0;
-
-            foreach (var file in filesToDelete)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                try
-                {
-                    file.Delete();
-                    deletedCount++;
-                    _logger.LogDebug("Deleted old backup: {BackupFile}", file.Name);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete old backup: {BackupFile}", file.FullName);
-                }
-            }
-
-            if (deletedCount > 0)
-            {
-                _logger.LogInformation("Cleaned up {DeletedCount} old backup files", deletedCount);
             }
         }
     }

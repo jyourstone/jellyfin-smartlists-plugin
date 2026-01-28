@@ -674,14 +674,16 @@
                         </div>
 
                         <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
-                            Automated Backup
-                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#automated-backup"
+                            Backup & Restore
+                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#backup-restore"
                                 target="_blank" rel="noopener noreferrer" title="Documentation"
                                 style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
                                 <span class="material-icons" aria-hidden="true"
                                     style="font-size: 1em; line-height: 0;">info_outline</span>
                             </a>
                         </h2>
+
+                        <h3 class="sectionTitle" style="margin-top: 1em;">Automated Backups</h3>
 
                         <div class="checkboxList paperList"
                             style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
@@ -704,7 +706,7 @@
                             </div>
                         </div>
 
-                        <div id="backupOptionsContainer" style="display: none;">
+                        <div id="backupOptionsContainer">
                             <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
                                 <label class="inputLabel" for="backupRetentionCount">Backups to retain</label>
                                 <input type="number" id="backupRetentionCount" class="emby-input" min="1" max="365" step="1" value="7">
@@ -722,52 +724,93 @@
                             </div>
                         </div>
 
-                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
-                            Export/Import
-                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#export-import"
-                                target="_blank" rel="noopener noreferrer" title="Documentation"
-                                style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
-                                <span class="material-icons" aria-hidden="true"
-                                    style="font-size: 1em; line-height: 0;">info_outline</span>
-                            </a>
-                        </h2>
-
-                        <h3 class="sectionTitle" style="margin-top: 1em;">Export</h3>
+                        <h3 class="sectionTitle" style="margin-top: 1.5em;">Available Backups</h3>
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
-                            <button type="button" is="emby-button" id="exportPlaylistsBtn"
-                                class="emby-button raised block">Export All Lists</button>
-                            <div class="fieldDescription">Download a ZIP file containing all your smart list
-                                configurations. This can be used as a backup or to transfer lists to another Jellyfin
-                                instance.</div>
+                            <div id="backupListContainer" class="paperList" style="padding: 1em; border: 1px solid var(--jf-palette-divider);">
+                                <div id="backupListLoading" style="text-align: center; padding: 1em;">
+                                    <span class="material-icons" style="animation: spin 1s linear infinite;">sync</span>
+                                    <div style="margin-top: 0.5em; opacity: 0.7;">Loading backups...</div>
+                                </div>
+                                <div id="backupListEmpty" style="display: none; text-align: center; padding: 1em; opacity: 0.7;">
+                                    <span class="material-icons" style="font-size: 2em; display: block; margin-bottom: 0.5em;">inventory_2</span>
+                                    <div>No backups found. Enable automated backups or create one manually below.</div>
+                                </div>
+                                <div id="backupListTable" style="display: none; max-height: 300px; overflow-y: auto;">
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        <thead>
+                                            <tr style="border-bottom: 1px solid var(--jf-palette-divider);">
+                                                <th style="text-align: left; padding: 0.5em 0.75em; font-weight: 600;">Filename</th>
+                                                <th style="text-align: left; padding: 0.5em 0.75em; font-weight: 600;">Date</th>
+                                                <th style="text-align: right; padding: 0.5em 0.75em; font-weight: 600;">Size</th>
+                                                <th style="text-align: center; padding: 0.5em 0.75em; font-weight: 600; width: 120px;">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="backupListBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div style="margin-top: 0.5em;">
+                                <button type="button" is="emby-button" id="refreshBackupListBtn" class="emby-button raised block">
+                                    <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.3em;">refresh</span>
+                                    Refresh List
+                                </button>
+                            </div>
                         </div>
 
-                        <h3 class="sectionTitle" style="margin-top: 1em;">Import</h3>
+                        <h3 class="sectionTitle" style="margin-top: 1.5em;">Manual Backup</h3>
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
-                            <input type="file" id="importPlaylistsFile" accept=".zip" style="display: none;">
-                            <div id="importDropZone" style="border: 2px dashed var(--jf-palette-divider); border-radius: 8px; padding: 2em; text-align: center; cursor: pointer; transition: all 0.2s ease;">
-                                <div id="importDropZoneContent">
+                            <button type="button" is="emby-button" id="createBackupBtn"
+                                class="emby-button raised block">Create Backup Now</button>
+                            <div class="fieldDescription">Creates a backup and downloads it. The backup is also saved to the server's backup directory.</div>
+                        </div>
+
+                        <h3 class="sectionTitle" style="margin-top: 1.5em;">Restore from File</h3>
+
+                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                            <input type="file" id="restoreFile" accept=".zip" style="display: none;">
+                            <div id="restoreDropZone" style="border: 2px dashed var(--jf-palette-divider); border-radius: 8px; padding: 2em; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                                <div id="restoreDropZoneContent">
                                     <span class="material-icons" style="font-size: 3em; color: var(--jf-palette-text-disabled); display: block; margin-bottom: 0.5em;">upload_file</span>
-                                    <div style="font-size: 1.1em; margin-bottom: 0.25em;">Drop ZIP file here or click to browse</div>
-                                    <div style="color: var(--jf-palette-text-secondary); font-size: 0.9em;">Accepts .zip files exported from SmartLists</div>
+                                    <div style="font-size: 1.1em; margin-bottom: 0.25em;">Drop backup file here or click to browse</div>
+                                    <div style="color: var(--jf-palette-text-secondary); font-size: 0.9em;">Accepts .zip backup files</div>
                                 </div>
-                                <div id="importFileSelected" style="display: none;">
+                                <div id="restoreFileSelected" style="display: none;">
                                     <span class="material-icons" style="font-size: 3em; color: var(--jf-palette-success-main); display: block; margin-bottom: 0.5em;">folder_zip</span>
-                                    <div id="selectedFileName" style="font-size: 1.1em; margin-bottom: 0.5em; word-break: break-all;"></div>
+                                    <div id="restoreSelectedFileName" style="font-size: 1.1em; margin-bottom: 0.5em; word-break: break-all;"></div>
                                     <div style="display: flex; gap: 0.5em; justify-content: center; flex-wrap: wrap;">
-                                        <button type="button" is="emby-button" id="importPlaylistsBtn" class="emby-button raised" style="background: var(--jf-palette-success-dark);">
-                                            <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">download</span>
-                                            Import
+                                        <button type="button" is="emby-button" id="restoreBtn" class="emby-button raised" style="background: var(--jf-palette-success-dark);">
+                                            <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">restore</span>
+                                            Restore
                                         </button>
-                                        <button type="button" is="emby-button" id="importCancelBtn" class="emby-button raised">
+                                        <button type="button" is="emby-button" id="restoreCancelBtn" class="emby-button raised">
                                             <span class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.25em;">close</span>
                                             Cancel
                                         </button>
                                     </div>
                                 </div>
                             </div>
-                            <div class="fieldDescription" style="margin-top: 0.75em;">Lists with duplicate IDs will be skipped to avoid conflicts. After importing, you need to refresh all lists to create them in Jellyfin.</div>
+                            <div class="checkboxList paperList" style="padding: 0.5em 1em; margin-top: 1em;">
+                                <div class="sectioncheckbox">
+                                    <label class="emby-checkbox-label">
+                                        <input type="checkbox" is="emby-checkbox" id="restoreOverwriteCheckbox"
+                                            data-embycheckbox="true" class="emby-checkbox">
+                                        <span class="checkboxLabel">Overwrite existing lists with the same ID</span>
+                                        <span class="checkboxOutline">
+                                            <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                                aria-hidden="true"></span>
+                                            <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                                aria-hidden="true"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="fieldDescription">If unchecked, lists with duplicate IDs will be skipped.</div>
+                            </div>
+                            <div class="fieldDescription" style="margin-top: 0.75em; padding: 0.5em; border-radius: 4px;">
+                                <strong>Note:</strong> After restoring, you must refresh the lists to create them in Jellyfin.
+                            </div>
                         </div>
 
                         <div style="margin-top: 2em;">
@@ -856,6 +899,63 @@
                             id="delete-cancel-btn">Cancel</button>
                         <button type="button" is="emby-button" class="emby-button raised button-delete"
                             id="delete-confirm-btn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup Delete Confirmation Modal -->
+        <div id="backup-delete-modal" class="custom-modal hide">
+            <div class="custom-modal-container paperList">
+                <div class="modal-content">
+                    <div class="custom-modal-header" style="margin-top: -1em;">
+                        <h2 class="custom-modal-title">Delete Backup</h2>
+                    </div>
+                    <div class="custom-modal-body">
+                        <p>Are you sure you want to delete this backup?</p>
+                        <p id="backup-delete-filename" style="font-family: monospace; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px; word-break: break-all;"></p>
+                        <p style="opacity: 0.7; font-size: 0.9em;">This action cannot be undone.</p>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="backup-delete-cancel-btn">Cancel</button>
+                        <button type="button" is="emby-button" class="emby-button raised button-delete"
+                            id="backup-delete-confirm-btn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup Restore Confirmation Modal -->
+        <div id="backup-restore-modal" class="custom-modal hide">
+            <div class="custom-modal-container paperList">
+                <div class="modal-content">
+                    <div class="custom-modal-header" style="margin-top: -1em;">
+                        <h2 class="custom-modal-title">Restore Backup</h2>
+                    </div>
+                    <div class="custom-modal-body">
+                        <p>Are you sure you want to restore from this backup?</p>
+                        <p id="backup-restore-filename" style="font-family: monospace; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px; word-break: break-all;"></p>
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="backup-restore-overwrite-checkbox"
+                                    style="margin-right: 0.5em;">
+                                <span>Overwrite existing lists with the same ID</span>
+                            </label>
+                            <div style="font-size: 0.9em; opacity: 0.6; margin-top: 0.5em; margin-bottom: 0.5em;">
+                                <strong>Unchecked:</strong> Lists with duplicate IDs will be skipped.<br><br>
+                                <strong>Checked:</strong> Existing lists with the same ID will be replaced.
+                            </div>
+                        </div>
+                        <div style="margin-top: 1em; margin-bottom: 1em; padding: 0.5em; border-radius: 4px; font-size: 0.9em;">
+                            <strong>Note:</strong> After restoring, you must refresh the list to create it in Jellyfin.
+                        </div>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="backup-restore-cancel-btn">Cancel</button>
+                        <button type="button" is="emby-button" class="emby-button raised" style="background: var(--jf-palette-success-dark);"
+                            id="backup-restore-confirm-btn">Restore</button>
                     </div>
                 </div>
             </div>

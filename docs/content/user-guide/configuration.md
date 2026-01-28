@@ -18,7 +18,7 @@ Regular users can access SmartLists directly from their Jellyfin home screen:
   - Can only see and manage lists they own
   - Cannot access other users' playlists
   - Cannot modify global plugin settings
-  - Cannot export/import list configurations
+  - Cannot backup/restore list configurations
   - No Status tab (refresh happens in background)
 
 !!! note "Collection Permissions"
@@ -37,7 +37,7 @@ Administrators have full access to SmartLists through the plugin settings:
   - Create and manage all playlists and collections (server-wide)
   - View and edit any user's lists
   - Access global plugin settings
-  - Export and import list configurations
+  - Backup and restore list configurations
   - Configure performance settings
   - Access bulk operations across all lists
   - View comprehensive refresh statistics
@@ -242,8 +242,7 @@ Configure global settings for the plugin:
 - Set the default custom schedule settings for new lists
 - Configure performance settings
 - **Enable/disable user page access** - Control whether regular users can access SmartLists from their home screen
-- Export all lists to a ZIP file for backup or transfer
-- Import lists from a ZIP file with duplicate detection
+- **Backup & Restore** - Create backups, view available backups, restore from server or uploaded files
 - Manually trigger a refresh for all smart lists
 
 ## User Page Access Control
@@ -300,55 +299,82 @@ You can customize how smart list names appear in Jellyfin by configuring a prefi
 
 The naming configuration applies to all new smart lists. When you delete a smart list but keep the Jellyfin playlist/collection, the custom prefix/suffix will be automatically removed.
 
-## Export & Import
+## Backup & Restore
 
-The Export/Import feature allows you to backup your smart list configurations or transfer them between different Jellyfin instances:
+SmartLists provides a comprehensive backup system that combines automated backups with easy-to-use restore functionality. All backup operations are available in the Settings tab.
 
-### Export
+### Automated Backups
 
-- Click the "Export All Lists" button in the Settings tab
-- Downloads a timestamped ZIP file containing all your smart lists
-- **Includes Custom Images**: Any custom images uploaded through SmartLists are included in the export
-- Use this as a backup or to transfer your lists to another Jellyfin server
+SmartLists can automatically create scheduled backups of all your smart list configurations and custom images.
 
-### Import
-
-- Select a ZIP file exported from the SmartLists plugin
-- Click "Import Selected File" to upload and process the archive
-- **Includes Custom Images**: Custom images from the export are automatically restored
-- **Duplicate Detection**: Lists with the same GUID as existing lists will be automatically skipped to prevent conflicts
-- **User Reassignment**: When importing lists from another Jellyfin instance, if the original list owner doesn't exist in the destination system, the list will be automatically reassigned to the admin user performing the import
-- **Backward Compatible**: Old export files (without images) are still supported
-
-!!! note "User-Specific Rules"
-    Rules like "Playback Status for [User]" or "Is Favorite for [User]" that reference non-existent users will need to be updated manually.
-
-## Automated Backup
-
-SmartLists includes an automated backup feature that creates scheduled backups of all your smart list configurations and custom images.
-
-### Enabling Automated Backups
+**Configuration:**
 
 1. Go to the Settings tab in the SmartLists admin page
-2. Find the "Automated Backup" section
-3. Check "Enable automated backups"
+2. Find the "Backup & Restore" section
+3. Check **Enable automated backups**
 4. Configure your backup settings:
    - **Backups to retain**: Number of backup files to keep (default: 7). Older backups are automatically deleted.
    - **Custom backup path** (optional): Specify a custom directory for backups. Leave empty to use the default location inside the SmartLists data folder.
 
-### Backup Schedule
+**Backup Schedule:**
 
 The backup task runs as a native Jellyfin scheduled task. By default, it runs daily at 3:00 AM.
 
-**To change the backup schedule:**
+To change the schedule:
 
 1. Go to Jellyfin Dashboard → Scheduled Tasks
 2. Find "SmartLists backup task" under the "SmartLists" category
 3. Click on the task to configure triggers (time, frequency, etc.)
 
+### Available Backups
+
+The "Available Backups" table displays all backup files stored on the server, showing:
+
+- **Filename**: The backup file name with timestamp
+- **Date**: When the backup was created
+- **Size**: File size of the backup
+
+For each backup, you have three actions:
+
+| Action | Icon | Description |
+|--------|------|-------------|
+| **Restore** | ↺ | Restores the backup, recreating all lists from this backup |
+| **Download** | ↓ | Downloads the backup file to your computer |
+| **Delete** | 🗑 | Deletes the backup file from the server (with confirmation) |
+
+Use the refresh button next to "Available Backups" to reload the list after creating or deleting backups.
+
 ### Manual Backup
 
-You can trigger a backup manually from **Scheduled Tasks** by clicking the play button next to the "SmartLists backup task".
+Click **Create Backup Now** to create a backup on demand. This:
+
+1. Creates a timestamped backup file on the server
+2. Automatically downloads the backup to your computer
+3. The new backup appears in the "Available Backups" table
+
+This is useful for creating a backup before making significant changes to your lists.
+
+### Restore from File
+
+To restore from a backup file stored on your computer (not on the server):
+
+1. Drag and drop a backup ZIP file onto the drop zone, or click to browse
+2. Click **Restore** to process the backup
+3. All lists from the backup will be restored
+
+**Restore behavior:**
+
+- **Duplicate Detection**: Lists with the same GUID as existing lists will be automatically skipped to prevent conflicts (or overwritten if the overwrite option is checked)
+- **User Reassignment**: When restoring from another Jellyfin instance, if the original list owner doesn't exist in the destination system, the list will be automatically reassigned to the admin user performing the restore
+- **Custom Images**: Custom images from the backup are automatically restored
+- **Backward Compatible**: Old backup files (from earlier versions) are still supported
+- **Refresh Required**: After restoring, you must refresh the lists to create the actual playlists/collections in Jellyfin
+
+!!! important "Refresh After Restore"
+    Restored lists only exist as SmartLists configurations until they are refreshed. Use **Refresh All Lists** in the Status tab or refresh individual lists to create them in Jellyfin.
+
+!!! note "User-Specific Rules"
+    Rules like "Playback Status for [User]" or "Is Favorite for [User]" that reference non-existent users will need to be updated manually after restoring.
 
 ### Backup Contents
 
@@ -357,18 +383,19 @@ Each backup is a timestamped ZIP file (e.g., `smartlists_backup_20250128_030000.
 - All smart list configurations (`{listId}/config.json`)
 - All custom images for each list
 
-### Restoring from Backup
+### Transferring Lists Between Servers
 
-To restore from a backup, use the Import feature in the Settings tab:
+To transfer your smart lists to another Jellyfin server:
 
-1. Select the backup ZIP file
-2. Click "Import Selected File"
-3. Lists with duplicate IDs will be skipped to prevent conflicts
+1. Create a backup using **Create Backup Now** or download an existing backup
+2. Copy the ZIP file to the destination server
+3. On the destination server, use **Restore from File** to import the lists
 
 !!! tip "Backup Best Practices"
-    - Keep at least 7 days of backups to recover from accidental changes
-    - For critical setups, consider copying backups to an external location periodically
-    - Test your backups occasionally by importing them to a test Jellyfin instance
+    - Keep at least 7 days of automated backups to recover from accidental changes
+    - Create a manual backup before making significant changes to your lists
+    - For critical setups, periodically download backups to an external location
+    - Test your backups occasionally by restoring them to a test Jellyfin instance
 
 ## Performance Settings
 

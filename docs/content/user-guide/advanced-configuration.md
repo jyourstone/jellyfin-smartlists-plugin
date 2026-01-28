@@ -67,7 +67,7 @@ Manual editing can be useful for:
 
 For a reference of the JSON file structure, you can:
 
-1. **Export a list** using the web interface (Settings → Export All Lists) to see the format
+1. **Create a backup** using the web interface (Settings → Create Backup Now) to see the format
 2. **Examine existing files** in your `smartlists` directory
 3. **Check the repository** for example files (if available)
 

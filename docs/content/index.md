@@ -24,7 +24,7 @@ This plugin allows you to create dynamic playlists and collections based on a se
 - 👥 **Multi-User Playlists** - Create playlists for multiple users, with each user getting their own personalized version based on their playback data
 - 🎯 **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - 🔄 **Automatic Updates** - Playlists and collections refresh automatically on library updates or via scheduled tasks
-- 📦 **Export/Import** - Export all lists to a ZIP file for backup or transfer between Jellyfin instances
+- 📦 **Backup & Restore** - Create backups, view server-side backups, and restore from backup files
 - 🎵 **Media Types** - Works with all Jellyfin media types
 
 ## Supported Media Types

@@ -16,8 +16,8 @@
         libraries: 'Plugins/SmartLists/libraries', // Keep admin endpoint for library selection (may not be needed in user mode)
         refresh: endpointPrefix + '/refresh',
         refreshDirect: endpointPrefix + '/refresh-direct',
-        export: endpointPrefix + '/export',
-        import: endpointPrefix + '/import'
+        backups: 'Plugins/SmartLists/backups',
+        backupUpload: 'Plugins/SmartLists/backups/upload'
     };
 
     // Field type constants to avoid duplication

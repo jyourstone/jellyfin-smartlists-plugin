@@ -286,12 +286,35 @@
     };
 
     /**
-     * Export all playlists as a ZIP file
+     * Get list of available backups
      */
-    SmartLists.exportPlaylists = function () {
+    SmartLists.getBackups = function () {
+        const apiClient = SmartLists.getApiClient();
+        const url = apiClient.getUrl(SmartLists.ENDPOINTS.backups);
+
+        return fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+            }
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('Failed to get backup list');
+                }
+                return response.json();
+            });
+    };
+
+    /**
+     * Create a new backup and download it
+     */
+    SmartLists.createBackup = function () {
         try {
             const apiClient = SmartLists.getApiClient();
-            const url = apiClient.getUrl(SmartLists.ENDPOINTS.export);
+            const url = apiClient.getUrl(SmartLists.ENDPOINTS.backups);
+
+            SmartLists.showNotification('Creating backup...', 'info');
 
             fetch(url, {
                 method: 'POST',
@@ -302,27 +325,26 @@
             })
                 .then(async function (response) {
                     if (!response.ok) {
-                        let errorMessage = 'Export failed';
+                        let errorMessage = 'Backup creation failed';
                         try {
                             const errorData = await response.json();
                             errorMessage = errorData.message || errorData.detail || errorMessage;
                         } catch (e) {
-                            // Fallback to text if JSON parsing fails
                             try {
                                 const errorText = await response.text();
                                 if (errorText && errorText.trim()) {
                                     errorMessage = errorText;
                                 }
                             } catch (textError) {
-                                // Ignore text parsing errors, use default message
+                                // Ignore text parsing errors
                             }
                         }
                         throw new Error(errorMessage);
                     }
 
-                    // Get filename from Content-Disposition header BEFORE consuming the blob
+                    // Get filename from Content-Disposition header
                     const contentDisposition = response.headers.get('Content-Disposition');
-                    let filename = 'smartlists_export.zip';
+                    let filename = 'smartlists_backup.zip';
                     if (contentDisposition) {
                         const matches = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
                         if (matches && matches[1]) {
@@ -341,33 +363,151 @@
                     a.click();
                     window.URL.revokeObjectURL(blobUrl);
                     document.body.removeChild(a);
-                    SmartLists.showNotification('Export completed successfully!', 'success');
+                    SmartLists.showNotification('Backup created successfully!', 'success');
+
+                    // Refresh backup list if function exists
+                    if (SmartLists.loadBackupList) {
+                        SmartLists.loadBackupList();
+                    }
                 })
                 .catch(function (error) {
-                    console.error('Export error:', error);
-                    SmartLists.showNotification('Export failed: ' + (error.message || 'Unknown error'), 'error');
+                    console.error('Backup creation error:', error);
+                    SmartLists.showNotification('Backup creation failed: ' + (error.message || 'Unknown error'), 'error');
                 });
         } catch (error) {
-            console.error('Export error:', error);
-            SmartLists.showNotification('Export failed: ' + (error.message || 'Unknown error'), 'error');
+            console.error('Backup creation error:', error);
+            SmartLists.showNotification('Backup creation failed: ' + (error.message || 'Unknown error'), 'error');
         }
     };
 
     /**
-     * Import playlists from selected ZIP file
+     * Download a specific backup file
      */
-    SmartLists.importPlaylists = function (page) {
-        const fileInput = page.querySelector('#importPlaylistsFile');
+    SmartLists.downloadBackup = function (filename) {
+        const apiClient = SmartLists.getApiClient();
+        const url = apiClient.getUrl(SmartLists.ENDPOINTS.backups + '/' + encodeURIComponent(filename));
+
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+            }
+        })
+            .then(async function (response) {
+                if (!response.ok) {
+                    throw new Error('Failed to download backup');
+                }
+                const blob = await response.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(blobUrl);
+                document.body.removeChild(a);
+            })
+            .catch(function (error) {
+                console.error('Download backup error:', error);
+                SmartLists.showNotification('Failed to download backup: ' + (error.message || 'Unknown error'), 'error');
+            });
+    };
+
+    /**
+     * Restore from a server-side backup
+     * @param {string} filename - The backup filename to restore from
+     * @param {Element} page - The page element
+     * @param {boolean} overwrite - If true, overwrite existing lists with the same ID
+     */
+    SmartLists.restoreFromBackup = function (filename, page, overwrite) {
+        const apiClient = SmartLists.getApiClient();
+        var urlPath = SmartLists.ENDPOINTS.backups + '/' + encodeURIComponent(filename) + '/restore';
+        if (overwrite) {
+            urlPath += '?overwrite=true';
+        }
+        const url = apiClient.getUrl(urlPath);
+
+        SmartLists.showNotification('Restoring from backup...', 'info');
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+            }
+        })
+            .then(async function (response) {
+                if (!response.ok) {
+                    let errorMessage = 'Restore failed';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorData.detail || errorMessage;
+                    } catch (e) {
+                        // Ignore
+                    }
+                    throw new Error(errorMessage);
+                }
+                return response.json();
+            })
+            .then(function (result) {
+                SmartLists._handleRestoreResult(result, page);
+            })
+            .catch(function (error) {
+                console.error('Restore error:', error);
+                SmartLists.showNotification('Restore failed: ' + (error.message || 'Unknown error'), 'error');
+            });
+    };
+
+    /**
+     * Delete a backup file
+     */
+    SmartLists.deleteBackup = function (filename) {
+        const apiClient = SmartLists.getApiClient();
+        const url = apiClient.getUrl(SmartLists.ENDPOINTS.backups + '/' + encodeURIComponent(filename));
+
+        return fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': 'MediaBrowser Token="' + apiClient.accessToken() + '"'
+            }
+        })
+            .then(async function (response) {
+                if (!response.ok) {
+                    let errorMessage = 'Delete failed';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorData.detail || errorMessage;
+                    } catch (e) {
+                        // Ignore
+                    }
+                    throw new Error(errorMessage);
+                }
+                SmartLists.showNotification('Backup deleted successfully', 'success');
+                // Refresh backup list
+                if (SmartLists.loadBackupList) {
+                    SmartLists.loadBackupList();
+                }
+            })
+            .catch(function (error) {
+                console.error('Delete backup error:', error);
+                SmartLists.showNotification('Failed to delete backup: ' + (error.message || 'Unknown error'), 'error');
+            });
+    };
+
+    /**
+     * Upload and restore from a file
+     */
+    SmartLists.uploadAndRestore = function (page) {
+        const fileInput = page.querySelector('#restoreFile');
 
         if (!fileInput) {
-            SmartLists.showNotification('Import file input not found on page', 'error');
+            SmartLists.showNotification('Restore file input not found on page', 'error');
             return;
         }
 
         const file = fileInput.files[0];
 
         if (!file) {
-            SmartLists.showNotification('Please select a file to import', 'error');
+            SmartLists.showNotification('Please select a file to restore', 'error');
             return;
         }
 
@@ -378,20 +518,27 @@
             return;
         }
 
-        // Extension check as safety net (accept attribute already filters in dialog)
+        // Extension check
         if (!file.name.toLowerCase().endsWith('.zip')) {
             SmartLists.showNotification('Please select a ZIP file', 'error');
             return;
         }
 
+        // Get overwrite checkbox value
+        var overwriteCheckbox = page.querySelector('#restoreOverwriteCheckbox');
+        var overwrite = overwriteCheckbox && overwriteCheckbox.checked;
+
         const formData = new FormData();
         formData.append('file', file);
 
         const apiClient = SmartLists.getApiClient();
-        const url = apiClient.getUrl(SmartLists.ENDPOINTS.import);
+        var urlPath = SmartLists.ENDPOINTS.backupUpload;
+        if (overwrite) {
+            urlPath += '?overwrite=true';
+        }
+        const url = apiClient.getUrl(urlPath);
 
-        // Show loading indicator
-        SmartLists.showNotification('Importing playlists...', 'info');
+        SmartLists.showNotification('Restoring from file...', 'info');
 
         fetch(url, {
             method: 'POST',
@@ -402,19 +549,18 @@
         })
             .then(async function (response) {
                 if (!response.ok) {
-                    let errorMessage = 'Import failed';
+                    let errorMessage = 'Restore failed';
                     try {
                         const errorData = await response.json();
                         errorMessage = errorData.message || errorData.detail || errorMessage;
                     } catch (e) {
-                        // Fallback to text if JSON parsing fails
                         try {
                             const errorText = await response.text();
                             if (errorText && errorText.trim()) {
                                 errorMessage = errorText;
                             }
                         } catch (textError) {
-                            // Ignore text parsing errors, use default message
+                            // Ignore
                         }
                     }
                     throw new Error(errorMessage);
@@ -423,72 +569,85 @@
             })
             .then(function (result) {
                 // Reset the drop zone UI
-                if (SmartLists.resetImportDropZone) {
-                    SmartLists.resetImportDropZone();
+                if (SmartLists.resetRestoreDropZone) {
+                    SmartLists.resetRestoreDropZone();
                 }
-
-                // Backend returns: imported, skipped, errors, details
-                const importedCount = result.imported || result.importedCount || 0;
-                const skippedCount = result.skipped || result.skippedCount || 0;
-                const errorCount = result.errors || result.errorCount || 0;
-                const details = result.details || [];
-
-                // Build detailed message
-                let message = 'Import completed: ';
-                const parts = [];
-
-                if (importedCount > 0) {
-                    parts.push(importedCount + ' imported');
-                }
-                if (skippedCount > 0) {
-                    parts.push(skippedCount + ' skipped');
-                }
-                if (errorCount > 0) {
-                    parts.push(errorCount + ' errors');
-                }
-
-                if (parts.length === 0) {
-                    message = 'Import completed with no playlists processed.';
-                } else {
-                    message += parts.join(', ') + '.';
-                }
-
-                // Show appropriate notification type
-                const notificationType = errorCount > 0 ? 'warning' : (importedCount > 0 ? 'success' : 'info');
-                SmartLists.showNotification(message, notificationType);
-
-                // Log detailed results to console for debugging
-                if (details.length > 0) {
-                    console.log('Import details:', details);
-                }
-
-                // Clear all checkbox selections
-                const playlistCheckboxes = page.querySelectorAll('.playlist-checkbox');
-                playlistCheckboxes.forEach(function (checkbox) {
-                    checkbox.checked = false;
-                });
-                const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.checked = false;
-                }
-                // Update selected count display if function exists
-                if (SmartLists.updateSelectedCount) {
-                    SmartLists.updateSelectedCount(page);
-                }
-
-                // Switch to manage tab and scroll to top
-                SmartLists.switchToTab(page, 'manage');
-                window.scrollTo({ top: 0, behavior: 'auto' });
-
-                // Refresh the playlist list
-                if (SmartLists.loadPlaylistList) {
-                    SmartLists.loadPlaylistList(page);
-                }
+                SmartLists._handleRestoreResult(result, page);
             })
             .catch(function (error) {
-                console.error('Import error:', error);
-                SmartLists.showNotification('Import failed: ' + (error.message || 'Unknown error'), 'error');
+                console.error('Restore error:', error);
+                SmartLists.showNotification('Restore failed: ' + (error.message || 'Unknown error'), 'error');
             });
+    };
+
+    /**
+     * Handle restore result (shared by restoreFromBackup and uploadAndRestore)
+     */
+    SmartLists._handleRestoreResult = function (result, page) {
+        // Backend returns: restored, overwritten, skipped, errors, details
+        var restoredCount = result.restored || 0;
+        var overwrittenCount = result.overwritten || 0;
+        var skippedCount = result.skipped || 0;
+        var errorCount = result.errors || 0;
+        var details = result.details || [];
+
+        // Build detailed message
+        var message = 'Restore completed: ';
+        var parts = [];
+
+        if (restoredCount > 0) {
+            parts.push(restoredCount + ' restored');
+        }
+        if (overwrittenCount > 0) {
+            parts.push(overwrittenCount + ' overwritten');
+        }
+        if (skippedCount > 0) {
+            parts.push(skippedCount + ' skipped');
+        }
+        if (errorCount > 0) {
+            parts.push(errorCount + ' errors');
+        }
+
+        if (parts.length === 0) {
+            message = 'Restore completed with no lists processed.';
+        } else {
+            message += parts.join(', ') + '.';
+        }
+
+        // Show appropriate notification type
+        var totalProcessed = restoredCount + overwrittenCount;
+        var notificationType = errorCount > 0 ? 'warning' : (totalProcessed > 0 ? 'success' : 'info');
+        SmartLists.showNotification(message, notificationType);
+
+        // Log detailed results to console
+        if (details.length > 0) {
+            console.log('Restore details:', details);
+        }
+
+        // Clear all checkbox selections
+        if (page) {
+            const playlistCheckboxes = page.querySelectorAll('.playlist-checkbox');
+            playlistCheckboxes.forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+            const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+            }
+            // Update selected count display if function exists
+            if (SmartLists.updateSelectedCount) {
+                SmartLists.updateSelectedCount(page);
+            }
+
+            // Switch to manage tab and scroll to top
+            SmartLists.switchToTab(page, 'manage');
+            window.scrollTo({ top: 0, behavior: 'auto' });
+
+            // Refresh the playlist list
+            if (SmartLists.loadPlaylistList) {
+                SmartLists.loadPlaylistList(page);
+            }
+        }
     };
 
 })(window.SmartLists = window.SmartLists || {});
