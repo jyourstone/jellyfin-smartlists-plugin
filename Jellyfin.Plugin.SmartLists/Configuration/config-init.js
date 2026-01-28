@@ -1497,6 +1497,32 @@
                 page._pendingAllowedUserPageUsers = config.AllowedUserPageUsers;
             }
 
+            // Load backup settings
+            var backupEnabledEl = page.querySelector('#backupEnabled');
+            var backupOptionsContainer = page.querySelector('#backupOptionsContainer');
+            if (backupEnabledEl) {
+                backupEnabledEl.checked = config.BackupEnabled || false;
+                if (backupOptionsContainer) {
+                    backupOptionsContainer.style.display = config.BackupEnabled ? 'block' : 'none';
+                }
+                // Add change handler to toggle options visibility
+                backupEnabledEl.addEventListener('change', function () {
+                    if (backupOptionsContainer) {
+                        backupOptionsContainer.style.display = this.checked ? 'block' : 'none';
+                    }
+                });
+            }
+
+            var backupRetentionEl = page.querySelector('#backupRetentionCount');
+            if (backupRetentionEl) {
+                backupRetentionEl.value = config.BackupRetentionCount !== undefined && config.BackupRetentionCount !== null ? config.BackupRetentionCount : 7;
+            }
+
+            var backupPathEl = page.querySelector('#backupCustomPath');
+            if (backupPathEl) {
+                backupPathEl.value = config.BackupCustomPath || '';
+            }
+
             // Load schedule configuration values
             const defaultScheduleTriggerElement = page.querySelector('#defaultScheduleTrigger');
             if (defaultScheduleTriggerElement) {
@@ -1669,6 +1695,21 @@
             // Save allowed users for user page access
             const allowedUserIds = SmartLists.getSelectedItems ? SmartLists.getSelectedItems(page, 'allowedUsersMultiSelect', 'allowed-users-checkbox') : [];
             config.AllowedUserPageUsers = allowedUserIds && allowedUserIds.length > 0 ? allowedUserIds : null;
+
+            // Save backup settings
+            var backupEnabledCheckbox = page.querySelector('#backupEnabled');
+            config.BackupEnabled = backupEnabledCheckbox ? backupEnabledCheckbox.checked : false;
+
+            var backupRetentionInput = page.querySelector('#backupRetentionCount');
+            if (backupRetentionInput && backupRetentionInput.value) {
+                var parsedRetention = parseInt(backupRetentionInput.value, 10);
+                config.BackupRetentionCount = (isNaN(parsedRetention) || parsedRetention < 1) ? 7 : parsedRetention;
+            } else {
+                config.BackupRetentionCount = 7;
+            }
+
+            var backupPathInput = page.querySelector('#backupCustomPath');
+            config.BackupCustomPath = backupPathInput ? (backupPathInput.value.trim() || null) : null;
 
             apiClient.updatePluginConfiguration(SmartLists.getPluginId(), config).then(function () {
                 Dashboard.hideLoadingMsg();

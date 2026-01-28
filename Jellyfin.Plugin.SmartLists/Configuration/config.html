@@ -415,7 +415,7 @@
                 <!-- Settings Tab -->
                 <div id="settings-tab" class="page-content hide" data-tab-content="settings">
                     <form style="margin-top:2em;">
-                        <h2 class="sectionTitle">General Settings</h2>
+                        <h2 class="sectionTitle">Default Settings</h2>
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="inputLabel" for="defaultListType">Default List Type</label>
@@ -492,16 +492,6 @@
                             <div class="fieldDescription">Default maximum playtime in minutes for new smart lists. Set
                                 to 0 for no limit.</div>
                         </div>
-
-                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
-                            Refresh Settings
-                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/auto-refresh/"
-                                target="_blank" rel="noopener noreferrer" title="Documentation"
-                                style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
-                                <span class="material-icons" aria-hidden="true"
-                                    style="font-size: 1em; line-height: 0;">info_outline</span>
-                            </a>
-                        </h2>
 
                         <div class="selectContainer" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="selectLabel" for="defaultAutoRefresh">Default Auto-refresh Mode</label>
@@ -681,6 +671,53 @@
                         </div>
 
                         <div>After you have changed this setting, you need to refresh all lists for it to take effect.
+                        </div>
+
+                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
+                            Automated Backup
+                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#automated-backup"
+                                target="_blank" rel="noopener noreferrer" title="Documentation"
+                                style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                <span class="material-icons" aria-hidden="true"
+                                    style="font-size: 1em; line-height: 0;">info_outline</span>
+                            </a>
+                        </h2>
+
+                        <div class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <div class="sectioncheckbox">
+                                <label class="emby-checkbox-label">
+                                    <input type="checkbox" is="emby-checkbox" id="backupEnabled"
+                                        data-embycheckbox="true" class="emby-checkbox">
+                                    <span class="checkboxLabel">Enable automated backups</span>
+                                    <span class="checkboxOutline">
+                                        <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                            aria-hidden="true"></span>
+                                        <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                            aria-hidden="true"></span>
+                                    </span>
+                                </label>
+                                <div class="fieldDescription">
+                                    When enabled, SmartLists will automatically create daily backups of all list configurations and images.
+                                    The scheduled task can be managed in Jellyfin's<a href="#!/dashboard/tasks" style="color: inherit;">Scheduled Tasks</a> page.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="backupOptionsContainer" style="display: none;">
+                            <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                                <label class="inputLabel" for="backupRetentionCount">Backups to retain</label>
+                                <input type="number" id="backupRetentionCount" class="emby-input" min="1" max="365" step="1" value="7">
+                                <div class="fieldDescription">Number of backup files to keep. Older backups will be automatically deleted. Default: 7</div>
+                            </div>
+
+                            <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                                <label class="inputLabel" for="backupCustomPath">Custom backup path (optional)</label>
+                                <input type="text" id="backupCustomPath" class="emby-input" placeholder="config/data/smartlists/backups">
+                                <div class="fieldDescription">
+                                    Custom directory path for backup files. Leave empty to use the default location "config/data/smartlists/backups".
+                                </div>
+                            </div>
                         </div>
 
                         <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">

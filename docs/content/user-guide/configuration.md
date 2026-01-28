@@ -323,6 +323,53 @@ The Export/Import feature allows you to backup your smart list configurations or
 !!! note "User-Specific Rules"
     Rules like "Playback Status for [User]" or "Is Favorite for [User]" that reference non-existent users will need to be updated manually.
 
+## Automated Backup
+
+SmartLists includes an automated backup feature that creates scheduled backups of all your smart list configurations and custom images.
+
+### Enabling Automated Backups
+
+1. Go to the Settings tab in the SmartLists admin page
+2. Find the "Automated Backup" section
+3. Check "Enable automated backups"
+4. Configure your backup settings:
+   - **Backups to retain**: Number of backup files to keep (default: 7). Older backups are automatically deleted.
+   - **Custom backup path** (optional): Specify a custom directory for backups. Leave empty to use the default location inside the SmartLists data folder.
+
+### Backup Schedule
+
+The backup task runs as a native Jellyfin scheduled task. By default, it runs daily at 3:00 AM.
+
+**To change the backup schedule:**
+
+1. Go to Jellyfin Dashboard → Scheduled Tasks
+2. Find "SmartLists backup task" under the "SmartLists" category
+3. Click on the task to configure triggers (time, frequency, etc.)
+
+### Manual Backup
+
+You can trigger a backup manually from **Scheduled Tasks** by clicking the play button next to the "SmartLists backup task".
+
+### Backup Contents
+
+Each backup is a timestamped ZIP file (e.g., `smartlists_backup_20250128_030000.zip`) containing:
+
+- All smart list configurations (`{listId}/config.json`)
+- All custom images for each list
+
+### Restoring from Backup
+
+To restore from a backup, use the Import feature in the Settings tab:
+
+1. Select the backup ZIP file
+2. Click "Import Selected File"
+3. Lists with duplicate IDs will be skipped to prevent conflicts
+
+!!! tip "Backup Best Practices"
+    - Keep at least 7 days of backups to recover from accidental changes
+    - For critical setups, consider copying backups to an external location periodically
+    - Test your backups occasionally by importing them to a test Jellyfin instance
+
 ## Performance Settings
 
 ### Processing Batch Size

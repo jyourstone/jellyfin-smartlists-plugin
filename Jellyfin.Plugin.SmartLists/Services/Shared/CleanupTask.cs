@@ -113,11 +113,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return;
             }
 
-            // Get all GUID folders in smartlists/
+            // Get all GUID folders in smartlists/, excluding special folders
             var guidFolders = Directory.GetDirectories(basePath)
                 .Where(d =>
                 {
                     var dirName = Path.GetFileName(d);
+                    // Skip the backups folder - it's managed by BackupTask
+                    if (dirName.Equals("backups", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+
                     return Guid.TryParse(dirName, out _);
                 })
                 .ToList();

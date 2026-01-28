@@ -124,5 +124,26 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
                 _allowedUserPageUsers = value?.Select(id => id.ToLowerInvariant()).ToList();
             }
         }
+
+        // ===== Backup Settings =====
+
+        /// <summary>
+        /// Gets or sets whether automated daily backups are enabled.
+        /// Default: false
+        /// </summary>
+        public bool BackupEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets the number of backup files to retain.
+        /// Older backups beyond this limit will be automatically deleted.
+        /// Default: 7 (keep 7 most recent backups)
+        /// </summary>
+        public int BackupRetentionCount { get; set; } = 7;
+
+        /// <summary>
+        /// Gets or sets the custom backup path.
+        /// If null or empty, uses the default path: {DataPath}/smartlists/backups/
+        /// </summary>
+        public string? BackupCustomPath { get; set; } = null;
     }
 }
