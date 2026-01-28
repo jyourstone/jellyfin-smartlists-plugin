@@ -699,7 +699,7 @@
                                 </label>
                                 <div class="fieldDescription">
                                     When enabled, SmartLists will automatically create daily backups of all list configurations and images.
-                                    The scheduled task can be managed in Jellyfin's<a href="#!/dashboard/tasks" style="color: inherit;">Scheduled Tasks</a> page.
+                                    The scheduled task can be managed in Jellyfin's <a href="#!/dashboard/tasks" style="color: inherit;">Scheduled Tasks</a> page.
                                 </div>
                             </div>
                         </div>
@@ -713,9 +713,11 @@
 
                             <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
                                 <label class="inputLabel" for="backupCustomPath">Custom backup path (optional)</label>
-                                <input type="text" id="backupCustomPath" class="emby-input" placeholder="config/data/smartlists/backups">
+                                <input type="text" id="backupCustomPath" class="emby-input" placeholder="Leave empty for default">
                                 <div class="fieldDescription">
-                                    Custom directory path for backup files. Leave empty to use the default location "config/data/smartlists/backups".
+                                    Custom directory path for backup files. Leave empty to use the default location inside the SmartLists data folder.
+                                    Relative paths are resolved from the SmartLists data folder.<br>
+                                    <span style="opacity: 0.8;">Examples: <code>D:\Backups\SmartLists</code> (Windows) or <code>/mnt/backups/smartlists</code> (Linux/Docker)</span>
                                 </div>
                             </div>
                         </div>

@@ -128,15 +128,63 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private string GetBackupDirectory(Configuration.PluginConfiguration config)
         {
+            var defaultPath = Path.Combine(_fileSystem.BasePath, "backups");
+
             if (!string.IsNullOrWhiteSpace(config.BackupCustomPath))
             {
-                // Use custom path - normalize it
-                var normalizedPath = Path.GetFullPath(config.BackupCustomPath);
-                return normalizedPath;
+                var customPath = config.BackupCustomPath.Trim();
+
+                // Detect Windows-style paths on non-Windows systems (e.g., "D:\path" on Linux)
+                if (!OperatingSystem.IsWindows() && IsWindowsStylePath(customPath))
+                {
+                    _logger.LogWarning(
+                        "Custom backup path '{CustomPath}' appears to be a Windows path but Jellyfin is running on Linux/macOS. " +
+                        "Using default backup location instead. Please use a Unix-style path (e.g., /mnt/backups/smartlists)",
+                        customPath);
+                    return defaultPath;
+                }
+
+                // Detect Unix-style paths on Windows (e.g., "/mnt/path" on Windows)
+                if (OperatingSystem.IsWindows() && IsUnixStyleAbsolutePath(customPath))
+                {
+                    _logger.LogWarning(
+                        "Custom backup path '{CustomPath}' appears to be a Unix path but Jellyfin is running on Windows. " +
+                        "Using default backup location instead. Please use a Windows-style path (e.g., D:\\Backups\\SmartLists)",
+                        customPath);
+                    return defaultPath;
+                }
+
+                // If path is absolute for this OS, use it directly
+                if (Path.IsPathRooted(customPath))
+                {
+                    return Path.GetFullPath(customPath);
+                }
+
+                // Relative paths are resolved against the SmartLists data folder
+                return Path.GetFullPath(Path.Combine(_fileSystem.BasePath, customPath));
             }
 
             // Default: {DataPath}/smartlists/backups/
-            return Path.Combine(_fileSystem.BasePath, "backups");
+            return defaultPath;
+        }
+
+        /// <summary>
+        /// Checks if a path looks like a Windows absolute path (e.g., "C:\path" or "D:/path").
+        /// </summary>
+        private static bool IsWindowsStylePath(string path)
+        {
+            return path.Length >= 3 &&
+                   char.IsLetter(path[0]) &&
+                   path[1] == ':' &&
+                   (path[2] == '\\' || path[2] == '/');
+        }
+
+        /// <summary>
+        /// Checks if a path looks like a Unix absolute path (starts with /).
+        /// </summary>
+        private static bool IsUnixStyleAbsolutePath(string path)
+        {
+            return path.Length >= 1 && path[0] == '/';
         }
 
         /// <summary>
