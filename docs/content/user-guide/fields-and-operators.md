@@ -35,12 +35,18 @@ The more fields selected, the more comprehensive but potentially stricter the ma
 
 | Field | Description |
 |-------|-------------|
-| **Resolution** | Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K) |
+| **Resolution** | Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K) - for Movies, Episodes, Music Videos, Home Videos |
+| **Channel Resolution** | Live TV channel resolution (SD, HD, Full HD, UHD) - for Live TV channels only |
 | **Framerate** | Video framerate in fps (e.g., 23.976, 29.97, 59.94) |
 | **Video Codec** | Codec format (e.g., HEVC, H264, AV1, VP9) |
 | **Video Profile** | Codec profile (e.g., Main 10, High) |
 | **Video Range** | Dynamic range (e.g., SDR, HDR) |
 | **Video Range Type** | Specific HDR format (e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG) |
+
+!!! note "Resolution vs Channel Resolution"
+    **Resolution** extracts from actual video stream data and works with Movies, Episodes, Music Videos, and Home Videos. It uses numeric height comparison.
+
+    **Channel Resolution** reads IPTV metadata text and only works with Live TV Channels. Values are: SD, SD (PAL), HD, Full HD, UHD. It supports numeric comparison operators (greater than, less than, etc.) for filtering by quality level - for example, "Channel Resolution greater than HD" will match Full HD and UHD channels.
 
 ### Audio
 
@@ -307,3 +313,57 @@ Matches: (Action AND Unplayed) OR (Comedy AND Unplayed)
     Each OR group can have its own **Max Items** limit. See [Per-Group Max Items](sorting-and-limits.md#per-group-max-items).
 
 For more examples, see [Common Use Cases](../examples/common-use-cases.md).
+
+---
+
+## Media Type-Specific Notes
+
+### Live TV Channels
+
+Live TV channels have limited metadata available for filtering. The following fields are supported:
+
+**Content Fields:**
+
+- **Name** - Channel name
+- **OfficialRating** - Parental rating (if available)
+- **Tags** - Custom tags
+
+**Video Fields:**
+
+- **Channel Resolution** - Live TV-specific resolution (SD, SD (PAL), HD, Full HD, UHD)
+
+!!! info "Channel Resolution vs Resolution"
+    Live TV channels use **Channel Resolution** instead of the standard **Resolution** field. This is because Live TV resolution is stored as text metadata from IPTV sources, while standard Resolution is calculated from video stream data.
+
+    Available Channel Resolution values:
+
+    - **SD** - Standard Definition
+    - **SD (PAL)** - PAL Standard Definition
+    - **HD** - High Definition (720p)
+    - **Full HD** - Full HD (1080p)
+    - **UHD** - Ultra HD (4K)
+
+**Metadata Fields:**
+
+- **Collections** - Collection membership
+- **DateCreated**, **DateLastRefreshed**, **DateLastSaved** - Timestamp fields
+
+**User Data Fields (useful for DVR recordings):**
+
+- **IsFavorite** - Whether the channel is favorited
+- **PlayCount**, **LastPlayedDate**, **PlaybackStatus** - Playback tracking
+
+Most other fields are not available for Live TV channels:
+
+- **Resolution** - Standard resolution field (uses video stream data, not available for Live TV)
+- **LibraryName** - Live TV is not part of a traditional library
+- **Genre, Year, People, audio/video codecs** - Not populated
+
+!!! tip "Organizing Channels"
+    Use **Name** rules with contains/regex to group channels by category (e.g., `Name contains "News"` or `Name contains "Sports"`), or manually tag channels in Jellyfin and filter by **Tags**.
+
+!!! tip "Sorting by Resolution"
+    Use the **Channel Resolution** sort option (available only for Live TV) to organize channels by quality. See [Sorting and Limits](sorting-and-limits.md#channel-resolution) for details.
+
+!!! note "Collections Only"
+    Live TV channels can only be added to **Collections**, not Playlists. This is a Jellyfin limitation.

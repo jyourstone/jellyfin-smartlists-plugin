@@ -356,10 +356,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Validate media types before processing
                 _logger.LogDebug("Validating media types for playlist '{PlaylistName}': {MediaTypes}", dto.Name, dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "null");
 
-                if (dto.MediaTypes?.Contains(Core.Constants.MediaTypes.Series) == true)
+                // Check for collections-only media types (Series, LiveTvChannel)
+                var collectionsOnlyTypes = dto.MediaTypes?.Where(mt => Core.Constants.MediaTypes.CollectionsOnlySet.Contains(mt)).ToList();
+                if (collectionsOnlyTypes?.Count > 0)
                 {
-                    _logger.LogError("Smart playlist '{PlaylistName}' uses 'Series' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Series support. Skipping playlist refresh.", dto.Name);
-                    return (false, "Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.", string.Empty);
+                    var typesList = string.Join(", ", collectionsOnlyTypes);
+                    _logger.LogError("Smart playlist '{PlaylistName}' uses collections-only media type(s): {MediaTypes}. These are not supported in Playlists due to Jellyfin limitations. Create a Collection instead. Skipping playlist refresh.", dto.Name, typesList);
+                    return (false, $"{typesList} media type(s) are not supported for Playlists. Create a Collection instead.", string.Empty);
                 }
 
                 if (dto.MediaTypes == null || dto.MediaTypes.Count == 0)
@@ -878,11 +881,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 dto != null ? $" for '{dto.Name}'" : "", 
                 mediaTypes != null ? string.Join(",", mediaTypes) : "null");
 
-            if (mediaTypes?.Contains(Core.Constants.MediaTypes.Series) == true)
+            // Check for collections-only media types (Series, LiveTvChannel)
+            var collectionsOnlyTypes = mediaTypes?.Where(mt => Core.Constants.MediaTypes.CollectionsOnlySet.Contains(mt)).ToList();
+            if (collectionsOnlyTypes?.Count > 0)
             {
                 var playlistName = dto?.Name ?? "Unknown";
-                _logger?.LogError("Smart playlist '{PlaylistName}' uses 'Series' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Series support.", playlistName);
-                throw new InvalidOperationException("Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.");
+                var typesList = string.Join(", ", collectionsOnlyTypes);
+                _logger?.LogError("Smart playlist '{PlaylistName}' uses collections-only media type(s): {MediaTypes}. These are not supported in Playlists due to Jellyfin limitations. Create a Collection instead.", playlistName, typesList);
+                throw new InvalidOperationException($"{typesList} media type(s) are not supported for Playlists. Create a Collection instead.");
             }
 
             if (mediaTypes == null || mediaTypes.Count == 0)

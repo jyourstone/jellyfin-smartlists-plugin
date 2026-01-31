@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Entities.Movies;
@@ -1190,6 +1191,49 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 logger?.LogWarning(ex, "Failed to extract resolution for item {Name}", baseItem.Name);
             }
+        }
+
+        /// <summary>
+        /// Extracts channel resolution for Live TV channels from Jellyfin metadata.
+        /// Reads from baseItem.Height which is set via the Jellyfin metadata editor.
+        /// </summary>
+        private static void ExtractChannelResolution(Operand operand, BaseItem baseItem, ILogger? logger)
+        {
+            operand.ChannelResolution = string.Empty;
+            try
+            {
+                // Read resolution from Height property (set via Jellyfin metadata editor)
+                var height = baseItem.Height;
+                if (height > 0)
+                {
+                    operand.ChannelResolution = MapHeightToChannelResolution(height);
+                    logger?.LogDebug("Extracted channel resolution from Height: {Height} -> {Resolution} for {Name}",
+                        height, operand.ChannelResolution, baseItem.Name);
+                }
+                else
+                {
+                    logger?.LogDebug("No resolution set for Live TV channel {Name} (Height=0)", baseItem.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract channel resolution for item {Name}", baseItem.Name);
+            }
+        }
+
+        /// <summary>
+        /// Maps a pixel height to a channel resolution category.
+        /// </summary>
+        private static string MapHeightToChannelResolution(int height)
+        {
+            return height switch
+            {
+                >= 2160 => "UHD",        // 4K and above
+                >= 1080 => "Full HD",     // 1080p/1080i
+                >= 720 => "HD",           // 720p
+                >= 576 => "SD (PAL)",     // PAL SD (576p/576i)
+                _ => "SD"                 // Everything below (480p, 360p, etc.)
+            };
         }
 
         /// <summary>
@@ -2553,6 +2597,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.VideoProfile = string.Empty;
                 operand.VideoRange = string.Empty;
                 operand.VideoRangeType = string.Empty;
+            }
+
+            // Extract channel resolution for Live TV channels (lightweight, no extraction flag needed)
+            if (operand.ItemType == Constants.MediaTypes.LiveTvChannel)
+            {
+                ExtractChannelResolution(operand, baseItem, logger);
+            }
+            else
+            {
+                operand.ChannelResolution = string.Empty;
             }
 
             // Extract people - only when needed for performance
@@ -4346,7 +4400,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             try
             {
-                var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.Compiled);
+                var regex = new Regex(pattern, RegexOptions.Compiled);
                 return regex.IsMatch(name);
             }
             catch (Exception ex)

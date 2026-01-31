@@ -1057,7 +1057,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 Recursive = true,
                 IsVirtualItem = false
             };
-            
+
             return _libraryManager.GetItemsResult(query).Items;
         }
 

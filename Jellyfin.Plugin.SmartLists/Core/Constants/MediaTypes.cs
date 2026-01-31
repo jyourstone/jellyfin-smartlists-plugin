@@ -17,6 +17,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         // but supported in Collections (Collections don't play sequentially, so no expansion issues)
         public const string Series = nameof(Series);
 
+        // Live TV Types: Not supported in Playlists (Jellyfin doesn't allow Live TV channels in playlists)
+        // but supported in Collections (can group channels by category, genre, etc.)
+        public const string LiveTvChannel = nameof(LiveTvChannel);
+
         // Movie Types
         public const string Movie = nameof(Movie);
 
@@ -52,7 +56,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { BaseItemKind.Book, Book },
             { BaseItemKind.AudioBook, AudioBook },
             // Series: Supported in Collections, not in Playlists
-            { BaseItemKind.Series, Series }
+            { BaseItemKind.Series, Series },
+            // LiveTvChannel: Supported in Collections, not in Playlists
+            { BaseItemKind.LiveTvChannel, LiveTvChannel }
         };
 
         /// <summary>
@@ -69,7 +75,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { Book, BaseItemKind.Book },
             { AudioBook, BaseItemKind.AudioBook },
             // Series: Supported in Collections, not in Playlists
-            { Series, BaseItemKind.Series }
+            { Series, BaseItemKind.Series },
+            // LiveTvChannel: Supported in Collections, not in Playlists
+            { LiveTvChannel, BaseItemKind.LiveTvChannel }
         };
 
         /// <summary>
@@ -97,6 +105,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// Gets TV media types (Episode and Series)
         /// </summary>
         public static readonly string[] TV = [Episode, Series];
+
+        /// <summary>
+        /// Gets Live TV media types (LiveTvChannel)
+        /// </summary>
+        public static readonly string[] LiveTV = [LiveTvChannel];
+
+        /// <summary>
+        /// Gets media types that are only supported in Collections (not Playlists)
+        /// </summary>
+        public static readonly string[] CollectionsOnly = [Series, LiveTvChannel];
 
         /// <summary>
         /// Gets music-related media types (Audio, AudioBook, MusicVideo)
@@ -134,6 +152,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// HashSet variant of VideoStreamCapable for O(1) membership checks
         /// </summary>
         public static readonly HashSet<string> VideoStreamCapableSet = new(VideoStreamCapable, StringComparer.Ordinal);
+
+        /// <summary>
+        /// HashSet variant of CollectionsOnly for O(1) membership checks
+        /// </summary>
+        public static readonly HashSet<string> CollectionsOnlySet = new(CollectionsOnly, StringComparer.Ordinal);
 
         /// <summary>
         /// Gets BaseItemKind array for audio-only content (derived from centralized mapping)

@@ -18,6 +18,7 @@
         if (SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) return 'boolean';
         if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) return 'simple';
         if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'resolution';
+        if (SmartLists.FIELD_TYPES.CHANNEL_RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'channelResolution';
         if (fieldValue === 'PlaybackStatus') return 'playback';
         // Default to string for STRING_FIELDS and any unknown fields
         return 'string';
@@ -167,6 +168,8 @@
             SmartLists.handleDateFieldInput(valueContainer, currentOperator, currentValue);
         } else if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleResolutionFieldInput(valueContainer, currentValue);
+        } else if (SmartLists.FIELD_TYPES.CHANNEL_RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) {
+            SmartLists.handleChannelResolutionFieldInput(valueContainer, currentValue);
         } else {
             SmartLists.handleTextFieldInput(valueContainer, currentValue);
         }
@@ -373,6 +376,47 @@
 
         // Add resolution options and select if matches currentValue
         resolutionOptions.forEach(function (opt) {
+            const option = document.createElement('option');
+            option.value = opt.Value;
+            option.textContent = opt.Label;
+            if (currentValue && opt.Value === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        valueContainer.appendChild(select);
+    };
+
+    SmartLists.handleChannelResolutionFieldInput = function (valueContainer, currentValue) {
+        const select = document.createElement('select');
+        select.className = 'emby-select rule-value-input';
+        select.setAttribute('is', 'emby-select');
+        select.style.width = '100%';
+
+        // Add placeholder option
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = '-- Channel Resolution --';
+        placeholderOption.disabled = true;
+        // Only select placeholder if no currentValue
+        if (!currentValue) {
+            placeholderOption.selected = true;
+        }
+        select.appendChild(placeholderOption);
+
+        // Channel resolution options for Live TV (from IPTV metadata)
+        // These match Jellyfin's metadata editor options
+        const channelResolutionOptions = [
+            { Value: 'SD', Label: 'SD (Standard Definition)' },
+            { Value: 'SD (PAL)', Label: 'SD (PAL)' },
+            { Value: 'HD', Label: 'HD (High Definition)' },
+            { Value: 'Full HD', Label: 'Full HD (1080p)' },
+            { Value: 'UHD', Label: 'UHD (4K)' }
+        ];
+
+        // Add resolution options and select if matches currentValue
+        channelResolutionOptions.forEach(function (opt) {
             const option = document.createElement('option');
             option.value = opt.Value;
             option.textContent = opt.Label;
@@ -1938,6 +1982,25 @@
         const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioBook = selectedMediaTypes.indexOf('AudioBook') !== -1;
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
+        const hasLiveTvChannel = selectedMediaTypes.indexOf('LiveTvChannel') !== -1;
+
+        // Live TV Channel has very limited metadata - only show compatible fields
+        // If LiveTvChannel is selected along with other types, show fields that work for ANY selected type
+        if (hasLiveTvChannel) {
+            var isLiveTvCompatible = SmartLists.LIVETV_COMPATIBLE_FIELDS.indexOf(fieldValue) !== -1;
+
+            // If ONLY LiveTvChannel is selected, restrict to compatible fields
+            if (selectedMediaTypes.length === 1) {
+                return isLiveTvCompatible;
+            }
+
+            // If mixed with other types, show field if it works for LiveTV OR other types
+            // For LiveTV-compatible fields, always show
+            if (isLiveTvCompatible) {
+                return true;
+            }
+            // For non-LiveTV fields, check if other selected types support them (continue to checks below)
+        }
 
         // Episode-only fields
         if (['SeriesName', 'NextUnwatched'].indexOf(fieldValue) !== -1) {
@@ -1953,17 +2016,28 @@
         // Audio-capable types: Movie, Episode, Audio, AudioBook, MusicVideo, Video
         // Books don't have audio metadata, Photos don't have audio metadata
         if (SmartLists.AUDIO_FIELD_NAMES.indexOf(fieldValue) !== -1) {
-            const hasAudioType = selectedMediaTypes.some(function (type) {
+            var hasAudioType = selectedMediaTypes.some(function (type) {
                 return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
             });
             return hasAudioType;
         }
 
+        // ChannelResolution is only for Live TV channels
+        // It should NOT be shown for any other media type
+        if (fieldValue === 'ChannelResolution') {
+            return hasLiveTvChannel;
+        }
+
         // Video fields - show when any video-capable type is selected
         // Video-capable types: Movie, Episode, MusicVideo, Video
         // Audio/AudioBooks don't have video streams, Books/Photos don't have video metadata
+        // Note: LiveTvChannel is excluded because it uses ChannelResolution instead of Resolution
         if (SmartLists.VIDEO_FIELD_NAMES.indexOf(fieldValue) !== -1) {
-            const hasVideoType = selectedMediaTypes.some(function (type) {
+            var hasVideoType = selectedMediaTypes.some(function (type) {
+                // LiveTvChannel doesn't use regular video fields (uses ChannelResolution instead)
+                if (type === 'LiveTvChannel') {
+                    return false;
+                }
                 return SmartLists.VIDEO_CAPABLE_TYPES.indexOf(type) !== -1;
             });
             return hasVideoType;
@@ -1975,6 +2049,10 @@
         }
 
         // All other fields are universal (Name, ProductionYear, ReleaseDate, etc.)
+        // But if ONLY LiveTvChannel is selected, we already returned above
+        if (hasLiveTvChannel && selectedMediaTypes.length === 1) {
+            return false; // Non-compatible field with only LiveTvChannel selected
+        }
         return true;
     };
 

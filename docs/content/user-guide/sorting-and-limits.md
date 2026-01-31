@@ -59,6 +59,15 @@ Sort by album name, disc number, then track number. Designed specifically for mu
 ### Similarity
 Sort by similarity score (highest first). Only available when using the "Similar To" filter field in your rules.
 
+### Channel Resolution
+Sort Live TV channels by resolution quality. Only available when Live TV Channel is selected as a media type.
+
+- **Ascending**: Lower resolution first (SD → HD → Full HD → UHD)
+- **Descending**: Higher resolution first (UHD → Full HD → HD → SD)
+
+!!! note "Live TV Only"
+    This sort option is specifically for Live TV channels and uses the resolution metadata set via Jellyfin's metadata editor.
+
 ### Random
 Randomize the order of items. Each refresh generates a new random order.
 

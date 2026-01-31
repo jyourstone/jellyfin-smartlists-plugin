@@ -102,6 +102,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         UserData,       // User-specific fields (PlaybackStatus, IsFavorite, etc.)
         Similarity,
         Simple,         // Predefined values (ItemType)
+        ChannelResolution, // Live TV channel resolution (SD, HD, Full HD, UHD)
     }
 
     /// <summary>
@@ -185,6 +186,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static readonly HashSet<string> _userDataFields;
         private static readonly HashSet<string> _simpleFields;
         private static readonly HashSet<string> _resolutionFields;
+        private static readonly HashSet<string> _channelResolutionFields;
         private static readonly HashSet<string> _framerateFields;
         private static readonly HashSet<string> _similarityFields;
         private static readonly Dictionary<string, string[]> _fieldOperators;
@@ -205,6 +207,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             _userDataFields = BuildFieldSet(f => f.IsUserSpecific);
             _simpleFields = BuildFieldSet(f => f.Type == FieldType.Simple);
             _resolutionFields = BuildFieldSet(f => f.Type == FieldType.Resolution);
+            _channelResolutionFields = BuildFieldSet(f => f.Type == FieldType.ChannelResolution);
             _framerateFields = BuildFieldSet(f => f.Type == FieldType.Framerate);
             _similarityFields = BuildFieldSet(f => f.Type == FieldType.Similarity);
             _fieldOperators = _fields.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedOperators, StringComparer.OrdinalIgnoreCase);
@@ -230,6 +233,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Video Fields
             AddField(fields, "Resolution", "Resolution", FieldType.Resolution, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "ChannelResolution", "Channel Resolution", FieldType.ChannelResolution, FieldCategory.Video, NumericOperators);
             AddField(fields, "Framerate", "Framerate", FieldType.Framerate, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoCodec", "Video Codec", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoProfile", "Video Profile", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
@@ -412,6 +416,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public static bool IsUserDataField(string fieldName) => _userDataFields.Contains(fieldName);
         public static bool IsSimpleField(string fieldName) => _simpleFields.Contains(fieldName);
         public static bool IsResolutionField(string fieldName) => _resolutionFields.Contains(fieldName);
+        public static bool IsChannelResolutionField(string fieldName) => _channelResolutionFields.Contains(fieldName);
         public static bool IsFramerateField(string fieldName) => _framerateFields.Contains(fieldName);
         public static bool IsSimilarityField(string fieldName) => _similarityFields.Contains(fieldName);
 
@@ -460,6 +465,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public static HashSet<string> GetResolutionFields()
         {
             return new HashSet<string>(_resolutionFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetChannelResolutionFields()
+        {
+            return new HashSet<string>(_channelResolutionFields, StringComparer.OrdinalIgnoreCase);
         }
 
         public static HashSet<string> GetFramerateFields()

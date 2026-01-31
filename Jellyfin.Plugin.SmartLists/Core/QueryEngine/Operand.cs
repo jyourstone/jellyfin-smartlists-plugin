@@ -72,6 +72,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         // Video quality fields (from media streams)
         public string Resolution { get; set; } = string.Empty;  // e.g., 480p, 720p, 1080p, 4K, 8K
+        public string ChannelResolution { get; set; } = string.Empty;  // For Live TV channels: SD, HD, Full HD, UHD (from IPTV metadata)
         public float? Framerate { get; set; } = null;  // e.g., 23.976, 29.97, 59.94
         public string VideoCodec { get; set; } = string.Empty;  // e.g., HEVC, H264, AV1, VP9
         public string VideoProfile { get; set; } = string.Empty;  // e.g., Main 10, High

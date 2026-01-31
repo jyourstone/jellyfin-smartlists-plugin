@@ -2054,6 +2054,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is EpisodeNumberOrderDesc ||
                    order is TrackNumberOrderDesc ||
                    order is Orders.RuleBlockOrderDesc ||
+                   order is ChannelResolutionOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -2702,7 +2703,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         if (matches)
                         {
                             results.Add(item);
-                            
+
                             // Track which groups this item matched for per-group limiting
                             if (matchingGroups != null && matchingGroups.Count > 0)
                             {
@@ -2832,6 +2833,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "SeasonNumber Descending", () => new SeasonNumberOrderDesc() },
             { "EpisodeNumber Ascending", () => new EpisodeNumberOrder() },
             { "EpisodeNumber Descending", () => new EpisodeNumberOrderDesc() },
+            { "ChannelResolution Ascending", () => new ChannelResolutionOrder() },
+            { "ChannelResolution Descending", () => new ChannelResolutionOrderDesc() },
             { "Random", () => new RandomOrder() },
             { "Rule Block Order Ascending", () => new Orders.RuleBlockOrder() },
             { "Rule Block Order Descending", () => new Orders.RuleBlockOrderDesc() },

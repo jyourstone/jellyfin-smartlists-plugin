@@ -145,6 +145,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildResolutionExpression(r, left, logger);
             }
 
+            // Check channel resolution fields (for Live TV channels)
+            if (tProp == typeof(string) && IsChannelResolutionField(r.MemberName))
+            {
+                return BuildChannelResolutionExpression(r, left, logger);
+            }
+
             // Check framerate fields (nullable float type)
             if (tProp == typeof(float?) && IsFramerateField(r.MemberName))
             {
@@ -807,6 +813,63 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Builds expressions for channel resolution fields (Live TV) that support both equality and numeric comparisons.
+        /// Channel resolution uses text values (SD, HD, Full HD, UHD) from IPTV metadata.
+        /// </summary>
+        private static BinaryExpression BuildChannelResolutionExpression(Expression r, MemberExpression left, ILogger? logger)
+        {
+            logger?.LogDebug("SmartLists handling channel resolution field {Field} with value {Value}", r.MemberName, r.TargetValue);
+
+            // Enforce per-field operator whitelist for channel resolution fields
+            var allowedOps = Operators.GetOperatorsForField(r.MemberName);
+            if (!allowedOps.Contains(r.Operator))
+            {
+                logger?.LogError("SmartLists unsupported operator '{Operator}' for channel resolution field '{Field}'. Allowed: {Allowed}",
+                    r.Operator, r.MemberName, string.Join(", ", allowedOps));
+                var supportedOperators = Operators.GetSupportedOperatorsString(r.MemberName);
+                throw new ArgumentException($"Operator '{r.Operator}' is not supported for channel resolution field '{r.MemberName}'. Supported operators: {supportedOperators}");
+            }
+
+            // Get the numeric height value for the target channel resolution
+            var targetHeight = ChannelResolutionTypes.GetHeightForResolution(r.TargetValue);
+            if (targetHeight == -1)
+            {
+                logger?.LogError("SmartLists channel resolution comparison failed: Invalid resolution value '{Value}' for field '{Field}'", r.TargetValue, r.MemberName);
+                throw new ArgumentException($"Invalid channel resolution value '{r.TargetValue}' for field '{r.MemberName}'. Expected one of: {string.Join(", ", ChannelResolutionTypes.GetAllValues())}");
+            }
+
+            // For all channel resolution comparisons, we need to ensure the field is not null/empty
+            // and that it's a valid resolution (height > 0)
+            var resolutionHeightMethod = typeof(ChannelResolutionTypes).GetMethod("GetHeightForResolution", [typeof(string)]);
+            if (resolutionHeightMethod == null) throw new InvalidOperationException("ChannelResolutionTypes.GetHeightForResolution method not found");
+            var resolutionHeightCall = System.Linq.Expressions.Expression.Call(
+                resolutionHeightMethod,
+                left
+            );
+
+            var targetHeightConstant = System.Linq.Expressions.Expression.Constant(targetHeight);
+            var zeroConstant = System.Linq.Expressions.Expression.Constant(0);
+
+            // First, ensure the channel resolution is valid (not null/empty and height > 0)
+            var isValidResolution = System.Linq.Expressions.Expression.GreaterThan(resolutionHeightCall, zeroConstant);
+
+            // Handle different operators with validity check
+            BinaryExpression comparisonExpression = r.Operator switch
+            {
+                "Equal" => System.Linq.Expressions.Expression.Equal(resolutionHeightCall, targetHeightConstant),
+                "NotEqual" => System.Linq.Expressions.Expression.NotEqual(resolutionHeightCall, targetHeightConstant),
+                "GreaterThan" => System.Linq.Expressions.Expression.GreaterThan(resolutionHeightCall, targetHeightConstant),
+                "LessThan" => System.Linq.Expressions.Expression.LessThan(resolutionHeightCall, targetHeightConstant),
+                "GreaterThanOrEqual" => System.Linq.Expressions.Expression.GreaterThanOrEqual(resolutionHeightCall, targetHeightConstant),
+                "LessThanOrEqual" => System.Linq.Expressions.Expression.LessThanOrEqual(resolutionHeightCall, targetHeightConstant),
+                _ => throw new ArgumentException($"Operator '{r.Operator}' is not supported for channel resolution field '{r.MemberName}'. Supported operators: {string.Join(", ", allowedOps)}"),
+            };
+
+            // Combine: channel resolution must be valid AND meet the comparison criteria
+            return System.Linq.Expressions.Expression.AndAlso(isValidResolution, comparisonExpression);
+        }
+
+        /// <summary>
         /// Builds expressions for framerate fields that support numeric comparisons with null handling.
         /// Items with null framerate are ignored (filtered out).
         /// </summary>
@@ -1260,6 +1323,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static bool IsFramerateField(string fieldName)
         {
             return FieldRegistry.IsFramerateField(fieldName);
+        }
+
+        /// <summary>
+        /// Checks if a field name is a channel resolution field that needs special handling.
+        /// </summary>
+        /// <param name="fieldName">The field name to check</param>
+        /// <returns>True if it's a channel resolution field, false otherwise</returns>
+        private static bool IsChannelResolutionField(string fieldName)
+        {
+            return FieldRegistry.IsChannelResolutionField(fieldName);
         }
 
         /// <summary>

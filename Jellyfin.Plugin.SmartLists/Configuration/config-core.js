@@ -29,6 +29,7 @@
         BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched'],
         SIMPLE_FIELDS: ['ItemType'],
         RESOLUTION_FIELDS: ['Resolution'],
+        CHANNEL_RESOLUTION_FIELDS: ['ChannelResolution'],
         STRING_FIELDS: ['SimilarTo', 'Name', 'Album', 'SeriesName', 'OfficialRating', 'Overview', 'FileName', 'FolderPath', 'AudioCodec', 'AudioProfile', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType', 'PlaybackStatus', 'CustomRating'],
         USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'NextUnwatched', 'LastPlayedDate']
     };
@@ -40,6 +41,27 @@
     // Audio and video field lists for visibility gating
     SmartLists.AUDIO_FIELD_NAMES = ['AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioCodec', 'AudioProfile', 'AudioChannels', 'AudioLanguages', 'SubtitleLanguages'];
     SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType'];
+
+    // Live TV Channel compatible fields - limited metadata available for IPTV channels
+    // Only these fields will be shown when LiveTvChannel is the only selected media type
+    // Note: User data fields included for DVR recordings support
+    // Note: Resolution excluded - Live TV uses different format (HD/SD text vs numeric height)
+    // Note: LibraryName excluded - Live TV is not part of a traditional library
+    // Note: ChannelResolution added for Live TV-specific resolution (SD, HD, Full HD, UHD)
+    SmartLists.LIVETV_COMPATIBLE_FIELDS = [
+        'Name',              // Channel name
+        'OfficialRating',    // Parental rating
+        'Tags',              // Custom tags
+        'Collections',       // Collection membership
+        'DateCreated',       // When added to Jellyfin
+        'DateLastRefreshed', // Last metadata refresh
+        'DateLastSaved',     // Last database save
+        'IsFavorite',        // User can favorite channels
+        'PlayCount',         // Useful for DVR recordings
+        'LastPlayedDate',    // Useful for DVR recordings
+        'PlaybackStatus',    // Useful for DVR recordings (Played/Unplayed)
+        'ChannelResolution'  // Live TV channel resolution (SD, HD, Full HD, UHD)
+    ];
 
     // Debounce delay for media type change updates (milliseconds)
     SmartLists.MEDIA_TYPE_UPDATE_DEBOUNCE_MS = 200;
@@ -62,6 +84,7 @@
         { value: 'Similarity', label: 'Similarity (requires Similar To rule)' },
         { value: 'TrackNumber', label: 'Track Number' },
         { value: 'Resolution', label: 'Resolution' },
+        { value: 'ChannelResolution', label: 'Channel Resolution' },
         { value: 'Rule Block Order', label: 'Rule Block Order' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'No Order' }
@@ -93,7 +116,8 @@
         { Value: "Video", Label: "Video (Home Video)" },
         { Value: "Photo", Label: "Photo (Home Photo)" },
         { Value: "Book", Label: "Book" },
-        { Value: "AudioBook", Label: "Audiobook" }
+        { Value: "AudioBook", Label: "Audiobook" },
+        { Value: "LiveTvChannel", Label: "Live TV Channel", CollectionOnly: true } // Live TV channels can only be added to Collections, not Playlists
     ];
 
     // Utility function to get selected media types from page
