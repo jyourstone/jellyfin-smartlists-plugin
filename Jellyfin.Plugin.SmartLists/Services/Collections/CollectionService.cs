@@ -17,6 +17,7 @@ using Jellyfin.Plugin.SmartLists.Services.Abstractions;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -539,7 +540,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
             if (!hasCustomPrimary && !hasCustomThumb)
             {
-                await RefreshCollectionMetadataAsync(collection, cancellationToken).ConfigureAwait(false);
+                // Pass linkedChildren to ensure we use the freshly-set items rather than potentially stale cache
+                await RefreshCollectionMetadataAsync(collection, linkedChildren, cancellationToken).ConfigureAwait(false);
             }
 
             // Always set the name after metadata refresh to ensure it's correct
@@ -557,7 +559,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                 // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                await SetPhotoForCollection(collectionAfterRefresh, cancellationToken).ConfigureAwait(false);
+                // Pass linkedChildren to ensure we use the freshly-set items rather than potentially stale cache
+                await SetPhotoForCollection(collectionAfterRefresh, linkedChildren, cancellationToken).ConfigureAwait(false);
 
                 // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                 SetCollectionDisplayOrder(collectionAfterRefresh);
@@ -836,7 +839,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
                 if (!hasCustomPrimary && !hasCustomThumb)
                 {
-                    await RefreshCollectionMetadataAsync(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    // Pass linkedChildren to avoid stale cache issues - the collection object may not have
+                    // updated LinkedChildren yet after AddToCollectionAsync, especially for large libraries
+                    await RefreshCollectionMetadataAsync(retrievedItem, linkedChildren, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Always set the name after metadata refresh to ensure it's correct
@@ -853,7 +858,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                     // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                    await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    // Pass linkedChildren to avoid stale cache issues - the collection object may not have
+                    // updated LinkedChildren yet after AddToCollectionAsync, especially for large libraries
+                    await SetPhotoForCollection(retrievedItem, linkedChildren, cancellationToken).ConfigureAwait(false);
 
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
@@ -1061,17 +1068,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             return _libraryManager.GetItemsResult(query).Items;
         }
 
+        /// <summary>
+        /// Refreshes collection metadata including cover image generation.
+        /// </summary>
+        /// <param name="collection">The collection to refresh.</param>
+        /// <param name="knownLinkedChildren">Optional pre-fetched LinkedChildren to use instead of querying from the collection.
+        /// This is used when items were just added and the collection object may have stale data.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "File path comes from Jellyfin's internal ItemImageInfo.Path property, which is validated by Jellyfin")]
-        private async Task RefreshCollectionMetadataAsync(BaseItem collection, CancellationToken cancellationToken)
+        private async Task RefreshCollectionMetadataAsync(BaseItem collection, LinkedChild[]? knownLinkedChildren, CancellationToken cancellationToken)
         {
             // Verify this is a BoxSet using BaseItemKind
             if (collection.GetBaseItemKind() != BaseItemKind.BoxSet)
             {
-                _logger.LogWarning("Expected BoxSet but got {Type} (BaseItemKind: {Kind}) for collection {Name}", 
+                _logger.LogWarning("Expected BoxSet but got {Type} (BaseItemKind: {Kind}) for collection {Name}",
                     collection.GetType().Name, collection.GetBaseItemKind(), collection.Name);
                 return;
             }
-            
+
             // BoxSet properties are available on BaseItem
             var boxSet = collection;
 
@@ -1080,9 +1094,19 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 var directoryService = new Services.Shared.BasicDirectoryService();
 
-                // Check if collection is empty using reflection to access LinkedChildren property
-                var linkedChildrenProperty = collection.GetType().GetProperty("LinkedChildren");
-                var linkedChildren = linkedChildrenProperty?.GetValue(collection) as LinkedChild[];
+                // Check if collection is empty - use pre-fetched LinkedChildren if provided to avoid stale cache issues
+                LinkedChild[]? linkedChildren;
+                if (knownLinkedChildren != null)
+                {
+                    linkedChildren = knownLinkedChildren;
+                    _logger.LogDebug("Using {Count} pre-fetched LinkedChildren for collection {CollectionName} metadata refresh",
+                        linkedChildren.Length, collection.Name);
+                }
+                else
+                {
+                    var linkedChildrenProperty = collection.GetType().GetProperty("LinkedChildren");
+                    linkedChildren = linkedChildrenProperty?.GetValue(collection) as LinkedChild[];
+                }
                 
                 if (linkedChildren == null || linkedChildren.Length == 0)
                 {
@@ -1146,9 +1170,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// Skips if the collection has a manually uploaded image.
         /// </summary>
         /// <param name="collection">The collection to set the image for</param>
+        /// <param name="knownLinkedChildren">Optional pre-fetched LinkedChildren to use instead of querying from the collection.
+        /// This is used when items were just added and the collection object may have stale data.</param>
         /// <param name="cancellationToken">Cancellation token</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "File path comes from Jellyfin's internal ItemImageInfo.Path property, which is validated by Jellyfin")]
-        private async Task SetPhotoForCollection(BaseItem collection, CancellationToken cancellationToken)
+        private async Task SetPhotoForCollection(BaseItem collection, LinkedChild[]? knownLinkedChildren, CancellationToken cancellationToken)
         {
             try
             {
@@ -1171,8 +1197,27 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     _logger.LogDebug("Collection {CollectionName} has a manually uploaded Thumb image, will only auto-generate Primary", collection.Name);
                 }
 
-                // Get collection items
-                var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
+                // Get collection items - use pre-fetched LinkedChildren if provided to avoid stale cache issues
+                List<BaseItem> items;
+                if (knownLinkedChildren != null && knownLinkedChildren.Length > 0)
+                {
+                    // Resolve LinkedChildren to BaseItems directly from library manager
+                    // Only resolve enough items to find images for the collage (max 4 needed)
+                    // Use a limit to avoid resolving 20k+ items which would cause performance issues
+                    const int maxItemsToResolve = 200;
+                    items = knownLinkedChildren
+                        .Where(lc => lc.ItemId.HasValue)
+                        .Take(maxItemsToResolve)
+                        .Select(lc => _libraryManager.GetItemById(lc.ItemId!.Value))
+                        .Where(item => item != null)
+                        .ToList()!;
+                    _logger.LogDebug("Resolved {ResolvedCount} of {TotalCount} pre-fetched items for collection {CollectionName} image generation",
+                        items.Count, knownLinkedChildren.Length, collection.Name);
+                }
+                else
+                {
+                    items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
+                }
 
                 if (items.Count == 0)
                 {
@@ -1489,10 +1534,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             if (episodes.Count > 0)
             {
                 _logger.LogDebug("Collection contains {EpisodeCount} episodes, fetching parent series for poster generation", episodes.Count);
-                
+
                 var seriesItems = new List<BaseItem>();
                 var seenSeriesIds = new HashSet<Guid>();
-                
+
                 foreach (var episode in episodes)
                 {
                     if (episode.SeriesId != Guid.Empty && !seenSeriesIds.Contains(episode.SeriesId))
@@ -1504,16 +1549,66 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         {
                             seriesItems.Add(series);
                             seenSeriesIds.Add(episode.SeriesId);
-                            _logger.LogDebug("Added parent series '{SeriesName}' for episode '{EpisodeName}'", 
+                            _logger.LogDebug("Added parent series '{SeriesName}' for episode '{EpisodeName}'",
                                 series.Name, episode.Name);
                         }
                     }
                 }
-                
+
                 if (seriesItems.Count > 0)
                 {
                     _logger.LogDebug("Using {SeriesCount} unique parent series for collection poster", seriesItems.Count);
                     return seriesItems;
+                }
+            }
+
+            // Check if we have audio items (music tracks)
+            var audioItems = items.OfType<Audio>().ToList();
+            if (audioItems.Count > 0)
+            {
+                _logger.LogDebug("Collection contains {AudioCount} audio items, checking for images", audioItems.Count);
+
+                var imageItems = new List<BaseItem>();
+                var seenAlbumIds = new HashSet<Guid>();
+
+                foreach (var audio in audioItems)
+                {
+                    // First, check if the audio item itself has a Primary image
+                    if (audio.ImageInfos != null && audio.ImageInfos.Any(i => i.Type == ImageType.Primary))
+                    {
+                        imageItems.Add(audio);
+                        _logger.LogDebug("Using audio item's own image for '{AudioName}'", audio.Name);
+                    }
+                    else
+                    {
+                        // Fall back to parent album's image
+                        var albumId = audio.ParentId;
+                        if (albumId != Guid.Empty && !seenAlbumIds.Contains(albumId))
+                        {
+                            var parentAlbum = _libraryManager.GetItemById(albumId);
+                            if (parentAlbum is MusicAlbum album &&
+                                album.ImageInfos != null &&
+                                album.ImageInfos.Any(i => i.Type == ImageType.Primary))
+                            {
+                                imageItems.Add(album);
+                                seenAlbumIds.Add(albumId);
+                                _logger.LogDebug("Using parent album '{AlbumName}' image for audio '{AudioName}'",
+                                    album.Name, audio.Name);
+                            }
+                        }
+                    }
+
+                    // Stop once we have enough items for the collage (4 max)
+                    if (imageItems.Count >= 4)
+                    {
+                        break;
+                    }
+                }
+
+                if (imageItems.Count > 0)
+                {
+                    _logger.LogDebug("Using {ImageCount} items with images for collection poster", imageItems.Count);
+                    return imageItems;
                 }
             }
 
@@ -1550,10 +1645,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             if (episodes.Count > 0)
             {
                 _logger.LogDebug("Collection contains {EpisodeCount} episodes, fetching parent series for thumb generation", episodes.Count);
-                
+
                 var seriesItems = new List<BaseItem>();
                 var seenSeriesIds = new HashSet<Guid>();
-                
+
                 foreach (var episode in episodes)
                 {
                     if (episode.SeriesId != Guid.Empty && !seenSeriesIds.Contains(episode.SeriesId))
@@ -1565,16 +1660,66 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         {
                             seriesItems.Add(series);
                             seenSeriesIds.Add(episode.SeriesId);
-                            _logger.LogDebug("Added parent series '{SeriesName}' with thumb for episode '{EpisodeName}'", 
+                            _logger.LogDebug("Added parent series '{SeriesName}' with thumb for episode '{EpisodeName}'",
                                 series.Name, episode.Name);
                         }
                     }
                 }
-                
+
                 if (seriesItems.Count > 0)
                 {
                     _logger.LogDebug("Using {SeriesCount} unique parent series with thumbs for collection thumb", seriesItems.Count);
                     return seriesItems;
+                }
+            }
+
+            // Check if we have audio items - check for thumb images
+            var audioItems = items.OfType<Audio>().ToList();
+            if (audioItems.Count > 0)
+            {
+                _logger.LogDebug("Collection contains {AudioCount} audio items, checking for thumb images", audioItems.Count);
+
+                var imageItems = new List<BaseItem>();
+                var seenAlbumIds = new HashSet<Guid>();
+
+                foreach (var audio in audioItems)
+                {
+                    // First, check if the audio item itself has a Thumb image
+                    if (audio.ImageInfos != null && audio.ImageInfos.Any(i => i.Type == ImageType.Thumb))
+                    {
+                        imageItems.Add(audio);
+                        _logger.LogDebug("Using audio item's own thumb for '{AudioName}'", audio.Name);
+                    }
+                    else
+                    {
+                        // Fall back to parent album's thumb image
+                        var albumId = audio.ParentId;
+                        if (albumId != Guid.Empty && !seenAlbumIds.Contains(albumId))
+                        {
+                            var parentAlbum = _libraryManager.GetItemById(albumId);
+                            if (parentAlbum is MusicAlbum album &&
+                                album.ImageInfos != null &&
+                                album.ImageInfos.Any(i => i.Type == ImageType.Thumb))
+                            {
+                                imageItems.Add(album);
+                                seenAlbumIds.Add(albumId);
+                                _logger.LogDebug("Using parent album '{AlbumName}' thumb for audio '{AudioName}'",
+                                    album.Name, audio.Name);
+                            }
+                        }
+                    }
+
+                    // Stop once we have enough items for the collage (4 max)
+                    if (imageItems.Count >= 4)
+                    {
+                        break;
+                    }
+                }
+
+                if (imageItems.Count > 0)
+                {
+                    _logger.LogDebug("Using {ImageCount} items with thumb images for collection thumb", imageItems.Count);
+                    return imageItems;
                 }
             }
 
