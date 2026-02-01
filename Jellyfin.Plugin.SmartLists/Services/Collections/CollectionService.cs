@@ -309,10 +309,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 }
                 else
                 {
-                    // Create new collection
+                    // Create new collection - just the empty shell
                     _logger.LogDebug("Creating new collection: {CollectionName}", collectionName);
 
-                    var newCollectionId = await CreateNewCollectionAsync(collectionName, newLinkedChildren, dto, cancellationToken);
+                    var newCollectionId = await CreateEmptyCollectionAsync(collectionName, dto, cancellationToken);
 
                     // Check if collection creation actually succeeded
                     if (string.IsNullOrEmpty(newCollectionId))
@@ -323,6 +323,22 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     // Update the DTO with the new Jellyfin collection ID
                     dto.JellyfinCollectionId = newCollectionId;
+
+                    // WORKAROUND: Wait for Jellyfin to finish initializing the new collection.
+                    // Without this delay, there's a race condition where our writes to LinkedChildren
+                    // conflict with Jellyfin's internal setup (file locking errors on collection.xml).
+                    // This delay gives Jellyfin time to complete its internal initialization.
+                    _logger.LogDebug("Waiting for Jellyfin to finish initializing new collection...");
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+
+                    // Now populate the collection using the same path as manual refresh
+                    // This ensures consistent behavior - UpdateCollectionItemsAsync works reliably for Live TV
+                    var newCollection = _libraryManager.GetItemById(Guid.Parse(newCollectionId));
+                    if (newCollection != null && newCollection.GetBaseItemKind() == BaseItemKind.BoxSet)
+                    {
+                        _logger.LogDebug("Populating new collection via UpdateCollectionItemsAsync (same path as manual refresh)");
+                        await UpdateCollectionItemsAsync(newCollection, newLinkedChildren, dto, cancellationToken);
+                    }
 
                     // Update LastRefreshed timestamp for successful refresh
                     dto.LastRefreshed = DateTime.UtcNow;
@@ -565,6 +581,131 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
+        /// <summary>
+        /// Creates an empty collection shell without any items.
+        /// Items will be added later via UpdateCollectionItemsAsync which handles Live TV correctly.
+        /// </summary>
+        private async Task<string> CreateEmptyCollectionAsync(string collectionName, SmartCollectionDto dto, CancellationToken cancellationToken)
+        {
+            var formattedName = NameFormatter.FormatPlaylistName(collectionName);
+            _logger.LogDebug("Creating empty collection shell: {CollectionName} (formatted as {FormattedName})", collectionName, formattedName);
+
+            Guid collectionId;
+
+            try
+            {
+                var collectionManagerType = _collectionManager.GetType();
+                System.Reflection.MethodInfo? createMethod = null;
+
+                // Find CollectionCreationOptions type
+                Type? optionsType = null;
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    optionsType = assembly.GetTypes()
+                        .FirstOrDefault(t => t.Name == "CollectionCreationOptions" && t.Namespace?.Contains("MediaBrowser") == true);
+                    if (optionsType != null) break;
+                }
+
+                if (optionsType != null)
+                {
+                    createMethod = collectionManagerType.GetMethod("CreateCollectionAsync", new[] { optionsType });
+                }
+
+                if (createMethod == null)
+                {
+                    createMethod = collectionManagerType.GetMethod("CreateCollectionAsync", new[] { typeof(string), typeof(Guid[]) });
+                }
+
+                if (createMethod != null)
+                {
+                    var parameters = createMethod.GetParameters();
+                    object? taskResult = null;
+
+                    if (parameters.Length == 1 && parameters[0].ParameterType.Name == "CollectionCreationOptions")
+                    {
+                        var optType = parameters[0].ParameterType;
+                        var options = Activator.CreateInstance(optType);
+                        if (options == null)
+                        {
+                            throw new InvalidOperationException("Failed to create CollectionCreationOptions instance");
+                        }
+
+                        var nameProperty = optType.GetProperty("Name");
+                        nameProperty?.SetValue(options, formattedName);
+
+                        taskResult = createMethod.Invoke(_collectionManager, new object[] { options });
+                    }
+                    else
+                    {
+                        // Create with empty items array
+                        taskResult = createMethod.Invoke(_collectionManager, new object[] { formattedName, Array.Empty<Guid>() });
+                    }
+
+                    if (taskResult != null)
+                    {
+                        await ((Task)taskResult).ConfigureAwait(false);
+                        var resultProperty = taskResult.GetType().GetProperty("Result");
+                        var boxSetResult = resultProperty?.GetValue(taskResult);
+
+                        if (boxSetResult is BaseItem baseItem)
+                        {
+                            collectionId = baseItem.Id;
+                            _logger.LogDebug("Empty collection created with ID: {CollectionId}", collectionId);
+                            return collectionId.ToString("N");
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"CreateCollectionAsync did not return a BaseItem");
+                        }
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("CreateCollectionAsync returned null");
+                    }
+                }
+                else
+                {
+                    // Fallback: Create BoxSet using reflection
+                    _logger.LogDebug("CreateCollectionAsync not found, creating BoxSet via reflection");
+                    var boxSetType = typeof(BaseItem).Assembly.GetType("MediaBrowser.Controller.Entities.BoxSet")
+                        ?? AppDomain.CurrentDomain.GetAssemblies()
+                            .SelectMany(a => a.GetTypes())
+                            .FirstOrDefault(t => t.Name == "BoxSet" && t.IsSubclassOf(typeof(BaseItem)));
+
+                    if (boxSetType != null)
+                    {
+                        var boxSet = Activator.CreateInstance(boxSetType);
+                        if (boxSet != null)
+                        {
+                            var baseItem = (BaseItem)boxSet;
+                            var newCollectionId = Guid.NewGuid();
+                            boxSetType.GetProperty("Id")?.SetValue(boxSet, newCollectionId);
+                            boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
+
+                            var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
+                            if (createItemMethod != null)
+                            {
+                                await ((Task)createItemMethod.Invoke(_libraryManager, new object[] { baseItem, cancellationToken })!).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                await baseItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            }
+
+                            _logger.LogDebug("Empty BoxSet created with ID: {CollectionId}", newCollectionId);
+                            return newCollectionId.ToString("N");
+                        }
+                    }
+                    throw new InvalidOperationException("BoxSet type not found - cannot create collection");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create empty collection shell for {CollectionName}", collectionName);
+                return string.Empty;
+            }
+        }
+
         private async Task<string> CreateNewCollectionAsync(string collectionName, LinkedChild[] linkedChildren, SmartCollectionDto dto, CancellationToken cancellationToken)
         {
             // Apply prefix/suffix to collection name using the same configuration as playlists
@@ -685,24 +826,39 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         {
                             collectionId = baseItem.Id;
                             _logger.LogDebug("Collection created via ICollectionManager with ID: {CollectionId}", collectionId);
-                            
-                            // Add items to the collection using AddToCollectionAsync
-                            if (itemIds.Count > 0)
+
+                            // For Live TV channels, AddToCollectionAsync has issues with Jellyfin's cache.
+                            // Use the same approach as UpdateCollectionItemsAsync: set LinkedChildren directly.
+                            // This method works reliably during manual refresh, so we use it for creation too.
+                            if (linkedChildren.Length > 0)
                             {
-                                _logger.LogDebug("Adding {Count} items to collection {CollectionId} using AddToCollectionAsync", itemIds.Count, collectionId);
-                                var addMethod = _collectionManager.GetType().GetMethod("AddToCollectionAsync");
-                                if (addMethod != null)
+                                // Re-fetch the collection to get a fresh reference
+                                var freshCollection = _libraryManager.GetItemById(collectionId);
+                                if (freshCollection != null)
                                 {
-                                    var addTask = addMethod.Invoke(_collectionManager, new object[] { collectionId, itemIds.ToArray() });
-                                    if (addTask != null)
+                                    _logger.LogDebug("Setting {Count} LinkedChildren on collection {CollectionId} directly", linkedChildren.Length, collectionId);
+                                    var linkedChildrenProperty = freshCollection.GetType().GetProperty("LinkedChildren");
+                                    if (linkedChildrenProperty != null && linkedChildrenProperty.CanWrite)
                                     {
-                                        await ((Task)addTask).ConfigureAwait(false);
-                                        _logger.LogDebug("Successfully added items to collection via AddToCollectionAsync");
+                                        linkedChildrenProperty.SetValue(freshCollection, linkedChildren);
+                                        await freshCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                                        _logger.LogDebug("Successfully set LinkedChildren and saved collection");
                                     }
-                                }
-                                else
-                                {
-                                    _logger.LogWarning("AddToCollectionAsync method not found on ICollectionManager");
+                                    else
+                                    {
+                                        _logger.LogWarning("Cannot set LinkedChildren property, falling back to AddToCollectionAsync");
+                                        // Fallback to AddToCollectionAsync
+                                        var addMethod = _collectionManager.GetType().GetMethod("AddToCollectionAsync");
+                                        if (addMethod != null)
+                                        {
+                                            var addTask = addMethod.Invoke(_collectionManager, new object[] { collectionId, itemIds.ToArray() });
+                                            if (addTask != null)
+                                            {
+                                                await ((Task)addTask).ConfigureAwait(false);
+                                                _logger.LogDebug("Successfully added items to collection via AddToCollectionAsync");
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -852,12 +1008,42 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     retrievedItem.Name = formattedName;
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
+                    // Resolve itemIds to BaseItems for image generation
+                    // This bypasses Jellyfin's broken cache for Live TV channels where GetLinkedChildren()
+                    // returns stale data immediately after AddToCollectionAsync completes
+                    var knownItems = itemIds
+                        .Select(id => _libraryManager.GetItemById(id))
+                        .Where(item => item != null)
+                        .Cast<BaseItem>()
+                        .ToList();
+                    _logger.LogDebug("Resolved {Count} items from itemIds for image generation", knownItems.Count);
+
                     // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                    await SetPhotoForCollection(retrievedItem, cancellationToken).ConfigureAwait(false);
+                    await SetPhotoForCollection(retrievedItem, cancellationToken, knownItems).ConfigureAwait(false);
 
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+
+                    // WORKAROUND: For Live TV channels, Jellyfin's cache doesn't update properly
+                    // after the initial LinkedChildren write. Re-fetch and re-set LinkedChildren
+                    // one final time to force Jellyfin to recognize all items.
+                    var hasLiveTvChannels = dto.MediaTypes?.Contains(MediaTypes.LiveTvChannel, StringComparer.OrdinalIgnoreCase) == true;
+                    if (hasLiveTvChannels && linkedChildren.Length > 0)
+                    {
+                        _logger.LogDebug("Live TV collection: forcing final LinkedChildren re-write to update Jellyfin cache");
+                        var finalCollection = _libraryManager.GetItemById(collectionId);
+                        if (finalCollection != null)
+                        {
+                            var linkedChildrenProperty = finalCollection.GetType().GetProperty("LinkedChildren");
+                            if (linkedChildrenProperty != null && linkedChildrenProperty.CanWrite)
+                            {
+                                linkedChildrenProperty.SetValue(finalCollection, linkedChildren);
+                                await finalCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                                _logger.LogDebug("Final LinkedChildren re-write completed");
+                            }
+                        }
+                    }
                 }
 
                 return collectionId.ToString("N");
@@ -1148,7 +1334,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// <param name="collection">The collection to set the image for</param>
         /// <param name="cancellationToken">Cancellation token</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "File path comes from Jellyfin's internal ItemImageInfo.Path property, which is validated by Jellyfin")]
-        private async Task SetPhotoForCollection(BaseItem collection, CancellationToken cancellationToken)
+        private async Task SetPhotoForCollection(BaseItem collection, CancellationToken cancellationToken, List<BaseItem>? knownItems = null)
         {
             try
             {
@@ -1171,8 +1357,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     _logger.LogDebug("Collection {CollectionName} has a manually uploaded Thumb image, will only auto-generate Primary", collection.Name);
                 }
 
-                // Get collection items
-                var items = await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
+                // Get collection items - use provided items if available (bypasses Jellyfin's cache issues with Live TV)
+                // Otherwise fall back to GetCollectionItemsAsync which uses GetLinkedChildren()
+                var items = knownItems ?? await GetCollectionItemsAsync(collection, cancellationToken).ConfigureAwait(false);
 
                 if (items.Count == 0)
                 {
