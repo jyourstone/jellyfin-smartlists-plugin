@@ -1626,7 +1626,8 @@
             '</label>' +
             '<span class="playlist-expand-icon" style="margin-right: 0.5em; font-family: monospace; font-size: 1.2em; opacity: 0.6; flex-shrink: 0;">▶</span>' +
             '<h3 style="margin: 0; flex: 1.5; min-width: 0; word-wrap: break-word; padding-right: 0.5em;">' + eName + '</h3>' +
-            (enabledStatus ? '<span class="playlist-status" style="color: ' + enabledStatusColor + '; font-weight: bold; margin-right: 0.75em; flex-shrink: 0; line-height: 1.5; align-self: center;">' + enabledStatus + '</span>' : '') +
+            (enabledStatus ? '<span class="playlist-status" style="color: ' + enabledStatusColor + '; font-weight: bold; flex-shrink: 0; line-height: 1.5; align-self: center;">' + enabledStatus + '</span>' : '') +
+            (enabledStatus && eStatsDisplay ? '<span class="playlist-status-divider" style="width: 1px; height: 1.2em; background: var(--jf-palette-divider); opacity: 0.5; margin: 0 0.75em; flex-shrink: 0; align-self: center;"></span>' : '') +
             (eStatsDisplay ? '<span class="playlist-stats" style="opacity: 0.6; font-size: 0.85em; flex-shrink: 0; font-weight: normal; line-height: 1.5; align-self: center;">' + eStatsDisplay + '</span>' : '') +
             '</div>' +
             '<div class="playlist-header-right" style="display: flex; align-items: center; gap: 0.75em; margin-left: 1em; margin-right: 0;">' +

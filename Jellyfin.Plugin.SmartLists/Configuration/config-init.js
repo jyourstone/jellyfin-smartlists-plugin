@@ -2167,6 +2167,21 @@
                 }
             }
 
+            /* Responsive playlist header - hide elements on small screens */
+            @media (max-width: 550px) {
+                .playlist-header-right .playlist-type-label,
+                .playlist-header-right .playlist-header-divider:first-child {
+                    display: none !important;
+                }
+            }
+
+            @media (max-width: 450px) {
+                .playlist-header-left .playlist-stats,
+                .playlist-header-left .playlist-status-divider {
+                    display: none !important;
+                }
+            }
+
             /* Ensure playlist cards don't clip the kebab menu */
             .playlist-card {
                 overflow: visible !important;
