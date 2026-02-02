@@ -1202,17 +1202,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 if (knownLinkedChildren != null && knownLinkedChildren.Length > 0)
                 {
                     // Resolve LinkedChildren to BaseItems directly from library manager
-                    // Only resolve enough items to find images for the collage (max 4 needed)
-                    // Use a limit to avoid resolving 20k+ items which would cause performance issues
-                    const int maxItemsToResolve = 200;
+                    // Process all items to ensure we find images even if they're not in the first few items
+                    // The list has already been limited by MaxItems in FilterPlaylistItems, so this respects user config
                     items = knownLinkedChildren
                         .Where(lc => lc.ItemId.HasValue)
-                        .Take(maxItemsToResolve)
                         .Select(lc => _libraryManager.GetItemById(lc.ItemId!.Value))
                         .Where(item => item != null)
                         .ToList()!;
-                    _logger.LogDebug("Resolved {ResolvedCount} of {TotalCount} pre-fetched items for collection {CollectionName} image generation",
-                        items.Count, knownLinkedChildren.Length, collection.Name);
+                    _logger.LogDebug("Resolved {ResolvedCount} pre-fetched items for collection {CollectionName} image generation",
+                        items.Count, collection.Name);
                 }
                 else
                 {
