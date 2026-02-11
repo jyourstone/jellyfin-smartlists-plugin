@@ -125,6 +125,26 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
             }
         }
 
+        // ===== External List Settings =====
+
+        /// <summary>
+        /// Gets or sets the MDBList API key for fetching external lists.
+        /// Free API keys can be obtained from https://mdblist.com/preferences/
+        /// </summary>
+        public string? MdbListApiKey { get; set; } = null;
+
+        /// <summary>
+        /// Gets or sets the Trakt client ID for fetching external lists.
+        /// Create an app at https://trakt.tv/oauth/applications to get a client ID.
+        /// </summary>
+        public string? TraktClientId { get; set; } = null;
+
+        /// <summary>
+        /// Gets or sets the TMDB API key for fetching external lists.
+        /// Get a free API key at https://www.themoviedb.org/settings/api
+        /// </summary>
+        public string? TmdbApiKey { get; set; } = null;
+
         // ===== Backup Settings =====
 
         /// <summary>

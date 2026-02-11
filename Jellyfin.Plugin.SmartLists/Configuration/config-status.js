@@ -262,8 +262,17 @@
         html += '</tr></thead><tbody>';
 
         sortedHistory.forEach(entry => {
-            const statusColor = entry.success ? 'var(--jf-palette-success-main)' : 'var(--jf-palette-error-main)';
-            const statusText = entry.success ? 'Success' : 'Failed';
+            var statusColor, statusText;
+            if (!entry.success) {
+                statusColor = 'var(--jf-palette-error-main)';
+                statusText = 'Failed';
+            } else if (entry.errorMessage) {
+                statusColor = 'var(--jf-palette-warning-main, #ffa726)';
+                statusText = 'Warning';
+            } else {
+                statusColor = 'var(--jf-palette-success-main)';
+                statusText = 'Success';
+            }
             const duration = formatDuration(entry.duration);
             const endTime = entry.endTime ? formatDateTime(entry.endTime) : 'N/A';
 
@@ -271,7 +280,11 @@
             html += `<td style="padding: 0.75em;">${escapeHtml(entry.listName)}</td>`;
             html += `<td style="padding: 0.75em;">${escapeHtml(String(entry.listType))}</td>`;
             html += `<td style="padding: 0.75em;">${escapeHtml(String(entry.triggerType))}</td>`;
-            html += `<td style="padding: 0.75em; color: ${statusColor};">${statusText}</td>`;
+            if (entry.errorMessage) {
+                html += `<td style="padding: 0.75em; color: ${statusColor}; position: relative;"><a href="#" class="status-warning-link" style="color: inherit; text-decoration: underline dotted; cursor: pointer;" data-message="${escapeHtml(entry.errorMessage)}">${statusText}</a></td>`;
+            } else {
+                html += `<td style="padding: 0.75em; color: ${statusColor};">${statusText}</td>`;
+            }
             html += `<td style="padding: 0.75em;">${duration}</td>`;
             html += `<td style="padding: 0.75em;">${endTime}</td>`;
             html += '</tr>';
@@ -279,6 +292,44 @@
 
         html += '</tbody></table></div>';
         container.innerHTML = html;
+
+        // Attach click handlers for warning status links
+        container.querySelectorAll('.status-warning-link').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                // Remove any existing popover
+                var existing = document.querySelector('.status-warning-popover');
+                if (existing) existing.remove();
+                // Create popover
+                var popover = document.createElement('div');
+                popover.className = 'status-warning-popover';
+                popover.style.cssText = 'position:fixed;z-index:10000;max-width:400px;padding:0.75em 1em;background:var(--jf-palette-background-paper,#333);color:var(--jf-palette-text-primary,#fff);border:1px solid var(--jf-palette-warning-main,#ffa726);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:0.85em;line-height:1.4;';
+                popover.textContent = link.getAttribute('data-message');
+                document.body.appendChild(popover);
+                // Position near the link
+                var rect = link.getBoundingClientRect();
+                var popW = popover.offsetWidth;
+                var left = rect.left + rect.width / 2 - popW / 2;
+                if (left < 8) left = 8;
+                if (left + popW > window.innerWidth - 8) left = window.innerWidth - 8 - popW;
+                var top = rect.bottom + 6;
+                if (top + popover.offsetHeight > window.innerHeight - 8) {
+                    top = rect.top - popover.offsetHeight - 6;
+                }
+                popover.style.left = left + 'px';
+                popover.style.top = top + 'px';
+                // Dismiss on click outside (but not inside the popover)
+                setTimeout(function () {
+                    document.addEventListener('click', function dismiss(evt) {
+                        var el = document.querySelector('.status-warning-popover');
+                        if (el && el.contains(evt.target)) return;
+                        if (el) el.remove();
+                        document.removeEventListener('click', dismiss);
+                    });
+                }, 0);
+            });
+        });
     }
 
     /**

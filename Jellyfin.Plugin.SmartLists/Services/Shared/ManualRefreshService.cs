@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
@@ -108,7 +109,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         IProviderManager providerManager,
         ILogger<ManualRefreshService> logger,
         Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
-        RefreshQueueService refreshQueueService) : IManualRefreshService
+        RefreshQueueService refreshQueueService,
+        ExternalListService externalListService) : IManualRefreshService
     {
         private readonly IUserManager _userManager = userManager;
         private readonly ILibraryManager _libraryManager = libraryManager;
@@ -120,6 +122,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly ILogger<ManualRefreshService> _logger = logger;
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory = loggerFactory;
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
+        private readonly ExternalListService _externalListService = externalListService;
 
         /// <summary>
         /// Gets the user for a playlist, handling migration from old User field to new UserId field.
@@ -205,7 +208,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _playlistManager,
                 _userDataManager,
                 playlistServiceLogger,
-                _providerManager);
+                _providerManager,
+                externalListService: _externalListService);
         }
 
         /// <summary>
@@ -222,7 +226,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userManager,
                 _userDataManager,
                 collectionServiceLogger,
-                _providerManager);
+                _providerManager,
+                externalListService: _externalListService);
         }
 
         /// <summary>

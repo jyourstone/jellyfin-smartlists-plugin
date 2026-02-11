@@ -2892,6 +2892,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
         public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
         public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
+        public bool NeedsExternalLists => RequiredGroups.HasFlag(ExtractionGroup.ExternalLists);
+
+        /// <summary>
+        /// External list URLs collected from ExternalList rules. Used for pre-fetching.
+        /// </summary>
+        public List<string> ExternalListUrls { get; } = [];
 
         // Computed accessors for cheap extraction groups
         public bool NeedsFileInfo => RequiredGroups.HasFlag(ExtractionGroup.FileInfo);
@@ -2934,6 +2940,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")
                     requirements.SimilarToExpressions.Add(expr);
+
+                // Collect external list URLs for pre-fetching
+                if (expr.MemberName == "ExternalList" && !string.IsNullOrWhiteSpace(expr.TargetValue))
+                    requirements.ExternalListUrls.Add(expr.TargetValue);
 
                 // Collect user IDs from user-specific rules (normalize to "N" format for consistency)
                 // Skip invalid user IDs - validation will catch them later during processing

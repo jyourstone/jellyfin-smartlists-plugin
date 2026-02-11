@@ -1811,6 +1811,20 @@
                 page._pendingAllowedUserPageUsers = config.AllowedUserPageUsers;
             }
 
+            // Load external list settings
+            var mdbListApiKeyEl = page.querySelector('#mdbListApiKey');
+            if (mdbListApiKeyEl) {
+                mdbListApiKeyEl.value = config.MdbListApiKey || '';
+            }
+            var traktClientIdEl = page.querySelector('#traktClientId');
+            if (traktClientIdEl) {
+                traktClientIdEl.value = config.TraktClientId || '';
+            }
+            var tmdbApiKeyEl = page.querySelector('#tmdbApiKey');
+            if (tmdbApiKeyEl) {
+                tmdbApiKeyEl.value = config.TmdbApiKey || '';
+            }
+
             // Load backup settings
             var backupEnabledEl = page.querySelector('#backupEnabled');
             if (backupEnabledEl) {
@@ -1999,6 +2013,14 @@
             // Save allowed users for user page access
             const allowedUserIds = SmartLists.getSelectedItems ? SmartLists.getSelectedItems(page, 'allowedUsersMultiSelect', 'allowed-users-checkbox') : [];
             config.AllowedUserPageUsers = allowedUserIds && allowedUserIds.length > 0 ? allowedUserIds : null;
+
+            // Save external list settings
+            var mdbListApiKeyInput = page.querySelector('#mdbListApiKey');
+            config.MdbListApiKey = mdbListApiKeyInput ? (mdbListApiKeyInput.value.trim() || null) : null;
+            var traktClientIdInput = page.querySelector('#traktClientId');
+            config.TraktClientId = traktClientIdInput ? (traktClientIdInput.value.trim() || null) : null;
+            var tmdbApiKeyInput = page.querySelector('#tmdbApiKey');
+            config.TmdbApiKey = tmdbApiKeyInput ? (tmdbApiKeyInput.value.trim() || null) : null;
 
             // Save backup settings
             var backupEnabledCheckbox = page.querySelector('#backupEnabled');

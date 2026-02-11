@@ -40,6 +40,7 @@ nav:
     - Media Types: user-guide/media-types.md
     - User Selection: user-guide/user-selection.md
     - Fields and Operators: user-guide/fields-and-operators.md
+    - External Lists: user-guide/external-lists.md
     - Sorting and Limits: user-guide/sorting-and-limits.md
     - Auto-Refresh: user-guide/auto-refresh.md
     - Advanced Configuration: user-guide/advanced-configuration.md

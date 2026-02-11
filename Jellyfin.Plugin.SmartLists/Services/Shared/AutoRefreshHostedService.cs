@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
@@ -49,13 +50,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var autoRefreshLogger = loggerFactory.CreateLogger<AutoRefreshService>();
                 var playlistServiceLogger = loggerFactory.CreateLogger<PlaylistService>();
 
+                var externalListService = _serviceProvider.GetRequiredService<ExternalListService>();
+
                 var fileSystem = new SmartListFileSystem(serverApplicationPaths);
                 var playlistStore = new PlaylistStore(fileSystem);
-                var playlistService = new PlaylistService(userManager, libraryManager, playlistManager, userDataManager, playlistServiceLogger, providerManager);
+                var playlistService = new PlaylistService(userManager, libraryManager, playlistManager, userDataManager, playlistServiceLogger, providerManager, externalListService: externalListService);
 
                 var collectionServiceLogger = loggerFactory.CreateLogger<CollectionService>();
                 var collectionStore = new CollectionStore(fileSystem);
-                var collectionService = new CollectionService(libraryManager, collectionManager, userManager, userDataManager, collectionServiceLogger, providerManager);
+                var collectionService = new CollectionService(libraryManager, collectionManager, userManager, userDataManager, collectionServiceLogger, providerManager, externalListService: externalListService);
 
                 // Get RefreshStatusService from DI - it should be registered as singleton
                 // Use GetRequiredService to prevent creating duplicate instances that cause split-brain state

@@ -1050,6 +1050,14 @@
             '</select>' +
             '</div>' +
             '</div>' +
+            '<div class="rule-externallist-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
+            '<div style="font-size: 0.85em; opacity: 0.8; display: flex; align-items: center;">' +
+            '<span>Enter an external list URL. Supported: MDBList, IMDb, Trakt, TMDB.</span>' +
+            '<a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/external-lists/" target="_blank" rel="noopener noreferrer" title="Documentation" style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">' +
+            '<span class="material-icons" aria-hidden="true" style="font-size: 1.1em; line-height: 0;">info_outline</span>' +
+            '</a>' +
+            '</div>' +
+            '</div>' +
             '<div class="rule-tags-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include parent series tags:' +
@@ -1145,6 +1153,9 @@
         // Initialize Playlists options visibility
         SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
+        // Initialize ExternalList options visibility
+        SmartLists.updateExternalListOptionsVisibility(newRuleRow, fieldSelect.value);
+
         // Initialize Tags options visibility
         SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
@@ -1183,6 +1194,7 @@
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
+            SmartLists.updateExternalListOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateStudiosOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateGenresOptionsVisibility(newRuleRow, fieldSelect.value, page);
@@ -2112,6 +2124,13 @@
         SmartLists.updateAllRules(page, SmartLists.updatePlaylistsOptionsVisibility);
     };
 
+    SmartLists.updateExternalListOptionsVisibility = function (ruleRow, fieldValue) {
+        var optionsDiv = ruleRow.querySelector('.rule-externallist-options');
+        if (optionsDiv) {
+            optionsDiv.style.display = fieldValue === 'ExternalList' ? 'block' : 'none';
+        }
+    };
+
     SmartLists.updateTagsOptionsVisibility = function (ruleRow, fieldValue, page) {
         const isTagsField = fieldValue === 'Tags';
         const tagsOptionsDiv = ruleRow.querySelector('.rule-tags-options');
@@ -2570,11 +2589,12 @@
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updatePlaylistsOptionsVisibility(ruleRow, actualMemberName, page);
+                SmartLists.updateExternalListOptionsVisibility(ruleRow, actualMemberName);
                 SmartLists.updateTagsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateStudiosOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateGenresOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateAudioLanguagesOptionsVisibility(ruleRow, actualMemberName, page);
-                
+
                 // For SimilarTo field, get similarity fields from page state (set by clone/edit flows)
                 // and update visibility immediately so the options show up
                 if (actualMemberName === 'SimilarTo') {
