@@ -8,6 +8,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller;
@@ -62,6 +63,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly RefreshStatusService _refreshStatusService;
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory;
         private readonly SmartListImageService? _imageService;
+        private readonly ExternalListService? _externalListService;
 
         // Queue data structures
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
@@ -91,7 +93,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             IServerApplicationPaths applicationPaths,
             RefreshStatusService refreshStatusService,
             Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
-            SmartListImageService? imageService = null)
+            SmartListImageService? imageService = null,
+            ExternalListService? externalListService = null)
         {
             _logger = logger;
             _userManager = userManager;
@@ -104,6 +107,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _refreshStatusService = refreshStatusService;
             _loggerFactory = loggerFactory;
             _imageService = imageService;
+            _externalListService = externalListService;
 
             // Start background processing task
             _processingTask = Task.Run(ProcessQueueAsync, _cancellationTokenSource.Token);
@@ -252,7 +256,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
                 stopwatch.Stop();
                 var elapsedTime = stopwatch.Elapsed;
-                _refreshStatusService.CompleteOperation(listId, true, elapsedTime, null);
+
+                // Collect any warnings from refresh caches (e.g., external list issues)
+                var warnings = _refreshCaches.Values
+                    .SelectMany(c => c.Warnings)
+                    .Distinct()
+                    .ToList();
+                var warningMessage = warnings.Count > 0 ? string.Join("; ", warnings) : null;
+
+                _refreshStatusService.CompleteOperation(listId, true, elapsedTime, warningMessage);
 
                 _logger.LogInformation("Completed {OperationType} operation for list {ListId} ({ListName}) in {ElapsedMs}ms",
                     item.OperationType, item.ListId, item.ListName, elapsedTime.TotalMilliseconds);
@@ -624,7 +636,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userDataManager,
                 playlistServiceLogger,
                 _providerManager,
-                _imageService);
+                _imageService,
+                _externalListService);
         }
 
         /// <summary>
@@ -640,7 +653,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userDataManager,
                 collectionServiceLogger,
                 _providerManager,
-                _imageService);
+                _imageService,
+                _externalListService);
         }
 
         public void Dispose()
@@ -715,6 +729,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Library name cache - maps ItemId → library name (from GetCollectionFolders API)
             public ConcurrentDictionary<Guid, string> LibraryNameById { get; } = new();
+
+            // External list caches - pre-fetched list data and per-item membership
+            // Maps external list URL → fetched provider ID sets (populated by ExternalListService before filtering)
+            public ConcurrentDictionary<string, ExternalListResult> ExternalListData { get; } = new(StringComparer.OrdinalIgnoreCase);
+            // Maps ItemId → list of external list URLs this item appears in (per-item cache)
+            public ConcurrentDictionary<Guid, List<string>> ItemExternalLists { get; } = new();
+
+            // Warnings collected during processing (e.g., missing API keys, fetch failures)
+            public ConcurrentBag<string> Warnings { get; } = [];
         }
 
         /// <summary>

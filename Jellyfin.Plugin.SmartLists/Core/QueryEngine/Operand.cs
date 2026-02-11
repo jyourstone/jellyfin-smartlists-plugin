@@ -84,6 +84,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Playlists field - indicates which playlists this item belongs to
         public List<string> Playlists { get; set; } = [];
 
+        // External list field - URLs of external lists this item appears in
+        public List<string> ExternalList { get; set; } = [];
+
         // Series name field - for episodes, contains the name of the parent series
         public string SeriesName { get; set; } = string.Empty;
 

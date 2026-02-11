@@ -6,6 +6,7 @@ using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Services;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 
 namespace Jellyfin.Plugin.SmartLists
 {
@@ -36,6 +37,13 @@ namespace Jellyfin.Plugin.SmartLists
             serviceCollection.AddSingleton<PlaylistService>();
             serviceCollection.AddSingleton<CollectionService>();
 
+            // Register external list services
+            serviceCollection.AddSingleton<IExternalListProvider, MdbListProvider>();
+            serviceCollection.AddSingleton<IExternalListProvider, ImdbListProvider>();
+            serviceCollection.AddSingleton<IExternalListProvider, TraktListProvider>();
+            serviceCollection.AddSingleton<IExternalListProvider, TmdbListProvider>();
+            serviceCollection.AddSingleton<ExternalListService>();
+
             // Register backup service
             serviceCollection.AddSingleton<IBackupService, BackupService>();
 
@@ -57,6 +65,7 @@ namespace Jellyfin.Plugin.SmartLists
                 var refreshStatusService = sp.GetRequiredService<RefreshStatusService>();
                 var loggerFactory = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
                 var imageService = sp.GetRequiredService<SmartListImageService>();
+                var externalListService = sp.GetRequiredService<ExternalListService>();
 
                 var queueService = new RefreshQueueService(
                     logger,
@@ -69,7 +78,8 @@ namespace Jellyfin.Plugin.SmartLists
                     applicationPaths,
                     refreshStatusService,
                     loggerFactory,
-                    imageService);
+                    imageService,
+                    externalListService);
 
                 // Set the reference in RefreshStatusService
                 refreshStatusService.SetRefreshQueueService(queueService);

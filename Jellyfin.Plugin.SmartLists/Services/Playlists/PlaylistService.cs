@@ -13,6 +13,7 @@ using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Abstractions;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
@@ -39,6 +40,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         private readonly ILogger<PlaylistService> _logger;
         private readonly IProviderManager _providerManager;
         private readonly SmartListImageService? _imageService;
+        private readonly ExternalListService? _externalListService;
 
         public PlaylistService(
             IUserManager userManager,
@@ -47,7 +49,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             IUserDataManager userDataManager,
             ILogger<PlaylistService> logger,
             IProviderManager providerManager,
-            SmartListImageService? imageService = null)
+            SmartListImageService? imageService = null,
+            ExternalListService? externalListService = null)
         {
             _userManager = userManager;
             _libraryManager = libraryManager;
@@ -56,6 +59,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             _logger = logger;
             _providerManager = providerManager;
             _imageService = imageService;
+            _externalListService = externalListService;
         }
 
 
@@ -149,6 +153,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 // Report initial total items count
                 progressCallback?.Invoke(0, allUserMedia.Length);
+
+                // Pre-fetch external lists if any ExternalList rules are present
+                if (_externalListService != null && dto.ExpressionSets != null)
+                {
+                    var fieldReqs = FieldRequirements.Analyze(dto.ExpressionSets);
+                    if (fieldReqs.NeedsExternalLists && fieldReqs.ExternalListUrls.Count > 0)
+                    {
+                        logger.LogDebug("Pre-fetching {Count} external list(s) for playlist '{PlaylistName}'", fieldReqs.ExternalListUrls.Count, dto.Name);
+                        await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken).ConfigureAwait(false);
+                    }
+                }
 
                 var newItems = smartPlaylist.FilterPlaylistItems(allUserMedia, _libraryManager, user, refreshCache, _userDataManager, logger, progressCallback).ToArray();
                 logger.LogDebug("Playlist {PlaylistName} filtered to {FilteredCount} items from {TotalCount} total items",

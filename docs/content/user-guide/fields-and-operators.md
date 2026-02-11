@@ -175,6 +175,7 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | **Album** | Album name (music) |
 | **Artists** | Track-level artists (music) |
 | **Album Artists** | Album-level primary artists (music) |
+| **External List** | Match items from an external list (e.g., MDBList). [See details below.](#external-list) |
 
 **Episode-specific options** for Tags, Studios, and Genres:
 
@@ -222,6 +223,21 @@ Filter items based on Jellyfin playlist membership.
 
 !!! note "Self-Reference Prevention"
     Smart playlists never include themselves in results, even if they match the rule criteria.
+
+#### External List
+
+Filter items based on membership in an external list. Supports [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Trakt](https://trakt.tv), and [TMDB](https://www.themoviedb.org) — including user lists, watchlists, and charts/trending.
+
+| Provider | API key required | Matches by |
+|----------|-----------------|------------|
+| **MDBList** | Yes | IMDb, TMDB, TVDB |
+| **IMDb** | No | IMDb |
+| **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
+| **TMDB** | Yes | TMDB |
+
+Use `equals` to include items from a list, or `not equals` to exclude them.
+
+For setup instructions, supported URL formats, and examples, see the [External Lists](external-lists.md) page.
 
 ---
 

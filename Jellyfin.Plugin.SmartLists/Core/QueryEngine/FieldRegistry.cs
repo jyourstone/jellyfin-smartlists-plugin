@@ -73,6 +73,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         ParentSeriesGenres = 1 << 10, // Fields: Genres (with IncludeParentSeriesGenres) | Cache: SeriesGenresById
         SimilarTo = 1 << 11,          // Fields: SimilarTo | Special handling in Engine
         LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
+        ExternalLists = 1 << 20,      // Fields: ExternalList | Cache: ExternalListData, ItemExternalLists
 
         // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
         // Defined in FieldRegistry.CheapExtractionGroups
@@ -276,6 +277,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
+            AddField(fields, "ExternalList", "External List", FieldType.List, FieldCategory.Collection, SimpleOperators, ExtractionGroup.ExternalLists);
 
             // Simple Fields
             AddField(fields, "ItemType", "Item Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);

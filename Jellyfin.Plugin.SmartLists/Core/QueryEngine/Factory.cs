@@ -16,6 +16,8 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Utilities;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
+using MediaBrowser.Model.Entities;
 using RefreshQueueServiceRefreshCache = Jellyfin.Plugin.SmartLists.Services.Shared.RefreshQueueService.RefreshCache;
 using CategorizedPeople = Jellyfin.Plugin.SmartLists.Services.Shared.RefreshQueueService.CategorizedPeople;
 
@@ -112,6 +114,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             get => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.LastEpisodeAirDate : RequiredGroups & ~ExtractionGroup.LastEpisodeAirDate;
+        }
+
+        public bool ExtractExternalLists
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ExternalLists);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ExternalLists : RequiredGroups & ~ExtractionGroup.ExternalLists;
         }
 
         // Cheap extraction groups (conditionally extracted for performance optimization)
@@ -2612,6 +2620,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.Playlists = [];
             }
 
+            // Extract external list membership - checks if item appears in pre-fetched external lists
+            if (options.ExtractExternalLists)
+            {
+                operand.ExternalList = ExtractExternalListMembership(baseItem, cache, logger);
+            }
+            else
+            {
+                operand.ExternalList = [];
+            }
+
             // LibraryInfo extraction - conditionally extracted for performance optimization
             if (extractLibraryInfo)
             {
@@ -3476,6 +3494,106 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             cache.ItemPlaylists[baseItem.Id] = playlists;
             logger?.LogDebug("Cached {Count} playlists for item '{ItemName}'", playlists.Count, baseItem.Name);
             return playlists;
+        }
+
+        /// <summary>
+        /// Checks if a library item appears in any pre-fetched external lists by matching provider IDs.
+        /// Returns the list of external list URLs that contain this item.
+        /// External list data must be pre-fetched into the cache before calling this method.
+        /// </summary>
+        private static List<string> ExtractExternalListMembership(BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            // Check per-item cache first
+            if (cache.ItemExternalLists.TryGetValue(baseItem.Id, out var cached))
+            {
+                return cached;
+            }
+
+            var matchingLists = new List<string>();
+
+            if (cache.ExternalListData.IsEmpty)
+            {
+                cache.ItemExternalLists[baseItem.Id] = matchingLists;
+                return matchingLists;
+            }
+
+            // Get this item's provider IDs
+            var imdbId = baseItem.GetProviderId(MetadataProvider.Imdb);
+            var tmdbId = baseItem.GetProviderId(MetadataProvider.Tmdb);
+            var tvdbId = baseItem.GetProviderId(MetadataProvider.Tvdb);
+
+            // For episodes, also check the parent series provider IDs
+            string? seriesImdbId = null;
+            string? seriesTmdbId = null;
+            string? seriesTvdbId = null;
+            if (baseItem is MediaBrowser.Controller.Entities.TV.Episode episode && episode.Series != null)
+            {
+                seriesImdbId = episode.Series.GetProviderId(MetadataProvider.Imdb);
+                seriesTmdbId = episode.Series.GetProviderId(MetadataProvider.Tmdb);
+                seriesTvdbId = episode.Series.GetProviderId(MetadataProvider.Tvdb);
+            }
+
+            var hasAnyId = !string.IsNullOrEmpty(imdbId) || !string.IsNullOrEmpty(tmdbId) || !string.IsNullOrEmpty(tvdbId)
+                || !string.IsNullOrEmpty(seriesImdbId) || !string.IsNullOrEmpty(seriesTmdbId) || !string.IsNullOrEmpty(seriesTvdbId);
+
+            if (!hasAnyId)
+            {
+                logger?.LogDebug("Item '{ItemName}' has no provider IDs, cannot match against external lists", baseItem.Name);
+                cache.ItemExternalLists[baseItem.Id] = matchingLists;
+                return matchingLists;
+            }
+
+            // Check each pre-fetched external list
+            foreach (var kvp in cache.ExternalListData)
+            {
+                var url = kvp.Key;
+                var listResult = kvp.Value;
+
+                bool matched = false;
+
+                // Match by IMDb ID
+                if (!matched && !string.IsNullOrEmpty(imdbId) && listResult.ImdbIds.Contains(imdbId))
+                {
+                    matched = true;
+                }
+
+                // Match by TMDB ID
+                if (!matched && !string.IsNullOrEmpty(tmdbId) && listResult.TmdbIds.Contains(tmdbId))
+                {
+                    matched = true;
+                }
+
+                // Match by TVDB ID
+                if (!matched && !string.IsNullOrEmpty(tvdbId) && listResult.TvdbIds.Contains(tvdbId))
+                {
+                    matched = true;
+                }
+
+                // Match episodes by parent series IDs
+                if (!matched && !string.IsNullOrEmpty(seriesImdbId) && listResult.ImdbIds.Contains(seriesImdbId))
+                {
+                    matched = true;
+                }
+
+                if (!matched && !string.IsNullOrEmpty(seriesTmdbId) && listResult.TmdbIds.Contains(seriesTmdbId))
+                {
+                    matched = true;
+                }
+
+                if (!matched && !string.IsNullOrEmpty(seriesTvdbId) && listResult.TvdbIds.Contains(seriesTvdbId))
+                {
+                    matched = true;
+                }
+
+                if (matched)
+                {
+                    matchingLists.Add(url);
+                    logger?.LogDebug("Item '{ItemName}' matched external list: {Url}", baseItem.Name, url);
+                }
+            }
+
+            cache.ItemExternalLists[baseItem.Id] = matchingLists;
+            return matchingLists;
         }
 
         /// <summary>
