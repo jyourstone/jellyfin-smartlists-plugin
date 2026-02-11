@@ -34,7 +34,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, string apiKey, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
         {
             var result = new ExternalListResult();
 

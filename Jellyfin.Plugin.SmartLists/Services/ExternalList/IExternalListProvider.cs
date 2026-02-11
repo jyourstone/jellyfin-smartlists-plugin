@@ -44,11 +44,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
         /// <summary>
         /// Fetches all items from the external list and returns their provider IDs.
+        /// Each provider reads its own credentials from plugin configuration.
         /// </summary>
         /// <param name="url">The external list URL.</param>
-        /// <param name="apiKey">The API key for authentication.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>An <see cref="ExternalListResult"/> containing the provider IDs of all items in the list.</returns>
-        Task<ExternalListResult> FetchListAsync(string url, string apiKey, CancellationToken cancellationToken);
+        Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken);
     }
 }

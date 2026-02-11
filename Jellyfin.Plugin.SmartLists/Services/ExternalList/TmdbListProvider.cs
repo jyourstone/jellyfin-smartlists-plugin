@@ -39,7 +39,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, string apiKey, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
         {
             var tmdbApiKey = Plugin.Instance?.Configuration?.TmdbApiKey ?? string.Empty;
             if (string.IsNullOrWhiteSpace(tmdbApiKey))

@@ -37,8 +37,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             RefreshQueueService.RefreshCache cache,
             CancellationToken cancellationToken)
         {
-            var apiKey = Plugin.Instance?.Configuration?.MdbListApiKey ?? string.Empty;
-
             var urlList = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (urlList.Count == 0)
             {
@@ -73,7 +71,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 try
                 {
-                    var result = await provider.FetchListAsync(url, apiKey, cancellationToken).ConfigureAwait(false);
+                    var result = await provider.FetchListAsync(url, cancellationToken).ConfigureAwait(false);
                     cache.ExternalListData[url] = result;
                     _logger.LogDebug("Cached external list {Url}: {Count} items", url, result.TotalItems);
                 }

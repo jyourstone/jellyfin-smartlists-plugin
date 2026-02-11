@@ -39,10 +39,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, string apiKey, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
         {
             var result = new ExternalListResult();
 
+            var apiKey = Plugin.Instance?.Configuration?.MdbListApiKey ?? string.Empty;
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 throw new InvalidOperationException("MDBList API key is not configured. Set the API key in Settings > External Lists.");
