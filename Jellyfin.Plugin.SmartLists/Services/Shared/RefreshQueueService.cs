@@ -264,6 +264,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     .ToList();
                 var warningMessage = warnings.Count > 0 ? string.Join("; ", warnings) : null;
 
+                // Clear warnings after collecting to prevent stale messages leaking into subsequent operations
+                foreach (var cache in _refreshCaches.Values)
+                {
+                    cache.Warnings.Clear();
+                }
+
                 _refreshStatusService.CompleteOperation(listId, true, elapsedTime, warningMessage);
 
                 _logger.LogInformation("Completed {OperationType} operation for list {ListId} ({ListName}) in {ElapsedMs}ms",

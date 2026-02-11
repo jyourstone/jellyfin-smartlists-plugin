@@ -34,7 +34,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public bool CanHandle(string url)
         {
             return !string.IsNullOrWhiteSpace(url)
-                && url.Contains("trakt.tv", StringComparison.OrdinalIgnoreCase);
+                && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && (uri.Host.Equals("trakt.tv", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.EndsWith(".trakt.tv", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <inheritdoc />

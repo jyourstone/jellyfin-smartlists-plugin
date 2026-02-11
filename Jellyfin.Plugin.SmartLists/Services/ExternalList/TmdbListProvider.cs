@@ -32,7 +32,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public bool CanHandle(string url)
         {
             return !string.IsNullOrWhiteSpace(url)
-                && url.Contains("themoviedb.org", StringComparison.OrdinalIgnoreCase);
+                && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && (uri.Host.Equals("themoviedb.org", StringComparison.OrdinalIgnoreCase)
+                    || uri.Host.EndsWith(".themoviedb.org", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <inheritdoc />
