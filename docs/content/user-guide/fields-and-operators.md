@@ -194,10 +194,14 @@ Filter items based on Jellyfin collection membership.
 
 - **Include collections only** (Collections only, default: No) - Include the collection object instead of its contents. Creates "collections of collections" (meta-collections). Media type selection is ignored when enabled.
 - **Include episodes within series** (Playlists with Episodes, default: No) - Include individual episodes from series in collections.
-- **Collection Search Depth** (default: 0) - How deep to traverse nested collections:
-    - 0 = Only items directly in the collection
-    - 1 = Items in collection + one level of sub-collections
-    - 2+ = Continue traversing nested collections
+
+##### Collection Search Depth {#collection-search-depth}
+
+How deep to traverse nested collections (default: 0):
+
+- 0 = Only items directly in the collection
+- 1 = Items in collection + one level of sub-collections
+- 2+ = Continue traversing nested collections
 
 !!! warning "Performance"
     Higher search depths require more database queries. Start with depth 0 and increase only if needed.

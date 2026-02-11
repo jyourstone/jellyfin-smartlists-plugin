@@ -19,6 +19,9 @@ Items are matched by comparing provider IDs between the external list and your l
 | **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
 | **TMDB** | Yes | TMDB |
 
+!!! warning "Rate Limits"
+    All providers have their own rate limits. Each list URL uses one or more requests depending on list size. Be mindful of how often you refresh these lists.
+
 ---
 
 ### MDBList
@@ -29,7 +32,7 @@ Items are matched by comparing provider IDs between the external list and your l
 
 1. Go to [mdblist.com/preferences](https://mdblist.com/preferences/)
 2. Sign in or create a free account
-3. Your API key is displayed on the preferences page
+3. Scroll down to **API Access** and get your API key from there
 4. Enter the API key in the plugin **Settings** tab under **External Lists > MDBList API Key**
 
 **Supported URLs:**
@@ -43,9 +46,6 @@ Items are matched by comparing provider IDs between the external list and your l
 ```
 External List / equals / https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week
 ```
-
-!!! note "Rate Limits"
-    The free tier allows 1,000 API requests per day. Each list URL uses one or more requests depending on list size.
 
 ---
 
@@ -61,7 +61,7 @@ No API key required. Just use a public IMDb list or chart URL.
 
 | Type | URL format |
 |------|-----------|
-| User list | `https://www.imdb.com/list/ls123456789/` |
+| User list | `https://www.imdb.com/list/{listid}/` |
 | Top 250 Movies | `https://www.imdb.com/chart/top/` |
 | Top 250 TV Shows | `https://www.imdb.com/chart/toptv/` |
 | Box Office | `https://www.imdb.com/chart/boxoffice/` |
@@ -119,11 +119,7 @@ External List / equals / https://www.imdb.com/chart/top/
 ```
 External List / equals / https://trakt.tv/users/justin/lists/imdb-top-rated-movies
 External List / equals / https://trakt.tv/movies/trending
-External List / equals / https://trakt.tv/users/me/watchlist
 ```
-
-!!! note "Rate Limits"
-    Trakt allows 1,000 API requests per 5 minutes. Use your smart list's **Max Items** setting to control how many items end up in the final list.
 
 !!! note "Public Lists Only"
     The plugin uses API-key authentication (not OAuth), so only public user lists and watchlists are accessible. Private lists require the list owner to make them public.
@@ -142,8 +138,8 @@ External List / equals / https://trakt.tv/users/me/watchlist
 4. Accept the terms of use
 5. Fill in the application form:
     - **Application Name**: `Jellyfin SmartLists` (or any name you prefer)
-    - **Application URL**: `https://github.com/jyourstone/jellyfin-smartlists-plugin` (or your Jellyfin server URL)
-    - **Type of Use**: `Desktop Application`
+    - **Application URL**: e.g. your Jellyfin server URL
+    - **Type of Use**: `Personal`
     - **Application Summary**: e.g. `Jellyfin plugin that creates smart playlists from TMDB lists and charts`
     - Fill in the remaining contact fields with your information
 6. Submit the form — the API key is generated immediately
@@ -176,12 +172,6 @@ External List / equals / https://www.themoviedb.org/movie
 External List / equals / https://www.themoviedb.org/movie/top-rated
 External List / equals / https://www.themoviedb.org/list/8136
 ```
-
-!!! note "TMDB ID Matching"
-    TMDB only returns TMDB IDs. Items in your Jellyfin library must have TMDB metadata to match. Since Jellyfin uses TMDB as a primary metadata source, most items should match.
-
-!!! note "TMDB Rate Limits"
-    TMDB is lenient with rate limits but chart/trending endpoints can return thousands of items. Use your smart list's **Max Items** setting to control the final list size.
 
 !!! note "Trending URLs"
     The trending URLs (e.g. `/trending/movie/week`) are not browsable pages on TMDB's website — they map directly to TMDB API endpoints. Use the exact URL formats shown in the table above.
