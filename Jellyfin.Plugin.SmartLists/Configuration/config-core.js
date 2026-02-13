@@ -92,7 +92,6 @@
         { Value: "Audio", Label: "Audio (Music)" },
         { Value: "MusicVideo", Label: "Music Video" },
         { Value: "Video", Label: "Video" },
-        { Value: "Trailer", Label: "Trailer" },
         { Value: "Photo", Label: "Photo (Home Photo)" },
         { Value: "Book", Label: "Book" },
         { Value: "AudioBook", Label: "Audiobook" }

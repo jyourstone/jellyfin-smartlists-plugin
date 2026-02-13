@@ -2805,7 +2805,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 Movie => MediaTypes.Movie,
                 Audio => MediaTypes.Audio,
                 MusicVideo => MediaTypes.MusicVideo,
-                Trailer => MediaTypes.Trailer,
+                Trailer => MediaTypes.Video,
                 Video => MediaTypes.Video,
                 Photo => MediaTypes.Photo,
                 Book => MediaTypes.Book,

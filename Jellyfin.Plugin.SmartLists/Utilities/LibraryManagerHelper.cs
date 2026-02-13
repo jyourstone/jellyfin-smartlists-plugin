@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
@@ -48,6 +49,44 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return false;
             }
         }
+        /// <summary>
+        /// Gets TopParentIds for actual user libraries by resolving VirtualFolder physical paths
+        /// to their folder BaseItem IDs. Excludes internal folders like live TV recordings.
+        /// </summary>
+        /// <param name="libraryManager">The library manager instance</param>
+        /// <returns>Array of Guid IDs for library top parent folders</returns>
+        public static Guid[] GetLibraryTopParentIds(ILibraryManager libraryManager)
+        {
+            var ids = new List<Guid>();
+            foreach (var vf in libraryManager.GetVirtualFolders())
+            {
+                if (vf.Locations == null)
+                {
+                    continue;
+                }
+
+                foreach (var location in vf.Locations)
+                {
+                    if (string.IsNullOrEmpty(location))
+                    {
+                        continue;
+                    }
+
+                    // Skip live TV recording locations
+                    if (location.Contains("/livetv/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var folder = libraryManager.FindByPath(location, true);
+                    if (folder != null)
+                    {
+                        ids.Add(folder.Id);
+                    }
+                }
+            }
+
+            return ids.ToArray();
+        }
     }
 }
-

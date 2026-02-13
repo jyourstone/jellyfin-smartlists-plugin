@@ -10,13 +10,13 @@ Here are some more complex playlist and collection examples:
 
 ## Movie Trailers Collection
 - **Include Extras**: Enabled
-- **Media Types**: Trailer
+- **Media Types**: Video
 - **Extra Type** = Trailer
 - Collects all trailers attached to your movies and shows
 
 ## All Extras for a Specific Series
 - **Include Extras**: Enabled
-- **Media Types**: Video, Trailer
+- **Media Types**: Video
 - **Series Name** contains "Modern Family"
 - Collects all special features (deleted scenes, bloopers, featurettes, trailers) for a specific show
 

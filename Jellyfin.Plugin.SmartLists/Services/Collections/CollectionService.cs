@@ -1118,7 +1118,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             };
             var parents = _libraryManager.GetItemsResult(parentQuery).Items;
 
-            var baseItemKindSet = new HashSet<BaseItemKind>(baseItemKinds);
             var seenIds = new HashSet<Guid>(items.Select(i => i.Id));
             var extrasList = new List<BaseItem>();
 
@@ -1145,7 +1144,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 foreach (var extra in parent.GetExtras())
                 {
-                    if (baseItemKindSet.Contains(extra.GetBaseItemKind()) && seenIds.Add(extra.Id))
+                    if (seenIds.Add(extra.Id))
                     {
                         extrasList.Add(extra);
 
@@ -1164,43 +1163,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             return items.Concat(extrasList);
         }
 
-        /// <summary>
-        /// Gets TopParentIds for actual user libraries by resolving VirtualFolder physical paths
-        /// to their folder BaseItem IDs. Excludes internal folders like live TV recordings.
-        /// </summary>
-        private Guid[] GetLibraryTopParentIds()
-        {
-            var ids = new List<Guid>();
-            foreach (var vf in _libraryManager.GetVirtualFolders())
-            {
-                if (vf.Locations == null)
-                {
-                    continue;
-                }
-
-                foreach (var location in vf.Locations)
-                {
-                    if (string.IsNullOrEmpty(location))
-                    {
-                        continue;
-                    }
-
-                    // Skip live TV recording locations
-                    if (location.Contains("/livetv/", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var folder = _libraryManager.FindByPath(location, true);
-                    if (folder != null)
-                    {
-                        ids.Add(folder.Id);
-                    }
-                }
-            }
-
-            return ids.ToArray();
-        }
+        private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
 
         /// <summary>
         /// Refreshes collection metadata including cover image generation.

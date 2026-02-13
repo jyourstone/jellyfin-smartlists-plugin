@@ -2002,11 +2002,10 @@
             return hasEpisode;
         }
 
-        // Series Name: available for Episodes (direct) and Video/Trailer (extras attached to series)
+        // Series Name: available for Episodes (direct) and Video (extras attached to series)
         if (fieldValue === 'SeriesName') {
             var hasVideo = selectedMediaTypes.indexOf('Video') !== -1;
-            var hasTrailer = selectedMediaTypes.indexOf('Trailer') !== -1;
-            return hasEpisode || hasVideo || hasTrailer;
+            return hasEpisode || hasVideo;
         }
 
         // Series-only fields (TV Shows)
@@ -2422,12 +2421,11 @@
         var container = page.querySelector('#includeExtrasContainer');
         if (!container) return;
 
-        var selectedMediaTypes = SmartLists.getSelectedItems
-            ? SmartLists.getSelectedItems(page, 'mediaTypesMultiSelect', 'media-type-multi-select-checkbox')
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes
+            ? SmartLists.getSelectedMediaTypes(page)
             : [];
 
-        var hasExtrasMediaType = selectedMediaTypes.indexOf('Video') !== -1 ||
-            selectedMediaTypes.indexOf('Trailer') !== -1;
+        var hasExtrasMediaType = selectedMediaTypes.indexOf('Video') !== -1;
 
         container.style.display = hasExtrasMediaType ? '' : 'none';
 

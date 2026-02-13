@@ -11,11 +11,10 @@ When creating a smart list, you must select at least one **Media Type** to speci
 | **Series** | Shows | Entire TV series (collections only, not individual episodes) |
 | **Audio** | Music | Music tracks and songs |
 | **Music Videos** | Music Videos | Music video content |
-| **Video** | Home Videos and Photos | Personal video content and extras (behind the scenes, featurettes, etc.) |
+| **Video** | Home Videos and Photos | Personal video content and extras (behind the scenes, featurettes, trailers, etc.) |
 | **Photo** | Home Videos and Photos | Photo content |
 | **Books** | Books | E-book content |
 | **AudioBooks** | Books | Audiobook content |
-| **Trailer** | — | Trailers attached to movies/shows (requires **Include Extras**) |
 
 ## Extras (Special Features)
 
@@ -27,8 +26,8 @@ Once included, you can use the **Extra Type** rule field to filter by specific e
 
 Selecting an **Extra Type** rule will automatically enable the **Include Extras** checkbox.
 
-!!! tip "Trailer Media Type"
-    Jellyfin resolves trailers as a separate `Trailer` media type. If your list includes trailers, make sure to add **Trailer** to your selected media types. Other extras (behind the scenes, featurettes, etc.) are resolved as **Video** type.
+!!! tip "Including Trailers"
+    Trailers are extras attached to movies and shows. To include them, select the **Video** media type, enable **Include Extras**, and optionally add an **Extra Type** = Trailer rule to filter for trailers specifically.
 
 ## Important Notes
 

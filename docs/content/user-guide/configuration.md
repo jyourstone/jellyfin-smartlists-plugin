@@ -138,7 +138,7 @@ This is where you build new playlists and collections:
 - Set the maximum number of items
 - Set the maximum playtime for the list (playlists only)
 - Decide if the list should be public or private (playlists only - collections are always server-wide)
-- Include extras (behind the scenes, deleted scenes, featurettes, trailers) in the item pool — this option is only visible when Video or Trailer media types are selected
+- Include extras (behind the scenes, deleted scenes, featurettes, trailers) in the item pool — this option is only visible when the Video media type is selected
 - Choose whether or not to enable the list
 - Configure auto-refresh behavior (Never, On Library Changes, On All Changes)
 - Set custom refresh schedule (Daily, Weekly, Monthly, Yearly, Interval or No schedule)

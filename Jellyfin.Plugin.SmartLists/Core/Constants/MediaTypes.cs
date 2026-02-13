@@ -26,9 +26,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         // Music Video Types
         public const string MusicVideo = nameof(MusicVideo);
 
-        // Trailer Types
-        public const string Trailer = nameof(Trailer);
-
         // Home Video and Photo Types (matching Jellyfin's backend types)
         public const string Video = nameof(Video);
         public const string Photo = nameof(Photo);
@@ -54,7 +51,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { BaseItemKind.Photo, Photo },
             { BaseItemKind.Book, Book },
             { BaseItemKind.AudioBook, AudioBook },
-            { BaseItemKind.Trailer, Trailer },
             // Series: Supported in Collections, not in Playlists
             { BaseItemKind.Series, Series }
         };
@@ -72,7 +68,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { Photo, BaseItemKind.Photo },
             { Book, BaseItemKind.Book },
             { AudioBook, BaseItemKind.AudioBook },
-            { Trailer, BaseItemKind.Trailer },
             // Series: Supported in Collections, not in Playlists
             { Series, BaseItemKind.Series }
         };
@@ -86,7 +81,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// <summary>
         /// Gets non-audio media types (everything except Audio and AudioBook)
         /// </summary>
-        public static readonly string[] NonAudioTypes = [Movie, Episode, MusicVideo, Video, Photo, Book, Trailer];
+        public static readonly string[] NonAudioTypes = [Movie, Episode, MusicVideo, Video, Photo, Book];
 
         /// <summary>
         /// Gets audio-only media types (Audio, AudioBook)
@@ -111,7 +106,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// <summary>
         /// Gets media types that can have video streams (excludes Photo, Audio, Book, AudioBook)
         /// </summary>
-        public static readonly string[] VideoStreamCapable = [Movie, Episode, MusicVideo, Video, Trailer];
+        public static readonly string[] VideoStreamCapable = [Movie, Episode, MusicVideo, Video];
 
         // HashSet variants for O(1) membership checks (performance optimization)
 
