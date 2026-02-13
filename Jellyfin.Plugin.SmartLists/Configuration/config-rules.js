@@ -8,6 +8,21 @@
         { Value: 'Unplayed', Label: 'Unplayed (Not Started)' }
     ];
 
+    SmartLists.EXTRA_TYPE_OPTIONS = [
+        { Value: 'BehindTheScenes', Label: 'Behind the Scenes' },
+        { Value: 'Clip', Label: 'Clip' },
+        { Value: 'DeletedScene', Label: 'Deleted Scene' },
+        { Value: 'Featurette', Label: 'Featurette' },
+        { Value: 'Interview', Label: 'Interview' },
+        { Value: 'Sample', Label: 'Sample' },
+        { Value: 'Scene', Label: 'Scene' },
+        { Value: 'Short', Label: 'Short' },
+        { Value: 'ThemeSong', Label: 'Theme Song' },
+        { Value: 'ThemeVideo', Label: 'Theme Video' },
+        { Value: 'Trailer', Label: 'Trailer' },
+        { Value: 'Unknown', Label: 'Unknown' }
+    ];
+
     // ===== FIELD TYPE COMPATIBILITY =====
     // Returns the category of a field type for value preservation purposes
     SmartLists.getFieldTypeCategory = function (fieldValue) {
@@ -19,6 +34,7 @@
         if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) return 'simple';
         if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'resolution';
         if (fieldValue === 'PlaybackStatus') return 'playback';
+        if (fieldValue === 'ExtraType') return 'extratype';
         // Default to string for STRING_FIELDS and any unknown fields
         return 'string';
     };
@@ -155,6 +171,8 @@
         if (isMultiValueOperator) {
             // Create tag-based input for IsIn/IsNotIn operators
             SmartLists.createTagBasedInput(valueContainer, currentValue);
+        } else if (fieldValue === 'ExtraType') {
+            SmartLists.handleExtraTypeFieldInput(valueContainer, currentValue);
         } else if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleSimpleFieldInput(valueContainer, currentValue);
         } else if (fieldValue === 'PlaybackStatus') {
@@ -226,6 +244,25 @@
         const statusOptions = SmartLists.PLAYBACK_STATUS_OPTIONS;
 
         statusOptions.forEach(function (opt) {
+            const option = document.createElement('option');
+            option.value = opt.Value;
+            option.textContent = opt.Label;
+            if (currentValue && opt.Value === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        valueContainer.appendChild(select);
+    };
+
+    SmartLists.handleExtraTypeFieldInput = function (valueContainer, currentValue) {
+        const select = document.createElement('select');
+        select.className = 'emby-select rule-value-input';
+        select.setAttribute('is', 'emby-select');
+        select.style.width = '100%';
+
+        SmartLists.EXTRA_TYPE_OPTIONS.forEach(function (opt) {
             const option = document.createElement('option');
             option.value = opt.Value;
             option.textContent = opt.Label;
@@ -405,7 +442,8 @@
             newValueInput.setAttribute('data-original-value', currentValue);
 
             // Try to restore the value if it's appropriate for the new field type
-            if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1 ||
+            if (fieldValue === 'ExtraType' || fieldValue === 'PlaybackStatus' ||
+                SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1 ||
                 SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
                 SmartLists.restoreSelectValue(newValueInput, currentValue);
             } else if (SmartLists.FIELD_TYPES.DATE_FIELDS.indexOf(fieldValue) !== -1) {
@@ -1204,6 +1242,10 @@
             SmartLists.updateRegexHelp(newRuleRow);
             // Update sort options when Similar To rule is added/removed
             SmartLists.updateAllSortOptionsVisibility(page);
+            // Auto-check Include Extras when ExtraType rule is selected
+            if (newField === 'ExtraType') {
+                SmartLists.autoCheckIncludeExtras(page);
+            }
         }, listenerOptions);
 
         operatorSelect.addEventListener('change', function () {
@@ -1723,6 +1765,10 @@
                     SmartLists.updateRegexHelp(ruleRow);
                     // Update sort options when Similar To rule is added/removed
                     SmartLists.updateAllSortOptionsVisibility(page);
+                    // Auto-check Include Extras when ExtraType rule is selected
+                    if (newField === 'ExtraType') {
+                        SmartLists.autoCheckIncludeExtras(page);
+                    }
                 }, listenerOptions);
 
                 operatorSelect.addEventListener('change', function () {
@@ -1952,8 +1998,14 @@
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
 
         // Episode-only fields
-        if (['SeriesName', 'NextUnwatched'].indexOf(fieldValue) !== -1) {
+        if (fieldValue === 'NextUnwatched') {
             return hasEpisode;
+        }
+
+        // Series Name: available for Episodes (direct) and Video (extras attached to series)
+        if (fieldValue === 'SeriesName') {
+            var hasVideo = selectedMediaTypes.indexOf('Video') !== -1;
+            return hasEpisode || hasVideo;
         }
 
         // Series-only fields (TV Shows)
@@ -2350,6 +2402,41 @@
     };
 
     // Note: getPeopleFieldDisplayName is defined in config-formatters.js to avoid duplication
+
+    // ===== INCLUDE EXTRAS VISIBILITY =====
+    // Auto-check Include Extras checkbox when ExtraType rule is selected
+    SmartLists.autoCheckIncludeExtras = function (page) {
+        if (!page) return;
+        var checkbox = page.querySelector('#playlistIncludeExtras');
+        if (checkbox && !checkbox.checked) {
+            checkbox.checked = true;
+            // Also show the container if it was hidden
+            SmartLists.updateIncludeExtrasVisibility(page);
+        }
+    };
+
+    // Show/hide Include Extras checkbox based on selected media types
+    SmartLists.updateIncludeExtrasVisibility = function (page) {
+        if (!page) return;
+        var container = page.querySelector('#includeExtrasContainer');
+        if (!container) return;
+
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes
+            ? SmartLists.getSelectedMediaTypes(page)
+            : [];
+
+        var hasExtrasMediaType = selectedMediaTypes.indexOf('Video') !== -1;
+
+        container.style.display = hasExtrasMediaType ? '' : 'none';
+
+        // Uncheck if hiding
+        if (!hasExtrasMediaType) {
+            var checkbox = page.querySelector('#playlistIncludeExtras');
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+        }
+    };
 
     // Generic helper to update all rules using a provided update function
     // Reduces duplication across updateAll* functions

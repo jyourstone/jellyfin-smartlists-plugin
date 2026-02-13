@@ -326,6 +326,11 @@
             if (SmartLists.updateAllSortOptionsVisibility) {
                 SmartLists.updateAllSortOptionsVisibility(page);
             }
+
+            // 4) Update Include Extras checkbox visibility based on media types
+            if (SmartLists.updateIncludeExtrasVisibility) {
+                SmartLists.updateIncludeExtrasVisibility(page);
+            }
         };
 
         // Generate media types array filtered by list type
@@ -402,8 +407,9 @@
         // Set default auto refresh mode
         SmartLists.setElementValue(page, '#autoRefreshMode', config.DefaultAutoRefresh || 'OnLibraryChanges');
 
-        // Set default public/enabled checkboxes
+        // Set default public/enabled/extras checkboxes
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
+        SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
@@ -446,6 +452,7 @@
         SmartLists.setElementValue(page, '#playlistMaxPlayTimeMinutes', 0);
         SmartLists.setElementValue(page, '#autoRefreshMode', 'OnLibraryChanges');
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
+        SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
@@ -2653,6 +2660,11 @@
         // Update "Use Child Values" checkbox visibility in sort boxes when switching between Playlist/Collection
         if (SmartLists.updateUseChildValuesVisibility) {
             SmartLists.updateUseChildValuesVisibility(page);
+        }
+
+        // Update Include Extras checkbox visibility based on media types
+        if (SmartLists.updateIncludeExtrasVisibility) {
+            SmartLists.updateIncludeExtrasVisibility(page);
         }
 
         // Collections are server-wide, no library loading needed

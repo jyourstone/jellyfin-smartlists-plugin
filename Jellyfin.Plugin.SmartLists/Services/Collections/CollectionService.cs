@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -75,6 +76,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// </summary>
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto = null)
         {
+            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
+        }
+
+        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
+        {
             // Validate media types before processing
             if (dto != null)
             {
@@ -88,7 +94,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
 
             // Use GetAllMedia which queries media in the owner user's context
-            return GetAllMedia(mediaTypes, dto, user);
+            return GetAllMedia(mediaTypes, dto, user, extraOwnerMap);
         }
 
         /// <summary>
@@ -1062,31 +1068,48 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         private static string GetImageFileName(ImageType imageType, string extension)
             => SmartListImageService.GetJellyfinImageFileName(imageType, extension);
 
-        private IEnumerable<BaseItem> GetAllMedia(List<string> mediaTypes, SmartCollectionDto? dto = null, User? ownerUser = null)
+        private IEnumerable<BaseItem> GetAllMedia(List<string> mediaTypes, SmartCollectionDto? dto = null, User? ownerUser = null, ConcurrentDictionary<Guid, Guid>? extraOwnerMap = null)
         {
             // Collections are server-wide (visible to all users), but the media query and rules
             // are evaluated in the context of the owner user to respect library access permissions
             // and user-specific data (IsPlayed, IsFavorite, etc.)
-            
+
             var baseItemKinds = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger);
-            
+
             // Owner user is required for proper permissions and user-specific data
             if (ownerUser == null)
             {
                 _logger.LogError("Owner user is required for GetAllMedia but was not provided");
                 return [];
             }
-            
+
+            // Build a set of valid TopParentIds from VirtualFolder physical locations.
+            // Excludes internal folders like live TV recordings.
+            var validTopParentIds = GetLibraryTopParentIds();
+
             // Query all items the owner user has access to
             var query = new InternalItemsQuery(ownerUser)
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
-                IsVirtualItem = false
+                IsVirtualItem = false,
+                TopParentIds = validTopParentIds,
             };
-            
-            return _libraryManager.GetItemsResult(query).Items;
+
+            var items = _libraryManager.GetItemsResult(query).Items;
+
+            if (dto?.IncludeExtras != true)
+            {
+                return items;
+            }
+
+            var extras = LibraryManagerHelper.FetchExtras(
+                _libraryManager, ownerUser, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
+
+            return items.Concat(extras);
         }
+
+        private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
 
         /// <summary>
         /// Refreshes collection metadata including cover image generation.

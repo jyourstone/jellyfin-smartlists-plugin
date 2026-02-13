@@ -6,6 +6,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.Audio;
+using Trailer = MediaBrowser.Controller.Entities.Trailer;
 using Video = MediaBrowser.Controller.Entities.Video;
 using Photo = MediaBrowser.Controller.Entities.Photo;
 using Book = MediaBrowser.Controller.Entities.Book;
@@ -1538,67 +1539,87 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Extracts the series name for episodes with per-refresh caching.
+        /// Extracts the series name for episodes and extras with per-refresh caching.
+        /// For episodes: uses SeriesId property directly.
+        /// For extras: walks up the parent chain to find the owning Series.
         /// </summary>
         private static void ExtractSeriesName(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
             operand.SeriesName = string.Empty;
             try
             {
-                // Use helper to extract SeriesId safely
+                // Use helper to extract SeriesId safely (episodes only)
                 if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
                 {
-                    // Check cache first to avoid repeated library lookups
-                    if (cache.SeriesNameById.TryGetValue(seriesGuid, out var cachedName))
-                    {
-                        operand.SeriesName = cachedName;
-                        logger?.LogDebug("Using cached series name '{SeriesName}' for episode '{EpisodeName}'",
-                            operand.SeriesName, baseItem.Name);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Get the parent series from the library manager
-                            var parentSeries = libraryManager.GetItemById(seriesGuid);
-                            var seriesName = parentSeries?.Name ?? "";
-                            var seriesSortName = parentSeries?.SortName ?? ""; // Don't fallback to Name, let sorting logic handle it
-
-                            // Cache the result for future episodes from the same series
-                            cache.SeriesNameById[seriesGuid] = seriesName;
-                            cache.SeriesSortNameById[seriesGuid] = seriesSortName;
-                            operand.SeriesName = seriesName;
-
-                            logger?.LogDebug("Extracted and cached series name '{SeriesName}' for episode '{EpisodeName}'",
-                                operand.SeriesName, baseItem.Name);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger?.LogDebug(ex, "Failed to get parent series for episode '{EpisodeName}' with SeriesId {SeriesId}",
-                                baseItem.Name, seriesGuid);
-
-                            // Cache empty string to avoid repeated failures
-                            cache.SeriesNameById[seriesGuid] = string.Empty;
-                            cache.SeriesSortNameById[seriesGuid] = string.Empty;
-                        }
-                    }
+                    ResolveAndCacheSeriesName(operand, baseItem, seriesGuid, libraryManager, cache, logger);
                 }
-                else
+                else if (operand.ExtraType.Length > 0)
                 {
-                    // Either not an episode, no SeriesId property, or unsupported SeriesId value
-                    if (baseItem is Episode)
-                    {
-                        logger?.LogDebug("Could not extract valid SeriesId from episode '{EpisodeName}'", baseItem.Name);
-                    }
-                    else
-                    {
-                        logger?.LogDebug("Item '{ItemName}' is not an episode, series name remains empty", baseItem.Name);
-                    }
+                    // For extras, walk up the parent chain to find the owning Series
+                    ExtractSeriesNameFromExtra(operand, baseItem, libraryManager, cache, logger);
+                }
+                else if (baseItem is Episode)
+                {
+                    logger?.LogDebug("Could not extract valid SeriesId from episode '{EpisodeName}'", baseItem.Name);
                 }
             }
             catch (Exception ex)
             {
                 logger?.LogWarning(ex, "Failed to extract series name for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
+        /// Resolves the series name from a series GUID and caches it.
+        /// </summary>
+        private static void ResolveAndCacheSeriesName(Operand operand, BaseItem baseItem, Guid seriesGuid, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            if (cache.SeriesNameById.TryGetValue(seriesGuid, out var cachedName))
+            {
+                operand.SeriesName = cachedName;
+                return;
+            }
+
+            try
+            {
+                var parentSeries = libraryManager.GetItemById(seriesGuid);
+                var seriesName = parentSeries?.Name ?? "";
+                var seriesSortName = parentSeries?.SortName ?? "";
+
+                cache.SeriesNameById[seriesGuid] = seriesName;
+                cache.SeriesSortNameById[seriesGuid] = seriesSortName;
+                operand.SeriesName = seriesName;
+
+                logger?.LogDebug("Extracted and cached series name '{SeriesName}' for item '{ItemName}'",
+                    operand.SeriesName, baseItem.Name);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "Failed to get parent series for item '{ItemName}' with SeriesId {SeriesId}",
+                    baseItem.Name, seriesGuid);
+
+                cache.SeriesNameById[seriesGuid] = string.Empty;
+                cache.SeriesSortNameById[seriesGuid] = string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Extracts series name for extras using the reverse mapping populated during media collection.
+        /// Extras don't have a ParentId linking back to their owner, so the mapping is built when
+        /// iterating parent.GetExtras() in PlaylistService/CollectionService.
+        /// </summary>
+        private static void ExtractSeriesNameFromExtra(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            try
+            {
+                if (cache.ExtraOwnerSeriesId.TryGetValue(baseItem.Id, out var seriesId))
+                {
+                    ResolveAndCacheSeriesName(operand, baseItem, seriesId, libraryManager, cache, logger);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "Failed to extract series name from extra '{ExtraName}'", baseItem.Name);
             }
         }
 
@@ -2279,6 +2300,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 // Note: Album, RuntimeMinutes, FileInfo, LibraryName are now conditionally extracted below
             };
 
+            // Extract ExtraType (zero cost - direct property via reflection, cached)
+            operand.ExtraType = GetExtraTypeName(baseItem);
+
             // Extract series name for episodes - only when needed for performance
             if (extractSeriesName)
             {
@@ -2781,6 +2805,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 Movie => MediaTypes.Movie,
                 Audio => MediaTypes.Audio,
                 MusicVideo => MediaTypes.MusicVideo,
+                Trailer => MediaTypes.Video,
                 Video => MediaTypes.Video,
                 Photo => MediaTypes.Photo,
                 Book => MediaTypes.Book,
@@ -2810,6 +2835,38 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             return typeName;
+        }
+
+        /// <summary>
+        /// Cached PropertyInfo for BaseItem.ExtraType to avoid repeated reflection lookups.
+        /// </summary>
+        private static System.Reflection.PropertyInfo? _extraTypePropertyCache;
+        private static bool _extraTypePropertyResolved;
+
+        /// <summary>
+        /// Gets the ExtraType name for a BaseItem, or empty string if not an extra.
+        /// Uses reflection with caching since ExtraType is on the base class.
+        /// </summary>
+        private static string GetExtraTypeName(BaseItem item)
+        {
+            if (!_extraTypePropertyResolved)
+            {
+                _extraTypePropertyCache = typeof(BaseItem).GetProperty("ExtraType");
+                _extraTypePropertyResolved = true;
+            }
+
+            if (_extraTypePropertyCache == null)
+            {
+                return string.Empty;
+            }
+
+            var extraType = _extraTypePropertyCache.GetValue(item);
+            if (extraType == null)
+            {
+                return string.Empty;
+            }
+
+            return extraType.ToString() ?? string.Empty;
         }
 
         /// <summary>

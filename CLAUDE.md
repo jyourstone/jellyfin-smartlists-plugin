@@ -41,7 +41,7 @@ Jellyfin.Plugin.SmartLists/
 Extract duplicated code into helpers. Check `Utilities/` and existing helpers before creating new functionality.
 
 ### Thread Safety
-Lists are processed with threading. Use thread-safe collections (`ConcurrentDictionary`, `ConcurrentBag`) and proper locking for shared state.
+List item processing is sequential (enforced by `SemaphoreSlim(1,1)` in `RefreshQueueService`), but background task scheduling and cache access use concurrent collections (`ConcurrentDictionary`, `ConcurrentQueue`). Use thread-safe collections for shared caches accessed across the background refresh task and API layer.
 
 ### Two-Phase Filtering
 Expensive fields (People, AudioLanguages, Collections, etc.) use two-phase filtering in `SmartList.cs`:

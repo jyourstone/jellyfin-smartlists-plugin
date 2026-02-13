@@ -66,12 +66,14 @@ Here are some popular playlist and collection types you can create:
 These examples use the **Max Items for this OR block** feature to create perfectly balanced playlists:
 
 ### Movie Trailer & Episode Mix
-Create a playlist with exactly 50% bumpers and 50% episodes:
+Create a playlist with exactly 50% trailers and 50% episodes:
 
-- **OR Block 1**: 
-    - **Media Type** = Trailer
+- **Include Extras**: Enabled
+- **Media Types**: Video, Episode
+- **OR Block 1**:
+    - **Extra Type** = Trailer
     - **Max Items for this OR block**: 50
-- **OR Block 2**: 
+- **OR Block 2**:
     - **Media Type** = Episode
     - **Max Items for this OR block**: 50
 - **Sort by**: Random

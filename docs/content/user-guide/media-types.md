@@ -11,10 +11,23 @@ When creating a smart list, you must select at least one **Media Type** to speci
 | **Series** | Shows | Entire TV series (collections only, not individual episodes) |
 | **Audio** | Music | Music tracks and songs |
 | **Music Videos** | Music Videos | Music video content |
-| **Video** | Home Videos and Photos | Personal video content |
+| **Video** | Home Videos and Photos | Personal video content and extras (behind the scenes, featurettes, trailers, etc.) |
 | **Photo** | Home Videos and Photos | Photo content |
 | **Books** | Books | E-book content |
 | **AudioBooks** | Books | Audiobook content |
+
+## Extras (Special Features)
+
+Jellyfin supports "extras" — behind the scenes, deleted scenes, featurettes, trailers, and other bonus content attached to movies and TV shows. By default, extras are **not included** in smart lists because they are owned by their parent items and excluded from standard library queries.
+
+To include extras in a smart list, enable the **Include Extras** checkbox when creating or editing a list. This adds extras to the item pool alongside regular library items.
+
+Once included, you can use the **Extra Type** rule field to filter by specific extra type. The field provides a dropdown with all available types: Behind the Scenes, Clip, Deleted Scene, Featurette, Interview, Sample, Scene, Short, Theme Song, Theme Video, Trailer, and Unknown.
+
+Selecting an **Extra Type** rule will automatically enable the **Include Extras** checkbox.
+
+!!! tip "Including Trailers"
+    Trailers are extras attached to movies and shows. To include them, select the **Video** media type, enable **Include Extras**, and optionally add an **Extra Type** = Trailer rule to filter for trailers specifically.
 
 ## Important Notes
 

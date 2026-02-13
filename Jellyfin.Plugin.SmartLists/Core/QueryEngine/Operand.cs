@@ -16,6 +16,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public List<string> Studios { get; set; } = [];
         public string MediaType { get; set; } = string.Empty;
         public string ItemType { get; set; } = string.Empty;
+        public string ExtraType { get; set; } = string.Empty;
         public string Album { get; set; } = string.Empty;
         public string Overview { get; set; } = string.Empty;
         public double DateCreated { get; set; } = 0;

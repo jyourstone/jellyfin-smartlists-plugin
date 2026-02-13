@@ -159,6 +159,7 @@
             const sortOptions = SmartLists.collectSortsFromForm(page);
 
             const isPublic = SmartLists.getElementChecked(page, '#playlistIsPublic', false);
+            const includeExtras = SmartLists.getElementChecked(page, '#playlistIncludeExtras', false);
             const isEnabled = SmartLists.getElementChecked(page, '#playlistIsEnabled', true); // Default to true
             const autoRefreshMode = SmartLists.getElementValue(page, '#autoRefreshMode', 'Never');
 
@@ -237,6 +238,7 @@
                 ExpressionSets: expressionSets,
                 Order: { SortOptions: sortOptions },
                 Enabled: isEnabled,
+                IncludeExtras: includeExtras,
                 MediaTypes: selectedMediaTypes,
                 MaxItems: maxItems,
                 MaxPlayTimeMinutes: maxPlayTimeMinutes,
@@ -577,6 +579,7 @@
                 }
 
                 SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
+                SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
 
                 // Handle AutoRefresh with backward compatibility
                 const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
@@ -623,6 +626,11 @@
 
                 // Clear flag to re-enable change event handlers
                 page._skipMediaTypeChangeHandlers = false;
+
+                // Update Include Extras visibility based on loaded media types
+                if (SmartLists.updateIncludeExtrasVisibility) {
+                    SmartLists.updateIncludeExtrasVisibility(page);
+                }
 
                 // Set the list owner (for both playlists and collections)
                 // isCollection is already declared above on line 425
@@ -843,6 +851,7 @@
                 }
 
                 SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false);
+                SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
 
                 // Handle AutoRefresh
                 const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
@@ -878,6 +887,11 @@
                 // Flag was already set at the beginning of clone process to prevent interference
                 // Set the media types from the cloned playlist
                 SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', clonedMediaTypes, 'media-type-multi-select-checkbox', 'Select media types...');
+
+                // Update Include Extras visibility based on cloned media types
+                if (SmartLists.updateIncludeExtrasVisibility) {
+                    SmartLists.updateIncludeExtrasVisibility(page);
+                }
 
                 // Set the list owner (for both playlists and collections)
                 // isCollection is already declared above on line 650

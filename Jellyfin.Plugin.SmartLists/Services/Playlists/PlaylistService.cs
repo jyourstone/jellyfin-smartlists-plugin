@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -888,10 +889,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// <returns>Enumerable of BaseItem matching the specified media types.</returns>
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes)
         {
-            return GetAllUserMediaForPlaylist(user, mediaTypes, null);
+            return GetAllUserMediaForPlaylist(user, mediaTypes, null, null);
         }
 
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto = null)
+        {
+            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
+        }
+
+        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
         {
             // Validate media types before processing (always validate, not just when dto is provided)
             _logger?.LogDebug("GetAllUserMediaForPlaylist validation{PlaylistName}: MediaTypes={MediaTypes}", 
@@ -912,19 +918,40 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 throw new InvalidOperationException("No media types specified. At least one media type must be selected.");
             }
 
-            return GetAllUserMedia(user, mediaTypes, dto);
+            return GetAllUserMedia(user, mediaTypes, dto, extraOwnerMap);
         }
 
-        private IEnumerable<BaseItem> GetAllUserMedia(User user, List<string>? mediaTypes = null, SmartPlaylistDto? dto = null)
+        private IEnumerable<BaseItem> GetAllUserMedia(User user, List<string>? mediaTypes = null, SmartPlaylistDto? dto = null, ConcurrentDictionary<Guid, Guid>? extraOwnerMap = null)
         {
+            var baseItemKinds = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger);
+
+            // Build a set of valid TopParentIds from VirtualFolder physical locations.
+            // VirtualFolderInfo.ItemId is the CollectionFolder ID which differs from items' TopParentId
+            // (which points to the physical folder). We resolve physical folder IDs via FindByPath.
+            var validTopParentIds = GetLibraryTopParentIds();
+
             var query = new InternalItemsQuery(user)
             {
-                IncludeItemTypes = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger),
+                IncludeItemTypes = baseItemKinds,
                 Recursive = true,
+                IsVirtualItem = false,
+                TopParentIds = validTopParentIds,
             };
 
-            return _libraryManager.GetItemsResult(query).Items;
+            var items = _libraryManager.GetItemsResult(query).Items;
+
+            if (dto?.IncludeExtras != true)
+            {
+                return items;
+            }
+
+            var extras = LibraryManagerHelper.FetchExtras(
+                _libraryManager, user, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
+
+            return items.Concat(extras);
         }
+
+        private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
 
         /// <summary>
         /// Refreshes playlist metadata to trigger Jellyfin's auto-generation of cover images.

@@ -281,6 +281,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Simple Fields
             AddField(fields, "ItemType", "Item Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);
+            AddField(fields, "ExtraType", "Extra Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);
 
             // People Fields (all expensive - require People extraction group)
             AddPeopleField(fields, "People", "People (All)");
