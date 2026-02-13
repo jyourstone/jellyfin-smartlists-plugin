@@ -18,7 +18,6 @@ using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
@@ -935,6 +934,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
+                IsVirtualItem = false,
                 TopParentIds = validTopParentIds,
             };
 
@@ -945,63 +945,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 return items;
             }
 
-            // Fetch extras via parent.GetExtras() — the official Jellyfin API for accessing extras.
-            // Extras (behind the scenes, deleted scenes, featurettes, etc.) are linked to parent items
-            // via ExtraIds and cannot be found through standard library queries.
-            _logger?.LogDebug("IncludeExtras enabled for playlist '{Name}', fetching extras from parent items", dto.Name);
+            var extras = LibraryManagerHelper.FetchExtras(
+                _libraryManager, user, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
 
-            var parentKinds = new[] { BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.MusicVideo };
-            var parentQuery = new InternalItemsQuery(user)
-            {
-                IncludeItemTypes = parentKinds,
-                Recursive = true,
-                TopParentIds = validTopParentIds,
-            };
-            var parents = _libraryManager.GetItemsResult(parentQuery).Items;
-
-            var seenIds = new HashSet<Guid>(items.Select(i => i.Id));
-            var extrasList = new List<BaseItem>();
-
-            foreach (var parent in parents)
-            {
-                if (parent.ExtraIds == null || parent.ExtraIds.Length == 0)
-                {
-                    continue;
-                }
-
-                // Resolve series ID for this parent (if applicable) for reverse mapping
-                Guid? parentSeriesId = null;
-                if (extraOwnerMap != null)
-                {
-                    if (parent is Series)
-                    {
-                        parentSeriesId = parent.Id;
-                    }
-                    else if (parent is Season season)
-                    {
-                        parentSeriesId = season.SeriesId != Guid.Empty ? season.SeriesId : null;
-                    }
-                }
-
-                foreach (var extra in parent.GetExtras())
-                {
-                    if (seenIds.Add(extra.Id))
-                    {
-                        extrasList.Add(extra);
-
-                        // Build reverse mapping: extra ID → owning Series ID
-                        if (parentSeriesId.HasValue)
-                        {
-                            extraOwnerMap!.TryAdd(extra.Id, parentSeriesId.Value);
-                        }
-                    }
-                }
-            }
-
-            _logger?.LogDebug("Found {ExtrasCount} extras from {ParentCount} parent items for playlist '{Name}'",
-                extrasList.Count, parents.Count, dto.Name);
-
-            return items.Concat(extrasList);
+            return items.Concat(extras);
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);

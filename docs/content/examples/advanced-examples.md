@@ -11,7 +11,7 @@ Here are some more complex playlist and collection examples:
 ## Movie Trailers Collection
 - **Include Extras**: Enabled
 - **Media Types**: Video
-- **Extra Type** = Trailer
+- **Extra Type** = "Trailer"
 - Collects all trailers attached to your movies and shows
 
 ## All Extras for a Specific Series
