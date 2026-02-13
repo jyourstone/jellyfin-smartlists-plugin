@@ -88,6 +88,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         {
             int page = 1;
             int totalFetched = 0;
+            int position = 0;
 
             while (true)
             {
@@ -119,8 +120,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     if (item.Id is int id and > 0)
                     {
-                        result.TmdbIds.Add(id.ToString(CultureInfo.InvariantCulture));
+                        // TryAdd keeps first/lowest position for duplicates
+                        result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
                         totalFetched++;
+                        position++;
                     }
                 }
 
@@ -144,6 +147,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             CancellationToken cancellationToken)
         {
             int totalFetched = 0;
+            int position = 0;
 
             for (int page = 1; page <= maxPages; page++)
             {
@@ -175,8 +179,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     if (item.Id is int id and > 0)
                     {
-                        result.TmdbIds.Add(id.ToString(CultureInfo.InvariantCulture));
+                        // TryAdd keeps first/lowest position for duplicates
+                        result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
                         totalFetched++;
+                        position++;
                     }
                 }
 

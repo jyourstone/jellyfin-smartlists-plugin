@@ -67,10 +67,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
             // Extract IMDb IDs from title links in the HTML (e.g., /title/tt1234567/)
+            // TryAdd keeps first/lowest position for duplicates (maintains DOM/list order)
             var matches = ImdbTitleIdPattern().Matches(html);
+            int position = 0;
             foreach (Match match in matches)
             {
-                result.ImdbIds.Add(match.Groups[1].Value);
+                result.ImdbIds.TryAdd(match.Groups[1].Value, position);
+                position++;
             }
 
             result.TotalItems = result.ImdbIds.Count;

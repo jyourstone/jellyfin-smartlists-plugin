@@ -5,24 +5,24 @@ using System.Threading.Tasks;
 namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 {
     /// <summary>
-    /// Represents the result of fetching an external list — sets of provider IDs.
+    /// Represents the result of fetching an external list — provider IDs mapped to their 0-based position in the list.
     /// </summary>
     public class ExternalListResult
     {
         /// <summary>
-        /// Gets the set of IMDb IDs (e.g., "tt1234567").
+        /// Gets the IMDb IDs (e.g., "tt1234567") mapped to their 0-based position in the list.
         /// </summary>
-        public HashSet<string> ImdbIds { get; init; } = [];
+        public Dictionary<string, int> ImdbIds { get; init; } = [];
 
         /// <summary>
-        /// Gets the set of TMDB IDs as strings (e.g., "917496").
+        /// Gets the TMDB IDs as strings (e.g., "917496") mapped to their 0-based position in the list.
         /// </summary>
-        public HashSet<string> TmdbIds { get; init; } = [];
+        public Dictionary<string, int> TmdbIds { get; init; } = [];
 
         /// <summary>
-        /// Gets the set of TVDB IDs as strings (e.g., "421968").
+        /// Gets the TVDB IDs as strings (e.g., "421968") mapped to their 0-based position in the list.
         /// </summary>
-        public HashSet<string> TvdbIds { get; init; } = [];
+        public Dictionary<string, int> TvdbIds { get; init; } = [];
 
         /// <summary>
         /// Gets or sets the total number of items in the external list.

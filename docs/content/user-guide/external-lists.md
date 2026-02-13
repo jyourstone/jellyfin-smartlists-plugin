@@ -178,6 +178,28 @@ External List / equals / https://www.themoviedb.org/list/8136
 
 ---
 
+## Sorting by External List Order
+
+You can sort items in the same order as they appear in the external list. Select **External List Order** as the sort option (it appears in the sort dropdown when an External List rule is present).
+
+- **Ascending**: Items appear in the same order as the external list (position 1 first)
+- **Descending**: Items appear in reverse order (last item in the list first)
+
+Items that are not matched by any external list are placed at the end.
+
+If an item appears in multiple external lists, its best (lowest) position across all lists is used for sorting.
+
+**Example:**
+
+```
+Rules: External List / equals / https://www.imdb.com/chart/top/
+Sort:  External List Order / Ascending
+```
+
+This creates a collection sorted exactly like IMDb's Top 250 chart.
+
+---
+
 ## Tips
 
 !!! tip "Combining with other rules"

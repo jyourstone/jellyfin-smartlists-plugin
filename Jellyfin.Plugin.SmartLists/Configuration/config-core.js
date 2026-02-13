@@ -63,6 +63,7 @@
         { value: 'TrackNumber', label: 'Track Number' },
         { value: 'Resolution', label: 'Resolution' },
         { value: 'Rule Block Order', label: 'Rule Block Order' },
+        { value: 'External List Order', label: 'External List Order' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'No Order' }
     ];
@@ -108,6 +109,18 @@
             const ruleRow = allRules[i];
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
             if (fieldSelect && fieldSelect.value === 'SimilarTo') {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    SmartLists.hasExternalListRuleInForm = function (page) {
+        const allRules = page.querySelectorAll('.rule-row');
+        for (var i = 0; i < allRules.length; i++) {
+            const ruleRow = allRules[i];
+            const fieldSelect = ruleRow.querySelector('.rule-field-select');
+            if (fieldSelect && fieldSelect.value === 'ExternalList') {
                 return true;
             }
         }

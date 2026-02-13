@@ -2054,6 +2054,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is EpisodeNumberOrderDesc ||
                    order is TrackNumberOrderDesc ||
                    order is Orders.RuleBlockOrderDesc ||
+                   order is ExternalListOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -2835,6 +2836,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Random", () => new RandomOrder() },
             { "Rule Block Order Ascending", () => new Orders.RuleBlockOrder() },
             { "Rule Block Order Descending", () => new Orders.RuleBlockOrderDesc() },
+            { "External List Order Ascending", () => new ExternalListOrder() },
+            { "External List Order Descending", () => new ExternalListOrderDesc() },
             { "NoOrder", () => new NoOrder() },
         };
 

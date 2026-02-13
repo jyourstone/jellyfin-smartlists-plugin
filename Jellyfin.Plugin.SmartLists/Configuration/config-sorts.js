@@ -131,61 +131,67 @@
         }
     };
     
-    SmartLists.shouldShowSortOption = function(sortValue, selectedMediaTypes, hasSimilarToRule) {
+    SmartLists.shouldShowSortOption = function(sortValue, selectedMediaTypes, hasSimilarToRule, hasExternalListRule) {
         // If no media types selected, show all options
         if (!selectedMediaTypes || selectedMediaTypes.length === 0) {
             return true;
         }
-        
+
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
         const hasMovie = selectedMediaTypes.indexOf('Movie') !== -1;
         const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioBook = selectedMediaTypes.indexOf('AudioBook') !== -1;
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
         const hasVideo = selectedMediaTypes.indexOf('Video') !== -1;
-        
+
         // Episode-only sort options
         if (sortValue === 'SeasonNumber' || sortValue === 'EpisodeNumber' || sortValue === 'SeriesName') {
             return hasEpisode;
         }
-        
+
         // Audio/MusicVideo/AudioBook sort options
         if (sortValue === 'TrackNumber') {
             return hasAudio || hasMusicVideo || hasAudioBook;
         }
-        
+
         // Audio/MusicVideo sort options
         if (sortValue === 'AlbumName' || sortValue === 'Artist') {
             return hasAudio || hasMusicVideo;
         }
-        
+
         // Video-capable sort options (Resolution)
         if (sortValue === 'Resolution') {
             return hasMovie || hasEpisode || hasMusicVideo || hasVideo;
         }
-        
+
         // Runtime - shown for Movie, Episode, Audio, Music Video, Home Video (Video), Audiobook
         if (sortValue === 'Runtime') {
             return hasMovie || hasEpisode || hasAudio || hasMusicVideo || hasVideo || hasAudioBook;
         }
-        
+
         // Similarity - only show if there's a "Similar To" rule
         if (sortValue === 'Similarity') {
             return hasSimilarToRule === true;
         }
-        
-        // Always show: Name, ProductionYear, CommunityRating, 
+
+        // External List Order - only show if there's an "ExternalList" rule
+        if (sortValue === 'External List Order') {
+            return hasExternalListRule === true;
+        }
+
+        // Always show: Name, ProductionYear, CommunityRating,
         // DateCreated, ReleaseDate, PlayCount (owner), LastPlayed (owner), Random, NoOrder
         return true;
     };
-    
+
     // Filter sort options based on current context
     SmartLists.getFilteredSortOptions = function(page) {
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
         const hasSimilarTo = SmartLists.hasSimilarToRuleInForm(page);
-        
+        const hasExternalList = SmartLists.hasExternalListRuleInForm(page);
+
         return SmartLists.SORT_OPTIONS.filter(function(opt) {
-            return SmartLists.shouldShowSortOption(opt.value, selectedMediaTypes, hasSimilarTo);
+            return SmartLists.shouldShowSortOption(opt.value, selectedMediaTypes, hasSimilarTo, hasExternalList);
         });
     };
     

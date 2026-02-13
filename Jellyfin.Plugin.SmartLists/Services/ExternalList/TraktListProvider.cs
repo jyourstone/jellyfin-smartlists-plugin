@@ -67,6 +67,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             var httpClient = _httpClientFactory.CreateClient("TraktList");
             int page = 1;
             int totalFetched = 0;
+            int position = 0;
 
             try
             {
@@ -106,7 +107,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                     foreach (var item in items)
                     {
-                        AddItemIds(item, result);
+                        AddItemIds(item, result, ref position);
                         totalFetched++;
                     }
 
@@ -149,7 +150,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return result;
         }
 
-        private static void AddItemIds(TraktListItem item, ExternalListResult result)
+        private static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)
         {
             // Items can be wrapped (list items) or direct (trending/popular)
             var ids = item.Movie?.Ids ?? item.Show?.Ids ?? item.Ids;
@@ -158,20 +159,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 return;
             }
 
+            // TryAdd keeps first/lowest position for duplicates
             if (!string.IsNullOrEmpty(ids.Imdb))
             {
-                result.ImdbIds.Add(ids.Imdb);
+                result.ImdbIds.TryAdd(ids.Imdb, position);
             }
 
             if (ids.Tmdb is int tmdbId and > 0)
             {
-                result.TmdbIds.Add(tmdbId.ToString(CultureInfo.InvariantCulture));
+                result.TmdbIds.TryAdd(tmdbId.ToString(CultureInfo.InvariantCulture), position);
             }
 
             if (ids.Tvdb is int tvdbId and > 0)
             {
-                result.TvdbIds.Add(tvdbId.ToString(CultureInfo.InvariantCulture));
+                result.TvdbIds.TryAdd(tvdbId.ToString(CultureInfo.InvariantCulture), position);
             }
+
+            position++;
         }
 
         /// <summary>
