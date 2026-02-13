@@ -13,11 +13,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
     {
         private readonly string[] _sortedTypes;
         private readonly bool _hasCollectionsExpansion;
+        private readonly bool _includeExtras;
 
-        private MediaTypesKey(string[] sortedTypes, bool hasCollectionsExpansion = false)
+        private MediaTypesKey(string[] sortedTypes, bool hasCollectionsExpansion = false, bool includeExtras = false)
         {
             _sortedTypes = sortedTypes;
             _hasCollectionsExpansion = hasCollectionsExpansion;
+            _includeExtras = includeExtras;
         }
 
         public static MediaTypesKey Create(List<string> mediaTypes)
@@ -49,7 +51,11 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 collectionsExpansionFlag = hasCollectionsExpansion && sortedTypes.Contains(MediaTypes.Episode) && !sortedTypes.Contains(MediaTypes.Series);
             }
 
-            return new MediaTypesKey(sortedTypes, collectionsExpansionFlag);
+            // Include IncludeExtras flag in cache key to avoid sharing cached results
+            // between lists that include extras and those that don't
+            bool includeExtrasFlag = dto?.IncludeExtras == true;
+
+            return new MediaTypesKey(sortedTypes, collectionsExpansionFlag, includeExtrasFlag);
         }
 
         public bool Equals(MediaTypesKey other)
@@ -59,7 +65,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             var otherArray = other._sortedTypes ?? [];
 
             return thisArray.AsSpan().SequenceEqual(otherArray.AsSpan()) &&
-                   _hasCollectionsExpansion == other._hasCollectionsExpansion;
+                   _hasCollectionsExpansion == other._hasCollectionsExpansion &&
+                   _includeExtras == other._includeExtras;
         }
 
         public override int GetHashCode()
@@ -74,6 +81,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 hashCode.Add(item, StringComparer.Ordinal);
             }
             hashCode.Add(_hasCollectionsExpansion);
+            hashCode.Add(_includeExtras);
 
             return hashCode.ToHashCode();
         }
@@ -82,7 +90,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         {
             var array = _sortedTypes ?? [];
             var typesString = string.Join(",", array);
-            return _hasCollectionsExpansion ? $"{typesString}[CollectionsExpansion]" : typesString;
+            var suffix = "";
+            if (_hasCollectionsExpansion) suffix += "[CollectionsExpansion]";
+            if (_includeExtras) suffix += "[IncludeExtras]";
+            return typesString + suffix;
         }
     }
 }

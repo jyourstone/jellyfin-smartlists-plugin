@@ -448,16 +448,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             var userCache = EnsureCacheForUser(user, dto);
             _logger.LogDebug("Processing playlist '{PlaylistName}' with user cache ({CacheEntryCount} entries)", dto.Name, userCache.Count);
 
+            // Get or create RefreshCache for this user (before media fetch so extras can populate the reverse map)
+            var refreshCache = GetOrCreateRefreshCacheForUser(user.Id);
+
             // Get media for this playlist using cache
             var mediaTypesForClosure = dto.MediaTypes?.ToList() ?? [];
             var mediaTypesKey = MediaTypesKey.Create(mediaTypesForClosure, dto);
+            var extraOwnerMap = refreshCache.ExtraOwnerSeriesId;
 
             var playlistSpecificMedia = userCache.GetOrAdd(mediaTypesKey, _ =>
                 new Lazy<BaseItem[]>(() =>
                 {
                     _logger.LogDebug("Cache miss for MediaTypes [{MediaTypes}] for playlist '{PlaylistName}', fetching media", mediaTypesKey, dto.Name);
                     var playlistService = GetPlaylistService();
-                    var media = playlistService.GetAllUserMediaForPlaylist(user, mediaTypesForClosure, dto).ToArray();
+                    var media = playlistService.GetAllUserMediaForPlaylist(user, mediaTypesForClosure, dto, extraOwnerMap).ToArray();
                     _logger.LogDebug("Cached {MediaCount} items for MediaTypes [{MediaTypes}] for user '{Username}'",
                         media.Length, mediaTypesKey, user.Username);
                     return media;
@@ -481,8 +485,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             var fileSystem = new SmartListFileSystem(_applicationPaths);
             var playlistStore = new PlaylistStore(fileSystem);
 
-            // Get or create RefreshCache for this user
-            var refreshCache = GetOrCreateRefreshCacheForUser(user.Id);
             _logger.LogDebug("Using RefreshCache for user '{Username}' (shared across playlists/collections)", user.Username);
 
             // Process refresh
@@ -524,16 +526,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             var userCache = EnsureCacheForUser(ownerUser, dto);
             _logger.LogDebug("Processing collection '{CollectionName}' with user cache ({CacheEntryCount} entries)", dto.Name, userCache.Count);
 
+            // Get or create RefreshCache for this user (before media fetch so extras can populate the reverse map)
+            var refreshCache = GetOrCreateRefreshCacheForUser(ownerUserId);
+
             // Get media for this collection using cache
             var mediaTypesForClosure = dto.MediaTypes?.ToList() ?? [];
             var mediaTypesKey = MediaTypesKey.Create(mediaTypesForClosure, dto);
+            var extraOwnerMap = refreshCache.ExtraOwnerSeriesId;
 
             var collectionSpecificMedia = userCache.GetOrAdd(mediaTypesKey, _ =>
                 new Lazy<BaseItem[]>(() =>
                 {
                     _logger.LogDebug("Cache miss for MediaTypes [{MediaTypes}] for collection '{CollectionName}', fetching media", mediaTypesKey, dto.Name);
                     var collectionService = GetCollectionService();
-                    var media = collectionService.GetAllUserMediaForPlaylist(ownerUser, mediaTypesForClosure, dto).ToArray();
+                    var media = collectionService.GetAllUserMediaForPlaylist(ownerUser, mediaTypesForClosure, dto, extraOwnerMap).ToArray();
                     _logger.LogDebug("Cached {MediaCount} items for MediaTypes [{MediaTypes}] for user '{Username}' (collection '{CollectionName}')",
                         media.Length, mediaTypesKey, ownerUser.Username, dto.Name);
                     return media;
@@ -557,8 +563,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             var fileSystem = new SmartListFileSystem(_applicationPaths);
             var collectionStore = new CollectionStore(fileSystem);
 
-            // Get or create RefreshCache for this user
-            var refreshCache = GetOrCreateRefreshCacheForUser(ownerUserId);
             _logger.LogDebug("Using RefreshCache for user '{Username}' (shared across playlists/collections)", ownerUser.Username);
 
             // Process refresh with cached media
@@ -735,6 +739,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Library name cache - maps ItemId → library name (from GetCollectionFolders API)
             public ConcurrentDictionary<Guid, string> LibraryNameById { get; } = new();
+
+            // Extra → owning Series ID cache (reverse lookup from extra ID to its parent Series)
+            // Populated by PlaylistService/CollectionService when fetching extras
+            public ConcurrentDictionary<Guid, Guid> ExtraOwnerSeriesId { get; } = new();
 
             // External list caches - pre-fetched list data and per-item membership
             // Maps external list URL → fetched provider ID sets (populated by ExternalListService before filtering)

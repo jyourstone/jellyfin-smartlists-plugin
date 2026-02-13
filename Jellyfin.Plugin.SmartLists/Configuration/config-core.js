@@ -91,7 +91,8 @@
         { Value: "Series", Label: "Series (TV Show)", CollectionOnly: true }, // Series can only be added to Collections, not Playlists
         { Value: "Audio", Label: "Audio (Music)" },
         { Value: "MusicVideo", Label: "Music Video" },
-        { Value: "Video", Label: "Video (Home Video)" },
+        { Value: "Video", Label: "Video" },
+        { Value: "Trailer", Label: "Trailer" },
         { Value: "Photo", Label: "Photo (Home Photo)" },
         { Value: "Book", Label: "Book" },
         { Value: "AudioBook", Label: "Audiobook" }

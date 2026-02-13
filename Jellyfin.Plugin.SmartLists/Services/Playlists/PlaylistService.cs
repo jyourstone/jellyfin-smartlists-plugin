@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -17,6 +18,7 @@ using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Providers;
@@ -888,10 +890,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// <returns>Enumerable of BaseItem matching the specified media types.</returns>
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes)
         {
-            return GetAllUserMediaForPlaylist(user, mediaTypes, null);
+            return GetAllUserMediaForPlaylist(user, mediaTypes, null, null);
         }
 
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto = null)
+        {
+            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
+        }
+
+        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
         {
             // Validate media types before processing (always validate, not just when dto is provided)
             _logger?.LogDebug("GetAllUserMediaForPlaylist validation{PlaylistName}: MediaTypes={MediaTypes}", 
@@ -912,18 +919,128 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 throw new InvalidOperationException("No media types specified. At least one media type must be selected.");
             }
 
-            return GetAllUserMedia(user, mediaTypes, dto);
+            return GetAllUserMedia(user, mediaTypes, dto, extraOwnerMap);
         }
 
-        private IEnumerable<BaseItem> GetAllUserMedia(User user, List<string>? mediaTypes = null, SmartPlaylistDto? dto = null)
+        private IEnumerable<BaseItem> GetAllUserMedia(User user, List<string>? mediaTypes = null, SmartPlaylistDto? dto = null, ConcurrentDictionary<Guid, Guid>? extraOwnerMap = null)
         {
+            var baseItemKinds = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger);
+
+            // Build a set of valid TopParentIds from VirtualFolder physical locations.
+            // VirtualFolderInfo.ItemId is the CollectionFolder ID which differs from items' TopParentId
+            // (which points to the physical folder). We resolve physical folder IDs via FindByPath.
+            var validTopParentIds = GetLibraryTopParentIds();
+
             var query = new InternalItemsQuery(user)
             {
-                IncludeItemTypes = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger),
+                IncludeItemTypes = baseItemKinds,
                 Recursive = true,
+                TopParentIds = validTopParentIds,
             };
 
-            return _libraryManager.GetItemsResult(query).Items;
+            var items = _libraryManager.GetItemsResult(query).Items;
+
+            if (dto?.IncludeExtras != true)
+            {
+                return items;
+            }
+
+            // Fetch extras via parent.GetExtras() — the official Jellyfin API for accessing extras.
+            // Extras (behind the scenes, deleted scenes, featurettes, etc.) are linked to parent items
+            // via ExtraIds and cannot be found through standard library queries.
+            _logger?.LogDebug("IncludeExtras enabled for playlist '{Name}', fetching extras from parent items", dto.Name);
+
+            var parentKinds = new[] { BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.MusicVideo };
+            var parentQuery = new InternalItemsQuery(user)
+            {
+                IncludeItemTypes = parentKinds,
+                Recursive = true,
+                TopParentIds = validTopParentIds,
+            };
+            var parents = _libraryManager.GetItemsResult(parentQuery).Items;
+
+            var baseItemKindSet = new HashSet<BaseItemKind>(baseItemKinds);
+            var seenIds = new HashSet<Guid>(items.Select(i => i.Id));
+            var extrasList = new List<BaseItem>();
+
+            foreach (var parent in parents)
+            {
+                if (parent.ExtraIds == null || parent.ExtraIds.Length == 0)
+                {
+                    continue;
+                }
+
+                // Resolve series ID for this parent (if applicable) for reverse mapping
+                Guid? parentSeriesId = null;
+                if (extraOwnerMap != null)
+                {
+                    if (parent is Series)
+                    {
+                        parentSeriesId = parent.Id;
+                    }
+                    else if (parent is Season season)
+                    {
+                        parentSeriesId = season.SeriesId != Guid.Empty ? season.SeriesId : null;
+                    }
+                }
+
+                foreach (var extra in parent.GetExtras())
+                {
+                    if (baseItemKindSet.Contains(extra.GetBaseItemKind()) && seenIds.Add(extra.Id))
+                    {
+                        extrasList.Add(extra);
+
+                        // Build reverse mapping: extra ID → owning Series ID
+                        if (parentSeriesId.HasValue)
+                        {
+                            extraOwnerMap!.TryAdd(extra.Id, parentSeriesId.Value);
+                        }
+                    }
+                }
+            }
+
+            _logger?.LogDebug("Found {ExtrasCount} extras from {ParentCount} parent items for playlist '{Name}'",
+                extrasList.Count, parents.Count, dto.Name);
+
+            return items.Concat(extrasList);
+        }
+
+        /// <summary>
+        /// Gets TopParentIds for actual user libraries by resolving VirtualFolder physical paths
+        /// to their folder BaseItem IDs. Excludes internal folders like live TV recordings.
+        /// </summary>
+        private Guid[] GetLibraryTopParentIds()
+        {
+            var ids = new List<Guid>();
+            foreach (var vf in _libraryManager.GetVirtualFolders())
+            {
+                if (vf.Locations == null)
+                {
+                    continue;
+                }
+
+                foreach (var location in vf.Locations)
+                {
+                    if (string.IsNullOrEmpty(location))
+                    {
+                        continue;
+                    }
+
+                    // Skip live TV recording locations
+                    if (location.Contains("/livetv/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var folder = _libraryManager.FindByPath(location, true);
+                    if (folder != null)
+                    {
+                        ids.Add(folder.Id);
+                    }
+                }
+            }
+
+            return ids.ToArray();
         }
 
         /// <summary>

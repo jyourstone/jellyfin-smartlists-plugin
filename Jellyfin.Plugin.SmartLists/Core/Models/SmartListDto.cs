@@ -69,6 +69,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
             }
         }
 
+        /// <summary>
+        /// Whether to include extras (behind the scenes, deleted scenes, featurettes, trailers, etc.)
+        /// in the item pool. When false (default), only regular library items are included.
+        /// When true, extras attached to parent items are also queried and available for rule evaluation.
+        /// </summary>
+        public bool IncludeExtras { get; set; } = false;
+
         // State and limits
         public bool Enabled { get; set; } = true; // Default to enabled
         public int? MaxItems { get; set; } // Nullable to support backwards compatibility
