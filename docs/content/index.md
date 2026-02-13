@@ -52,7 +52,7 @@ SmartLists works with all media types supported by Jellyfin:
 - **Episode** - Individual TV show episodes
 - **Audio (Music)** - Music tracks and albums
 - **Music Video** - Music video files
-- **Video (Home Video)** - Personal home videos and recordings
+- **Video** - Personal home videos and recordings and extras (trailers, interviews etc.)
 - **Photo (Home Photo)** - Personal photos and images
 - **Book** - eBooks, comics, and other readable content
 - **Audiobook** - Spoken word audio books
