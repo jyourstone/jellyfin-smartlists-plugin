@@ -3549,46 +3549,48 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 var url = kvp.Key;
                 var listResult = kvp.Value;
 
-                bool matched = false;
+                int matchedPosition = -1;
 
                 // Match by IMDb ID
-                if (!matched && !string.IsNullOrEmpty(imdbId) && listResult.ImdbIds.Contains(imdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(imdbId) && listResult.ImdbIds.TryGetValue(imdbId, out var imdbPos))
                 {
-                    matched = true;
+                    matchedPosition = imdbPos;
                 }
 
                 // Match by TMDB ID
-                if (!matched && !string.IsNullOrEmpty(tmdbId) && listResult.TmdbIds.Contains(tmdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(tmdbId) && listResult.TmdbIds.TryGetValue(tmdbId, out var tmdbPos))
                 {
-                    matched = true;
+                    matchedPosition = tmdbPos;
                 }
 
                 // Match by TVDB ID
-                if (!matched && !string.IsNullOrEmpty(tvdbId) && listResult.TvdbIds.Contains(tvdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(tvdbId) && listResult.TvdbIds.TryGetValue(tvdbId, out var tvdbPos))
                 {
-                    matched = true;
+                    matchedPosition = tvdbPos;
                 }
 
                 // Match episodes by parent series IDs
-                if (!matched && !string.IsNullOrEmpty(seriesImdbId) && listResult.ImdbIds.Contains(seriesImdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesImdbId) && listResult.ImdbIds.TryGetValue(seriesImdbId, out var seriesImdbPos))
                 {
-                    matched = true;
+                    matchedPosition = seriesImdbPos;
                 }
 
-                if (!matched && !string.IsNullOrEmpty(seriesTmdbId) && listResult.TmdbIds.Contains(seriesTmdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesTmdbId) && listResult.TmdbIds.TryGetValue(seriesTmdbId, out var seriesTmdbPos))
                 {
-                    matched = true;
+                    matchedPosition = seriesTmdbPos;
                 }
 
-                if (!matched && !string.IsNullOrEmpty(seriesTvdbId) && listResult.TvdbIds.Contains(seriesTvdbId))
+                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesTvdbId) && listResult.TvdbIds.TryGetValue(seriesTvdbId, out var seriesTvdbPos))
                 {
-                    matched = true;
+                    matchedPosition = seriesTvdbPos;
                 }
 
-                if (matched)
+                if (matchedPosition >= 0)
                 {
                     matchingLists.Add(url);
-                    logger?.LogDebug("Item '{ItemName}' matched external list: {Url}", baseItem.Name, url);
+                    // Cache the best (lowest) position across all matched external lists for sorting
+                    cache.ExternalListPositions.AddOrUpdate(baseItem.Id, matchedPosition, (_, existing) => Math.Min(existing, matchedPosition));
+                    logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, url, matchedPosition);
                 }
             }
 

@@ -741,6 +741,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<string, ExternalListResult> ExternalListData { get; } = new(StringComparer.OrdinalIgnoreCase);
             // Maps ItemId → list of external list URLs this item appears in (per-item cache)
             public ConcurrentDictionary<Guid, List<string>> ItemExternalLists { get; } = new();
+            // Maps ItemId → best (lowest) position across all matched external lists (for External List Order sorting)
+            public ConcurrentDictionary<Guid, int> ExternalListPositions { get; } = new();
 
             // Warnings collected during processing (e.g., missing API keys, fetch failures)
             public ConcurrentBag<string> Warnings { get; } = [];
