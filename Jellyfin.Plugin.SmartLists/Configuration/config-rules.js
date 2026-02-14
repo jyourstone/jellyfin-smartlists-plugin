@@ -2033,6 +2033,11 @@
             return hasVideoType;
         }
 
+        // Extra Type - only available when Video media type is selected
+        if (fieldValue === 'ExtraType') {
+            return selectedMediaTypes.indexOf('Video') !== -1;
+        }
+
         // Music-specific fields
         if (['Album', 'Artists', 'AlbumArtists'].indexOf(fieldValue) !== -1) {
             return hasAudio || hasAudioBook || hasMusicVideo;

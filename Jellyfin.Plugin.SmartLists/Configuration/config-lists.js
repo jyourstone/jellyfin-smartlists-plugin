@@ -1745,6 +1745,13 @@
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Media Types</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eMediaTypesDisplayText + '</td>' +
             '</tr>' +
+            (playlist.IncludeExtras ?
+                '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Include Extras</td>' +
+                '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
+                '</tr>' :
+                ''
+            ) +
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Sort</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eSortName + '</td>' +
