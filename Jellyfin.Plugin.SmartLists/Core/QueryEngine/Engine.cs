@@ -1104,28 +1104,29 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (r.Operator == "Equal" || r.Operator == "NotEqual")
             {
-                logger?.LogDebug("SmartLists applying collection {Operator} to {Field} with value '{Value}'", r.Operator, r.MemberName, r.TargetValue);
+                logger?.LogDebug("SmartLists applying exclusive {Operator} to {Field} with value '{Value}'", r.Operator, r.MemberName, r.TargetValue);
                 var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                
-                // Use special method for Collections and Playlists that handles prefix/suffix stripping
-                // For other fields, use the standard AnyItemEquals method
+
+                // Equal/NotEqual on list fields means "exclusively equals" - the list must contain
+                // ONLY this value and no others. Use special methods for Collections/Playlists
+                // that handle prefix/suffix stripping.
                 System.Reflection.MethodInfo? method;
                 if (r.MemberName == "Collections")
                 {
-                    method = typeof(Engine).GetMethod("AnyCollectionEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyCollectionEquals method not found");
+                    method = typeof(Engine).GetMethod("OnlyCollectionEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.OnlyCollectionEquals method not found");
                 }
                 else if (r.MemberName == "Playlists")
                 {
-                    method = typeof(Engine).GetMethod("AnyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyPlaylistEquals method not found");
+                    method = typeof(Engine).GetMethod("OnlyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.OnlyPlaylistEquals method not found");
                 }
                 else
                 {
-                    method = typeof(Engine).GetMethod("AnyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyItemEquals method not found");
+                    method = typeof(Engine).GetMethod("OnlyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.OnlyItemEquals method not found");
                 }
-                
+
                 var equalsCall = System.Linq.Expressions.Expression.Call(method, left, right);
                 if (r.Operator == "Equal") return equalsCall;
                 if (r.Operator == "NotEqual") return System.Linq.Expressions.Expression.Not(equalsCall);
@@ -1359,6 +1360,53 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         internal static bool AnyPlaylistEquals(IEnumerable<string> list, string value)
         {
             return AnyEqualsWithOptionalStripping(list, value, stripPrefixSuffix: true);
+        }
+
+        /// <summary>
+        /// Checks if the list contains exactly one item and that item equals the target value.
+        /// Used for Equal/NotEqual on list fields where "equals" means "exclusively contains this value".
+        /// </summary>
+        internal static bool OnlyItemEquals(IEnumerable<string> list, string value)
+        {
+            return OnlyEqualsWithOptionalStripping(list, value, stripPrefixSuffix: false);
+        }
+
+        /// <summary>
+        /// Exclusive equals for Collections field, with prefix/suffix stripping support.
+        /// </summary>
+        internal static bool OnlyCollectionEquals(IEnumerable<string> list, string value)
+        {
+            return OnlyEqualsWithOptionalStripping(list, value, stripPrefixSuffix: true);
+        }
+
+        /// <summary>
+        /// Exclusive equals for Playlists field, with prefix/suffix stripping support.
+        /// </summary>
+        internal static bool OnlyPlaylistEquals(IEnumerable<string> list, string value)
+        {
+            return OnlyEqualsWithOptionalStripping(list, value, stripPrefixSuffix: true);
+        }
+
+        /// <summary>
+        /// Checks if the list contains exactly one item and that item equals the target value,
+        /// with optional prefix/suffix stripping for Collections/Playlists fields.
+        /// </summary>
+        private static bool OnlyEqualsWithOptionalStripping(IEnumerable<string> list, string value, bool stripPrefixSuffix)
+        {
+            if (list == null) return false;
+
+            var items = list.Where(s => s != null).ToList();
+            if (items.Count != 1) return false;
+
+            var item = items[0];
+            if (item.Equals(value, StringComparison.OrdinalIgnoreCase)) return true;
+
+            if (stripPrefixSuffix && NameFormatter.StripPrefixAndSuffix(item) is string stripped)
+            {
+                return stripped.Equals(value, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
 
         internal static bool AnyRegexMatch(IEnumerable<string> list, string pattern)

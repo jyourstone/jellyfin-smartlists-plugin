@@ -188,6 +188,12 @@ Collections are great for organizing related content that you want to browse tog
 - **List Type**: Collection
 - Creates a collection that groups all action movies together for easy browsing
 
+### Solo Studio Collection
+- **Studios** equals "A24"
+- **Media Type**: Movie
+- Creates a collection of movies produced exclusively by A24 (excludes co-productions with other studios)
+- Use **contains** instead if you want to include co-productions
+
 ### Holiday Collection
 - **Tags** contain "Christmas" OR "Holiday"
 - **List Type**: Collection

@@ -79,7 +79,7 @@
         } else {
             // Fallback to the old logic if FieldOperators is not available
             // Define common operator sets to avoid duplication
-            const stringListOperators = ['Contains', 'NotContains', 'IsIn', 'IsNotIn', 'MatchRegex'];
+            const stringListOperators = ['Equal', 'NotEqual', 'Contains', 'NotContains', 'IsIn', 'IsNotIn', 'MatchRegex'];
             const stringOperators = ['Equal', 'NotEqual', 'Contains', 'NotContains', 'IsIn', 'IsNotIn', 'MatchRegex'];
             const numericOperators = ['Equal', 'NotEqual', 'GreaterThan', 'LessThan', 'GreaterThanOrEqual', 'LessThanOrEqual'];
             const booleanOperators = ['Equal', 'NotEqual'];
