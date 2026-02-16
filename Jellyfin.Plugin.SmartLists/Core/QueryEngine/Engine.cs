@@ -1408,7 +1408,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (list == null) return false;
 
-            var items = list.Where(s => s != null).Take(2).ToList();
+            var items = list.Where(s => !string.IsNullOrEmpty(s)).Take(2).ToList();
             if (items.Count != 1) return false;
 
             var item = items[0];
