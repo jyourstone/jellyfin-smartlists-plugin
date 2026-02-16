@@ -191,12 +191,25 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="logger">Logger instance</param>
         private static System.Linq.Expressions.Expression BuildCombinedStringEnumerableExpression(Expression r, ParameterExpression param, string fieldName, string parentSeriesFieldName, ILogger? logger)
         {
-            // Get the field property expression
             var fieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, fieldName);
-            var fieldExpression = BuildStringEnumerableExpression(r, fieldProperty, logger);
-
-            // Get the parent series field property expression
             var parentSeriesFieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, parentSeriesFieldName);
+
+            // For Equal/NotEqual (exclusive match), we must check against the combined list.
+            // Checking each list independently would give wrong results, e.g. episode Studios=["ABC"]
+            // + parent series Studios=["Marvel Studios"] would incorrectly match "equals Marvel Studios"
+            // because the parent list alone exclusively equals it, ignoring the episode's own studios.
+            if (r.Operator == "Equal" || r.Operator == "NotEqual")
+            {
+                logger?.LogDebug("SmartLists building combined {Field} exclusive {Operator} against merged list", fieldName, r.Operator);
+                var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
+                var method = typeof(Engine).GetMethod("OnlyCombinedItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (method == null) throw new InvalidOperationException("Engine.OnlyCombinedItemEquals method not found");
+                var equalsCall = System.Linq.Expressions.Expression.Call(method, fieldProperty, parentSeriesFieldProperty, right);
+                if (r.Operator == "Equal") return equalsCall;
+                return System.Linq.Expressions.Expression.Not(equalsCall);
+            }
+
+            var fieldExpression = BuildStringEnumerableExpression(r, fieldProperty, logger);
             var parentSeriesFieldExpression = BuildStringEnumerableExpression(r, parentSeriesFieldProperty, logger);
 
             // Determine if this is a negative operator
@@ -1407,6 +1420,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Checks if the combined (deduplicated) entries from both lists contain exactly one
+        /// distinct value and that value equals the target. Used for Equal/NotEqual on
+        /// Tags/Studios/Genres when "Include parent series" is enabled.
+        /// </summary>
+        private static bool OnlyCombinedItemEquals(IEnumerable<string> list, IEnumerable<string> parentList, string value)
+        {
+            var items = (list ?? Enumerable.Empty<string>())
+                .Concat(parentList ?? Enumerable.Empty<string>())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return items.Count == 1 && items[0].Equals(value, StringComparison.OrdinalIgnoreCase);
         }
 
         internal static bool AnyRegexMatch(IEnumerable<string> list, string pattern)
