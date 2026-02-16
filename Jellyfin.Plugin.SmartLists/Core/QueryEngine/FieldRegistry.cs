@@ -166,7 +166,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         // Operator arrays for reuse
         private static readonly string[] StringOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
-        private static readonly string[] MultiValueOperators = ["Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
+        private static readonly string[] MultiValueOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
         private static readonly string[] NumericOperators = ["Equal", "NotEqual", "GreaterThan", "LessThan", "GreaterThanOrEqual", "LessThanOrEqual"];
         private static readonly string[] DateOperators = ["Equal", "NotEqual", "After", "Before", "NewerThan", "OlderThan", "Weekday"];
         private static readonly string[] BooleanOperators = ["Equal", "NotEqual"];

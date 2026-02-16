@@ -259,6 +259,22 @@ Different operators are available depending on the field type.
 | **is in** / **is not in** | Match any of multiple values (semicolon-separated) |
 | **matches regex** | Pattern matching using .NET regex syntax |
 
+### List Operators
+
+For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlists, etc.), operators work against the individual entries in the list:
+
+| Operator | Description |
+|----------|-------------|
+| **equals** | The list contains **only** this value and nothing else |
+| **not equals** | The list does **not** contain only this value |
+| **contains** / **not contains** | Any entry in the list contains the text (partial match) |
+| **is in** / **is not in** | Any entry in the list matches one of the semicolon-separated values |
+| **matches regex** | Any entry in the list matches the regex pattern |
+
+!!! tip "Equals vs Contains on list fields"
+    - **Studios equals "Marvel Studios"** — matches items where Marvel Studios is the *only* studio
+    - **Studios contains "Marvel Studios"** — matches items that *include* Marvel Studios (even if other studios are also listed)
+
 ### Numeric Operators
 
 | Operator | Description |
