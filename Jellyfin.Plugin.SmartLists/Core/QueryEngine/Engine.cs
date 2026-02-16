@@ -1408,7 +1408,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (list == null) return false;
 
-            var items = list.Where(s => s != null).ToList();
+            var items = list.Where(s => s != null).Take(2).ToList();
             if (items.Count != 1) return false;
 
             var item = items[0];
@@ -1433,6 +1433,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 .Concat(parentList ?? Enumerable.Empty<string>())
                 .Where(s => !string.IsNullOrEmpty(s))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
                 .ToList();
 
             return items.Count == 1 && items[0].Equals(value, StringComparison.OrdinalIgnoreCase);
