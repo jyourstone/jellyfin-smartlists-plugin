@@ -62,6 +62,7 @@
         { value: 'Similarity', label: 'Similarity (requires Similar To rule)' },
         { value: 'TrackNumber', label: 'Track Number' },
         { value: 'Resolution', label: 'Resolution' },
+        { value: 'LastEpisodeAirDate', label: 'Last Episode Air Date' },
         { value: 'Rule Block Order', label: 'Rule Block Order' },
         { value: 'External List Order', label: 'External List Order' },
         { value: 'Random', label: 'Random' },

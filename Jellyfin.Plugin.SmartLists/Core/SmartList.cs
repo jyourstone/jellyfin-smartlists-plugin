@@ -2055,6 +2055,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is TrackNumberOrderDesc ||
                    order is Orders.RuleBlockOrderDesc ||
                    order is ExternalListOrderDesc ||
+                   order is LastEpisodeAirDateOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -2838,6 +2839,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Rule Block Order Descending", () => new Orders.RuleBlockOrderDesc() },
             { "External List Order Ascending", () => new ExternalListOrder() },
             { "External List Order Descending", () => new ExternalListOrderDesc() },
+            { "LastEpisodeAirDate Ascending", () => new LastEpisodeAirDateOrder() },
+            { "LastEpisodeAirDate Descending", () => new LastEpisodeAirDateOrderDesc() },
             { "NoOrder", () => new NoOrder() },
         };
 
@@ -2982,6 +2985,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (orders.Any(o => o.Name.Contains("Artist", StringComparison.OrdinalIgnoreCase) ||
                                        o.Name.Contains("Album", StringComparison.OrdinalIgnoreCase)))
                         requirements.RequiredGroups |= ExtractionGroup.AudioMetadata;
+                }
+
+                // LastEpisodeAirDate sort requires LastEpisodeAirDate extraction
+                if (!requirements.RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate))
+                {
+                    if (orders.Any(o => o.Name.Contains("LastEpisodeAirDate", StringComparison.OrdinalIgnoreCase)))
+                        requirements.RequiredGroups |= ExtractionGroup.LastEpisodeAirDate;
                 }
             }
 
