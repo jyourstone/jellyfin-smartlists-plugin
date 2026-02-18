@@ -139,6 +139,7 @@
 
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
         const hasMovie = selectedMediaTypes.indexOf('Movie') !== -1;
+        const hasSeries = selectedMediaTypes.indexOf('Series') !== -1;
         const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioBook = selectedMediaTypes.indexOf('AudioBook') !== -1;
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
@@ -147,6 +148,11 @@
         // Episode-only sort options
         if (sortValue === 'SeasonNumber' || sortValue === 'EpisodeNumber' || sortValue === 'SeriesName') {
             return hasEpisode;
+        }
+
+        // Series-only sort options
+        if (sortValue === 'LastEpisodeAirDate') {
+            return hasSeries;
         }
 
         // Audio/MusicVideo/AudioBook sort options
