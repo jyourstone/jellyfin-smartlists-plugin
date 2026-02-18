@@ -23,6 +23,9 @@ Sort by the year the content was produced or released.
 ### Release Date
 Sort by the specific release date of the content.
 
+### Last Episode Air Date
+Sort TV series by the air date of their most recent episode. Only available when the **Series** media type is selected. Useful for finding which series are currently airing or were most recently updated with new episodes.
+
 ### Date Created
 Sort by when the item was added to your Jellyfin library.
 
@@ -56,6 +59,9 @@ Sort music and music videos by artist name.
 ### Track Number
 Sort by album name, disc number, then track number. Designed specifically for music to maintain proper album order.
 
+### Resolution
+Sort by video resolution (e.g., 480p, 720p, 1080p, 4K). Available for movies, episodes, music videos, and home videos.
+
 ### Similarity
 Sort by similarity score (highest first). Only available when using the "Similar To" filter field in your rules.
 
@@ -77,6 +83,9 @@ Preserves the natural grouping from OR blocks by keeping items from each block t
 
 !!! note "Requires Multiple OR Blocks"
     This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
+
+### External List Order
+Sort items in the same order as the external list they were matched from. Only available when using the "External List" filter field in your rules.
 
 ## Sorting Collections by Child Item Values {#child-item-sorting}
 
