@@ -21,7 +21,7 @@ public static class MetadataHelper
         bool changed = false;
 
         // Apply Sort Title (ForcedSortName overrides auto-generated SortName)
-        var newSortTitle = string.IsNullOrEmpty(dto.SortTitle) ? null : dto.SortTitle;
+        var newSortTitle = string.IsNullOrWhiteSpace(dto.SortTitle) ? null : dto.SortTitle;
         if (item.ForcedSortName != newSortTitle)
         {
             item.ForcedSortName = newSortTitle;
@@ -30,7 +30,7 @@ public static class MetadataHelper
         }
 
         // Apply Overview
-        var newOverview = string.IsNullOrEmpty(dto.Overview) ? null : dto.Overview;
+        var newOverview = string.IsNullOrWhiteSpace(dto.Overview) ? null : dto.Overview;
         if (item.Overview != newOverview)
         {
             item.Overview = newOverview;
