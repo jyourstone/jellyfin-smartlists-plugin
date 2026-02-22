@@ -10,6 +10,7 @@ When creating a smart list, you must select at least one **Media Type** to speci
 | **Episodes** | Shows | Individual TV show episodes |
 | **Series** | Shows | Entire TV series (collections only, not individual episodes) |
 | **Audio** | Music | Music tracks and songs |
+| **Album** | Music | Entire music albums (collections only, not individual tracks) |
 | **Music Videos** | Music Videos | Music video content |
 | **Video** | Home Videos and Photos | Personal video content and extras (behind the scenes, featurettes, trailers, etc.) |
 | **Photo** | Home Videos and Photos | Photo content |

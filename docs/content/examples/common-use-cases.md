@@ -146,6 +146,13 @@ Create distinct sections for different genres in one playlist:
 
 ## Music
 
+### Album Collection by Genre
+- **Genre** contains "Rock"
+- **Media Type**: Album (Music)
+- **List Type**: Collection
+- Creates a collection of all rock albums in your library
+- Albums can only be added to Collections, not Playlists
+
 ### Workout Mix
 - **Genre** contains "Electronic" OR "Rock" AND **Max Playtime** 45 minutes
 

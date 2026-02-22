@@ -2626,8 +2626,16 @@
 
             // Restore previously selected media types, excluding collection-only types when switching to Playlist
             const filteredMediaTypes = currentlySelectedMediaTypes.filter(function (value) {
-                // Skip Series if switching to Playlist mode (Series is collection-only)
-                return !(value === 'Series' && !isCollection);
+                // Skip collection-only media types when switching to Playlist mode
+                if (!isCollection) {
+                    var isCollectionOnly = SmartLists.mediaTypes.some(function (mt) {
+                        return mt.Value === value && mt.CollectionOnly;
+                    });
+                    if (isCollectionOnly) {
+                        return false;
+                    }
+                }
+                return true;
             });
 
             if (filteredMediaTypes.length > 0) {

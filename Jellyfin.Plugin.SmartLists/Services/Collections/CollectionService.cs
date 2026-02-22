@@ -1557,9 +1557,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// </summary>
         private List<BaseItem> GetItemsWithImages(List<BaseItem> items)
         {
-            // First, get Movies and Series with images (preserving order)
+            // First, get Movies, Series and MusicAlbums with images (preserving order)
             var mediaItemsWithImages = items
-                .Where(item => (item is Movie || item is Series) &&
+                .Where(item => (item is Movie || item is Series || item is MusicAlbum) &&
                                item.ImageInfos != null &&
                                item.ImageInfos.Any(i => i.Type == ImageType.Primary))
                 .ToList();
@@ -1668,9 +1668,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// </summary>
         private List<BaseItem> GetItemsWithThumbImages(List<BaseItem> items)
         {
-            // First, try to get Movies and Series with thumb images (preserving order)
+            // First, try to get Movies, Series and MusicAlbums with thumb images (preserving order)
             var mediaItemsWithThumbImages = items
-                .Where(item => (item is Movie || item is Series) &&
+                .Where(item => (item is Movie || item is Series || item is MusicAlbum) &&
                                item.ImageInfos != null &&
                                item.ImageInfos.Any(i => i.Type == ImageType.Thumb))
                 .ToList();

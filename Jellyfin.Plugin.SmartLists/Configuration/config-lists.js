@@ -1449,14 +1449,18 @@
         const playlistId = playlist.Id || 'NO_ID';
 
         // Collections are server-wide, no library assignment needed
-        // Create individual media type labels - filter out Series for playlists only (not supported due to Jellyfin limitations)
+        // Create individual media type labels - filter out collection-only types for playlists (not supported due to Jellyfin limitations)
         let mediaTypesArray = [];
         if (playlist.MediaTypes && playlist.MediaTypes.length > 0) {
-            // Only filter Series for Playlists (Collections support Series)
+            // Only filter collection-only types for Playlists (Collections support all types)
             const isPlaylist = playlist.Type === 'Playlist' || !playlist.Type; // Default to Playlist if Type not set
             const validTypes = isPlaylist
-                ? playlist.MediaTypes.filter(function (type) { return type !== 'Series'; })
-                : playlist.MediaTypes; // Collections: show all types including Series
+                ? playlist.MediaTypes.filter(function (type) {
+                    return !SmartLists.mediaTypes.some(function (mt) {
+                        return mt.Value === type && mt.CollectionOnly;
+                    });
+                })
+                : playlist.MediaTypes; // Collections: show all types
             mediaTypesArray = validTypes.length > 0 ? validTypes : ['Unknown'];
         } else {
             mediaTypesArray = ['Unknown'];
