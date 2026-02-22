@@ -908,37 +908,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
-        /// <summary>
-        /// Applies custom metadata (Sort Title, Overview) from the smart list configuration to the Jellyfin collection.
-        /// Called after metadata refresh to prevent providers from overwriting custom values.
-        /// </summary>
-        private async Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
-        {
-            bool changed = false;
-
-            // Apply Sort Title (ForcedSortName overrides auto-generated SortName)
-            var newSortTitle = string.IsNullOrEmpty(dto.SortTitle) ? null : dto.SortTitle;
-            if (item.ForcedSortName != newSortTitle)
-            {
-                item.ForcedSortName = newSortTitle;
-                changed = true;
-                _logger.LogDebug("Set ForcedSortName to '{SortTitle}' for collection {CollectionName}", newSortTitle ?? "(cleared)", item.Name);
-            }
-
-            // Apply Overview
-            var newOverview = string.IsNullOrEmpty(dto.Overview) ? null : dto.Overview;
-            if (item.Overview != newOverview)
-            {
-                item.Overview = newOverview;
-                changed = true;
-                _logger.LogDebug("Set Overview for collection {CollectionName}", item.Name);
-            }
-
-            if (changed)
-            {
-                await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-            }
-        }
+        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
+            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken);
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin collection.
