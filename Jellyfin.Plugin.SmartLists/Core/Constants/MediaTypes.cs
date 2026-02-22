@@ -23,6 +23,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         // Audio Types
         public const string Audio = nameof(Audio);
 
+        // MusicAlbum media type: Not supported in Playlists (Jellyfin expands to individual tracks)
+        // but supported in Collections (same pattern as Series)
+        public const string MusicAlbum = nameof(MusicAlbum);
+
         // Music Video Types
         public const string MusicVideo = nameof(MusicVideo);
 
@@ -52,7 +56,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { BaseItemKind.Book, Book },
             { BaseItemKind.AudioBook, AudioBook },
             // Series: Supported in Collections, not in Playlists
-            { BaseItemKind.Series, Series }
+            { BaseItemKind.Series, Series },
+            // MusicAlbum: Supported in Collections, not in Playlists
+            { BaseItemKind.MusicAlbum, MusicAlbum }
         };
 
         /// <summary>
@@ -69,7 +75,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { Book, BaseItemKind.Book },
             { AudioBook, BaseItemKind.AudioBook },
             // Series: Supported in Collections, not in Playlists
-            { Series, BaseItemKind.Series }
+            { Series, BaseItemKind.Series },
+            // MusicAlbum: Supported in Collections, not in Playlists
+            { MusicAlbum, BaseItemKind.MusicAlbum }
         };
 
         /// <summary>
@@ -101,7 +109,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// <summary>
         /// Gets music-related media types (Audio, AudioBook, MusicVideo)
         /// </summary>
-        public static readonly string[] MusicRelated = [Audio, AudioBook, MusicVideo];
+        public static readonly string[] MusicRelated = [Audio, AudioBook, MusicVideo, MusicAlbum];
 
         /// <summary>
         /// Gets media types that can have video streams (excludes Photo, Audio, Book, AudioBook)

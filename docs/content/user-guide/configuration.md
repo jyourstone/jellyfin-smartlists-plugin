@@ -53,7 +53,7 @@ This means you can override auto-generation simply by uploading your own images 
 
 - If a collection contains only one item with an image, that item's primary image is used directly as the collection cover
 - If a collection contains two or more items with images, a 4-image collage is automatically created using the first items from the collection
-- The plugin prioritizes Movies and Series with images, falling back to any items with images if needed
+- The plugin prioritizes Movies, Series and Albums with images, falling back to any items with images if needed
 
 ##### Thumb Images (Horizontal/Landscape)
 
