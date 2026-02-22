@@ -232,6 +232,10 @@
                 }
             }
 
+            // Get metadata fields
+            var sortTitleVal = SmartLists.getElementValue(page, '#metadataSortTitle');
+            var overviewVal = SmartLists.getElementValue(page, '#metadataOverview');
+
             const playlistDto = {
                 Type: listType,
                 Name: playlistName,
@@ -246,6 +250,10 @@
                 Schedules: schedules.length > 0 ? schedules : [],
                 VisibilitySchedules: visibilitySchedules.length > 0 ? visibilitySchedules : []
             };
+
+            // Add metadata fields if set
+            if (sortTitleVal) { playlistDto.SortTitle = sortTitleVal; }
+            if (overviewVal) { playlistDto.Overview = overviewVal; }
 
             // Add type-specific fields
             if (isCollection) {
@@ -505,6 +513,10 @@
         // Update button visibility after initial group is created
         SmartLists.updateRuleButtonVisibility(page);
 
+        // Clear metadata fields
+        SmartLists.setElementValue(page, '#metadataSortTitle', '');
+        SmartLists.setElementValue(page, '#metadataOverview', '');
+
         // Clear custom images container
         if (SmartLists.initCustomImagesContainer) {
             SmartLists.initCustomImagesContainer(page);
@@ -762,6 +774,10 @@
                 // Switch to Create tab to show edit form
                 SmartLists.switchToTab(page, 'create');
 
+                // Populate metadata fields
+                SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
+                SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
+
                 // Load existing images for this playlist
                 if (SmartLists.loadExistingImages) {
                     SmartLists.loadExistingImages(page, playlistId);
@@ -996,6 +1012,10 @@
                     clearTimeout(page._mediaTypeUpdateTimer);
                     page._mediaTypeUpdateTimer = null;
                 }
+
+                // Populate metadata fields
+                SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
+                SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
 
                 // Show success message
                 SmartLists.showNotification('List "' + playlistName + '" cloned successfully! You can now modify and create the new list.', 'success');
@@ -1789,6 +1809,14 @@
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Custom Images</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + customImagesHtml + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Sort Title</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + (playlist.SortTitle ? SmartLists.escapeHtml(playlist.SortTitle) : 'Not set') + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Overview</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + (playlist.Overview ? SmartLists.escapeHtml(playlist.Overview) : 'Not set') + '</td>' +
             '</tr>' +
             '</table>' +
             '</div>' +

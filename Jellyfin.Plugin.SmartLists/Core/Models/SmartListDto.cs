@@ -117,6 +117,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public Dictionary<string, string>? CustomImages { get; set; }
 
         /// <summary>
+        /// Custom sort title applied to the Jellyfin playlist/collection.
+        /// Overrides the auto-generated sort name when set.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SortTitle { get; set; }
+
+        /// <summary>
+        /// Custom overview/description applied to the Jellyfin playlist/collection.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Overview { get; set; }
+
+        /// <summary>
         /// Migrates legacy IsPlayed rules to PlaybackStatus.
         /// Called after deserialization.
         /// </summary>

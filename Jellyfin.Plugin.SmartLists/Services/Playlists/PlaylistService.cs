@@ -659,6 +659,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 await RefreshPlaylistMetadataAsync(playlist, cancellationToken).ConfigureAwait(false);
             }
+
+            // Apply custom metadata after metadata refresh to prevent providers from overwriting
+            await ApplyCustomMetadataAsync(playlist, dto, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<string> CreateNewPlaylistAsync(string playlistName, Guid userId, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
@@ -703,6 +706,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     await RefreshPlaylistMetadataAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
                 }
 
+                // Apply custom metadata after metadata refresh to prevent providers from overwriting
+                await ApplyCustomMetadataAsync(newPlaylist, dto, cancellationToken).ConfigureAwait(false);
+
                 return newPlaylist.Id.ToString("N");
             }
             else
@@ -711,6 +717,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 return string.Empty;
             }
         }
+
+        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
+            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken);
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin playlist.

@@ -591,6 +591,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                 SetCollectionDisplayOrder(collectionAfterRefresh);
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+
+                // Apply custom metadata after metadata refresh to prevent providers from overwriting
+                await ApplyCustomMetadataAsync(collectionAfterRefresh, dto, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -891,6 +894,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Set DisplayOrder to "Default" to respect the plugin's custom sort order
                     SetCollectionDisplayOrder(retrievedItem);
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+
+                    // Apply custom metadata after metadata refresh to prevent providers from overwriting
+                    await ApplyCustomMetadataAsync(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");
@@ -901,6 +907,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 return string.Empty;
             }
         }
+
+        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
+            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken);
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin collection.
