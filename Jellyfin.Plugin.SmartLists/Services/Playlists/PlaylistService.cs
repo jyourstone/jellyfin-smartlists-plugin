@@ -659,6 +659,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 await RefreshPlaylistMetadataAsync(playlist, cancellationToken).ConfigureAwait(false);
             }
+
+            // Apply custom metadata after metadata refresh to prevent providers from overwriting
+            await ApplyCustomMetadataAsync(playlist, dto, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<string> CreateNewPlaylistAsync(string playlistName, Guid userId, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
@@ -703,12 +706,47 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     await RefreshPlaylistMetadataAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
                 }
 
+                // Apply custom metadata after metadata refresh to prevent providers from overwriting
+                await ApplyCustomMetadataAsync(newPlaylist, dto, cancellationToken).ConfigureAwait(false);
+
                 return newPlaylist.Id.ToString("N");
             }
             else
             {
                 _logger.LogWarning("Failed to retrieve newly created playlist with ID {PlaylistId}", result.Id);
                 return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Applies custom metadata (Sort Title, Overview) from the smart list configuration to the Jellyfin playlist.
+        /// Called after metadata refresh to prevent providers from overwriting custom values.
+        /// </summary>
+        private async Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
+        {
+            bool changed = false;
+
+            // Apply Sort Title (ForcedSortName overrides auto-generated SortName)
+            var newSortTitle = string.IsNullOrEmpty(dto.SortTitle) ? null : dto.SortTitle;
+            if (item.ForcedSortName != newSortTitle)
+            {
+                item.ForcedSortName = newSortTitle;
+                changed = true;
+                _logger.LogDebug("Set ForcedSortName to '{SortTitle}' for playlist {PlaylistName}", newSortTitle ?? "(cleared)", item.Name);
+            }
+
+            // Apply Overview
+            var newOverview = string.IsNullOrEmpty(dto.Overview) ? null : dto.Overview;
+            if (item.Overview != newOverview)
+            {
+                item.Overview = newOverview;
+                changed = true;
+                _logger.LogDebug("Set Overview for playlist {PlaylistName}", item.Name);
+            }
+
+            if (changed)
+            {
+                await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
             }
         }
 

@@ -112,6 +112,15 @@ SmartLists allows you to upload custom images for your playlists and collections
 - **Automatic restoration**: When you disable and re-enable a list, your custom images are automatically restored
 - **Easy management**: View and manage all custom images directly from the Create/Edit form
 
+### Metadata
+
+The **Metadata** section lets you set additional properties on the Jellyfin playlist or collection:
+
+- **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top).
+- **Overview** – Sets a custom description that appears in Jellyfin's item detail view.
+
+Both fields are optional. Leave them empty to use Jellyfin's defaults. Values are re-applied on each refresh.
+
 !!! note "User Selection for Collections"
     When creating a collection, the user you select is used as a **reference** for rule evaluation, not as an owner. The collection itself is server-wide and visible to everyone. This user's context is important for:
     - Evaluating user-specific rules (Playback Status, Is Favorite, Play Count, etc.)

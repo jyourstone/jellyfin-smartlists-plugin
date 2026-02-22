@@ -331,6 +331,30 @@
                             <div class="fieldDescription">Upload custom cover images for this list. <span class="collection-only-description">When auto-generate is enabled, Primary and Thumbnail uploads are ignored.</span></div>
                         </div>
 
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <h3 class="sectionTitle" style="margin-top: 1em; display: flex; align-items: center;">
+                                Metadata
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#metadata"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </h3>
+                            <div style="margin-top: 0.5em;">
+                                <label class="inputLabel" for="metadataSortTitle">Sort Title</label>
+                                <input type="text" id="metadataSortTitle" class="emby-input"
+                                    placeholder="Leave empty to use default" />
+                                <div class="fieldDescription">Override the sort title used for this list.</div>
+                            </div>
+                            <div style="margin-top: 0.5em;">
+                                <label class="inputLabel" for="metadataOverview">Overview</label>
+                                <textarea id="metadataOverview" class="emby-input" rows="3"
+                                    placeholder="Leave empty for none" style="resize: vertical;"></textarea>
+                                <div class="fieldDescription">Set a custom description/overview for this list.</div>
+                            </div>
+                        </div>
+
                         <div style="margin-top: 2em;">
                             <button type="submit" id="submitBtn" class="button-submit emby-button block">Create List</button>
                             <button type="button" id="clearFormBtn" class="emby-button raised block">Clear Form</button>
