@@ -243,8 +243,8 @@ The **Enable List** setting controls whether the smart list is active and visibl
 
 You can toggle this setting when creating or editing a list, or use bulk operations in the Manage Lists tab to enable/disable multiple lists at once.
 
-!!! info "Disabling Lists Temporarily Removes Jellyfin Playlists/Collections"
-    When you **disable** a smart list, the corresponding Jellyfin playlist or collection is permanently removed from Jellyfin, including metadata. Any images uploaded through SmartLists will be kept intact and re-applied when the list is enabled again.
+!!! warning "Disabling Lists Temporarily Removes Jellyfin Playlists/Collections"
+    When you **disable** a smart list, the corresponding Jellyfin playlist or collection is permanently removed from Jellyfin, including any metadata entered manually. Any images uploaded or metadata added through SmartLists, will be kept intact and re-applied when the list is enabled again.
 
 Disabling lists can be useful for:
 
