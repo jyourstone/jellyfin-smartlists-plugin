@@ -1090,7 +1090,7 @@
             '</div>' +
             '<div class="rule-externallist-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<div style="font-size: 0.85em; opacity: 0.8; display: flex; align-items: center;">' +
-            '<span>Enter an external list URL. Supported: MDBList, IMDb, Trakt, TMDB.</span>' +
+            '<span>Enter an external list URL. Supported: MDBList, IMDb, Trakt, TMDB, Letterboxd.</span>' +
             '<a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/external-lists/" target="_blank" rel="noopener noreferrer" title="Documentation" style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">' +
             '<span class="material-icons" aria-hidden="true" style="font-size: 1.1em; line-height: 0;">info_outline</span>' +
             '</a>' +

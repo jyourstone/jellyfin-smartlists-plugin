@@ -28,6 +28,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// Gets or sets the total number of items in the external list.
         /// </summary>
         public int TotalItems { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the result contains all items from the external list.
+        /// When false, the result was truncated by a maxItems limit and should not be
+        /// reused for requests that need the full list.
+        /// </summary>
+        public bool IsComplete { get; set; } = true;
     }
 
     /// <summary>
@@ -43,12 +50,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         bool CanHandle(string url);
 
         /// <summary>
-        /// Fetches all items from the external list and returns their provider IDs.
+        /// Fetches items from the external list and returns their provider IDs.
         /// Each provider reads its own credentials from plugin configuration.
         /// </summary>
         /// <param name="url">The external list URL.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>An <see cref="ExternalListResult"/> containing the provider IDs of all items in the list.</returns>
-        Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken);
+        /// <param name="maxItems">Maximum number of items to fetch (0 = unlimited). When set,
+        /// providers may stop fetching early and mark the result as incomplete.</param>
+        /// <returns>An <see cref="ExternalListResult"/> containing the provider IDs of items in the list.</returns>
+        Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken, int maxItems = 0);
     }
 }

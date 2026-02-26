@@ -41,7 +41,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken, int maxItems = 0)
         {
             var clientId = Plugin.Instance?.Configuration?.TraktClientId ?? string.Empty;
             if (string.IsNullOrWhiteSpace(clientId))
@@ -111,6 +111,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         totalFetched++;
                     }
 
+                    // Stop early if we have enough items
+                    if (maxItems > 0 && position >= maxItems)
+                    {
+                        break;
+                    }
+
                     // Check pagination headers
                     if (response.Headers.TryGetValues("X-Pagination-Page-Count", out var pageCountValues))
                     {
@@ -143,6 +149,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             result.TotalItems = totalFetched;
+            result.IsComplete = maxItems <= 0 || totalFetched < maxItems;
             _logger.LogInformation(
                 "Fetched {Count} items from Trakt {Url} (IMDb: {ImdbCount}, TMDB: {TmdbCount}, TVDB: {TvdbCount})",
                 totalFetched, url, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
