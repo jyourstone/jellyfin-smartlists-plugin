@@ -77,7 +77,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             await ResolveFilmTmdbIdsAsync(filmSlugs, result, cancellationToken).ConfigureAwait(false);
 
             result.TotalItems = result.TmdbIds.Count;
-            result.IsComplete = maxItems <= 0 || result.TotalItems < maxItems;
+            result.IsComplete = maxItems <= 0 || filmSlugs.Count < maxItems;
             _logger.LogInformation(
                 "Fetched {Count} items with TMDB IDs from Letterboxd list {Url} ({Cached} from cache)",
                 result.TotalItems,
