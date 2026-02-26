@@ -1975,10 +1975,24 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
 
             // Create sort keys for each item based on all orders
+            var orderCount = orders.Count;
             var itemsWithKeys = itemsList.Select(item => new
             {
                 Item = item,
-                SortKeys = orders.Select(order => order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache)).ToList(),
+                SortKeys = orders.Select((order, idx) =>
+                {
+                    var key = order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache);
+                    // For non-final sorts, truncate DateTime keys to day precision
+                    // so secondary sorts can differentiate items within the same day.
+                    // Example: DateCreated Desc + TrackNumber Asc — without this, each track
+                    // has a unique timestamp and the TrackNumber sort never takes effect.
+                    if (idx < orderCount - 1 && key is DateTime dt)
+                    {
+                        return (IComparable)dt.Date;
+                    }
+
+                    return key;
+                }).ToList(),
             }).ToList();
 
             // Sort using the composite keys

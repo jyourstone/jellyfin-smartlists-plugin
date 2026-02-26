@@ -156,6 +156,13 @@ Create distinct sections for different genres in one playlist:
 ### Workout Mix
 - **Genre** contains "Electronic" OR "Rock" AND **Max Playtime** 45 minutes
 
+### Recently Added Albums (Tracks in Order)
+- **Date Created** newer than "3 weeks"
+- **Media Type**: Audio
+- **Sort by**: Date Created descending (primary), Track Number ascending (secondary)
+- Most recently added albums appear first, with tracks in proper album order within each day
+- The Date Created sort uses day-level precision when combined with a secondary sort, so all tracks added on the same day are grouped and the Track Number sort keeps them in the correct order
+
 ### Discover New Music
 - **Play Count** = 0 AND **Date Created** newer than "1 month"
 
