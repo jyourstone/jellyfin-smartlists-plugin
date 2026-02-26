@@ -39,7 +39,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken, int maxItems = 0)
         {
             var result = new ExternalListResult();
 
@@ -130,6 +130,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                     totalFetched += itemsInPage;
 
+                    // Stop early if we have enough items
+                    if (maxItems > 0 && position >= maxItems)
+                    {
+                        break;
+                    }
+
                     // If we got fewer items than page size, we've reached the end
                     if (itemsInPage < PageSize)
                     {
@@ -154,6 +160,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             result.TotalItems = totalFetched;
+            result.IsComplete = maxItems <= 0 || totalFetched < maxItems;
             _logger.LogInformation("Fetched {Count} items from MDBList {Username}/{ListName} (IMDb: {ImdbCount}, TMDB: {TmdbCount}, TVDB: {TvdbCount})",
                 totalFetched, username, listname, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
 

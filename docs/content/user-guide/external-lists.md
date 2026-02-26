@@ -1,6 +1,6 @@
 # External Lists
 
-External Lists let you populate smart lists from external services like MDBList, IMDb, Trakt, and TMDB. Use them to create collections based on trending lists, watchlists, top charts, and curated lists from these services.
+External Lists let you populate smart lists from external services like MDBList, IMDb, Letterboxd, Trakt, and TMDB. Use them to create collections based on trending lists, watchlists, top charts, and curated lists from these services.
 
 ## How It Works
 
@@ -16,6 +16,7 @@ Items are matched by comparing provider IDs between the external list and your l
 |----------|-----------------|------------|
 | **MDBList** | Yes | IMDb, TMDB, TVDB |
 | **IMDb** | No | IMDb |
+| **Letterboxd** | No | TMDB |
 | **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
 | **TMDB** | Yes | TMDB |
 
@@ -74,6 +75,32 @@ External List / equals / https://www.imdb.com/chart/top/
 
 !!! warning "IMDb Limitations"
     IMDb lists must be public. Private lists cannot be accessed. Only IMDb IDs are extracted, so items in your library must have IMDb metadata to match.
+
+---
+
+### Letterboxd
+
+[Letterboxd](https://letterboxd.com) is a social film discovery platform with user-curated lists and watchlists. The plugin scrapes the HTML pages to extract film data — no API key is required.
+
+**Setup:**
+
+No API key required. Just use a public Letterboxd list or watchlist URL.
+
+**Supported URLs:**
+
+| Type | URL format |
+|------|-----------|
+| User list | `https://letterboxd.com/{user}/list/{name}/` |
+| Watchlist | `https://letterboxd.com/{user}/watchlist/` |
+
+**Example:**
+
+```
+External List / equals / https://letterboxd.com/official/list/letterboxds-top-500-films/
+```
+
+!!! warning "Letterboxd is Slow for Large Lists"
+    Letterboxd list pages do not include TMDB IDs directly. The plugin must fetch each film's individual page to resolve its TMDB ID. This means a 250-film list requires ~250 additional HTTP requests, which can take several minutes. Resolved IDs are cached in memory for faster subsequent refreshes (until Jellyfin restarts). To minimize fetch time, use **External List Order Ascending** sort with a **Max Items** limit — the plugin will only fetch the first N items instead of the entire list.
 
 ---
 
@@ -211,3 +238,6 @@ This creates a collection sorted exactly like IMDb's Top 250 chart.
 
 !!! tip "Multiple external lists"
     You can use multiple External List rules in different rule groups (OR logic) to combine items from several lists into one smart list.
+
+!!! tip "Optimize external list performance"
+    When using **External List Order Ascending** sort with a **Max Items** limit (e.g., 50), the plugin only fetches the first 50 items from the external list instead of the entire list. This is especially beneficial for Letterboxd (which requires per-film HTTP requests), but improves performance for all providers with large lists. This optimization does not apply to other sort options — the entire list must be fetched first to determine the final sort order.

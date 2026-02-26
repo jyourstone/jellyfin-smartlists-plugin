@@ -42,6 +42,7 @@ namespace Jellyfin.Plugin.SmartLists
             serviceCollection.AddSingleton<IExternalListProvider, ImdbListProvider>();
             serviceCollection.AddSingleton<IExternalListProvider, TraktListProvider>();
             serviceCollection.AddSingleton<IExternalListProvider, TmdbListProvider>();
+            serviceCollection.AddSingleton<IExternalListProvider, LetterboxdListProvider>();
             serviceCollection.AddSingleton<ExternalListService>();
 
             // Register backup service

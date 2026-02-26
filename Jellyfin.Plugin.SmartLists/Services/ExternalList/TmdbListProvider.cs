@@ -39,7 +39,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken, int maxItems = 0)
         {
             var tmdbApiKey = Plugin.Instance?.Configuration?.TmdbApiKey ?? string.Empty;
             if (string.IsNullOrWhiteSpace(tmdbApiKey))
@@ -65,13 +65,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             if (isUserList)
             {
-                await FetchUserListAsync(httpClient, apiPath, tmdbApiKey, result, cancellationToken).ConfigureAwait(false);
+                await FetchUserListAsync(httpClient, apiPath, tmdbApiKey, result, maxItems, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await FetchPaginatedAsync(httpClient, apiPath, tmdbApiKey, result, MaxPages, cancellationToken).ConfigureAwait(false);
+                await FetchPaginatedAsync(httpClient, apiPath, tmdbApiKey, result, MaxPages, maxItems, cancellationToken).ConfigureAwait(false);
             }
 
+            result.IsComplete = maxItems <= 0 || result.TotalItems < maxItems;
             _logger.LogInformation(
                 "Fetched {Count} items from TMDB {Url} (TMDB IDs: {TmdbCount})",
                 result.TotalItems, url, result.TmdbIds.Count);
@@ -84,6 +85,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             string apiPath,
             string tmdbApiKey,
             ExternalListResult result,
+            int maxItems,
             CancellationToken cancellationToken)
         {
             int page = 1;
@@ -127,6 +129,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     }
                 }
 
+                // Stop early if we have enough items
+                if (maxItems > 0 && position >= maxItems)
+                {
+                    break;
+                }
+
                 if (listResponse.TotalPages == null || page >= listResponse.TotalPages)
                 {
                     break;
@@ -144,6 +152,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             string tmdbApiKey,
             ExternalListResult result,
             int maxPages,
+            int maxItems,
             CancellationToken cancellationToken)
         {
             int totalFetched = 0;
@@ -184,6 +193,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         totalFetched++;
                         position++;
                     }
+                }
+
+                // Stop early if we have enough items
+                if (maxItems > 0 && position >= maxItems)
+                {
+                    break;
                 }
 
                 if (pageResponse.TotalPages != null && page >= pageResponse.TotalPages)

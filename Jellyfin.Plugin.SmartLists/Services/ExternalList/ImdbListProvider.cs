@@ -34,7 +34,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <inheritdoc />
-        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken)
+        public async Task<ExternalListResult> FetchListAsync(string url, CancellationToken cancellationToken, int maxItems = 0)
         {
             var result = new ExternalListResult();
 
@@ -72,11 +72,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             int position = 0;
             foreach (Match match in matches)
             {
+                if (maxItems > 0 && position >= maxItems)
+                {
+                    break;
+                }
+
                 result.ImdbIds.TryAdd(match.Groups[1].Value, position);
                 position++;
             }
 
             result.TotalItems = result.ImdbIds.Count;
+            result.IsComplete = maxItems <= 0 || result.TotalItems < maxItems;
             _logger.LogInformation("Fetched {Count} items from IMDb list {Url}", result.TotalItems, listUrl);
 
             return result;
