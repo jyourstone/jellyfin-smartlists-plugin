@@ -95,12 +95,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     userData = userDataManager.GetUserData(user, item);
                 }
                 
-                return GetLastPlayedDateFromUserData(userData).Ticks;
+                return GetLastPlayedDateFromUserData(userData);
             }
             catch (Exception ex)
             {
                 logger?.LogError(ex, "Error getting last played date for item {ItemId} user {UserId}", item.Id, user.Id);
-                return DateTime.MinValue.Ticks;
+                return DateTime.MinValue;
             }
         }
 

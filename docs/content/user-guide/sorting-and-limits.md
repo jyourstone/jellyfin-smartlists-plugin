@@ -27,7 +27,7 @@ Sort by the specific release date of the content.
 Sort TV series by the air date of their most recent episode. Only available when the **Series** media type is selected. Useful for finding which series are currently airing or were most recently updated with new episodes.
 
 ### Date Created
-Sort by when the item was added to your Jellyfin library.
+Sort by when the item was added to your Jellyfin library. When used with a secondary sort (e.g., Track Number), items added on the same day are grouped together so the secondary sort can determine order within that day. When Date Created is the only or final sort, full timestamp precision is used.
 
 ### Community Rating
 Sort by user ratings. Higher ratings first when descending.
@@ -36,7 +36,7 @@ Sort by user ratings. Higher ratings first when descending.
 Sort by how many times the playlist/collection owner has played each item. Useful for finding least-played or most-played content.
 
 ### Last Played (owner)
-Sort by when the playlist/collection owner last played each item. Great for rediscovering content or finding recently watched items.
+Sort by when the playlist/collection owner last played each item. Great for rediscovering content or finding recently watched items. Like Date Created, uses day-level precision when combined with secondary sorts.
 
 ### Runtime
 Sort by the duration or runtime of items in minutes.
