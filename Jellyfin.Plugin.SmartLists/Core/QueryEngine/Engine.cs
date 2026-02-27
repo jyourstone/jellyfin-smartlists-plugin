@@ -1134,6 +1134,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     method = typeof(Engine).GetMethod("OnlyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     if (method == null) throw new InvalidOperationException("Engine.OnlyPlaylistEquals method not found");
                 }
+                else if (r.MemberName == "ExternalList")
+                {
+                    // ExternalList uses membership check (any URL matches), not exclusive equals,
+                    // because an item can appear in multiple external lists simultaneously.
+                    method = typeof(Engine).GetMethod("AnyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.AnyItemEquals method not found");
+                }
                 else
                 {
                     method = typeof(Engine).GetMethod("OnlyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
