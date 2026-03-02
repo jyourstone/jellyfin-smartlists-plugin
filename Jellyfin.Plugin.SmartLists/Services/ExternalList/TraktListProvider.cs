@@ -160,7 +160,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         private static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)
         {
             // Items can be wrapped (list items) or direct (trending/popular)
-            var ids = item.Movie?.Ids ?? item.Show?.Ids ?? item.Ids;
+            var ids = item.Episode?.Ids ?? item.Movie?.Ids ?? item.Show?.Ids ?? item.Ids;
             if (ids == null)
             {
                 return;

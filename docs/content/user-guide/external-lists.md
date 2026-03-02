@@ -8,7 +8,7 @@ External Lists let you populate smart lists from external services like MDBList,
 2. Create a rule with the `External List` field, `equals` operator, and the list URL as the value
 3. On refresh, the plugin fetches the external list and matches items by provider IDs (IMDb, TMDB, TVDB) against your Jellyfin library
 
-Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the parent series IDs are also checked. If any provider ID matches, the item is included.
+Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the episode's own provider IDs are checked first, then the parent series IDs as a fallback. If any provider ID matches, the item is included.
 
 ## Supported Providers
 
@@ -150,6 +150,9 @@ External List / equals / https://trakt.tv/movies/trending
 
 !!! note "Public Lists Only"
     The plugin uses API-key authentication (not OAuth), so only public user lists and watchlists are accessible. Private lists require the list owner to make them public.
+
+!!! note "Episode-Level Lists"
+    Trakt lists that contain individual episodes (e.g., a chronological viewing order across multiple series) are supported. Each episode is matched by its own provider IDs and preserves its position in the list. Use **External List Order Ascending** sort to maintain the list creator's intended episode order.
 
 ---
 
