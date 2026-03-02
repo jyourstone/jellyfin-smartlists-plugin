@@ -1982,13 +1982,25 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 SortKeys = orders.Select((order, idx) =>
                 {
                     var key = order.GetSortKey(item, user, userDataManager, logger, itemRandomKeys, refreshCache);
-                    // For non-final sorts, truncate DateTime keys to day precision
-                    // so secondary sorts can differentiate items within the same day.
-                    // Example: DateCreated Desc + TrackNumber Asc — without this, each track
-                    // has a unique timestamp and the TrackNumber sort never takes effect.
-                    if (idx < orderCount - 1 && key is DateTime dt)
+                    // For non-final sorts, simplify keys so secondary sorts can take effect.
+                    // Without this, the primary sort fully determines order and secondary sorts
+                    // become no-ops. Two cases:
+                    // 1. DateTime keys (DateCreated, LastPlayed): truncate to day precision so
+                    //    items from the same day are grouped, letting e.g. TrackNumber sort within.
+                    // 2. Composite keys (ReleaseDate, TrackNumber): strip embedded tiebreakers
+                    //    (season/episode, disc/track) so the user's secondary sort determines
+                    //    sub-ordering instead.
+                    if (idx < orderCount - 1)
                     {
-                        return (IComparable)dt.Date;
+                        if (key is DateTime dt)
+                        {
+                            return (IComparable)dt.Date;
+                        }
+
+                        if (key is Orders.ICompositeSortKey compositeKey)
+                        {
+                            return compositeKey.PrimaryValue;
+                        }
                     }
 
                     return key;

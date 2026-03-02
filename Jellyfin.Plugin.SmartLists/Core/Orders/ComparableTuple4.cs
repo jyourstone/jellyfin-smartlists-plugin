@@ -4,10 +4,23 @@ using System.Collections.Generic;
 namespace Jellyfin.Plugin.SmartLists.Core.Orders
 {
     /// <summary>
+    /// Marker interface for composite sort keys that embed tiebreaker values.
+    /// In multi-sort scenarios, non-final sorts use only the primary value
+    /// so that actual secondary sorts can determine sub-ordering.
+    /// </summary>
+    internal interface ICompositeSortKey
+    {
+        /// <summary>
+        /// Gets the primary sort value without embedded tiebreakers.
+        /// </summary>
+        IComparable PrimaryValue { get; }
+    }
+
+    /// <summary>
     /// A comparable tuple for composite sort keys with 4 elements.
     /// Used for complex multi-level sorting.
     /// </summary>
-    internal sealed class ComparableTuple4<T1, T2, T3, T4> : IComparable
+    internal sealed class ComparableTuple4<T1, T2, T3, T4> : IComparable, ICompositeSortKey
         where T1 : IComparable
         where T2 : IComparable
         where T3 : IComparable
@@ -37,6 +50,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             _comparer3 = comparer3 ?? Comparer<T3>.Default;
             _comparer4 = comparer4 ?? Comparer<T4>.Default;
         }
+
+        /// <inheritdoc/>
+        public IComparable PrimaryValue => _item1;
 
         public int CompareTo(object? obj)
         {
