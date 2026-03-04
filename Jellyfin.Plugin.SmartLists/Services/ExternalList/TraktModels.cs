@@ -22,6 +22,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public TraktMedia? Show { get; set; }
 
         /// <summary>
+        /// Gets or sets the episode object (present when list contains individual episodes).
+        /// </summary>
+        [JsonPropertyName("episode")]
+        public TraktMedia? Episode { get; set; }
+
+        /// <summary>
         /// Gets or sets the ids directly on the item (some endpoints).
         /// </summary>
         [JsonPropertyName("ids")]
