@@ -2535,6 +2535,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="overwrite">If true, overwrites existing lists with the same ID. If false, skips them.</param>
         /// <returns>Restore results with counts of imported and skipped lists.</returns>
         [HttpPost("backups/upload")]
+        [DisableRequestSizeLimit]
+        [RequestFormLimits(MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024)]
         public async Task<ActionResult> RestoreFromUpload([FromForm] IFormFile file, [FromQuery] bool overwrite = false)
         {
             // Maximum upload size: 1GB
@@ -2573,6 +2575,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="file">ZIP file to preview.</param>
         /// <returns>Preview information including list count.</returns>
         [HttpPost("backups/preview")]
+        [DisableRequestSizeLimit]
+        [RequestFormLimits(MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024)]
         public ActionResult PreviewUploadedBackup([FromForm] IFormFile file)
         {
             const long MaxUploadSize = 1L * 1024 * 1024 * 1024;
@@ -2869,6 +2873,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="imageType">The image type (Primary, Backdrop, Banner, etc.).</param>
         /// <returns>The uploaded image info.</returns>
         [HttpPost("{id}/images")]
+        [DisableRequestSizeLimit]
         public async Task<ActionResult<SmartListImageDto>> UploadImage(
             [FromRoute, Required] string id,
             [FromForm] IFormFile file,

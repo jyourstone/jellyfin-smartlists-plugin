@@ -413,10 +413,17 @@
         })
             .then(async function (response) {
                 if (!response.ok) {
-                    let errorMessage = 'Restore failed';
+                    var errorMessage = 'Restore failed';
                     try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.message || errorData.detail || errorMessage;
+                        var errorText = await response.text();
+                        try {
+                            var errorData = JSON.parse(errorText);
+                            errorMessage = errorData.message || errorData.detail || errorMessage;
+                        } catch (jsonError) {
+                            if (errorText && errorText.trim()) {
+                                errorMessage = errorText.trim();
+                            }
+                        }
                     } catch (e) {
                         // Ignore
                     }
@@ -552,19 +559,19 @@
         })
             .then(async function (response) {
                 if (!response.ok) {
-                    let errorMessage = 'Restore failed';
+                    var errorMessage = 'Restore failed';
                     try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.message || errorData.detail || errorMessage;
-                    } catch (e) {
+                        var errorText = await response.text();
                         try {
-                            const errorText = await response.text();
+                            var errorData = JSON.parse(errorText);
+                            errorMessage = errorData.message || errorData.detail || errorMessage;
+                        } catch (jsonError) {
                             if (errorText && errorText.trim()) {
-                                errorMessage = errorText;
+                                errorMessage = errorText.trim();
                             }
-                        } catch (textError) {
-                            // Ignore
                         }
+                    } catch (e) {
+                        // Ignore
                     }
                     throw new Error(errorMessage);
                 }
