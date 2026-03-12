@@ -1365,6 +1365,8 @@
 
         // Update sort options in case a Similar To rule was removed
         SmartLists.updateAllSortOptionsVisibility(page);
+        // Re-resolve default sort in case the last special rule was removed
+        SmartLists.resolveDefaultSortForRules(page);
     };
 
     // Extract rule configuration from a rule row element
@@ -1661,6 +1663,8 @@
 
         // Update sort options in case a Similar To rule was removed
         SmartLists.updateAllSortOptionsVisibility(page);
+        // Re-resolve default sort in case the last special rule was removed
+        SmartLists.resolveDefaultSortForRules(page);
     };
 
     SmartLists.updateRuleButtonVisibility = function (page) {
