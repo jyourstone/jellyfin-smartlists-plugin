@@ -8,8 +8,8 @@ You can add up to **3 sorting options** for both playlists and collections to cr
 
 ## Sort Fields
 
-### No Order
-Items appear in library order without any specific sorting applied.
+### Default
+Automatically selects the best sort order based on your rules. If your list uses an **External List** rule, items are sorted in the external list's order. If it uses a **Similar To** rule, items are sorted by similarity score. Otherwise, items are sorted alphabetically by name. This is the default sort for new lists.
 
 ### Name
 Sort alphabetically by the item's title. Respects Jellyfin's **Sort Title** metadata field when set.

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.Orders;
@@ -142,6 +143,49 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // Extract CollectionSearchDepth from the first Collections expression that has it set
             // This is now stored per-rule instead of list-level for more granular control
             CollectionSearchDepth = ExtractCollectionSearchDepthFromExpressions(dto.ExpressionSets) ?? 0;
+
+            // Resolve "Default" sort (NoOrder) based on the list's rules
+            ResolveDefaultOrder();
+        }
+
+        /// <summary>
+        /// When the sort is "Default" (NoOrder), auto-resolve to an appropriate sort
+        /// based on the list's rules: External List Order for external list rules,
+        /// Similarity for Similar To rules, or Name as fallback.
+        /// </summary>
+        private void ResolveDefaultOrder()
+        {
+            // Only resolve if the sole order is NoOrder (the "Default" sort)
+            if (Orders == null || Orders.Count != 1 || Orders[0] is not NoOrder)
+            {
+                return;
+            }
+
+            var hasExternalList = ExpressionSets?
+                .SelectMany(set => set?.Expressions ?? [])
+                .Any(expr => expr?.MemberName == "ExternalList") == true;
+
+            if (hasExternalList)
+            {
+                Orders = [new ExternalListOrder()];
+                SortOptions = [new SortOption { SortBy = "External List Order", SortOrder = SortOrder.Ascending }];
+                return;
+            }
+
+            var hasSimilarTo = ExpressionSets?
+                .SelectMany(set => set?.Expressions ?? [])
+                .Any(expr => expr?.MemberName == "SimilarTo") == true;
+
+            if (hasSimilarTo)
+            {
+                Orders = [new SimilarityOrder()];
+                SortOptions = [new SortOption { SortBy = "Similarity", SortOrder = SortOrder.Descending }];
+                return;
+            }
+
+            // Fallback: resolve to Name Ascending
+            Orders = [new NameOrder()];
+            SortOptions = [new SortOption { SortBy = "Name", SortOrder = SortOrder.Ascending }];
         }
 
         private List<List<Func<Operand, bool>>> CompileRuleSets(string? defaultUserId = null, ILogger? logger = null)

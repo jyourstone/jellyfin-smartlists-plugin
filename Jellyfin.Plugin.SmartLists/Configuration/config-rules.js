@@ -1240,8 +1240,10 @@
             SmartLists.updateSimilarityOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updatePeopleOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateRegexHelp(newRuleRow);
-            // Update sort options when Similar To rule is added/removed
+            // Update sort options when rules change (e.g., Similar To, External List)
             SmartLists.updateAllSortOptionsVisibility(page);
+            // Auto-resolve "Default" sort to match the new rules
+            SmartLists.resolveDefaultSortForRules(page);
             // Auto-check Include Extras when ExtraType rule is selected
             if (newField === 'ExtraType') {
                 SmartLists.autoCheckIncludeExtras(page);
@@ -1538,6 +1540,8 @@
 
         // Update sort options in case a Similar To rule was added
         SmartLists.updateAllSortOptionsVisibility(page);
+        // Auto-resolve "Default" sort to match the new rules
+        SmartLists.resolveDefaultSortForRules(page);
     };
 
     SmartLists.cloneLogicGroup = function (page, logicGroup) {
@@ -1605,6 +1609,8 @@
 
         // Update sort options in case Similar To rules were added
         SmartLists.updateAllSortOptionsVisibility(page);
+        // Auto-resolve "Default" sort to match the new rules
+        SmartLists.resolveDefaultSortForRules(page);
     };
 
     SmartLists.cleanupRuleEventListeners = function (ruleElement) {
@@ -1763,8 +1769,10 @@
                     SmartLists.updateSimilarityOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updatePeopleOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updateRegexHelp(ruleRow);
-                    // Update sort options when Similar To rule is added/removed
+                    // Update sort options when rules change (e.g., Similar To, External List)
                     SmartLists.updateAllSortOptionsVisibility(page);
+                    // Auto-resolve "Default" sort to match the new rules
+                    SmartLists.resolveDefaultSortForRules(page);
                     // Auto-check Include Extras when ExtraType rule is selected
                     if (newField === 'ExtraType') {
                         SmartLists.autoCheckIncludeExtras(page);

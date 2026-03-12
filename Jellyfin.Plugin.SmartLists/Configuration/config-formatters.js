@@ -433,10 +433,10 @@
                 } else if (displaySortBy === 'SeriesName (Ignore Articles)') {
                     displaySortBy = 'Series Name (Ignore Article \'The\')';
                 }
-                // Random and NoOrder don't have meaningful order, so don't show "Ascending"
-                // Normalize "NoOrder" to "No Order" for display consistency
-                if (displaySortBy === 'Random' || displaySortBy === 'NoOrder' || displaySortBy === 'No Order') {
-                    return displaySortBy === 'NoOrder' ? 'No Order' : displaySortBy;
+                // Random and Default don't have meaningful order, so don't show "Ascending"
+                // Normalize "NoOrder" to "Default" for display consistency
+                if (displaySortBy === 'Random' || displaySortBy === 'NoOrder' || displaySortBy === 'No Order' || displaySortBy === 'Default') {
+                    return (displaySortBy === 'NoOrder' || displaySortBy === 'No Order') ? 'Default' : displaySortBy;
                 }
                 var result = displaySortBy + ' ' + opt.SortOrder;
                 // Add indicator when sorting by child item values

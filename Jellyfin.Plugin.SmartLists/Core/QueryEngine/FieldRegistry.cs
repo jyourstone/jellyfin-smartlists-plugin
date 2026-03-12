@@ -552,7 +552,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             return
             [
-                new { Value = "NoOrder", Label = "No Order" },
+                new { Value = "NoOrder", Label = "Default" },
                 new { Value = "Random", Label = "Random" },
                 new { Value = "Name Ascending", Label = "Name Ascending" },
                 new { Value = "Name Descending", Label = "Name Descending" },
