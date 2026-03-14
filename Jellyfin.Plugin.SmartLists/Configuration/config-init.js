@@ -232,7 +232,7 @@
                 // Use default values for user pages
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: 'NoOrder', SortOrder: 'Ascending' });
                 }
                 return Promise.resolve();
             }
@@ -244,13 +244,13 @@
             return apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'NoOrder', SortOrder: config.DefaultSortOrder || 'Ascending' });
                 }
             }).catch(function () {
                 // Fallback to default values if config load fails
                 const sortsContainer = page.querySelector('#sorts-container');
                 if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-                    SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+                    SmartLists.safeAddSortBox(page, { SortBy: 'NoOrder', SortOrder: 'Ascending' });
                 }
             });
         }
@@ -433,7 +433,7 @@
         }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-            SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'Name', SortOrder: config.DefaultSortOrder || 'Ascending' });
+            SmartLists.safeAddSortBox(page, { SortBy: config.DefaultSortBy || 'NoOrder', SortOrder: config.DefaultSortOrder || 'Ascending' });
         }
 
         // Reset user dropdown to currently logged-in user
@@ -471,7 +471,7 @@
         }
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
-            SmartLists.safeAddSortBox(page, { SortBy: 'Name', SortOrder: 'Ascending' });
+            SmartLists.safeAddSortBox(page, { SortBy: 'NoOrder', SortOrder: 'Ascending' });
         }
     };
 
@@ -1768,7 +1768,7 @@
             const playlistNameSuffixEl = page.querySelector('#playlistNameSuffix');
 
             // Handle backwards compatibility for DefaultSortBy with "(Ignore Articles)"
-            let sortBy = config.DefaultSortBy || 'Name';
+            let sortBy = config.DefaultSortBy || 'NoOrder';
             let ignoreArticles = false;
 
             if (sortBy === 'Name (Ignore Articles)') {

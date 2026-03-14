@@ -118,7 +118,7 @@
     SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect) {
         if (!sortOrderContainer || !sortOrderSelect) return;
         
-        // Hide Sort Order for Random and NoOrder (they don't use ordering)
+        // Hide Sort Order for Random and Default (they don't use ordering)
         if (sortByValue === 'Random' || sortByValue === 'NoOrder') {
             sortOrderContainer.style.display = 'none';
         } else {
@@ -186,7 +186,7 @@
         }
 
         // Always show: Name, ProductionYear, CommunityRating,
-        // DateCreated, ReleaseDate, PlayCount (owner), LastPlayed (owner), Random, NoOrder
+        // DateCreated, ReleaseDate, PlayCount (owner), LastPlayed (owner), Random, Default
         return true;
     };
 
@@ -465,10 +465,45 @@
             }
         });
     };
-    
+
+    // Auto-resolve "Default" sort to a specific sort based on rules.
+    // Mirrors the backend ResolveDefaultOrder logic so the UI reflects what will actually happen.
+    SmartLists.resolveDefaultSortForRules = function(page) {
+        var sortsContainer = page.querySelector('#sorts-container');
+        if (!sortsContainer) return;
+
+        var sortBoxes = sortsContainer.querySelectorAll('.sort-box');
+        // Only auto-switch if there's exactly one sort box set to Default
+        if (sortBoxes.length !== 1) return;
+
+        var sortBySelect = sortBoxes[0].querySelector('select[id^="sort-by-"]');
+        if (!sortBySelect || sortBySelect.value !== 'NoOrder') return;
+
+        var sortOrderSelect = sortBoxes[0].querySelector('select[id^="sort-order-"]');
+        var sortOrderContainer = sortOrderSelect ? sortOrderSelect.closest('.sort-field-container') : null;
+
+        var newSort = null;
+        var newOrder = null;
+        if (SmartLists.hasExternalListRuleInForm(page)) {
+            newSort = 'External List Order';
+            newOrder = 'Ascending';
+        } else if (SmartLists.hasSimilarToRuleInForm(page)) {
+            newSort = 'Similarity';
+            newOrder = 'Descending';
+        }
+
+        if (newSort) {
+            sortBySelect.value = newSort;
+            if (sortOrderSelect) {
+                sortOrderSelect.value = newOrder;
+            }
+            SmartLists.syncSortOrderUI(newSort, sortOrderContainer, sortOrderSelect);
+        }
+    };
+
     SmartLists.parseSortOptions = function(playlist) {
         if (!playlist.Order) {
-            return [{ SortBy: 'Name', SortOrder: 'Ascending' }];
+            return [{ SortBy: 'NoOrder', SortOrder: 'Ascending' }];
         }
         
         // New format: SortOptions array
@@ -481,9 +516,9 @@
             const orderName = playlist.Order.Name;
             let sortBy, sortOrder;
             
-            if (orderName === 'Random' || orderName === 'NoOrder' || orderName === 'No Order') {
-                // Special handling for Random/NoOrder - no Asc/Desc
-                sortBy = (orderName === 'No Order') ? 'NoOrder' : orderName;
+            if (orderName === 'Random' || orderName === 'NoOrder' || orderName === 'No Order' || orderName === 'Default') {
+                // Special handling for Random/Default - no Asc/Desc
+                sortBy = (orderName === 'No Order' || orderName === 'Default') ? 'NoOrder' : orderName;
                 sortOrder = 'Ascending'; // Default sort order (though it won't be used)
             } else {
                 // Normal parsing for other orders like "Name Ascending" or "Similarity Descending"
@@ -496,7 +531,7 @@
         }
         
         // Fallback
-        return [{ SortBy: 'Name', SortOrder: 'Ascending' }];
+        return [{ SortBy: 'NoOrder', SortOrder: 'Ascending' }];
     };
     
     // Helper function to load sort options into the UI

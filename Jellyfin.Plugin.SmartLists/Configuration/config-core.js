@@ -66,7 +66,7 @@
         { value: 'Rule Block Order', label: 'Rule Block Order' },
         { value: 'External List Order', label: 'External List Order' },
         { value: 'Random', label: 'Random' },
-        { value: 'NoOrder', label: 'No Order' }
+        { value: 'NoOrder', label: 'Default' }
     ];
 
     SmartLists.SORT_ORDER_OPTIONS = [

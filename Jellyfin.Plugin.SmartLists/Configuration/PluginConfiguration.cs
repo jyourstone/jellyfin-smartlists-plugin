@@ -10,8 +10,9 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
     {
         /// <summary>
         /// Gets or sets the default sort order for new playlists.
+        /// "NoOrder" means "Default" - the backend will auto-resolve based on rules.
         /// </summary>
-        public string DefaultSortBy { get; set; } = "Name";
+        public string DefaultSortBy { get; set; } = "NoOrder";
 
         /// <summary>
         /// Gets or sets the default sort direction for new playlists.
