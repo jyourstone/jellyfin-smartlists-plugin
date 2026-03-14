@@ -47,27 +47,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     var key = (item.Id, user.Id);
                     if (refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
                     {
-                        int minPlayCount = int.MaxValue;
-                        foreach (var track in tracks)
-                        {
-                            int trackPlayCount = 0;
-                            if (refreshCache.UserDataCache.TryGetValue((track.Id, user.Id), out var trackUserData))
-                            {
-                                trackPlayCount = trackUserData?.PlayCount ?? 0;
-                            }
-                            else
-                            {
-                                var fetchedData = userDataManager.GetUserData(user, track);
-                                trackPlayCount = fetchedData?.PlayCount ?? 0;
-                            }
-
-                            if (trackPlayCount < minPlayCount)
-                            {
-                                minPlayCount = trackPlayCount;
-                            }
-                        }
-
-                        return minPlayCount == int.MaxValue ? 0 : minPlayCount;
+                        return CalculateMinPlayCountFromTracks(tracks, user, userDataManager, refreshCache);
                     }
                 }
 
@@ -101,6 +81,49 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logger?.LogDebug(ex, "Error extracting PlayCount from userData for item {ItemName}", item.Name);
                 return 0;
             }
+        }
+
+        /// <summary>
+        /// Shared helper: calculates the minimum PlayCount across an array of tracks.
+        /// Writes fetched UserData back to the cache to avoid redundant DB hits.
+        /// </summary>
+        internal static int CalculateMinPlayCountFromTracks(
+            BaseItem[] tracks,
+            User user,
+            IUserDataManager userDataManager,
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            if (tracks.Length == 0)
+            {
+                return 0;
+            }
+
+            int minPlayCount = int.MaxValue;
+            foreach (var track in tracks)
+            {
+                int trackPlayCount = 0;
+                var cacheKey = (track.Id, user.Id);
+                if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
+                {
+                    trackPlayCount = trackUserData?.PlayCount ?? 0;
+                }
+                else
+                {
+                    var fetchedData = userDataManager.GetUserData(user, track);
+                    trackPlayCount = fetchedData?.PlayCount ?? 0;
+                    if (fetchedData != null)
+                    {
+                        refreshCache.UserDataCache[cacheKey] = fetchedData;
+                    }
+                }
+
+                if (trackPlayCount < minPlayCount)
+                {
+                    minPlayCount = trackPlayCount;
+                }
+            }
+
+            return minPlayCount == int.MaxValue ? 0 : minPlayCount;
         }
     }
 

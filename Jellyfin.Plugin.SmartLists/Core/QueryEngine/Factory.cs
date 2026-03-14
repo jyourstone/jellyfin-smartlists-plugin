@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
+using Jellyfin.Plugin.SmartLists.Core.Orders;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using MediaBrowser.Model.Entities;
@@ -670,33 +671,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             try
             {
                 var tracks = GetCachedAlbumTracks(album.Id, user, libraryManager, cache, logger);
-
-                if (tracks.Length == 0)
-                {
-                    return 0;
-                }
-
-                int minPlayCount = int.MaxValue;
-                foreach (var track in tracks)
-                {
-                    var cacheKey = (track.Id, user.Id);
-                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
-                    {
-                        trackUserData = userDataManager.GetUserData(user, track);
-                        if (trackUserData != null)
-                        {
-                            cache.UserDataCache[cacheKey] = trackUserData;
-                        }
-                    }
-
-                    var trackPlayCount = trackUserData?.PlayCount ?? 0;
-                    if (trackPlayCount < minPlayCount)
-                    {
-                        minPlayCount = trackPlayCount;
-                    }
-                }
-
-                return minPlayCount == int.MaxValue ? 0 : minPlayCount;
+                return PlayCountOrder.CalculateMinPlayCountFromTracks(tracks, user, userDataManager, cache);
             }
             catch (Exception ex)
             {
