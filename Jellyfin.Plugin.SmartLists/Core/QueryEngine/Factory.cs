@@ -393,6 +393,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 return CalculateSeriesPlaybackStatus(series, user, libraryManager, userDataManager, cache, logger);
             }
+            else if (baseItem is MusicAlbum album && userDataManager != null)
+            {
+                return CalculateAlbumPlaybackStatus(album, user, libraryManager, userDataManager, cache, logger);
+            }
             else
             {
                 return CalculatePlaybackStatus(userData);
@@ -589,6 +593,209 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 logger?.LogWarning(ex, "Error calculating LastPlayedDate for series '{SeriesName}'", series.Name);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Calculates playback status for a MusicAlbum based on child audio track watch counts.
+        /// </summary>
+        private static string CalculateAlbumPlaybackStatus(
+            MusicAlbum album,
+            User user,
+            ILibraryManager libraryManager,
+            IUserDataManager userDataManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            try
+            {
+                var tracks = GetCachedAlbumTracks(album.Id, user, libraryManager, cache, logger);
+
+                if (tracks.Length == 0)
+                {
+                    logger?.LogDebug("Album '{AlbumName}' has 0 tracks, treating as Unplayed", album.Name);
+                    return "Unplayed";
+                }
+
+                int playedCount = 0;
+                foreach (var track in tracks)
+                {
+                    var cacheKey = (track.Id, user.Id);
+                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
+                    {
+                        trackUserData = userDataManager.GetUserData(user, track);
+                        if (trackUserData != null)
+                        {
+                            cache.UserDataCache[cacheKey] = trackUserData;
+                        }
+                    }
+
+                    if (trackUserData != null && trackUserData.Played)
+                    {
+                        playedCount++;
+                    }
+                }
+
+                if (playedCount == tracks.Length)
+                {
+                    return "Played";
+                }
+                else if (playedCount > 0)
+                {
+                    return "InProgress";
+                }
+                else
+                {
+                    return "Unplayed";
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Error calculating playback status for album '{AlbumName}'", album.Name);
+                return "Unplayed";
+            }
+        }
+
+        /// <summary>
+        /// Calculates play count for a MusicAlbum as the minimum PlayCount across all child tracks.
+        /// This represents the number of complete album listens.
+        /// </summary>
+        private static int CalculateAlbumPlayCount(
+            MusicAlbum album,
+            User user,
+            ILibraryManager libraryManager,
+            IUserDataManager userDataManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            try
+            {
+                var tracks = GetCachedAlbumTracks(album.Id, user, libraryManager, cache, logger);
+
+                if (tracks.Length == 0)
+                {
+                    return 0;
+                }
+
+                int minPlayCount = int.MaxValue;
+                foreach (var track in tracks)
+                {
+                    var cacheKey = (track.Id, user.Id);
+                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
+                    {
+                        trackUserData = userDataManager.GetUserData(user, track);
+                        if (trackUserData != null)
+                        {
+                            cache.UserDataCache[cacheKey] = trackUserData;
+                        }
+                    }
+
+                    var trackPlayCount = trackUserData?.PlayCount ?? 0;
+                    if (trackPlayCount < minPlayCount)
+                    {
+                        minPlayCount = trackPlayCount;
+                    }
+                }
+
+                return minPlayCount == int.MaxValue ? 0 : minPlayCount;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Error calculating play count for album '{AlbumName}'", album.Name);
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Calculates the most recent LastPlayedDate for a MusicAlbum based on child track play dates.
+        /// </summary>
+        private static DateTime? CalculateAlbumLastPlayedDate(
+            MusicAlbum album,
+            User user,
+            ILibraryManager libraryManager,
+            IUserDataManager userDataManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            try
+            {
+                var tracks = GetCachedAlbumTracks(album.Id, user, libraryManager, cache, logger);
+
+                if (tracks.Length == 0)
+                {
+                    return null;
+                }
+
+                DateTime? maxLastPlayedDate = null;
+
+                foreach (var track in tracks)
+                {
+                    var cacheKey = (track.Id, user.Id);
+                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
+                    {
+                        trackUserData = userDataManager.GetUserData(user, track);
+                        if (trackUserData != null)
+                        {
+                            cache.UserDataCache[cacheKey] = trackUserData;
+                        }
+                    }
+
+                    if (trackUserData != null)
+                    {
+                        var userDataType = trackUserData.GetType();
+                        var lastPlayedDateProp = userDataType.GetProperty("LastPlayedDate");
+                        if (lastPlayedDateProp != null)
+                        {
+                            var lastPlayedDateValue = lastPlayedDateProp.GetValue(trackUserData);
+                            if (lastPlayedDateValue is DateTime dateTime && dateTime != DateTime.MinValue)
+                            {
+                                if (!maxLastPlayedDate.HasValue || dateTime > maxLastPlayedDate.Value)
+                                {
+                                    maxLastPlayedDate = dateTime;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                logger?.LogDebug("Album '{AlbumName}' calculated LastPlayedDate: {Date} (from {TrackCount} tracks)", album.Name, maxLastPlayedDate, tracks.Length);
+                return maxLastPlayedDate;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Error calculating LastPlayedDate for album '{AlbumName}'", album.Name);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets cached audio tracks for a MusicAlbum, fetching from library manager on cache miss.
+        /// </summary>
+        private static BaseItem[] GetCachedAlbumTracks(
+            Guid albumId,
+            User user,
+            ILibraryManager libraryManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            var key = (albumId, user.Id);
+            if (cache.AlbumTracks.TryGetValue(key, out var cachedTracks))
+            {
+                return cachedTracks;
+            }
+
+            var tracks = libraryManager.GetItemList(new InternalItemsQuery
+            {
+                ParentId = albumId,
+                IncludeItemTypes = [BaseItemKind.Audio],
+                Recursive = true,
+                User = user
+            }).ToArray();
+
+            var albumName = libraryManager.GetItemById(albumId)?.Name ?? "Unknown";
+            logger?.LogDebug("Fetched {TrackCount} audio tracks for album '{AlbumName}' ({AlbumId})", tracks.Length, albumName, albumId);
+
+            cache.AlbumTracks[key] = tracks;
+            return tracks;
         }
 
         /// <summary>
@@ -859,17 +1066,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Use reflection to safely extract properties from userData
             var userDataType = userData.GetType();
 
-            // Extract PlayCount
-            var playCountProp = userDataType.GetProperty("PlayCount");
-            if (playCountProp != null)
+            // Extract PlayCount - for MusicAlbum, calculate from child tracks
+            if (baseItem is MusicAlbum albumForPlayCount && userDataManager != null)
             {
-                var playCountValue = playCountProp.GetValue(userData);
-                var playCount = ExtractIntValue(playCountValue);
-                operand.PlayCountByUser[userId] = playCount.GetValueOrDefault(0);
+                operand.PlayCountByUser[userId] = CalculateAlbumPlayCount(albumForPlayCount, user, libraryManager, userDataManager, cache, logger);
             }
             else
             {
-                operand.PlayCountByUser[userId] = 0;
+                var playCountProp = userDataType.GetProperty("PlayCount");
+                if (playCountProp != null)
+                {
+                    var playCountValue = playCountProp.GetValue(userData);
+                    var playCount = ExtractIntValue(playCountValue);
+                    operand.PlayCountByUser[userId] = playCount.GetValueOrDefault(0);
+                }
+                else
+                {
+                    operand.PlayCountByUser[userId] = 0;
+                }
             }
 
             // Extract IsFavorite
@@ -929,25 +1143,44 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
             else
             {
-                // Direct extraction for non-Series items
-                var lastPlayedDateProp = userDataType.GetProperty("LastPlayedDate");
-                if (lastPlayedDateProp != null)
+                // MusicAlbum: Calculate LastPlayedDate from child audio tracks
+                if (baseItem is MusicAlbum albumForDate && userDataManager != null)
                 {
-                    var lastPlayedDateValue = lastPlayedDateProp.GetValue(userData);
-                    // PropertyInfo.GetValue automatically unwraps Nullable<T>
-                    // If lastPlayedDateValue is non-null, it's already the underlying DateTime
-                    if (lastPlayedDateValue is DateTime dateTime && dateTime != DateTime.MinValue)
+                    var albumLastPlayedDate = CalculateAlbumLastPlayedDate(albumForDate, user, libraryManager, userDataManager, cache, logger);
+                    if (albumLastPlayedDate.HasValue)
                     {
-                        operand.LastPlayedDateByUser[userId] = SafeToUnixTimeSeconds(dateTime);
+                        var unixTimestamp = SafeToUnixTimeSeconds(albumLastPlayedDate.Value);
+                        logger?.LogDebug("Album '{AlbumName}' LastPlayedDate set to {Date} (Unix: {Unix})", albumForDate.Name, albumLastPlayedDate.Value, unixTimestamp);
+                        operand.LastPlayedDateByUser[userId] = unixTimestamp;
                     }
                     else
                     {
+                        logger?.LogDebug("Album '{AlbumName}' has no LastPlayedDate (no tracks played)", albumForDate.Name);
                         operand.LastPlayedDateByUser[userId] = -1; // Never played
                     }
                 }
                 else
                 {
-                    operand.LastPlayedDateByUser[userId] = -1; // Never played - property not found
+                    // Direct extraction for non-Series, non-MusicAlbum items
+                    var lastPlayedDateProp = userDataType.GetProperty("LastPlayedDate");
+                    if (lastPlayedDateProp != null)
+                    {
+                        var lastPlayedDateValue = lastPlayedDateProp.GetValue(userData);
+                        // PropertyInfo.GetValue automatically unwraps Nullable<T>
+                        // If lastPlayedDateValue is non-null, it's already the underlying DateTime
+                        if (lastPlayedDateValue is DateTime dateTime && dateTime != DateTime.MinValue)
+                        {
+                            operand.LastPlayedDateByUser[userId] = SafeToUnixTimeSeconds(dateTime);
+                        }
+                        else
+                        {
+                            operand.LastPlayedDateByUser[userId] = -1; // Never played
+                        }
+                    }
+                    else
+                    {
+                        operand.LastPlayedDateByUser[userId] = -1; // Never played - property not found
+                    }
                 }
             }
         }
