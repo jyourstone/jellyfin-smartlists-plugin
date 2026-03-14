@@ -698,6 +698,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public sealed class RefreshCache
         {
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId), BaseItem[]> SeriesEpisodes { get; } = new();
+            public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
             public ConcurrentDictionary<Guid, List<string>> ItemCollections { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
