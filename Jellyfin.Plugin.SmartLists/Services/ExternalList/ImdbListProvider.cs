@@ -58,7 +58,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     "Invalid IMDb URL. Expected formats: https://www.imdb.com/list/ls123456789/ or https://www.imdb.com/chart/top/");
             }
 
-            _logger.LogInformation("Fetching IMDb list: {Url}", url);
+            _logger.LogDebug("Fetching IMDb list: {Url}", url);
 
             // Determine if this is a chart or a user list
             var chartMatch = ImdbChartPattern().Match(url);
@@ -88,12 +88,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     $"Unsupported IMDb chart type: '{chartSlug}'. Supported chart types: {supported}");
             }
 
-            var fetchCount = maxItems > 0 ? maxItems : 250;
+            var fetchCount = maxItems > 0 ? maxItems : ListPageSize;
 
             var query = "{chartTitles(chart:{chartType:" + chartType + "},first:" + fetchCount
                 + "){edges{node{id}}}}";
 
-            var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
+            using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
             var result = new ExternalListResult();
             int position = 0;
@@ -136,7 +136,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 var query = "{list(id:\"" + listId + "\"){items(first:" + fetchCount + afterClause
                     + "){edges{node{item{... on Title{id}}}}pageInfo{hasNextPage endCursor}}}}";
 
-                var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
+                using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
                 var listData = json.RootElement.GetProperty("data").GetProperty("list");
                 if (listData.ValueKind == JsonValueKind.Null)
@@ -197,7 +197,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
             };
 
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
 
             using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -231,7 +231,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// https://www.imdb.com/chart/top/
         /// https://www.imdb.com/chart/toptv/
         /// </summary>
-        [GeneratedRegex(@"imdb\.com/(list/ls\d+|chart/\w+)", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"imdb\.com/(list/ls\d+|chart/\w[\w-]*)", RegexOptions.IgnoreCase)]
         private static partial Regex ImdbListUrlPattern();
 
         /// <summary>
