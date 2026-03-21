@@ -52,7 +52,7 @@ External List / equals / https://mdblist.com/lists/linaspurinis/top-watched-movi
 
 ### IMDb
 
-[IMDb](https://www.imdb.com) public lists and chart pages can be used directly without an API key. The plugin scrapes the HTML page to extract IMDb title IDs.
+[IMDb](https://www.imdb.com) public lists and chart pages can be used directly without an API key. The plugin uses IMDb's GraphQL API to fetch title IDs.
 
 **Setup:**
 
@@ -65,7 +65,10 @@ No API key required. Just use a public IMDb list or chart URL.
 | User list | `https://www.imdb.com/list/{listid}/` |
 | Top 250 Movies | `https://www.imdb.com/chart/top/` |
 | Top 250 TV Shows | `https://www.imdb.com/chart/toptv/` |
-| Box Office | `https://www.imdb.com/chart/boxoffice/` |
+| Most Popular Movies | `https://www.imdb.com/chart/moviemeter/` |
+| Most Popular TV Shows | `https://www.imdb.com/chart/tvmeter/` |
+| Lowest Rated Movies | `https://www.imdb.com/chart/bottom/` |
+| Top English Movies | `https://www.imdb.com/chart/top-english-movies/` |
 
 **Example:**
 
@@ -75,6 +78,9 @@ External List / equals / https://www.imdb.com/chart/top/
 
 !!! warning "IMDb Limitations"
     IMDb lists must be public. Private lists cannot be accessed. Only IMDb IDs are extracted, so items in your library must have IMDb metadata to match.
+
+!!! note "Box Office Chart Removed"
+    IMDb's `/chart/boxoffice/` is no longer available via their API. Use Trakt's box office chart (`https://trakt.tv/movies/boxoffice`) as an alternative.
 
 ---
 
