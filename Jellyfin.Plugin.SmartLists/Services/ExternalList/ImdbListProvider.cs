@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -88,25 +87,50 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     $"Unsupported IMDb chart type: '{chartSlug}'. Supported chart types: {supported}");
             }
 
-            var fetchCount = maxItems > 0 ? maxItems : ListPageSize;
-
-            var query = "{chartTitles(chart:{chartType:" + chartType + "},first:" + fetchCount
-                + "){edges{node{id}}}}";
-
-            using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
-
             var result = new ExternalListResult();
             int position = 0;
+            string? cursor = null;
 
-            var dataElement = json.RootElement.GetProperty("data").GetProperty("chartTitles").GetProperty("edges");
-            foreach (var edge in dataElement.EnumerateArray())
+            while (true)
             {
-                var id = edge.GetProperty("node").GetProperty("id").GetString();
-                if (!string.IsNullOrEmpty(id))
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var fetchCount = maxItems > 0 ? Math.Min(ListPageSize, maxItems - position) : ListPageSize;
+                if (fetchCount <= 0)
                 {
-                    result.ImdbIds.TryAdd(id, position);
-                    position++;
+                    break;
                 }
+
+                var afterClause = cursor != null ? ",after:\"" + cursor + "\"" : string.Empty;
+                var query = "{chartTitles(chart:{chartType:" + chartType + "},first:" + fetchCount + afterClause
+                    + "){edges{node{id}}pageInfo{hasNextPage endCursor}}}";
+
+                using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
+
+                var chartData = json.RootElement.GetProperty("data").GetProperty("chartTitles");
+                var edges = chartData.GetProperty("edges");
+                int itemsInPage = 0;
+
+                foreach (var edge in edges.EnumerateArray())
+                {
+                    var id = edge.GetProperty("node").GetProperty("id").GetString();
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        result.ImdbIds.TryAdd(id, position);
+                        position++;
+                        itemsInPage++;
+                    }
+                }
+
+                var pageInfo = chartData.GetProperty("pageInfo");
+                var hasNextPage = pageInfo.GetProperty("hasNextPage").GetBoolean();
+
+                if (!hasNextPage || itemsInPage == 0)
+                {
+                    break;
+                }
+
+                cursor = pageInfo.GetProperty("endCursor").GetString();
             }
 
             result.TotalItems = result.ImdbIds.Count;
@@ -218,6 +242,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     ? msg.GetString()
                     : "Unknown error";
 
+                document.Dispose();
                 throw new HttpRequestException(
                     $"IMDb GraphQL API returned an error: {message}");
             }
