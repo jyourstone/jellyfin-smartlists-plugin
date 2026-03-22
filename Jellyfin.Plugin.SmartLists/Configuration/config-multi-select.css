@@ -29,13 +29,14 @@
     left: 0;
     right: 0;
     max-height: 450px;
-    background: color-mix(in srgb, var(--jf-palette-background-paper) 80%, transparent);
+    background: color-mix(in srgb, var(--jf-palette-background-paper) 85%, transparent);
     border: 1px solid var(--jf-palette-divider);
     z-index: 1000;
     border-radius: 1em;
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     overflow: hidden;
+    color: var(--jf-palette-text-primary);
 }
 
 .multi-select-options {
@@ -139,13 +140,14 @@
     position: absolute;
     left: 0;
     right: 0;
-    background: color-mix(in srgb, var(--jf-palette-background-paper) 80%, transparent);
+    background: color-mix(in srgb, var(--jf-palette-background-paper) 85%, transparent);
     border: 1px solid var(--jf-palette-divider);
     z-index: 1000;
     border-radius: 1em;
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     overflow: hidden;
+    color: var(--jf-palette-text-primary);
 }
 
 .searchable-select-search-wrap {
