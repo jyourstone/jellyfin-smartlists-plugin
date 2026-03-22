@@ -48,6 +48,7 @@ Here are some more complex playlist and collection examples:
 - **Playlist name** contains "favorites" (match any user-created favorites playlists)
 - **Playback Status** = Unplayed (combine with unplayed filter)
 - Creates a dynamic playlist that pulls unplayed items from any existing favorites playlists
+- Automatically updates as playlists are added/removed or items are marked as played
 
 ## Curated List by Provider IDs
 
@@ -63,7 +64,6 @@ Create a hand-curated collection using IMDb or TMDb IDs — useful for award lis
 
 !!! tip "Where to find provider IDs"
     In Jellyfin, click a movie or show → **Edit Metadata** → scroll to **External IDs** to see the IMDb, TMDb, and TVDb identifiers. You can also find them on [imdb.com](https://imdb.com), [themoviedb.org](https://themoviedb.org), or [thetvdb.com](https://thetvdb.com) in the URL.
-- Automatically updates as playlists are added/removed or items are marked as played
 
 ## Genre-Based Playlist Mixer
 - **Rule Group 1**: **Playlist name** contains "Rock" AND **Community Rating** >= 8
