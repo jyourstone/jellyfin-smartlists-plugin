@@ -61,6 +61,18 @@ Here are some popular playlist and collection types you can create:
 ### Unplayed Sitcom Episodes
 - **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
 
+### Oscar-Nominated Movies
+- **External List** = `https://www.imdb.com/event/ev0000003/2025/1/`
+- All movies nominated at the 2025 Academy Awards
+
+### Oscar Best Picture Nominees
+- **External List** = `https://www.imdb.com/event/ev0000003/2025/1/#oscar_best_motion_picture_of_the_year`
+- Only movies nominated in the Best Picture category
+
+### Unwatched Award Winners
+- **External List** = `https://www.imdb.com/event/ev0000003/2024/1/` AND **Playback Status** = Unplayed
+- Combine an awards event list with other filters to find unwatched nominees in your library
+
 ## Balanced Mix with Per-Group Limits
 
 These examples use the **Max Items for this OR block** feature to create perfectly balanced playlists:
