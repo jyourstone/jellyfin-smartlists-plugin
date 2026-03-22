@@ -1168,6 +1168,10 @@
         if (SmartLists.availableFields.ContentFields) {
             SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, null, page);
         }
+
+        // Enhance field select with searchable dropdown
+        SmartLists.initSearchableSelect(fieldSelect, { signal: signal });
+
         if (SmartLists.availableFields.Operators) {
             SmartLists.populateSelect(operatorSelect, SmartLists.availableFields.Operators, null, false);
         }
@@ -1909,6 +1913,9 @@
                 selectElement.appendChild(optgroup);
             }
         });
+
+        // Refresh searchable select overlay if initialized
+        SmartLists.refreshSearchableSelect(selectElement);
     };
 
     // Update all field selects across all rules when media types change
@@ -2690,6 +2697,10 @@
 
                 SmartLists.updateOperatorOptions(actualMemberName, operatorSelect);
                 SmartLists.updateUserSelectorVisibility(ruleRow, actualMemberName);
+
+                // Refresh searchable select display to show the loaded field name
+                SmartLists.refreshSearchableSelect(fieldSelect);
+
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updatePlaylistsOptionsVisibility(ruleRow, actualMemberName, page);

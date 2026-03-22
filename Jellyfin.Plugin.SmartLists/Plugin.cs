@@ -122,6 +122,12 @@ namespace Jellyfin.Plugin.SmartLists
                     Name = "config-multi-select.css",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-multi-select.css",
                 },
+                // Searchable single-select component
+                new PluginPageInfo
+                {
+                    Name = "config-searchable-select.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-searchable-select.js",
+                },
                 // User selection component
                 new PluginPageInfo
                 {
