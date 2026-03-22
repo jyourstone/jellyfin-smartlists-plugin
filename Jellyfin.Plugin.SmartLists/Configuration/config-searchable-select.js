@@ -164,7 +164,7 @@
                 displayText.textContent = '-- Field --';
                 displayText.classList.add('searchable-select-placeholder');
             } else {
-                const selectedOpt = selectElement.querySelector('option[value="' + selected.replace(/"/g, '\\"') + '"]');
+                const selectedOpt = selectElement.querySelector('option[value="' + CSS.escape(selected) + '"]');
                 displayText.textContent = selectedOpt ? selectedOpt.textContent : selected;
                 displayText.classList.remove('searchable-select-placeholder');
             }
