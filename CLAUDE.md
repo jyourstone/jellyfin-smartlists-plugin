@@ -51,7 +51,7 @@ Expensive fields (People, AudioLanguages, Collections, etc.) use two-phase filte
 Expensive fields are defined in `FieldRegistry.cs` via `ExtractionGroup` flags. Use `FieldRegistry.IsExpensiveField(fieldName)` to check if a field is expensive.
 
 ### Adding New Rule Fields
-`FieldRegistry.cs` is the single source of truth for field definitions. Adding a new field requires updates in: `FieldRegistry.cs` (definition), `Operand.cs` (property), and `Factory.cs` (extraction logic). The UI automatically updates from the API.
+`FieldRegistry.cs` is the single source of truth for field definitions. Adding a new field requires updates in: `FieldRegistry.cs` (definition), `Operand.cs` (property), and `Factory.cs` (extraction logic). The field dropdown in the UI is populated from the API, but `config-core.js` has hardcoded `FIELD_TYPES` arrays (e.g., `STRING_FIELDS`, `LIST_FIELDS`, `NUMERIC_FIELDS`) that control which input controls and operators are shown. New fields must be added to the appropriate array in `config-core.js`.
 
 ## Critical Gotchas
 

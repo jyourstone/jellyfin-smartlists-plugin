@@ -2505,6 +2505,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 
                 OfficialRating = baseItem.OfficialRating ?? "",
                 CustomRating = baseItem.CustomRating ?? "",
+
+                // Provider IDs (zero cost - dictionary lookup on BaseItem)
+                ImdbId = baseItem.GetProviderId(MetadataProvider.Imdb) ?? "",
+                TmdbId = baseItem.GetProviderId(MetadataProvider.Tmdb) ?? "",
+                TvdbId = baseItem.GetProviderId(MetadataProvider.Tvdb) ?? "",
                 // Note: Album, RuntimeMinutes, FileInfo, LibraryName are now conditionally extracted below
             };
 
