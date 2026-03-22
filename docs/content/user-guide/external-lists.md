@@ -69,12 +69,32 @@ No API key required. Just use a public IMDb list or chart URL.
 | Most Popular TV Shows | `https://www.imdb.com/chart/tvmeter/` |
 | Lowest Rated Movies | `https://www.imdb.com/chart/bottom/` |
 | Top English Movies | `https://www.imdb.com/chart/top-english-movies/` |
+| Awards/Event | `https://www.imdb.com/event/{eventid}/{year}/{instance}/` |
+| Awards + Category | `https://www.imdb.com/event/{eventid}/{year}/{instance}/#{category}` |
 
-**Example:**
+**Examples:**
 
 ```
 External List / equals / https://www.imdb.com/chart/top/
+External List / equals / https://www.imdb.com/event/ev0000003/2022/1/
+External List / equals / https://www.imdb.com/event/ev0000003/2022/1/#oscar_best_sound
 ```
+
+#### Awards/Event URLs
+
+You can use IMDb event URLs to create lists of all titles nominated at a specific awards ceremony edition. The URL must include the event ID, year, and instance number — just copy the URL from the IMDb event page.
+
+To filter by a specific award category, add a `#` fragment with the category slug. The slug is the category name in lowercase with spaces replaced by underscores, optionally prefixed with the event name (e.g., `oscar_`). Some common examples:
+
+| Event | Category slug |
+|-------|--------------|
+| Oscars - Best Picture | `#oscar_best_motion_picture_of_the_year` |
+| Oscars - Best Director | `#oscar_best_achievement_in_directing` |
+| Oscars - Best Sound | `#oscar_best_sound` |
+| Golden Globes - Best Drama | `#best_motion_picture_drama` |
+
+!!! tip "Finding Category Slugs"
+    The easiest way to find the correct category slug is to browse the event page on IMDb's website — the URL fragment updates as you select categories.
 
 !!! warning "IMDb Limitations"
     IMDb lists must be public. Private lists cannot be accessed. Only IMDb IDs are extracted, so items in your library must have IMDb metadata to match.
