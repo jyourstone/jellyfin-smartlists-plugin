@@ -87,7 +87,7 @@
                             </label>
                             <div id="mediaTypesMultiSelect">
                                 <div class="multi-select-container">
-                                    <div class="multi-select-display" id="mediaTypesMultiSelectDisplay">
+                                    <div class="multi-select-display emby-select-withcolor" id="mediaTypesMultiSelectDisplay">
                                         <span class="multi-select-placeholder">Select media types...</span>
                                     </div>
                                     <div class="multi-select-dropdown" id="mediaTypesMultiSelectDropdown"
@@ -169,7 +169,7 @@
                             <!-- Playlist: Custom Multi-Select -->
                             <div id="playlistUserMultiSelect" class="playlist-only-field" style="display: none;">
                                 <div class="multi-select-container">
-                                    <div class="multi-select-display" id="userMultiSelectDisplay">
+                                    <div class="multi-select-display emby-select-withcolor" id="userMultiSelectDisplay">
                                         <span class="multi-select-placeholder">Select users...</span>
                                     </div>
                                     <div class="multi-select-dropdown" id="userMultiSelectDropdown"
@@ -660,7 +660,7 @@
                             <label class="inputLabel" for="allowedUsersMultiSelect">Allowed Users</label>
                             <div id="allowedUsersMultiSelect">
                                 <div class="multi-select-container">
-                                    <div class="multi-select-display" id="allowedUsersMultiSelectDisplay">
+                                    <div class="multi-select-display emby-select-withcolor" id="allowedUsersMultiSelectDisplay">
                                         <span class="multi-select-placeholder">All users (default)</span>
                                     </div>
                                     <div class="multi-select-dropdown" id="allowedUsersMultiSelectDropdown" style="display: none;">
@@ -1077,6 +1077,8 @@
         <script src="configurationpage?name=config-sorts.js"></script>
         <!-- Generic multi-select component -->
         <script src="configurationpage?name=config-multi-select.js"></script>
+        <!-- Searchable single-select component -->
+        <script src="configurationpage?name=config-searchable-select.js"></script>
         <!-- User multi-select for playlists -->
         <script src="configurationpage?name=config-user-select.js"></script>
         <!-- Rule management -->

@@ -37,6 +37,8 @@
     <EmbeddedResource Include="Configuration\config-multi-select.js" />
     <!-- Multi-select component CSS -->
     <EmbeddedResource Include="Configuration\config-multi-select.css" />
+    <!-- Searchable single-select component -->
+    <EmbeddedResource Include="Configuration\config-searchable-select.js" />
     <!-- User selection component -->
     <EmbeddedResource Include="Configuration\config-user-select.js" />
     <!-- Rule management -->

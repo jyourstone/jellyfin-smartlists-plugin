@@ -2173,7 +2173,8 @@
                     flex-wrap: wrap !important;
                 }
 
-                .rule-row .input-group .rule-field-select {
+                .rule-row .input-group .rule-field-select,
+                .rule-row .input-group .searchable-select-container {
                     flex: 1 1 calc(50% - 0.25em) !important;
                     min-width: 0 !important;
                 }
