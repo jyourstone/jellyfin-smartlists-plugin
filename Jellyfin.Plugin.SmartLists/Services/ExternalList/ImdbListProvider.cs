@@ -298,6 +298,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     {
                         result.ImdbIds.TryAdd(titleId, position);
                         position++;
+
+                        if (maxItems > 0 && position >= maxItems)
+                        {
+                            break;
+                        }
                     }
                 }
             }
