@@ -59,6 +59,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public List<string> Editors { get; set; } = [];
         public List<string> Translators { get; set; } = [];
 
+        // Provider ID fields (external metadata identifiers)
+        public string ImdbId { get; set; } = string.Empty;
+        public string TmdbId { get; set; } = string.Empty;
+        public string TvdbId { get; set; } = string.Empty;
+
         // Music-specific fields
         public List<string> Artists { get; set; } = [];
         public List<string> AlbumArtists { get; set; } = [];

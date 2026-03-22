@@ -50,6 +50,21 @@ Here are some more complex playlist and collection examples:
 - Creates a dynamic playlist that pulls unplayed items from any existing favorites playlists
 - Automatically updates as playlists are added/removed or items are marked as played
 
+## Curated List by Provider IDs
+
+Create a hand-curated collection using IMDb or TMDb IDs — useful for award lists, personal top lists, or any curated set.
+
+### Oscar Best International Feature Film Winners
+- **IMDb ID** is in `tt14961016;tt7160372;tt1016150;tt14039582;tt10288566;tt6751668;tt6155172;tt5639354;tt5186714;tt3808342`
+- Matches items by their IMDb identifier directly — no external URL needed
+
+### TMDb Curated Collection
+- **TMDb ID** is in `875828;533535;698687`
+- Same concept using TheMovieDb IDs instead
+
+!!! tip "Where to find provider IDs"
+    In Jellyfin, click a movie or show → **Edit Metadata** → scroll to **External IDs** to see the IMDb, TMDb, and TVDb identifiers. You can also find them on [imdb.com](https://imdb.com), [themoviedb.org](https://themoviedb.org), or [thetvdb.com](https://thetvdb.com) in the URL.
+
 ## Genre-Based Playlist Mixer
 - **Rule Group 1**: **Playlist name** contains "Rock" AND **Community Rating** >= 8
 - **Rule Group 2**: **Playlist name** contains "Electronic" AND **Play Count** = 0

@@ -279,6 +279,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "ExternalList", "External List", FieldType.List, FieldCategory.Collection, SimpleOperators, ExtractionGroup.ExternalLists);
 
+            // Provider ID Fields (direct BaseItem property access - zero cost)
+            AddField(fields, "ImdbId", "IMDb ID", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "TmdbId", "TMDb ID", FieldType.Text, FieldCategory.Content, StringOperators);
+            AddField(fields, "TvdbId", "TVDb ID", FieldType.Text, FieldCategory.Content, StringOperators);
+
             // Simple Fields
             AddField(fields, "ItemType", "Item Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);
             AddField(fields, "ExtraType", "Extra Type", FieldType.Simple, FieldCategory.Content, SimpleOperators);

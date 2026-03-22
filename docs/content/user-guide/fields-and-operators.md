@@ -20,6 +20,9 @@ Fields are organized into categories that match the dropdown menu in the UI. Som
 | **Last Episode Air Date** | Air date of the most recent episode (TV series only). Useful for finding actively airing shows. |
 | **Production Locations** | Countries/regions where the content was produced (e.g., "United States", "Japan") |
 | **Extra Type** | Type of extra — select from a dropdown (Behind the Scenes, Deleted Scene, Featurette, Trailer, etc.). Requires **Include Extras** enabled. |
+| **IMDb ID** | IMDb identifier (e.g., `tt15574124`). Use **is in** with semicolons to match multiple IDs. |
+| **TMDb ID** | TheMovieDb identifier (e.g., `875828`). Use **is in** with semicolons to match multiple IDs. |
+| **TVDb ID** | TheTVDB identifier. Use **is in** with semicolons to match multiple IDs. |
 
 #### Similar To
 
