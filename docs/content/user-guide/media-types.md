@@ -7,8 +7,9 @@ When creating a smart list, you must select at least one **Media Type** to speci
 | Media Type | Jellyfin Library | Description |
 |------------|------------------|-------------|
 | **Movies** | Movies | Feature films and movie content |
-| **Episodes** | Shows | Individual TV show episodes |
 | **Series** | Shows | Entire TV series (collections only, not individual episodes) |
+| **Season** | Shows | Entire TV show seasons (collections only) |
+| **Episodes** | Shows | Individual TV show episodes |
 | **Audio** | Music | Music tracks and songs |
 | **Album** | Music | Entire music albums (collections only, not individual tracks) |
 | **Music Videos** | Music Videos | Music video content |

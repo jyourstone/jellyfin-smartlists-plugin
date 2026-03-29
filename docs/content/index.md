@@ -49,6 +49,7 @@ SmartLists works with all media types supported by Jellyfin:
 
 - **Movie** - Individual movie files
 - **Series** - TV shows as a whole (can only be used when creating a Collection)
+- **Season** - TV show seasons (can only be used when creating a Collection)
 - **Episode** - Individual TV show episodes
 - **Audio (Music)** - Individual music tracks and songs
 - **Album (Music)** - Entire music albums (can only be used when creating a Collection)

@@ -17,6 +17,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         // but supported in Collections (Collections don't play sequentially, so no expansion issues)
         public const string Series = nameof(Series);
 
+        // Season media type: Not supported in Playlists (Jellyfin expands to episodes causing playback issues)
+        // but supported in Collections (same pattern as Series)
+        public const string Season = nameof(Season);
+
         // Movie Types
         public const string Movie = nameof(Movie);
 
@@ -57,6 +61,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { BaseItemKind.AudioBook, AudioBook },
             // Series: Supported in Collections, not in Playlists
             { BaseItemKind.Series, Series },
+            // Season: Supported in Collections, not in Playlists
+            { BaseItemKind.Season, Season },
             // MusicAlbum: Supported in Collections, not in Playlists
             { BaseItemKind.MusicAlbum, MusicAlbum }
         };
@@ -76,6 +82,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { AudioBook, BaseItemKind.AudioBook },
             // Series: Supported in Collections, not in Playlists
             { Series, BaseItemKind.Series },
+            // Season: Supported in Collections, not in Playlists
+            { Season, BaseItemKind.Season },
             // MusicAlbum: Supported in Collections, not in Playlists
             { MusicAlbum, BaseItemKind.MusicAlbum }
         };
@@ -89,7 +97,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// <summary>
         /// Gets non-audio media types (everything except Audio and AudioBook)
         /// </summary>
-        public static readonly string[] NonAudioTypes = [Movie, Episode, MusicVideo, Video, Photo, Book];
+        public static readonly string[] NonAudioTypes = [Movie, Episode, Season, MusicVideo, Video, Photo, Book];
 
         /// <summary>
         /// Gets audio-only media types (Audio, AudioBook)
@@ -104,7 +112,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// <summary>
         /// Gets TV media types (Episode and Series)
         /// </summary>
-        public static readonly string[] TV = [Episode, Series];
+        public static readonly string[] TV = [Episode, Series, Season];
 
         /// <summary>
         /// Gets music-related media types (Audio, AudioBook, MusicVideo)
