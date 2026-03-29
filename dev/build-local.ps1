@@ -28,6 +28,7 @@ Copy-Item -Path "..\images\logo.jpg" -Destination "$OUTPUT_DIR\logo.jpg"
 
 # Create the Configuration directory and copy the logging file for debug logs
 New-Item -ItemType Directory -Path "$OUTPUT_DIR\Configuration" -Force | Out-Null
+New-Item -ItemType Directory -Path "jellyfin-data\config\config" -Force | Out-Null
 Copy-Item -Path "logging.json" -Destination "jellyfin-data\config\config\logging.json"
 
 Write-Host ""
@@ -41,4 +42,4 @@ docker compose up --detach
 
 Write-Host ""
 Write-Host "Jellyfin container is up and running."
-Write-Host "You can access it at: http://localhost:8096" 
+Write-Host "You can access it at: http://localhost:8096"
