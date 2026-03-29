@@ -378,16 +378,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Validate media types before processing
                 _logger.LogDebug("Validating media types for playlist '{PlaylistName}': {MediaTypes}", dto.Name, dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "null");
 
-                if (dto.MediaTypes?.Contains(Core.Constants.MediaTypes.Series) == true)
+                var validation = ValidateUnsupportedMediaTypes(dto.MediaTypes, dto.Name);
+                if (!validation.IsValid)
                 {
-                    _logger.LogError("Smart playlist '{PlaylistName}' uses 'Series' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Series support. Skipping playlist refresh.", dto.Name);
-                    return (false, "Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.", string.Empty);
-                }
-
-                if (dto.MediaTypes?.Contains(Core.Constants.MediaTypes.MusicAlbum) == true)
-                {
-                    _logger.LogError("Smart playlist '{PlaylistName}' uses 'MusicAlbum' media type. MusicAlbum playlists are not supported due to Jellyfin playlist limitations. Use 'Audio' media type instead, or create a Collection for Album support. Skipping playlist refresh.", dto.Name);
-                    return (false, "MusicAlbum media type is not supported for Playlists. Use Audio media type, or create a Collection instead.", string.Empty);
+                    return validation;
                 }
 
                 if (dto.MediaTypes == null || dto.MediaTypes.Count == 0)
@@ -885,6 +879,39 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
         // Removed: legacy name-based lookup helper (no longer used after migration to JellyfinPlaylistId)
 
+        /// <summary>
+        /// Validates that the given media types do not contain types unsupported by playlists.
+        /// Returns (true, "", "") if valid, or (false, errorMessage, "") if an unsupported type is found.
+        /// </summary>
+        private (bool IsValid, string ErrorMessage, string Extra) ValidateUnsupportedMediaTypes(List<string>? mediaTypes, string playlistName)
+        {
+            if (mediaTypes?.Contains(Core.Constants.MediaTypes.Series) == true)
+            {
+                _logger.LogError(
+                    "Smart playlist '{PlaylistName}' uses '{MediaType}' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use '{SuggestedType}' media type instead, or create a Collection for Series support. Skipping playlist refresh.",
+                    playlistName, Core.Constants.MediaTypes.Series, Core.Constants.MediaTypes.Episode);
+                return (false, $"{Core.Constants.MediaTypes.Series} media type is not supported for Playlists. Use {Core.Constants.MediaTypes.Episode} media type, or create a Collection instead.", string.Empty);
+            }
+
+            if (mediaTypes?.Contains(Core.Constants.MediaTypes.Season) == true)
+            {
+                _logger.LogError(
+                    "Smart playlist '{PlaylistName}' uses '{MediaType}' media type. Season playlists are not supported due to Jellyfin playlist limitations. Use '{SuggestedType}' media type instead, or create a Collection for Season support. Skipping playlist refresh.",
+                    playlistName, Core.Constants.MediaTypes.Season, Core.Constants.MediaTypes.Episode);
+                return (false, $"{Core.Constants.MediaTypes.Season} media type is not supported for Playlists. Use {Core.Constants.MediaTypes.Episode} media type, or create a Collection instead.", string.Empty);
+            }
+
+            if (mediaTypes?.Contains(Core.Constants.MediaTypes.MusicAlbum) == true)
+            {
+                _logger.LogError(
+                    "Smart playlist '{PlaylistName}' uses '{MediaType}' media type. MusicAlbum playlists are not supported due to Jellyfin playlist limitations. Use '{SuggestedType}' media type instead, or create a Collection for Album support. Skipping playlist refresh.",
+                    playlistName, Core.Constants.MediaTypes.MusicAlbum, Core.Constants.MediaTypes.Audio);
+                return (false, $"{Core.Constants.MediaTypes.MusicAlbum} media type is not supported for Playlists. Use {Core.Constants.MediaTypes.Audio} media type, or create a Collection instead.", string.Empty);
+            }
+
+            return (true, string.Empty, string.Empty);
+        }
+
         private User? GetPlaylistUser(SmartPlaylistDto playlist)
         {
             // Parse User field and get the user
@@ -920,18 +947,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 dto != null ? $" for '{dto.Name}'" : "", 
                 mediaTypes != null ? string.Join(",", mediaTypes) : "null");
 
-            if (mediaTypes?.Contains(Core.Constants.MediaTypes.Series) == true)
+            var unsupportedCheck = ValidateUnsupportedMediaTypes(mediaTypes, dto?.Name ?? "Unknown");
+            if (!unsupportedCheck.IsValid)
             {
-                var playlistName = dto?.Name ?? "Unknown";
-                _logger?.LogError("Smart playlist '{PlaylistName}' uses 'Series' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Series support.", playlistName);
-                throw new InvalidOperationException("Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.");
-            }
-
-            if (mediaTypes?.Contains(Core.Constants.MediaTypes.MusicAlbum) == true)
-            {
-                var playlistName = dto?.Name ?? "Unknown";
-                _logger?.LogError("Smart playlist '{PlaylistName}' uses 'MusicAlbum' media type. MusicAlbum playlists are not supported due to Jellyfin playlist limitations. Use 'Audio' media type instead, or create a Collection for Album support.", playlistName);
-                throw new InvalidOperationException("MusicAlbum media type is not supported for Playlists. Use Audio media type, or create a Collection instead.");
+                throw new InvalidOperationException(unsupportedCheck.ErrorMessage);
             }
 
             if (mediaTypes == null || mediaTypes.Count == 0)
