@@ -384,6 +384,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     return (false, "Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.", string.Empty);
                 }
 
+                if (dto.MediaTypes?.Contains(Core.Constants.MediaTypes.Season) == true)
+                {
+                    _logger.LogError("Smart playlist '{PlaylistName}' uses 'Season' media type. Season playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Season support. Skipping playlist refresh.", dto.Name);
+                    return (false, "Season media type is not supported for Playlists. Use Episode media type, or create a Collection instead.", string.Empty);
+                }
+
                 if (dto.MediaTypes?.Contains(Core.Constants.MediaTypes.MusicAlbum) == true)
                 {
                     _logger.LogError("Smart playlist '{PlaylistName}' uses 'MusicAlbum' media type. MusicAlbum playlists are not supported due to Jellyfin playlist limitations. Use 'Audio' media type instead, or create a Collection for Album support. Skipping playlist refresh.", dto.Name);
@@ -925,6 +931,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 var playlistName = dto?.Name ?? "Unknown";
                 _logger?.LogError("Smart playlist '{PlaylistName}' uses 'Series' media type. Series playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Series support.", playlistName);
                 throw new InvalidOperationException("Series media type is not supported for Playlists. Use Episode media type, or create a Collection instead.");
+            }
+
+            if (mediaTypes?.Contains(Core.Constants.MediaTypes.Season) == true)
+            {
+                var playlistName = dto?.Name ?? "Unknown";
+                _logger?.LogError("Smart playlist '{PlaylistName}' uses 'Season' media type. Season playlists are not supported due to Jellyfin playlist limitations. Use 'Episode' media type instead, or create a Collection for Season support.", playlistName);
+                throw new InvalidOperationException("Season media type is not supported for Playlists. Use Episode media type, or create a Collection instead.");
             }
 
             if (mediaTypes?.Contains(Core.Constants.MediaTypes.MusicAlbum) == true)
