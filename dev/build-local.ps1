@@ -42,4 +42,4 @@ docker compose up --detach
 
 Write-Host ""
 Write-Host "Jellyfin container is up and running."
-Write-Host "You can access it at: http://localhost:8096" 
+Write-Host "You can access it at: http://localhost:8096"
