@@ -88,9 +88,9 @@
     // Media types constant
     SmartLists.mediaTypes = [
         { Value: "Movie", Label: "Movie" },
-        { Value: "Episode", Label: "Episode (TV Show)" },
         { Value: "Series", Label: "Series (TV Show)", CollectionOnly: true }, // Series can only be added to Collections, not Playlists
         { Value: "Season", Label: "Season (TV Show)", CollectionOnly: true }, // Season can only be added to Collections, not Playlists
+        { Value: "Episode", Label: "Episode (TV Show)" },
         { Value: "Audio", Label: "Audio (Music)" },
         { Value: "MusicAlbum", Label: "Album (Music)", CollectionOnly: true }, // MusicAlbum can only be added to Collections, not Playlists
         { Value: "MusicVideo", Label: "Music Video" },
