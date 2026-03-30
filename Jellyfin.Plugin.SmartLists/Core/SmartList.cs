@@ -867,6 +867,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Still need to apply sorting and limits to the collection/playlist results
                     try
                     {
+                        // Pre-compute Round Robin positions before sorting
+                        PrepareRoundRobinPositions(results, logger);
+
                         // Apply multiple orders in cascade
                         var orderedResults = ApplyMultipleOrders(results, user, userDataManager, logger, refreshCache);
 
@@ -1076,15 +1079,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         {
                             ruleBlockOrderDesc.GroupMappings = _itemGroupMappings;
                         }
-                        else if (order is RoundRobinOrder roundRobinOrder)
-                        {
-                            roundRobinOrder.PreComputePositions(expandedResults, reverseGroupOrder: false, logger: logger);
-                        }
-                        else if (order is RoundRobinOrderDesc roundRobinOrderDesc)
-                        {
-                            roundRobinOrderDesc.PreComputePositions(expandedResults, logger: logger);
-                        }
                     }
+
+                    // Pre-compute Round Robin positions before sorting
+                    PrepareRoundRobinPositions(expandedResults, logger);
 
                     // Apply multiple orders in cascade
                     var orderedResults = ApplyMultipleOrders(expandedResults, user, userDataManager, logger, refreshCache);
@@ -1229,6 +1227,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     //   then the global sort applies the Rule Block order while preserving these secondary sorts.
                     // For non-Rule Block ordering: this creates a minor redundancy (items sorted twice),
                     //   but per-group limits are primarily designed for Rule Block scenarios.
+                    PrepareRoundRobinPositions(groupItems, logger);
                     var sortedGroupItems = ApplyMultipleOrders(groupItems, user, userDataManager, logger, refreshCache).ToList();
 
                     // Filter out items that were already consumed by previous blocks
@@ -1913,13 +1912,45 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
+        /// Pre-computes Round Robin interleave positions for any RoundRobinOrder/RoundRobinOrderDesc in Orders.
+        /// Must be called before ApplyMultipleOrders() so ItemPositions are fresh for the given item set.
+        /// </summary>
+        /// <param name="items">The items to compute positions for.</param>
+        /// <param name="logger">Optional logger for debugging.</param>
+        private void PrepareRoundRobinPositions(IEnumerable<BaseItem> items, ILogger? logger)
+        {
+            if (Orders == null || Orders.Count == 0)
+            {
+                return;
+            }
+
+            // Materialize once so we don't enumerate multiple times
+            List<BaseItem>? materializedItems = null;
+
+            foreach (var order in Orders)
+            {
+                if (order is RoundRobinOrder roundRobinOrder)
+                {
+                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
+                    roundRobinOrder.PreComputePositions(materializedItems, reverseGroupOrder: false, logger: logger);
+                }
+                else if (order is RoundRobinOrderDesc roundRobinOrderDesc)
+                {
+                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
+                    roundRobinOrderDesc.PreComputePositions(materializedItems, logger: logger);
+                }
+            }
+        }
+
+        /// <summary>
         /// Applies multiple sorting orders in cascade to a collection of items.
         /// </summary>
-        /// <param name="items">The items to sort</param>
-        /// <param name="user">User for user-specific sorting</param>
-        /// <param name="userDataManager">User data manager for user-specific sorting</param>
-        /// <param name="logger">Optional logger for debugging</param>
-        /// <returns>The sorted collection of items</returns>
+        /// <param name="items">The items to sort.</param>
+        /// <param name="user">User for user-specific sorting.</param>
+        /// <param name="userDataManager">User data manager for user-specific sorting.</param>
+        /// <param name="logger">Optional logger for debugging.</param>
+        /// <param name="refreshCache">Refresh cache for performance.</param>
+        /// <returns>The sorted collection of items.</returns>
         private IEnumerable<BaseItem> ApplyMultipleOrders(IEnumerable<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
         {
             if (Orders == null || Orders.Count == 0)

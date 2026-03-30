@@ -89,7 +89,7 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 
 **How it works**:
 
-1. Items are grouped by the selected **Group By** field
+1. Items are grouped by **Rules Groups** (OR groups)
 2. Within each group, items are sorted in natural order (episodes by season/episode number, audio by disc/track number, other items by name)
 3. Groups are sorted alphabetically (or reverse for descending)
 4. Items are interleaved round-robin style: first item from each group, then second item from each group, and so on
