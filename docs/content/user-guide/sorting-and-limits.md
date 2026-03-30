@@ -89,7 +89,7 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 
 **How it works**:
 
-1. Items are grouped by **Rules Groups** (OR groups)
+1. Items are grouped by the **Group By** field you select (e.g., Series Name groups episodes by their show)
 2. Within each group, items are sorted in natural order (episodes by season/episode number, audio by disc/track number, other items by name)
 3. Groups are sorted alphabetically (or reverse for descending)
 4. Items are interleaved round-robin style: first item from each group, then second item from each group, and so on
@@ -111,6 +111,16 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 
 (Show B only had 2 episodes, so it's skipped from round 3 onward.)
 
+**Configuration**:
+
+1. Add rules that match the episodes you want (e.g., `Playback Status = Unplayed`)
+2. Select **Round Robin (Interleave)** as your sort
+3. Choose the **Group By** field (e.g., Series Name for TV episodes)
+4. Optionally set Sort Order to control group ordering (Ascending = A→Z, Descending = Z→A)
+
+!!! tip "Keep it simple"
+    You do **not** need separate OR blocks per show/album. A single rule block (e.g., `Playback Status = Unplayed`) is enough — the Round Robin sort automatically groups and interleaves items by the Group By field you choose.
+
 **Available Group By fields**:
 
 | Field | Available when |
@@ -122,10 +132,13 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 | Studio (first) | All media types |
 
 !!! tip "Combining with limits"
-    Use **Max Items** to create a fixed-length "channel" playlist. 
+    Use **Max Items** to create a fixed-length "channel" playlist.
 
 !!! note "Multi-value fields"
     For Genre and Studio, items are grouped by their **first** value. For example, a movie tagged "Action, Comedy" would be placed in the "Action" group.
+
+!!! warning "NextUnwatched vs Playback Status"
+    If you want to interleave **all** unwatched episodes, use `Playback Status = Unplayed`. The `Next Unwatched = Yes` filter only returns 1 episode per series (the very next one to watch), which limits Round Robin to at most one item per show.
 
 ### External List Order
 Sort items in the same order as the external list they were matched from. Only available when using the "External List" filter field in your rules.

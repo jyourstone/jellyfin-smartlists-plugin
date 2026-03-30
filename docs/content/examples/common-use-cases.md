@@ -65,10 +65,13 @@ Here are some popular playlist and collection types you can create:
 Create a playlist that cycles through episodes from multiple shows, like a TV channel:
 
 - **Media Types**: Episode
-- **Playback Status** = Unplayed (or use **Next Unwatched** = True for only next episodes)
+- **Playback Status** = Unplayed
 - **Sort by**: Round Robin (Interleave), **Group By**: Series Name
 
 Result: Episodes interleave across shows — Show A Ep1, Show B Ep1, Show C Ep1, Show A Ep2, Show B Ep2, etc. When a show runs out of episodes, it's skipped and the remaining shows continue.
+
+!!! note
+    Use `Playback Status = Unplayed` (not `Next Unwatched = Yes`) to get all unwatched episodes. `Next Unwatched` only returns 1 episode per series.
 
 ### Music Album Sampler (Round Robin)
 Create a playlist that samples tracks from different albums:
