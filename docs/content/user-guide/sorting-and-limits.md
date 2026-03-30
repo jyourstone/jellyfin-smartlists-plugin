@@ -84,6 +84,49 @@ Preserves the natural grouping from OR blocks by keeping items from each block t
 !!! note "Requires Multiple OR Blocks"
     This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
 
+### Round Robin (Interleave)
+Interleaves items across groups defined by a field you choose (e.g., Series Name, Album Name, Artist, Genre, or Studio). This creates a "TV channel" effect where episodes cycle through shows one at a time.
+
+**How it works**:
+
+1. Items are grouped by **Rules Groups** (OR groups)
+2. Within each group, items are sorted in natural order (episodes by season/episode number, audio by disc/track number, other items by name)
+3. Groups are sorted alphabetically (or reverse for descending)
+4. Items are interleaved round-robin style: first item from each group, then second item from each group, and so on
+5. When a group runs out of items, it is skipped
+
+**Example** — TV channel playlist grouped by Series Name:
+
+| Position | Item |
+|----------|------|
+| 1 | Show A - S01E01 |
+| 2 | Show B - S01E01 |
+| 3 | Show C - S01E01 |
+| 4 | Show A - S01E02 |
+| 5 | Show B - S01E02 |
+| 6 | Show C - S01E02 |
+| 7 | Show A - S01E03 |
+| 8 | Show C - S01E03 |
+| 9 | Show C - S01E04 |
+
+(Show B only had 2 episodes, so it's skipped from round 3 onward.)
+
+**Available Group By fields**:
+
+| Field | Available when |
+|-------|---------------|
+| Series Name | Episode media type |
+| Album Name | Audio or Music Video media type |
+| Artist | Audio or Music Video media type |
+| Genre (first) | All media types |
+| Studio (first) | All media types |
+
+!!! tip "Combining with limits"
+    Use **Max Items** to create a fixed-length "channel" playlist. 
+
+!!! note "Multi-value fields"
+    For Genre and Studio, items are grouped by their **first** value. For example, a movie tagged "Action, Comedy" would be placed in the "Action" group.
+
 ### External List Order
 Sort items in the same order as the external list they were matched from. Only available when using the "External List" filter field in your rules.
 
