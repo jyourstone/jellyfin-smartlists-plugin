@@ -65,6 +65,7 @@
         { value: 'Resolution', label: 'Resolution' },
         { value: 'Rule Block Order', label: 'Rule Block Order' },
         { value: 'External List Order', label: 'External List Order' },
+        { value: 'Round Robin', label: 'Round Robin (Interleave)' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'Default' }
     ];
@@ -72,6 +73,15 @@
     SmartLists.SORT_ORDER_OPTIONS = [
         { value: 'Ascending', label: 'Ascending' },
         { value: 'Descending', label: 'Descending' }
+    ];
+
+    // Fields available for Round Robin grouping, filtered by media type in the UI
+    SmartLists.ROUND_ROBIN_GROUP_FIELDS = [
+        { value: 'SeriesName', label: 'Series Name', mediaTypes: ['Episode'] },
+        { value: 'AlbumName', label: 'Album Name', mediaTypes: ['Audio', 'MusicVideo'] },
+        { value: 'Artist', label: 'Artist', mediaTypes: ['Audio', 'MusicVideo'] },
+        { value: 'Genres', label: 'Genre (first)', mediaTypes: null },
+        { value: 'Studios', label: 'Studio (first)', mediaTypes: null }
     ];
 
     // Sort fields that support child value aggregation (for collections containing collections/playlists)

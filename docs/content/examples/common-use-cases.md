@@ -61,6 +61,25 @@ Here are some popular playlist and collection types you can create:
 ### Unplayed Sitcom Episodes
 - **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
 
+### TV Channel Playlist (Round Robin)
+Create a playlist that cycles through episodes from multiple shows, like a TV channel:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed (or use **Next Unwatched** = True for only next episodes)
+- **Sort by**: Round Robin (Interleave), **Group By**: Series Name
+
+Result: Episodes interleave across shows — Show A Ep1, Show B Ep1, Show C Ep1, Show A Ep2, Show B Ep2, etc. When a show runs out of episodes, it's skipped and the remaining shows continue.
+
+### Music Album Sampler (Round Robin)
+Create a playlist that samples tracks from different albums:
+
+- **Media Types**: Audio
+- **Genre** contains "Rock"
+- **Sort by**: Round Robin (Interleave), **Group By**: Album Name
+- **Max Items**: 50
+
+Result: Track 1 from Album A, Track 1 from Album B, Track 2 from Album A, Track 2 from Album B, etc.
+
 ### Oscar-Nominated Movies
 - **External List** = `https://www.imdb.com/event/ev0000003/2025/1/`
 - All movies nominated at the 2025 Academy Awards

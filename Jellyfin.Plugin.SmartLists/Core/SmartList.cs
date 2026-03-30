@@ -108,7 +108,19 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             return OrderFactory.CreateOrder(so.SortBy);
                         }
                         // For all other sorts, append the sort order
-                        return OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
+                        var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
+
+                        // Pass GroupByField to Round Robin orders
+                        if (order is RoundRobinOrder rr)
+                        {
+                            rr.GroupByField = so.GroupByField;
+                        }
+                        else if (order is RoundRobinOrderDesc rrDesc)
+                        {
+                            rrDesc.GroupByField = so.GroupByField;
+                        }
+
+                        return order;
                     })
                     .Where(o => o != null)
                     .ToList();
@@ -1063,6 +1075,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         else if (order is Orders.RuleBlockOrderDesc ruleBlockOrderDesc)
                         {
                             ruleBlockOrderDesc.GroupMappings = _itemGroupMappings;
+                        }
+                        else if (order is RoundRobinOrder roundRobinOrder)
+                        {
+                            roundRobinOrder.PreComputePositions(expandedResults, reverseGroupOrder: false, logger: logger);
+                        }
+                        else if (order is RoundRobinOrderDesc roundRobinOrderDesc)
+                        {
+                            roundRobinOrderDesc.PreComputePositions(expandedResults, logger: logger);
                         }
                     }
 
@@ -2126,6 +2146,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is Orders.RuleBlockOrderDesc ||
                    order is ExternalListOrderDesc ||
                    order is LastEpisodeAirDateOrderDesc ||
+                   order is RoundRobinOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 
@@ -2911,6 +2932,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "External List Order Descending", () => new ExternalListOrderDesc() },
             { "LastEpisodeAirDate Ascending", () => new LastEpisodeAirDateOrder() },
             { "LastEpisodeAirDate Descending", () => new LastEpisodeAirDateOrderDesc() },
+            { "Round Robin Ascending", () => new RoundRobinOrder() },
+            { "Round Robin Descending", () => new RoundRobinOrderDesc() },
             { "NoOrder", () => new NoOrder() },
         };
 

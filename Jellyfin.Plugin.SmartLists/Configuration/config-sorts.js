@@ -115,7 +115,7 @@
     };
 
     // Helper function to sync Sort Order UI based on Sort By value
-    SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect) {
+    SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer) {
         if (!sortOrderContainer || !sortOrderSelect) return;
         
         // Hide Sort Order for Random and Default (they don't use ordering)
@@ -128,6 +128,11 @@
             if (sortByValue === 'Similarity') {
                 sortOrderSelect.value = 'Descending';
             }
+        }
+
+        // Show/hide GroupBy dropdown for Round Robin
+        if (groupByContainer) {
+            groupByContainer.style.display = (sortByValue === 'Round Robin') ? '' : 'none';
         }
     };
     
@@ -200,6 +205,22 @@
             return SmartLists.shouldShowSortOption(opt.value, selectedMediaTypes, hasSimilarTo, hasExternalList);
         });
     };
+
+    // Get Round Robin group-by fields filtered by current media types
+    SmartLists.getFilteredRoundRobinFields = function(page) {
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
+        return SmartLists.ROUND_ROBIN_GROUP_FIELDS.filter(function(field) {
+            // Fields with null mediaTypes are always shown (e.g., Genres, Studios)
+            if (!field.mediaTypes) return true;
+            // If no media types selected, show all
+            if (!selectedMediaTypes || selectedMediaTypes.length === 0) return true;
+            // Show if any of the field's mediaTypes match the selected types
+            for (var i = 0; i < field.mediaTypes.length; i++) {
+                if (selectedMediaTypes.indexOf(field.mediaTypes[i]) !== -1) return true;
+            }
+            return false;
+        });
+    };
     
     SmartLists.createSortBox = function(page, sortData) {
         const sortId = 'sort-' + Date.now() + '-' + Math.random();
@@ -259,6 +280,19 @@
         ignoreArticlesField.container.style.display = shouldShowIgnoreArticles ? '' : 'none';
         fieldsContainer.appendChild(ignoreArticlesField.container);
 
+        // Round Robin Group By field (visible only when Round Robin is selected)
+        const groupByField = SmartLists.createSortField('Group By', 'sort-groupby-' + sortId, 'select');
+        groupByField.container.style.minWidth = '200px';
+        groupByField.container.style.maxWidth = '200px';
+        var filteredGroupFields = SmartLists.getFilteredRoundRobinFields(page);
+        var savedGroupBy = sortData ? sortData.GroupByField : null;
+        var groupByOptions = filteredGroupFields.map(function(f) {
+            return { value: f.value, label: f.label, selected: f.value === savedGroupBy };
+        });
+        SmartLists.populateSelectElement(groupByField.input, groupByOptions);
+        groupByField.container.style.display = (actualSortBy === 'Round Robin') ? '' : 'none';
+        fieldsContainer.appendChild(groupByField.container);
+
         box.appendChild(fieldsContainer);
 
         // Remove button (positioned absolutely within box)
@@ -273,7 +307,7 @@
 
         // Add event listener to sync Sort Order UI and checkbox visibility when Sort By changes
         sortByField.input.addEventListener('change', function() {
-            SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input);
+            SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input, groupByField.container);
             // Show/hide ignore articles checkbox based on Sort By value
             const showIgnoreArticles = (this.value === 'Name' || this.value === 'SeriesName');
             ignoreArticlesField.container.style.display = showIgnoreArticles ? '' : 'none';
@@ -284,7 +318,7 @@
         });
 
         // Initialize Sort Order UI based on current Sort By value
-        SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input);
+        SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input, groupByField.container);
 
         return box;
     };
@@ -398,10 +432,20 @@
                 sortBy = sortBy + ' (Ignore Articles)';
             }
 
-            sorts.push({
+            var sortEntry = {
                 SortBy: sortBy,
                 SortOrder: sortOrder
-            });
+            };
+
+            // Include GroupByField for Round Robin sort
+            if (sortBy === 'Round Robin') {
+                var groupBySelect = box.querySelector('[id^="sort-groupby-"]');
+                if (groupBySelect && groupBySelect.value) {
+                    sortEntry.GroupByField = groupBySelect.value;
+                }
+            }
+
+            sorts.push(sortEntry);
         });
         
         return sorts;
@@ -449,7 +493,22 @@
             }
 
             // Sync Sort Order UI for the effective value
-            SmartLists.syncSortOrderUI(effectiveSortValue, sortOrderContainer, sortOrderSelect);
+            var groupByContainer = box.querySelector('[id^="sort-groupby-"]');
+            groupByContainer = groupByContainer ? groupByContainer.closest('.sort-field-container') : null;
+            SmartLists.syncSortOrderUI(effectiveSortValue, sortOrderContainer, sortOrderSelect, groupByContainer);
+
+            // Update Round Robin Group By dropdown options
+            if (groupByContainer) {
+                var groupBySelect = box.querySelector('select[id^="sort-groupby-"]');
+                if (groupBySelect) {
+                    var currentGroupBy = groupBySelect.value;
+                    var filteredGroupFields = SmartLists.getFilteredRoundRobinFields(page);
+                    var groupByOptions = filteredGroupFields.map(function(f) {
+                        return { value: f.value, label: f.label, selected: f.value === currentGroupBy };
+                    });
+                    SmartLists.populateSelectElement(groupBySelect, groupByOptions);
+                }
+            }
 
             // Update ignore article checkbox visibility
             const ignoreArticlesContainer = box.querySelector('.ignore-article-container');
@@ -497,7 +556,9 @@
             if (sortOrderSelect) {
                 sortOrderSelect.value = newOrder;
             }
-            SmartLists.syncSortOrderUI(newSort, sortOrderContainer, sortOrderSelect);
+            var groupByContainer = sortBoxes[0].querySelector('[id^="sort-groupby-"]');
+            groupByContainer = groupByContainer ? groupByContainer.closest('.sort-field-container') : null;
+            SmartLists.syncSortOrderUI(newSort, sortOrderContainer, sortOrderSelect, groupByContainer);
         }
     };
 
