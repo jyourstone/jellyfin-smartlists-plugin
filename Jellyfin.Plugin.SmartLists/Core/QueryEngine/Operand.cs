@@ -96,6 +96,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Series name field - for episodes, contains the name of the parent series
         public string SeriesName { get; set; } = string.Empty;
 
+        // Series status field - for Series items (Continuing, Ended, Unreleased)
+        public string SeriesStatus { get; set; } = string.Empty;
+
         // Production locations - countries/regions where the content was produced
         public List<string> ProductionLocations { get; set; } = [];
 

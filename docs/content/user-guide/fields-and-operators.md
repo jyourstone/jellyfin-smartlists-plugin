@@ -18,6 +18,7 @@ Fields are organized into categories that match the dropdown menu in the UI. Som
 | **Production Year** | Original production year |
 | **Release Date** | Original release date of the media |
 | **Last Episode Air Date** | Air date of the most recent episode (TV series only). Useful for finding actively airing shows. |
+| **Series Status** | Current status of a TV series — select from a dropdown: Continuing, Ended, or Unreleased. Only available when the **Series** media type is selected. |
 | **Production Locations** | Countries/regions where the content was produced (e.g., "United States", "Japan") |
 | **Extra Type** | Type of extra — select from a dropdown (Behind the Scenes, Deleted Scene, Featurette, Trailer, etc.). Requires **Include Extras** enabled. |
 | **IMDb ID** | IMDb identifier (e.g., `tt15574124`). Use **is in** with semicolons to match multiple IDs. |

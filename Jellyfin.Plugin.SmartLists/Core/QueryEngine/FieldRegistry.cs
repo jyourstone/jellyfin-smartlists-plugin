@@ -227,6 +227,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "ProductionYear", "Production Year", FieldType.Numeric, FieldCategory.Content, NumericOperators, ExtractionGroup.Dates);
             AddField(fields, "ReleaseDate", "Release Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.Dates);
             AddField(fields, "LastEpisodeAirDate", "Last Episode Air Date", FieldType.Date, FieldCategory.Content, DateOperators, ExtractionGroup.LastEpisodeAirDate);
+            AddField(fields, "SeriesStatus", "Series Status", FieldType.Simple, FieldCategory.Content, SimpleOperators);
             AddField(fields, "ProductionLocations", "Production Locations", FieldType.List, FieldCategory.Content, MultiValueOperators, ExtractionGroup.TextContent);
 
             // Video Fields
