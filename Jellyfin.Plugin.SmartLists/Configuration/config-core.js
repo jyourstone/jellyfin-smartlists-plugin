@@ -27,7 +27,7 @@
         NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels'],
         DATE_FIELDS: ['DateCreated', 'DateLastRefreshed', 'DateLastSaved', 'DateModified', 'ReleaseDate', 'LastPlayedDate', 'LastEpisodeAirDate'],
         BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched'],
-        SIMPLE_FIELDS: ['ItemType'],
+        SIMPLE_FIELDS: ['ItemType', 'SeriesStatus'],
         RESOLUTION_FIELDS: ['Resolution'],
         STRING_FIELDS: ['SimilarTo', 'Name', 'Album', 'SeriesName', 'OfficialRating', 'Overview', 'FileName', 'FolderPath', 'AudioCodec', 'AudioProfile', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType', 'PlaybackStatus', 'CustomRating', 'ImdbId', 'TmdbId', 'TvdbId'],
         USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'NextUnwatched', 'LastPlayedDate']

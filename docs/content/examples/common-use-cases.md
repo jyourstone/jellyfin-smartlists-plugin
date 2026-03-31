@@ -61,6 +61,18 @@ Here are some popular playlist and collection types you can create:
 ### Unplayed Sitcom Episodes
 - **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
 
+### Currently Airing Series Collection
+- **Media Types**: Series
+- **Series Status** = Continuing
+- **List Type**: Collection
+- Creates a collection of all TV series that are currently airing new episodes
+
+### Ended Series to Binge
+- **Media Types**: Series
+- **Series Status** = Ended AND **Community Rating** greater than 7
+- **List Type**: Collection
+- Curate a collection of completed, highly-rated series perfect for binge-watching
+
 ### TV Channel Playlist (Round Robin)
 Create a playlist that cycles through episodes from multiple shows, like a TV channel:
 

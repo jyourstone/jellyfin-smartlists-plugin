@@ -23,6 +23,12 @@
         { Value: 'Unknown', Label: 'Unknown' }
     ];
 
+    SmartLists.SERIES_STATUS_OPTIONS = [
+        { Value: 'Continuing', Label: 'Continuing' },
+        { Value: 'Ended', Label: 'Ended' },
+        { Value: 'Unreleased', Label: 'Unreleased' }
+    ];
+
     // ===== FIELD TYPE COMPATIBILITY =====
     // Returns the category of a field type for value preservation purposes
     SmartLists.getFieldTypeCategory = function (fieldValue) {
@@ -35,6 +41,7 @@
         if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'resolution';
         if (fieldValue === 'PlaybackStatus') return 'playback';
         if (fieldValue === 'ExtraType') return 'extratype';
+        if (fieldValue === 'SeriesStatus') return 'seriesstatus';
         // Default to string for STRING_FIELDS and any unknown fields
         return 'string';
     };
@@ -121,7 +128,7 @@
         // Restore previous operator if it's still valid, otherwise set default
         if (previousOperator && allowedOperators.some(function (op) { return op.Value === previousOperator; })) {
             operatorSelect.value = previousOperator;
-        } else if (fieldValue === 'ItemType' || SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
+        } else if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1 || SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
             operatorSelect.value = 'Equal';
         } else {
             operatorSelect.value = '';
@@ -173,6 +180,8 @@
             SmartLists.createTagBasedInput(valueContainer, currentValue);
         } else if (fieldValue === 'ExtraType') {
             SmartLists.handleExtraTypeFieldInput(valueContainer, currentValue);
+        } else if (fieldValue === 'SeriesStatus') {
+            SmartLists.handleSeriesStatusFieldInput(valueContainer, currentValue);
         } else if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleSimpleFieldInput(valueContainer, currentValue);
         } else if (fieldValue === 'PlaybackStatus') {
@@ -263,6 +272,25 @@
         select.style.width = '100%';
 
         SmartLists.EXTRA_TYPE_OPTIONS.forEach(function (opt) {
+            const option = document.createElement('option');
+            option.value = opt.Value;
+            option.textContent = opt.Label;
+            if (currentValue && opt.Value === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        valueContainer.appendChild(select);
+    };
+
+    SmartLists.handleSeriesStatusFieldInput = function (valueContainer, currentValue) {
+        const select = document.createElement('select');
+        select.className = 'emby-select rule-value-input';
+        select.setAttribute('is', 'emby-select');
+        select.style.width = '100%';
+
+        SmartLists.SERIES_STATUS_OPTIONS.forEach(function (opt) {
             const option = document.createElement('option');
             option.value = opt.Value;
             option.textContent = opt.Label;
@@ -443,6 +471,7 @@
 
             // Try to restore the value if it's appropriate for the new field type
             if (fieldValue === 'ExtraType' || fieldValue === 'PlaybackStatus' ||
+                fieldValue === 'SeriesStatus' ||
                 SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1 ||
                 SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
                 SmartLists.restoreSelectValue(newValueInput, currentValue);
@@ -1870,7 +1899,8 @@
 
         // Get selected media types for filtering
         const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
-        const filteredFieldGroups = SmartLists.filterFieldsByMediaType(fieldGroups, selectedMediaTypes);
+        const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
+        const filteredFieldGroups = SmartLists.filterFieldsByMediaType(fieldGroups, selectedMediaTypes, listType);
 
         // Get the current selected value before clearing
         const currentValue = selectElement.value;
@@ -1926,6 +1956,7 @@
 
         // Compute selected media types once before the loop for better performance
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
+        const listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
 
         const allRuleRows = page.querySelectorAll('.rule-row');
         allRuleRows.forEach(function (ruleRow) {
@@ -1935,7 +1966,7 @@
                 SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page);
 
                 // If the current field is no longer valid, clear it and reset the rule
-                if (currentValue && !SmartLists.shouldShowField(currentValue, selectedMediaTypes)) {
+                if (currentValue && !SmartLists.shouldShowField(currentValue, selectedMediaTypes, listType)) {
                     fieldSelect.value = '';
                     const valueContainer = ruleRow.querySelector('.rule-value-container');
                     if (valueContainer) {
@@ -1980,9 +2011,12 @@
         });
     };
 
-    SmartLists.filterFieldsByMediaType = function (fieldGroups, selectedMediaTypes) {
-        if (!selectedMediaTypes || selectedMediaTypes.length === 0) {
-            // No filtering when no media types selected - show all fields
+    SmartLists.filterFieldsByMediaType = function (fieldGroups, selectedMediaTypes, listType) {
+        var needsMediaTypeFiltering = selectedMediaTypes && selectedMediaTypes.length > 0;
+        var needsListTypeFiltering = listType && listType !== 'Collection';
+
+        if (!needsMediaTypeFiltering && !needsListTypeFiltering) {
+            // No filtering needed at all - show all fields
             return fieldGroups;
         }
 
@@ -1993,7 +2027,7 @@
             const fields = fieldGroups[groupKey];
             if (fields && Array.isArray(fields)) {
                 filteredGroups[groupKey] = fields.filter(function (field) {
-                    return SmartLists.shouldShowField(field.Value, selectedMediaTypes);
+                    return SmartLists.shouldShowField(field.Value, selectedMediaTypes, listType);
                 });
             } else {
                 filteredGroups[groupKey] = fields;
@@ -2003,8 +2037,15 @@
         return filteredGroups;
     };
 
-    // Field visibility definitions based on media types
-    SmartLists.shouldShowField = function (fieldValue, selectedMediaTypes) {
+    // Field visibility definitions based on media types and list type
+    SmartLists.shouldShowField = function (fieldValue, selectedMediaTypes, listType) {
+        // Collection-only fields — hide regardless of media type selection.
+        // Series items only exist in Collections, not Playlists, so SeriesStatus is meaningless there.
+        // LastEpisodeAirDate is intentionally NOT restricted here — it applies to Episode items too.
+        if (fieldValue === 'SeriesStatus' && listType !== 'Collection') {
+            return false;
+        }
+
         // If no media types selected, show all fields
         if (!selectedMediaTypes || selectedMediaTypes.length === 0) {
             return true;
@@ -2028,7 +2069,7 @@
         }
 
         // Series-only fields (TV Shows)
-        if (['LastEpisodeAirDate'].indexOf(fieldValue) !== -1) {
+        if (['LastEpisodeAirDate', 'SeriesStatus'].indexOf(fieldValue) !== -1) {
             return hasSeries;
         }
 

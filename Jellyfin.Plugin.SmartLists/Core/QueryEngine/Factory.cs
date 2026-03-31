@@ -2516,6 +2516,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Extract ExtraType (zero cost - direct property via reflection, cached)
             operand.ExtraType = GetExtraTypeName(baseItem);
 
+            // Extract SeriesStatus (zero cost - direct property access for Series items)
+            if (baseItem is MediaBrowser.Controller.Entities.TV.Series series)
+            {
+                operand.SeriesStatus = series.Status?.ToString() ?? string.Empty;
+            }
+
             // Extract series name for episodes - only when needed for performance
             if (extractSeriesName)
             {
