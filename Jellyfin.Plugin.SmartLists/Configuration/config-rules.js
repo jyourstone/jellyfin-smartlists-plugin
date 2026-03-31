@@ -2039,7 +2039,9 @@
 
     // Field visibility definitions based on media types and list type
     SmartLists.shouldShowField = function (fieldValue, selectedMediaTypes, listType) {
-        // Collection-only fields — hide regardless of media type selection
+        // Collection-only fields — hide regardless of media type selection.
+        // Series items only exist in Collections, not Playlists, so SeriesStatus is meaningless there.
+        // LastEpisodeAirDate is intentionally NOT restricted here — it applies to Episode items too.
         if (fieldValue === 'SeriesStatus' && listType !== 'Collection') {
             return false;
         }

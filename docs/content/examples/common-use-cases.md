@@ -71,7 +71,7 @@ Here are some popular playlist and collection types you can create:
 - **Media Types**: Series
 - **Series Status** = Ended AND **Community Rating** greater than 7
 - **List Type**: Collection
-- Curate a collection of completed, highly-rated series perfect for binge watching
+- Curate a collection of completed, highly-rated series perfect for binge-watching
 
 ### TV Channel Playlist (Round Robin)
 Create a playlist that cycles through episodes from multiple shows, like a TV channel:
