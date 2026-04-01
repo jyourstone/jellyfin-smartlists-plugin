@@ -13,13 +13,12 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SmartLists.Core.Orders
 {
     /// <summary>
-    /// Sorts items by interleaving across groups defined by a configurable field.
-    /// For example, grouping by SeriesName produces: Show A Ep1, Show B Ep1, Show C Ep1, Show A Ep2, ...
+    /// Base class for all round-robin sort orders.
+    /// Groups items by a configurable field and interleaves them round-robin;
+    /// subclasses control only the group ordering strategy via <see cref="OrderGroupKeys"/>.
     /// </summary>
-    public class RoundRobinOrder : Order
+    public abstract class RoundRobinBase : Order
     {
-        public override string Name => "Round Robin Ascending";
-
         /// <summary>
         /// The field used to group items (e.g., "SeriesName", "AlbumName", "Artist", "Genres", "Studios").
         /// Set by SmartList before sorting.
@@ -33,17 +32,50 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public ConcurrentDictionary<Guid, int> ItemPositions { get; set; } = new();
 
         /// <summary>
-        /// Pre-computes interleave positions for all items.
-        /// Groups items by the configured field, sorts within each group by natural order,
-        /// sorts groups alphabetically, then assigns positions via round-robin interleaving.
+        /// Determines how group keys are ordered before interleaving.
         /// </summary>
-        public void PreComputePositions(IEnumerable<BaseItem> items, bool reverseGroupOrder = false, ILogger? logger = null)
-        {
-            Func<IEnumerable<string>, List<string>> orderKeys = reverseGroupOrder
-                ? keys => keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList()
-                : keys => keys.OrderBy(k => k, OrderUtilities.SharedNaturalComparer).ToList();
+        protected abstract List<string> OrderGroupKeys(IEnumerable<string> keys);
 
-            ItemPositions = BuildInterleavedPositions(items, GroupByField, orderKeys, "RoundRobinOrder", logger);
+        /// <summary>
+        /// Pre-computes interleave positions for all items using the subclass group ordering strategy.
+        /// Groups items by the configured field, sorts within each group by natural order,
+        /// orders groups via <see cref="OrderGroupKeys"/>, then assigns positions via round-robin interleaving.
+        /// </summary>
+        public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
+        {
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger);
+        }
+
+        public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
+        {
+            if (ItemPositions.Count == 0)
+            {
+                return items;
+            }
+
+            return items.OrderBy(item =>
+                ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue);
+        }
+
+        public override IEnumerable<BaseItem> OrderBy(
+            IEnumerable<BaseItem> items,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return OrderBy(items);
+        }
+
+        public override IComparable GetSortKey(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            Dictionary<Guid, int>? itemRandomKeys = null,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
         }
 
         /// <summary>
@@ -107,38 +139,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logPrefix, positions.Count, groups.Count);
 
             return positions;
-        }
-
-        public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
-        {
-            if (ItemPositions.Count == 0)
-            {
-                return items;
-            }
-
-            return items.OrderBy(item =>
-                ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue);
-        }
-
-        public override IEnumerable<BaseItem> OrderBy(
-            IEnumerable<BaseItem> items,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return OrderBy(items);
-        }
-
-        public override IComparable GetSortKey(
-            BaseItem item,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            Dictionary<Guid, int>? itemRandomKeys = null,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
         }
 
         /// <summary>
@@ -217,64 +217,47 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 a.SortName ?? a.Name ?? string.Empty,
                 b.SortName ?? b.Name ?? string.Empty);
         }
+
+        /// <summary>
+        /// Fisher-Yates in-place shuffle.
+        /// </summary>
+        internal static void Shuffle<T>(IList<T> list, Random rng)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+#pragma warning disable CA5394
+                int j = rng.Next(i + 1);
+#pragma warning restore CA5394
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sorts items by interleaving across groups defined by a configurable field.
+    /// Groups are ordered alphabetically (A→Z).
+    /// For example, grouping by SeriesName produces: Show A Ep1, Show B Ep1, Show C Ep1, Show A Ep2, ...
+    /// </summary>
+    public class RoundRobinOrder : RoundRobinBase
+    {
+        public override string Name => "Round Robin Ascending";
+
+        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
+        {
+            return keys.OrderBy(k => k, OrderUtilities.SharedNaturalComparer).ToList();
+        }
     }
 
     /// <summary>
     /// Round Robin sort with groups in descending (Z→A) order.
     /// </summary>
-    public class RoundRobinOrderDesc : Order
+    public class RoundRobinOrderDesc : RoundRobinBase
     {
         public override string Name => "Round Robin Descending";
 
-        /// <inheritdoc cref="RoundRobinOrder.GroupByField"/>
-        public string? GroupByField { get; set; }
-
-        /// <inheritdoc cref="RoundRobinOrder.ItemPositions"/>
-        public ConcurrentDictionary<Guid, int> ItemPositions { get; set; } = new();
-
-        /// <summary>
-        /// Pre-computes interleave positions with groups in reverse alphabetical order.
-        /// </summary>
-        public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
+        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
         {
-            ItemPositions = RoundRobinOrder.BuildInterleavedPositions(
-                items,
-                GroupByField,
-                keys => keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList(),
-                "RoundRobinOrderDesc",
-                logger);
-        }
-
-        public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
-        {
-            if (ItemPositions.Count == 0)
-            {
-                return items;
-            }
-
-            return items.OrderBy(item =>
-                ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue);
-        }
-
-        public override IEnumerable<BaseItem> OrderBy(
-            IEnumerable<BaseItem> items,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return OrderBy(items);
-        }
-
-        public override IComparable GetSortKey(
-            BaseItem item,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            Dictionary<Guid, int>? itemRandomKeys = null,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
+            return keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList();
         }
     }
 
@@ -282,64 +265,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
     /// Round Robin sort with groups in random order. Each refresh produces a different
     /// group interleaving while preserving natural order within each group.
     /// </summary>
-    public class RoundRobinRandomOrder : Order
+    public class RoundRobinRandomOrder : RoundRobinBase
     {
         public override string Name => "Random Round Robin";
 
-        /// <inheritdoc cref="RoundRobinOrder.GroupByField"/>
-        public string? GroupByField { get; set; }
-
-        /// <inheritdoc cref="RoundRobinOrder.ItemPositions"/>
-        public ConcurrentDictionary<Guid, int> ItemPositions { get; set; } = new();
-
-        /// <summary>
-        /// Pre-computes interleave positions with groups in random order.
-        /// Uses a time-based seed so each refresh produces a different shuffle.
-        /// </summary>
-        public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
+        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
         {
-#pragma warning disable CA5394
-            var random = new Random((int)(DateTime.Now.Ticks & 0x7FFFFFFF));
-            ItemPositions = RoundRobinOrder.BuildInterleavedPositions(
-                items,
-                GroupByField,
-                keys => keys.OrderBy(_ => random.Next()).ToList(),
-                "RoundRobinRandomOrder",
-                logger);
-#pragma warning restore CA5394
+            var list = keys.ToList();
+            Shuffle(list, Random.Shared);
+            return list;
         }
-
-        public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
-        {
-            if (ItemPositions.Count == 0)
-            {
-                return items;
-            }
-
-            return items.OrderBy(item =>
-                ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue);
-        }
-
-        public override IEnumerable<BaseItem> OrderBy(
-            IEnumerable<BaseItem> items,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return OrderBy(items);
-        }
-
-        public override IComparable GetSortKey(
-            BaseItem item,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            Dictionary<Guid, int>? itemRandomKeys = null,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
-        }
-
     }
 }

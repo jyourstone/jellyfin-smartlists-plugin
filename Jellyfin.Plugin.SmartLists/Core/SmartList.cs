@@ -110,21 +110,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         if (so.SortBy == "Random Round Robin")
                         {
-                            var rrRandom = (RoundRobinRandomOrder)OrderFactory.CreateOrder(so.SortBy);
+                            var rrRandom = (RoundRobinBase)OrderFactory.CreateOrder(so.SortBy);
                             rrRandom.GroupByField = so.GroupByField;
                             return rrRandom;
                         }
                         // For all other sorts, append the sort order
                         var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
 
-                        // Pass GroupByField to Round Robin orders
-                        if (order is RoundRobinOrder rr)
+                        if (order is RoundRobinBase rr)
                         {
                             rr.GroupByField = so.GroupByField;
-                        }
-                        else if (order is RoundRobinOrderDesc rrDesc)
-                        {
-                            rrDesc.GroupByField = so.GroupByField;
                         }
 
                         return order;
@@ -1919,7 +1914,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Pre-computes Round Robin interleave positions for any RoundRobinOrder/RoundRobinOrderDesc in Orders.
+        /// Pre-computes Round Robin interleave positions for any <see cref="RoundRobinBase"/> orders.
         /// Must be called before ApplyMultipleOrders() so ItemPositions are fresh for the given item set.
         /// </summary>
         /// <param name="items">The items to compute positions for.</param>
@@ -1931,25 +1926,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return;
             }
 
-            // Materialize once so we don't enumerate multiple times
             List<BaseItem>? materializedItems = null;
 
             foreach (var order in Orders)
             {
-                if (order is RoundRobinRandomOrder roundRobinRandom)
+                if (order is RoundRobinBase roundRobin)
                 {
                     materializedItems ??= items as List<BaseItem> ?? items.ToList();
-                    roundRobinRandom.PreComputePositions(materializedItems, logger: logger);
-                }
-                else if (order is RoundRobinOrder roundRobinOrder)
-                {
-                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
-                    roundRobinOrder.PreComputePositions(materializedItems, reverseGroupOrder: false, logger: logger);
-                }
-                else if (order is RoundRobinOrderDesc roundRobinOrderDesc)
-                {
-                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
-                    roundRobinOrderDesc.PreComputePositions(materializedItems, logger: logger);
+                    roundRobin.PreComputePositions(materializedItems, logger: logger);
                 }
             }
         }
