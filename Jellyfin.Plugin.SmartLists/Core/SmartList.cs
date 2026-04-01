@@ -102,10 +102,17 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 Orders = dto.Order.SortOptions
                     .Select(so =>
                     {
-                        // Special handling for Random and NoOrder which don't have Ascending/Descending variants
+                        // Special handling for sorts that don't have Ascending/Descending variants
                         if (so.SortBy == "Random" || so.SortBy == "NoOrder")
                         {
                             return OrderFactory.CreateOrder(so.SortBy);
+                        }
+
+                        if (so.SortBy == "Random Round Robin")
+                        {
+                            var rrRandom = (RoundRobinRandomOrder)OrderFactory.CreateOrder(so.SortBy);
+                            rrRandom.GroupByField = so.GroupByField;
+                            return rrRandom;
                         }
                         // For all other sorts, append the sort order
                         var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
@@ -1929,7 +1936,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             foreach (var order in Orders)
             {
-                if (order is RoundRobinOrder roundRobinOrder)
+                if (order is RoundRobinRandomOrder roundRobinRandom)
+                {
+                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
+                    roundRobinRandom.PreComputePositions(materializedItems, logger: logger);
+                }
+                else if (order is RoundRobinOrder roundRobinOrder)
                 {
                     materializedItems ??= items as List<BaseItem> ?? items.ToList();
                     roundRobinOrder.PreComputePositions(materializedItems, reverseGroupOrder: false, logger: logger);
@@ -2965,6 +2977,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "LastEpisodeAirDate Descending", () => new LastEpisodeAirDateOrderDesc() },
             { "Round Robin Ascending", () => new RoundRobinOrder() },
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
+            { "Random Round Robin", () => new RoundRobinRandomOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 

@@ -269,4 +269,136 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
         }
     }
+
+    /// <summary>
+    /// Round Robin sort with groups in random order. Each refresh produces a different
+    /// group interleaving while preserving natural order within each group.
+    /// </summary>
+    public class RoundRobinRandomOrder : Order
+    {
+        public override string Name => "Random Round Robin";
+
+        /// <inheritdoc cref="RoundRobinOrder.GroupByField"/>
+        public string? GroupByField { get; set; }
+
+        /// <inheritdoc cref="RoundRobinOrder.ItemPositions"/>
+        public ConcurrentDictionary<Guid, int> ItemPositions { get; set; } = new();
+
+        /// <summary>
+        /// Pre-computes interleave positions with groups in random order.
+        /// Uses a time-based seed so each refresh produces a different shuffle.
+        /// </summary>
+        public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
+        {
+            ItemPositions.Clear();
+
+            var itemsList = items.ToList();
+            if (itemsList.Count == 0 || string.IsNullOrEmpty(GroupByField))
+            {
+                return;
+            }
+
+            var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in itemsList)
+            {
+                var key = RoundRobinOrder.ExtractGroupKey(item, GroupByField);
+                if (!groups.TryGetValue(key, out var group))
+                {
+                    group = new List<BaseItem>();
+                    groups[key] = group;
+                }
+
+                group.Add(item);
+            }
+
+            logger?.LogDebug("RoundRobinRandomOrder: Grouped {ItemCount} items into {GroupCount} groups by '{Field}'",
+                itemsList.Count, groups.Count, GroupByField);
+
+            foreach (var kvp in groups)
+            {
+                kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
+            }
+
+            // Shuffle group keys randomly (different each refresh)
+#pragma warning disable CA5394
+            var random = new Random((int)(DateTime.Now.Ticks & 0x7FFFFFFF));
+            var shuffledGroupKeys = groups.Keys.OrderBy(_ => random.Next()).ToList();
+#pragma warning restore CA5394
+
+            int position = 0;
+            int maxGroupSize = groups.Values.Max(g => g.Count);
+
+            for (int level = 0; level < maxGroupSize; level++)
+            {
+                foreach (var groupKey in shuffledGroupKeys)
+                {
+                    var group = groups[groupKey];
+                    if (level < group.Count)
+                    {
+                        ItemPositions[group[level].Id] = position++;
+                    }
+                }
+            }
+
+            logger?.LogDebug("RoundRobinRandomOrder: Assigned {PositionCount} interleave positions across {GroupCount} groups (random order)",
+                ItemPositions.Count, groups.Count);
+        }
+
+        public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
+        {
+            if (ItemPositions.Count == 0)
+            {
+                return items;
+            }
+
+            return items.OrderBy(item =>
+                ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue);
+        }
+
+        public override IEnumerable<BaseItem> OrderBy(
+            IEnumerable<BaseItem> items,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return OrderBy(items);
+        }
+
+        public override IComparable GetSortKey(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            Dictionary<Guid, int>? itemRandomKeys = null,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
+        }
+
+        /// <summary>
+        /// Compares two items within the same group for natural ordering.
+        /// Delegates to the same logic as RoundRobinOrder.
+        /// </summary>
+        private static int CompareWithinGroup(BaseItem a, BaseItem b)
+        {
+            if (a is Episode && b is Episode)
+            {
+                var seasonCompare = OrderUtilities.GetSeasonNumber(a).CompareTo(OrderUtilities.GetSeasonNumber(b));
+                if (seasonCompare != 0) return seasonCompare;
+                return OrderUtilities.GetEpisodeNumber(a).CompareTo(OrderUtilities.GetEpisodeNumber(b));
+            }
+
+            if (a is Audio && b is Audio)
+            {
+                var discCompare = OrderUtilities.GetDiscNumber(a).CompareTo(OrderUtilities.GetDiscNumber(b));
+                if (discCompare != 0) return discCompare;
+                return OrderUtilities.GetTrackNumber(a).CompareTo(OrderUtilities.GetTrackNumber(b));
+            }
+
+            return OrderUtilities.SharedNaturalComparer.Compare(
+                a.SortName ?? a.Name ?? string.Empty,
+                b.SortName ?? b.Name ?? string.Empty);
+        }
+    }
 }

@@ -118,8 +118,8 @@
     SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer) {
         if (!sortOrderContainer || !sortOrderSelect) return;
         
-        // Hide Sort Order for Random and Default (they don't use ordering)
-        if (sortByValue === 'Random' || sortByValue === 'NoOrder') {
+        // Hide Sort Order for Random, Random Round Robin, and Default (they don't use ordering)
+        if (sortByValue === 'Random' || sortByValue === 'Random Round Robin' || sortByValue === 'NoOrder') {
             sortOrderContainer.style.display = 'none';
         } else {
             sortOrderContainer.style.display = '';
@@ -130,9 +130,9 @@
             }
         }
 
-        // Show/hide GroupBy dropdown for Round Robin
+        // Show/hide GroupBy dropdown for Round Robin and Random Round Robin
         if (groupByContainer) {
-            groupByContainer.style.display = (sortByValue === 'Round Robin') ? '' : 'none';
+            groupByContainer.style.display = (sortByValue === 'Round Robin' || sortByValue === 'Random Round Robin') ? '' : 'none';
         }
     };
     
@@ -290,7 +290,7 @@
             return { value: f.value, label: f.label, selected: f.value === savedGroupBy };
         });
         SmartLists.populateSelectElement(groupByField.input, groupByOptions);
-        groupByField.container.style.display = (actualSortBy === 'Round Robin') ? '' : 'none';
+        groupByField.container.style.display = (actualSortBy === 'Round Robin' || actualSortBy === 'Random Round Robin') ? '' : 'none';
         fieldsContainer.appendChild(groupByField.container);
 
         box.appendChild(fieldsContainer);
@@ -425,7 +425,7 @@
             if (!sortBySelect || !sortBySelect.value) return; // Skip if no sort by selected
 
             let sortBy = sortBySelect.value;
-            const sortOrder = (sortBy === 'Random' || sortBy === 'NoOrder') ? 'Ascending' : (sortOrderSelect ? sortOrderSelect.value : 'Ascending');
+            const sortOrder = (sortBy === 'Random' || sortBy === 'Random Round Robin' || sortBy === 'NoOrder') ? 'Ascending' : (sortOrderSelect ? sortOrderSelect.value : 'Ascending');
 
             // Handle "Ignore Articles" checkbox - convert to "(Ignore Articles)" for backwards compatibility
             if ((sortBy === 'Name' || sortBy === 'SeriesName') && ignoreArticlesCheckbox && ignoreArticlesCheckbox.checked) {
@@ -437,8 +437,8 @@
                 SortOrder: sortOrder
             };
 
-            // Include GroupByField for Round Robin sort
-            if (sortBy === 'Round Robin') {
+            // Include GroupByField for Round Robin and Random Round Robin sorts
+            if (sortBy === 'Round Robin' || sortBy === 'Random Round Robin') {
                 var groupBySelect = box.querySelector('[id^="sort-groupby-"]');
                 if (groupBySelect && groupBySelect.value) {
                     sortEntry.GroupByField = groupBySelect.value;

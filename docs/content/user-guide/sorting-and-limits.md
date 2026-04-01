@@ -140,6 +140,50 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 !!! warning "NextUnwatched vs Playback Status"
     If you want to interleave **all** unwatched episodes, use `Playback Status = Unplayed`. The `Next Unwatched = Yes` filter only returns 1 episode per series (the very next one to watch), which limits Round Robin to at most one item per show.
 
+### Random Round Robin (Interleave)
+Works exactly like Round Robin, but **shuffles the group order randomly** on each refresh. This gives you the interleaved "TV channel" effect while varying which show appears first each time.
+
+**How it differs from Round Robin**:
+
+- **Round Robin**: Groups are always in alphabetical order (A→Z or Z→A). Show A always comes first.
+- **Random Round Robin**: Group order is randomized each refresh. One time Show C might come first, the next time Show B.
+
+Within each group, items always stay in natural order (episodes by season/episode number).
+
+**Example** — Same 3 shows, different refreshes:
+
+First refresh:
+
+| Position | Item |
+|----------|------|
+| 1 | Show B - S01E01 |
+| 2 | Show A - S01E01 |
+| 3 | Show C - S01E01 |
+| 4 | Show B - S01E02 |
+| 5 | Show A - S01E02 |
+| 6 | Show C - S01E02 |
+
+Next refresh:
+
+| Position | Item |
+|----------|------|
+| 1 | Show C - S01E01 |
+| 2 | Show A - S01E01 |
+| 3 | Show B - S01E01 |
+| 4 | Show C - S01E02 |
+| 5 | Show A - S01E02 |
+| 6 | Show B - S01E02 |
+
+**Configuration**:
+
+1. Add rules that match the episodes you want (e.g., `Playback Status = Unplayed`)
+2. Select **Random Round Robin (Interleave)** as your sort
+3. Choose the **Group By** field (e.g., Series Name for TV episodes)
+4. No Sort Order is needed — group order is always randomized
+
+!!! tip "Simulating a TV channel"
+    Combine with **Auto Refresh** to get a different "channel lineup" on a schedule. Each refresh reshuffles which show appears first while keeping episodes in order within each show.
+
 ### External List Order
 Sort items in the same order as the external list they were matched from. Only available when using the "External List" filter field in your rules.
 
