@@ -39,19 +39,36 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, bool reverseGroupOrder = false, ILogger? logger = null)
         {
-            ItemPositions.Clear();
+            Func<IEnumerable<string>, List<string>> orderKeys = reverseGroupOrder
+                ? keys => keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList()
+                : keys => keys.OrderBy(k => k, OrderUtilities.SharedNaturalComparer).ToList();
+
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, orderKeys, "RoundRobinOrder", logger);
+        }
+
+        /// <summary>
+        /// Shared algorithm for all round-robin variants: groups items, sorts within each group
+        /// by natural order, orders groups via the supplied strategy, then interleaves round-robin.
+        /// </summary>
+        internal static ConcurrentDictionary<Guid, int> BuildInterleavedPositions(
+            IEnumerable<BaseItem> items,
+            string? groupByField,
+            Func<IEnumerable<string>, List<string>> orderGroupKeys,
+            string logPrefix,
+            ILogger? logger)
+        {
+            var positions = new ConcurrentDictionary<Guid, int>();
 
             var itemsList = items.ToList();
-            if (itemsList.Count == 0 || string.IsNullOrEmpty(GroupByField))
+            if (itemsList.Count == 0 || string.IsNullOrEmpty(groupByField))
             {
-                return;
+                return positions;
             }
 
-            // Group items by the configured field
             var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in itemsList)
             {
-                var key = ExtractGroupKey(item);
+                var key = ExtractGroupKey(item, groupByField);
                 if (!groups.TryGetValue(key, out var group))
                 {
                     group = new List<BaseItem>();
@@ -61,38 +78,35 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 group.Add(item);
             }
 
-            logger?.LogDebug("RoundRobinOrder: Grouped {ItemCount} items into {GroupCount} groups by '{Field}'",
-                itemsList.Count, groups.Count, GroupByField);
+            logger?.LogDebug("{LogPrefix}: Grouped {ItemCount} items into {GroupCount} groups by '{Field}'",
+                logPrefix, itemsList.Count, groups.Count, groupByField);
 
-            // Sort items within each group by natural order (season/episode for TV, disc/track for audio, name for others)
             foreach (var kvp in groups)
             {
                 kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
             }
 
-            // Sort groups alphabetically (or reverse for descending)
-            var sortedGroupKeys = reverseGroupOrder
-                ? groups.Keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList()
-                : groups.Keys.OrderBy(k => k, OrderUtilities.SharedNaturalComparer).ToList();
+            var orderedKeys = orderGroupKeys(groups.Keys);
 
-            // Interleave: round-robin across groups
             int position = 0;
             int maxGroupSize = groups.Values.Max(g => g.Count);
 
             for (int level = 0; level < maxGroupSize; level++)
             {
-                foreach (var groupKey in sortedGroupKeys)
+                foreach (var groupKey in orderedKeys)
                 {
                     var group = groups[groupKey];
                     if (level < group.Count)
                     {
-                        ItemPositions[group[level].Id] = position++;
+                        positions[group[level].Id] = position++;
                     }
                 }
             }
 
-            logger?.LogDebug("RoundRobinOrder: Assigned {PositionCount} interleave positions across {GroupCount} groups",
-                ItemPositions.Count, groups.Count);
+            logger?.LogDebug("{LogPrefix}: Assigned {PositionCount} interleave positions across {GroupCount} groups",
+                logPrefix, positions.Count, groups.Count);
+
+            return positions;
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -179,18 +193,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             }
         }
 
-        private string ExtractGroupKey(BaseItem item)
-        {
-            return ExtractGroupKey(item, GroupByField);
-        }
-
         /// <summary>
         /// Compares two items within the same group for natural ordering.
         /// Episodes sort by season then episode number, audio by disc then track, others by name.
         /// </summary>
-        private static int CompareWithinGroup(BaseItem a, BaseItem b)
+        internal static int CompareWithinGroup(BaseItem a, BaseItem b)
         {
-            // Episodes: sort by season number, then episode number
             if (a is Episode && b is Episode)
             {
                 var seasonCompare = OrderUtilities.GetSeasonNumber(a).CompareTo(OrderUtilities.GetSeasonNumber(b));
@@ -198,7 +206,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 return OrderUtilities.GetEpisodeNumber(a).CompareTo(OrderUtilities.GetEpisodeNumber(b));
             }
 
-            // Audio: sort by disc number, then track number
             if (a is Audio && b is Audio)
             {
                 var discCompare = OrderUtilities.GetDiscNumber(a).CompareTo(OrderUtilities.GetDiscNumber(b));
@@ -206,7 +213,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 return OrderUtilities.GetTrackNumber(a).CompareTo(OrderUtilities.GetTrackNumber(b));
             }
 
-            // Fallback: sort by name
             return OrderUtilities.SharedNaturalComparer.Compare(
                 a.SortName ?? a.Name ?? string.Empty,
                 b.SortName ?? b.Name ?? string.Empty);
@@ -231,10 +237,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            // Delegate to the ascending order's algorithm with reverse flag
-            var ascending = new RoundRobinOrder { GroupByField = GroupByField };
-            ascending.PreComputePositions(items, reverseGroupOrder: true, logger: logger);
-            ItemPositions = ascending.ItemPositions;
+            ItemPositions = RoundRobinOrder.BuildInterleavedPositions(
+                items,
+                GroupByField,
+                keys => keys.OrderByDescending(k => k, OrderUtilities.SharedNaturalComparer).ToList(),
+                "RoundRobinOrderDesc",
+                logger);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -290,58 +298,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            ItemPositions.Clear();
-
-            var itemsList = items.ToList();
-            if (itemsList.Count == 0 || string.IsNullOrEmpty(GroupByField))
-            {
-                return;
-            }
-
-            var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in itemsList)
-            {
-                var key = RoundRobinOrder.ExtractGroupKey(item, GroupByField);
-                if (!groups.TryGetValue(key, out var group))
-                {
-                    group = new List<BaseItem>();
-                    groups[key] = group;
-                }
-
-                group.Add(item);
-            }
-
-            logger?.LogDebug("RoundRobinRandomOrder: Grouped {ItemCount} items into {GroupCount} groups by '{Field}'",
-                itemsList.Count, groups.Count, GroupByField);
-
-            foreach (var kvp in groups)
-            {
-                kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
-            }
-
-            // Shuffle group keys randomly (different each refresh)
 #pragma warning disable CA5394
             var random = new Random((int)(DateTime.Now.Ticks & 0x7FFFFFFF));
-            var shuffledGroupKeys = groups.Keys.OrderBy(_ => random.Next()).ToList();
+            ItemPositions = RoundRobinOrder.BuildInterleavedPositions(
+                items,
+                GroupByField,
+                keys => keys.OrderBy(_ => random.Next()).ToList(),
+                "RoundRobinRandomOrder",
+                logger);
 #pragma warning restore CA5394
-
-            int position = 0;
-            int maxGroupSize = groups.Values.Max(g => g.Count);
-
-            for (int level = 0; level < maxGroupSize; level++)
-            {
-                foreach (var groupKey in shuffledGroupKeys)
-                {
-                    var group = groups[groupKey];
-                    if (level < group.Count)
-                    {
-                        ItemPositions[group[level].Id] = position++;
-                    }
-                }
-            }
-
-            logger?.LogDebug("RoundRobinRandomOrder: Assigned {PositionCount} interleave positions across {GroupCount} groups (random order)",
-                ItemPositions.Count, groups.Count);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -376,29 +341,5 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             return ItemPositions.TryGetValue(item.Id, out var pos) ? pos : int.MaxValue;
         }
 
-        /// <summary>
-        /// Compares two items within the same group for natural ordering.
-        /// Delegates to the same logic as RoundRobinOrder.
-        /// </summary>
-        private static int CompareWithinGroup(BaseItem a, BaseItem b)
-        {
-            if (a is Episode && b is Episode)
-            {
-                var seasonCompare = OrderUtilities.GetSeasonNumber(a).CompareTo(OrderUtilities.GetSeasonNumber(b));
-                if (seasonCompare != 0) return seasonCompare;
-                return OrderUtilities.GetEpisodeNumber(a).CompareTo(OrderUtilities.GetEpisodeNumber(b));
-            }
-
-            if (a is Audio && b is Audio)
-            {
-                var discCompare = OrderUtilities.GetDiscNumber(a).CompareTo(OrderUtilities.GetDiscNumber(b));
-                if (discCompare != 0) return discCompare;
-                return OrderUtilities.GetTrackNumber(a).CompareTo(OrderUtilities.GetTrackNumber(b));
-            }
-
-            return OrderUtilities.SharedNaturalComparer.Compare(
-                a.SortName ?? a.Name ?? string.Empty,
-                b.SortName ?? b.Name ?? string.Empty);
-        }
     }
 }

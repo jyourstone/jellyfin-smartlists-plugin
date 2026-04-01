@@ -577,10 +577,9 @@
             const orderName = playlist.Order.Name;
             let sortBy, sortOrder;
             
-            if (orderName === 'Random' || orderName === 'NoOrder' || orderName === 'No Order' || orderName === 'Default') {
-                // Special handling for Random/Default - no Asc/Desc
+            if (orderName === 'Random' || orderName === 'Random Round Robin' || orderName === 'NoOrder' || orderName === 'No Order' || orderName === 'Default') {
                 sortBy = (orderName === 'No Order' || orderName === 'Default') ? 'NoOrder' : orderName;
-                sortOrder = 'Ascending'; // Default sort order (though it won't be used)
+                sortOrder = 'Ascending';
             } else {
                 // Normal parsing for other orders like "Name Ascending" or "Similarity Descending"
                 const parts = orderName.split(' ');
