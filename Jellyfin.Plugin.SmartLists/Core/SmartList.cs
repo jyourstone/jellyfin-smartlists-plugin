@@ -102,22 +102,24 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 Orders = dto.Order.SortOptions
                     .Select(so =>
                     {
-                        // Special handling for Random and NoOrder which don't have Ascending/Descending variants
+                        // Special handling for sorts that don't have Ascending/Descending variants
                         if (so.SortBy == "Random" || so.SortBy == "NoOrder")
                         {
                             return OrderFactory.CreateOrder(so.SortBy);
                         }
+
+                        if (so.SortBy == "Random Round Robin")
+                        {
+                            var rrRandom = (RoundRobinBase)OrderFactory.CreateOrder(so.SortBy);
+                            rrRandom.GroupByField = so.GroupByField;
+                            return rrRandom;
+                        }
                         // For all other sorts, append the sort order
                         var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
 
-                        // Pass GroupByField to Round Robin orders
-                        if (order is RoundRobinOrder rr)
+                        if (order is RoundRobinBase rr)
                         {
                             rr.GroupByField = so.GroupByField;
-                        }
-                        else if (order is RoundRobinOrderDesc rrDesc)
-                        {
-                            rrDesc.GroupByField = so.GroupByField;
                         }
 
                         return order;
@@ -1912,7 +1914,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Pre-computes Round Robin interleave positions for any RoundRobinOrder/RoundRobinOrderDesc in Orders.
+        /// Pre-computes Round Robin interleave positions for any <see cref="RoundRobinBase"/> orders.
         /// Must be called before ApplyMultipleOrders() so ItemPositions are fresh for the given item set.
         /// </summary>
         /// <param name="items">The items to compute positions for.</param>
@@ -1924,20 +1926,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return;
             }
 
-            // Materialize once so we don't enumerate multiple times
             List<BaseItem>? materializedItems = null;
 
             foreach (var order in Orders)
             {
-                if (order is RoundRobinOrder roundRobinOrder)
+                if (order is RoundRobinBase roundRobin)
                 {
                     materializedItems ??= items as List<BaseItem> ?? items.ToList();
-                    roundRobinOrder.PreComputePositions(materializedItems, reverseGroupOrder: false, logger: logger);
-                }
-                else if (order is RoundRobinOrderDesc roundRobinOrderDesc)
-                {
-                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
-                    roundRobinOrderDesc.PreComputePositions(materializedItems, logger: logger);
+                    roundRobin.PreComputePositions(materializedItems, logger: logger);
                 }
             }
         }
@@ -2965,6 +2961,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "LastEpisodeAirDate Descending", () => new LastEpisodeAirDateOrderDesc() },
             { "Round Robin Ascending", () => new RoundRobinOrder() },
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
+            { "Random Round Robin", () => new RoundRobinRandomOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 

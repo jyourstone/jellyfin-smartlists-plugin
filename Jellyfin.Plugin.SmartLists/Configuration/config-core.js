@@ -66,6 +66,7 @@
         { value: 'Rule Block Order', label: 'Rule Block Order' },
         { value: 'External List Order', label: 'External List Order' },
         { value: 'Round Robin', label: 'Round Robin (Interleave)' },
+        { value: 'Random Round Robin', label: 'Random Round Robin (Interleave)' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'Default' }
     ];

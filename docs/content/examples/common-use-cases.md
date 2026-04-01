@@ -85,6 +85,15 @@ Result: Episodes interleave across shows — Show A Ep1, Show B Ep1, Show C Ep1,
 !!! note
     Use `Playback Status = Unplayed` (not `Next Unwatched = Yes`) to get all unwatched episodes. `Next Unwatched` only returns 1 episode per series.
 
+### Shuffled TV Channel (Random Round Robin)
+Like the TV Channel playlist above, but the show order changes on each refresh:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed
+- **Sort by**: Random Round Robin (Interleave), **Group By**: Series Name
+
+Result: Same interleaving as Round Robin, but which show appears first is randomized each time. One refresh might start with Show C, the next with Show A.
+
 ### Music Album Sampler (Round Robin)
 Create a playlist that samples tracks from different albums:
 
