@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -194,16 +194,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var fieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, fieldName);
             var parentSeriesFieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, parentSeriesFieldName);
 
-            // For Equal/NotEqual (exclusive match), we must check against the combined list.
-            // Checking each list independently would give wrong results, e.g. episode Studios=["ABC"]
-            // + parent series Studios=["Marvel Studios"] would incorrectly match "equals Marvel Studios"
-            // because the parent list alone exclusively equals it, ignoring the episode's own studios.
+            // For Equal/NotEqual, check membership against the combined (deduplicated) list.
+            // "Equal" = any item in the merged list matches; "NotEqual" = no item matches.
             if (r.Operator == "Equal" || r.Operator == "NotEqual")
             {
-                logger?.LogDebug("SmartLists building combined {Field} exclusive {Operator} against merged list", fieldName, r.Operator);
+                logger?.LogDebug("SmartLists building combined {Field} {Operator} against merged list", fieldName, r.Operator);
                 var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                var method = typeof(Engine).GetMethod("OnlyCombinedItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                if (method == null) throw new InvalidOperationException("Engine.OnlyCombinedItemEquals method not found");
+                var method = typeof(Engine).GetMethod("AnyCombinedItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (method == null) throw new InvalidOperationException("Engine.AnyCombinedItemEquals method not found");
                 var equalsCall = System.Linq.Expressions.Expression.Call(method, fieldProperty, parentSeriesFieldProperty, right);
                 if (r.Operator == "Equal") return equalsCall;
                 return System.Linq.Expressions.Expression.Not(equalsCall);
@@ -1117,34 +1115,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (r.Operator == "Equal" || r.Operator == "NotEqual")
             {
-                logger?.LogDebug("SmartLists applying exclusive {Operator} to {Field} with value '{Value}'", r.Operator, r.MemberName, r.TargetValue);
+                logger?.LogDebug("SmartLists applying {Operator} to {Field} with value '{Value}'", r.Operator, r.MemberName, r.TargetValue);
                 var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
 
-                // Equal/NotEqual on list fields means "exclusively equals" - the list must contain
-                // ONLY this value and no others. Use special methods for Collections/Playlists
+                // Equal/NotEqual on list fields uses membership semantics: does any item
+                // in the list match the target? Collections/Playlists use special methods
                 // that handle prefix/suffix stripping.
                 System.Reflection.MethodInfo? method;
                 if (r.MemberName == "Collections")
                 {
-                    method = typeof(Engine).GetMethod("OnlyCollectionEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.OnlyCollectionEquals method not found");
+                    method = typeof(Engine).GetMethod("AnyCollectionEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.AnyCollectionEquals method not found");
                 }
                 else if (r.MemberName == "Playlists")
                 {
-                    method = typeof(Engine).GetMethod("OnlyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.OnlyPlaylistEquals method not found");
-                }
-                else if (r.MemberName == "ExternalList")
-                {
-                    // ExternalList uses membership check (any URL matches), not exclusive equals,
-                    // because an item can appear in multiple external lists simultaneously.
-                    method = typeof(Engine).GetMethod("AnyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.AnyItemEquals method not found");
+                    method = typeof(Engine).GetMethod("AnyPlaylistEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.AnyPlaylistEquals method not found");
                 }
                 else
                 {
-                    method = typeof(Engine).GetMethod("OnlyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                    if (method == null) throw new InvalidOperationException("Engine.OnlyItemEquals method not found");
+                    method = typeof(Engine).GetMethod("AnyItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.AnyItemEquals method not found");
                 }
 
                 var equalsCall = System.Linq.Expressions.Expression.Call(method, left, right);
@@ -1444,6 +1435,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 .ToList();
 
             return items.Count == 1 && items[0].Equals(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Checks if any item in the combined (deduplicated) list from both sources
+        /// exactly equals the target value. Used for Equal/NotEqual on Tags/Studios/Genres
+        /// when "Include parent series" is enabled.
+        /// </summary>
+        private static bool AnyCombinedItemEquals(IEnumerable<string> list, IEnumerable<string> parentList, string value)
+        {
+            return (list ?? Enumerable.Empty<string>())
+                .Concat(parentList ?? Enumerable.Empty<string>())
+                .Any(s => s != null && s.Equals(value, StringComparison.OrdinalIgnoreCase));
         }
 
         internal static bool AnyRegexMatch(IEnumerable<string> list, string pattern)
