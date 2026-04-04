@@ -11,7 +11,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 {
     /// <summary>
     /// Fetches list items from the TMDB API (api.themoviedb.org/3).
-    /// Supports user lists, popular, top-rated, trending, and other chart endpoints.
+    /// Supports user lists, collections, popular, top-rated, trending, and other chart endpoints.
     /// URLs like https://www.themoviedb.org/list/8136 or https://www.themoviedb.org/movie/popular
     /// </summary>
     public partial class TmdbListProvider : IExternalListProvider
@@ -50,11 +50,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             var result = new ExternalListResult();
 
-            var (apiPath, isUserList) = ResolveApiPath(url);
+            var (apiPath, endpointType) = ResolveApiPath(url);
             if (apiPath == null)
             {
                 throw new InvalidOperationException(
                     "Invalid TMDB URL. Supported formats: https://www.themoviedb.org/list/{id}, " +
+                    "https://www.themoviedb.org/collection/{id}, " +
                     "https://www.themoviedb.org/movie/popular, https://www.themoviedb.org/tv/top-rated, " +
                     "https://www.themoviedb.org/trending/movie/week, etc.");
             }
@@ -63,9 +64,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             var httpClient = _httpClientFactory.CreateClient("TmdbList");
 
-            if (isUserList)
+            if (endpointType == TmdbEndpointType.UserList)
             {
                 await FetchUserListAsync(httpClient, apiPath, tmdbApiKey, result, maxItems, cancellationToken).ConfigureAwait(false);
+            }
+            else if (endpointType == TmdbEndpointType.Collection)
+            {
+                await FetchCollectionAsync(httpClient, apiPath, tmdbApiKey, result, maxItems, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -210,17 +215,69 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             result.TotalItems = totalFetched;
         }
 
+        private static async Task FetchCollectionAsync(
+            HttpClient httpClient,
+            string apiPath,
+            string tmdbApiKey,
+            ExternalListResult result,
+            int maxItems,
+            CancellationToken cancellationToken)
+        {
+            var requestUrl = $"{ApiBaseUrl}{apiPath}?api_key={Uri.EscapeDataString(tmdbApiKey)}";
+            using var response = await httpClient.GetAsync(requestUrl, cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"TMDB API returned {response.StatusCode} for {apiPath}");
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var collectionResponse = JsonSerializer.Deserialize<TmdbCollectionResponse>(json);
+
+            if (collectionResponse?.Parts == null || collectionResponse.Parts.Length == 0)
+            {
+                result.TotalItems = 0;
+                return;
+            }
+
+            var position = 0;
+            foreach (var item in collectionResponse.Parts)
+            {
+                if (maxItems > 0 && position >= maxItems)
+                {
+                    break;
+                }
+
+                if (item.Id is int id and > 0)
+                {
+                    // TryAdd keeps first/lowest position for duplicates
+                    result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
+                    position++;
+                }
+            }
+
+            result.TotalItems = position;
+        }
+
         /// <summary>
         /// Resolves a themoviedb.org URL to the corresponding API path.
-        /// Returns the API path and whether it's a user list (unlimited pages) or chart (capped).
+        /// Returns the API path and endpoint type.
         /// </summary>
-        private static (string? ApiPath, bool IsUserList) ResolveApiPath(string url)
+        private static (string? ApiPath, TmdbEndpointType EndpointType) ResolveApiPath(string url)
         {
             // User list: https://www.themoviedb.org/list/{id}
             var listMatch = UserListPattern().Match(url);
             if (listMatch.Success)
             {
-                return ($"/list/{listMatch.Groups[1].Value}", true);
+                return ($"/list/{listMatch.Groups[1].Value}", TmdbEndpointType.UserList);
+            }
+
+            // Collection: https://www.themoviedb.org/collection/{id}
+            var collectionMatch = CollectionPattern().Match(url);
+            if (collectionMatch.Success)
+            {
+                return ($"/collection/{collectionMatch.Groups[1].Value}", TmdbEndpointType.Collection);
             }
 
             // Trending: https://www.themoviedb.org/trending/movie/week
@@ -229,7 +286,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             {
                 var mediaType = trendingMatch.Groups[1].Value.ToLowerInvariant();
                 var window = trendingMatch.Groups[2].Value.ToLowerInvariant();
-                return ($"/trending/{mediaType}/{window}", false);
+                return ($"/trending/{mediaType}/{window}", TmdbEndpointType.Paginated);
             }
 
             // Movie charts: https://www.themoviedb.org/movie/popular, /movie/top-rated, etc.
@@ -248,7 +305,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (apiChart != null)
                 {
-                    return ($"/movie/{apiChart}", false);
+                    return ($"/movie/{apiChart}", TmdbEndpointType.Paginated);
                 }
             }
 
@@ -268,7 +325,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (apiChart != null)
                 {
-                    return ($"/tv/{apiChart}", false);
+                    return ($"/tv/{apiChart}", TmdbEndpointType.Paginated);
                 }
             }
 
@@ -278,14 +335,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             if (bareMatch.Success)
             {
                 var mediaType = bareMatch.Groups[1].Value.ToLowerInvariant();
-                return ($"/{mediaType}/popular", false);
+                return ($"/{mediaType}/popular", TmdbEndpointType.Paginated);
             }
 
-            return (null, false);
+            return (null, TmdbEndpointType.Paginated);
         }
 
         [GeneratedRegex(@"themoviedb\.org/list/(\d+)", RegexOptions.IgnoreCase)]
         private static partial Regex UserListPattern();
+
+        [GeneratedRegex(@"themoviedb\.org/collection/(\d+)(?:-[^/?#]*)?(?:[/?#].*)?$", RegexOptions.IgnoreCase)]
+        private static partial Regex CollectionPattern();
 
         [GeneratedRegex(@"themoviedb\.org/trending/(movie|tv|all)/(day|week)", RegexOptions.IgnoreCase)]
         private static partial Regex TrendingPattern();
@@ -298,5 +358,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
         [GeneratedRegex(@"themoviedb\.org/(movie|tv)/?(?:[?#].*)?$", RegexOptions.IgnoreCase)]
         private static partial Regex BareMediaPattern();
+
+        private enum TmdbEndpointType
+        {
+            UserList,
+            Collection,
+            Paginated
+        }
     }
 }

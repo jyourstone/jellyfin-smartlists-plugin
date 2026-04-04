@@ -207,6 +207,7 @@ External List / equals / https://trakt.tv/movies/trending
 | Type | URL format |
 |------|-----------|
 | User list | `https://www.themoviedb.org/list/{id}` |
+| Movie collection | `https://www.themoviedb.org/collection/{id}` |
 | Popular movies | `https://www.themoviedb.org/movie` |
 | Top rated movies | `https://www.themoviedb.org/movie/top-rated` |
 | Now playing movies | `https://www.themoviedb.org/movie/now-playing` |
@@ -227,6 +228,7 @@ External List / equals / https://trakt.tv/movies/trending
 External List / equals / https://www.themoviedb.org/movie
 External List / equals / https://www.themoviedb.org/movie/top-rated
 External List / equals / https://www.themoviedb.org/list/8136
+External List / equals / https://www.themoviedb.org/collection/29
 ```
 
 !!! note "Trending URLs"
