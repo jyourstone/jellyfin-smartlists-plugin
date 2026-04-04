@@ -36,6 +36,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
     }
 
     /// <summary>
+    /// Response from TMDB collection endpoint (/collection/{id}).
+    /// </summary>
+    public class TmdbCollectionResponse
+    {
+        [JsonPropertyName("parts")]
+        public TmdbItem[]? Parts { get; set; }
+    }
+
+    /// <summary>
     /// A single item from a TMDB response.
     /// </summary>
     public class TmdbItem
