@@ -241,6 +241,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 return;
             }
 
+            result.TotalItems = 0;
+            foreach (var part in collectionResponse.Parts)
+            {
+                if (part.Id is int _ and > 0)
+                {
+                    result.TotalItems++;
+                }
+            }
+
             var position = 0;
             foreach (var item in collectionResponse.Parts)
             {
@@ -251,13 +260,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (item.Id is int id and > 0)
                 {
-                    // TryAdd keeps first/lowest position for duplicates
                     result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
                     position++;
                 }
             }
-
-            result.TotalItems = position;
         }
 
         /// <summary>
