@@ -28,6 +28,12 @@
 
     // ===== PAGE INITIALIZATION =====
     SmartLists.initPage = function (page) {
+        if (SmartLists.setPageContext) {
+            SmartLists.setPageContext(page);
+        }
+
+        page._initializationInProgress = false;
+
         // Check if this specific page is already initialized
         if (page._pageInitialized) {
             return;
@@ -2421,6 +2427,7 @@
 
         // Reset page-specific initialization flags and edit state
         page._pageInitialized = false;
+        page._initializationInProgress = false;
         page._tabListenersInitialized = false;
         page._editMode = false;
         page._editingPlaylistId = null;
@@ -2429,9 +2436,13 @@
     };
 
     // ===== PAGE EVENT LISTENERS =====
-    document.addEventListener('pageshow', function (e) {
-        const page = e.target;
-        if (page.classList.contains('SmartListsConfigurationPage')) {
+    document.addEventListener('pageshow', function () {
+        const page = document.querySelector('.SmartListsConfigurationPage');
+        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
+            if (SmartLists.setPageContext) {
+                SmartLists.setPageContext(page);
+            }
+
             // Clean up any persisted inline styles from browser back/forward navigation
             // This fixes the issue where navigating back from user page leaves elements hidden
             const elementsWithInlineDisplay = page.querySelectorAll('[style*="display"]');
@@ -2478,7 +2489,7 @@
     // Clean up all event listeners when page is hidden/unloaded
     document.addEventListener('pagehide', function (e) {
         const page = e.target;
-        if (page.classList.contains('SmartListsConfigurationPage')) {
+        if (page && page.classList && page.classList.contains('SmartListsConfigurationPage')) {
             SmartLists.cleanupAllEventListeners(page);
         }
     });

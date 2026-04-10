@@ -4,22 +4,39 @@
     // Constants
     SmartLists.PLUGIN_ID = "A0A2A7B2-747A-4113-8B39-757A9D267C79";
     
-    // Determine if we're in user mode (set by user-playlists.html before loading this script)
+    // Determine if we're in user mode (set by user-playlists.html before loading this script).
+    // This value is refreshed for each page in setPageContext() to avoid SPA navigation leaks.
     SmartLists.IS_USER_PAGE = SmartLists.IS_USER_PAGE || false;
-    
-    // Build endpoints based on context (admin vs user)
-    var endpointPrefix = SmartLists.IS_USER_PAGE ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
-    SmartLists.ENDPOINTS = {
-        fields: endpointPrefix + '/fields',
-        base: endpointPrefix,
-        users: 'Plugins/SmartLists/users',      // Keep admin endpoint for user selection (may not be needed in user mode)
-        libraries: 'Plugins/SmartLists/libraries', // Keep admin endpoint for library selection (may not be needed in user mode)
-        refresh: endpointPrefix + '/refresh',
-        refreshDirect: endpointPrefix + '/refresh-direct',
-        backups: 'Plugins/SmartLists/backups',
-        backupUpload: 'Plugins/SmartLists/backups/upload',
-        backupPreview: 'Plugins/SmartLists/backups/preview'
+
+    SmartLists.isUserPage = function (page) {
+        if (page && page.classList) {
+            return page.classList.contains('SmartListsUserPage');
+        }
+
+        return !!SmartLists.IS_USER_PAGE;
     };
+
+    SmartLists.buildEndpoints = function (isUserPage) {
+        var endpointPrefix = isUserPage ? 'Plugins/SmartLists/User' : 'Plugins/SmartLists';
+        return {
+            fields: endpointPrefix + '/fields',
+            base: endpointPrefix,
+            users: 'Plugins/SmartLists/users',
+            libraries: 'Plugins/SmartLists/libraries',
+            refresh: endpointPrefix + '/refresh',
+            refreshDirect: endpointPrefix + '/refresh-direct',
+            backups: 'Plugins/SmartLists/backups',
+            backupUpload: 'Plugins/SmartLists/backups/upload',
+            backupPreview: 'Plugins/SmartLists/backups/preview'
+        };
+    };
+
+    SmartLists.setPageContext = function (page) {
+        SmartLists.IS_USER_PAGE = SmartLists.isUserPage(page);
+        SmartLists.ENDPOINTS = SmartLists.buildEndpoints(SmartLists.IS_USER_PAGE);
+    };
+
+    SmartLists.setPageContext(document.querySelector('.SmartListsConfigurationPage'));
 
     // Field type constants to avoid duplication
     SmartLists.FIELD_TYPES = {
@@ -1011,4 +1028,3 @@
     };
 
 })(window.SmartLists = window.SmartLists || {});
-
