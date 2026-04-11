@@ -84,4 +84,4 @@ This project is based on the original SmartPlaylist plugin created by **[ankenyr
 
 ## ⚠️ Disclaimer
 
-The vast majority of the recent features, including the entire web interface and the underlying API changes in this plugin, were developed by an AI assistant. While I do have some basic experience with C# from a long time ago, I'm essentially the project manager, guiding the AI, fixing its occasional goofs, and trying to keep it from becoming self-aware.
+Much of the recent work on this project has been AI-assisted, but the repository, releases, and documentation are reviewed and maintained by the project owner. If you run into a bug or spot something inaccurate, please open an issue or discussion.

@@ -2,7 +2,7 @@
 
 <div align="center">
     <p>
-        <img alt="Logo" src="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/logo.jpg" style="height: 400px; width: auto;"/><br />
+        <img alt="Logo" src="../images/logo.jpg" style="height: 400px; width: auto;"/><br />
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Total GitHub Downloads" src="https://img.shields.io/github/downloads/jyourstone/jellyfin-smartlists-plugin/total"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/issues"><img alt="GitHub Issues or Pull Requests" src="https://img.shields.io/github/issues/jyourstone/jellyfin-smartlists-plugin"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Build and Release" src="https://github.com/jyourstone/jellyfin-smartlists-plugin/actions/workflows/release.yml/badge.svg"/></a> 
@@ -10,15 +10,32 @@
     </p>        
 </div>
 
-Create smart, rule-based playlists and collections in Jellyfin.
+Official documentation for the Jellyfin SmartLists plugin.
 
-This plugin allows you to create dynamic playlists and collections based on a set of rules, which will automatically update as your library changes. It features a modern web-based interface for easy list management - no technical knowledge required.
+SmartLists creates rule-based playlists and collections that refresh automatically as your Jellyfin library changes. The plugin is maintained in the open on GitHub and the documentation in this site tracks the current released behavior of the project.
 
 **Requires Jellyfin version `10.11.0` and newer.**
+
+## Project Links
+
+- **Source code**: [github.com/jyourstone/jellyfin-smartlists-plugin](https://github.com/jyourstone/jellyfin-smartlists-plugin)
+- **Releases**: [GitHub Releases](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases)
+- **Bug reports and feature requests**: [GitHub Issues](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues)
+- **Questions and community help**: [GitHub Discussions](https://github.com/jyourstone/jellyfin-smartlists-plugin/discussions)
+- **Plugin manifest**: [Stable manifest](https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/main/manifest.json)
+
+## What SmartLists Does
+
+- Builds playlists and collections from rules instead of manual curation
+- Refreshes lists automatically when library content or playback state changes
+- Supports movies, shows, episodes, music, photos, books, and more
+- Lets administrators and regular users manage lists through the Jellyfin web UI
+- Supports external sources such as IMDb, TMDB, Trakt, MDBList, and Letterboxd
 
 ## Features
 
 - **Modern Web Interface** - A full-featured UI to create, manage and view status for smart playlists and collections
+- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Trakt](https://trakt.tv), and [TMDB](https://www.themoviedb.org)
 - **User Selection** - Choose which users should own a playlist or collection with an intuitive dropdown
 - **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - **Automatic Updates** - Playlists and collections refresh automatically on library updates, playback status changes, or via scheduled tasks
@@ -29,17 +46,17 @@ This plugin allows you to create dynamic playlists and collections based on a se
 ## Screenshots
 
 <div align="center" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 1000px; margin: 0 auto;">
-    <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_create.png" target="_blank" style="cursor: pointer;">
-        <img alt="Create list page" src="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_create_cropped.png" width="240"/>
+    <a href="../images/config_page_create.png" target="_blank" style="cursor: pointer;">
+        <img alt="Create list page" src="../images/config_page_create_cropped.png" width="240"/>
     </a>
-    <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_manage.png" target="_blank" style="cursor: pointer;">
-        <img alt="Manage lists page" src="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_manage_cropped.png" width="240"/>
+    <a href="../images/config_page_manage.png" target="_blank" style="cursor: pointer;">
+        <img alt="Manage lists page" src="../images/config_page_manage_cropped.png" width="240"/>
     </a>
-    <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_status.png" target="_blank" style="cursor: pointer;">
-        <img alt="Status page" src="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_status.png" width="240"/>
+    <a href="../images/config_page_status.png" target="_blank" style="cursor: pointer;">
+        <img alt="Status page" src="../images/config_page_status.png" width="240"/>
     </a>
-    <a href="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_settings.png" target="_blank" style="cursor: pointer;">
-        <img alt="Settings page" src="https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/config_page_settings_cropped.png" width="240"/>
+    <a href="../images/config_page_settings.png" target="_blank" style="cursor: pointer;">
+        <img alt="Settings page" src="../images/config_page_settings_cropped.png" width="240"/>
     </a>
 </div>
 
@@ -70,3 +87,7 @@ SmartLists works with all media types supported by Jellyfin:
     - Media type: "Movie"
     - Genre contains "Action"
     - Playback Status = Unplayed
+
+## Maintenance Notes
+
+This project uses AI-assisted development, but the plugin and docs are reviewed, tested, and maintained through the public GitHub repository. If you find something unclear or incorrect, please open an issue or discussion so it can be fixed.
