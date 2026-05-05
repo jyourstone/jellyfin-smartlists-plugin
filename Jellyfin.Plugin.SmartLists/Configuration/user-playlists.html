@@ -298,6 +298,21 @@
                                     placeholder="Leave empty for none" style="resize: vertical;"></textarea>
                                 <div class="fieldDescription">Set a custom description/overview for this list.</div>
                             </div>
+                            <div style="margin-top: 0.5em;">
+                                <label class="inputLabel" for="metadataTagsContainer">Tags</label>
+                                <div id="metadataTagsContainer"></div>
+                                <div class="fieldDescription">Set tags on the Jellyfin playlist or collection. Any existing tags will be replaced.</div>
+                            </div>
+                            <div style="margin-top: 0.5em;">
+                                <label class="inputLabel" for="metadataFavorite">Favorite</label>
+                                <select id="metadataFavorite" is="emby-select"
+                                    class="emby-select-withcolor emby-select">
+                                    <option value="">Leave unchanged</option>
+                                    <option value="true">Mark as favorite</option>
+                                    <option value="false">Mark as not favorite</option>
+                                </select>
+                                <div class="fieldDescription">Set whether the created list is favorited for your user.</div>
+                            </div>
                         </div>
 
                         <div style="margin-top: 2em;">
