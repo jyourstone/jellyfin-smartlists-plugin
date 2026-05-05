@@ -333,9 +333,9 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
                 foreach (var tag in list.Tags)
                 {
-                    if (tag == null)
+                    if (string.IsNullOrWhiteSpace(tag))
                     {
-                        return SmartListValidationResult.Failure("Tags cannot contain null values");
+                        return SmartListValidationResult.Failure("Tags cannot be empty or whitespace");
                     }
 
                     if (tag.Length > MaxTagLength)
