@@ -282,7 +282,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     }
 
                     // Update the playlist items (includes metadata refresh)
-                    await UpdatePlaylistPublicStatusAsync(existingPlaylist, dto.Public, newLinkedChildren, dto, cancellationToken);
+                    await UpdatePlaylistPublicStatusAsync(existingPlaylist, dto.Public, newLinkedChildren, dto, user, cancellationToken);
 
                     logger.LogDebug("Successfully updated existing playlist: {PlaylistName} with {ItemCount} items",
                         existingPlaylist.Name, newLinkedChildren.Length);
@@ -294,7 +294,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // Create new playlist
                     logger.LogDebug("Creating new playlist: {PlaylistName}", smartPlaylistName);
 
-                    var newPlaylistId = await CreateNewPlaylistAsync(smartPlaylistName, user.Id, dto.Public, newLinkedChildren, dto, cancellationToken);
+                    var newPlaylistId = await CreateNewPlaylistAsync(smartPlaylistName, user, dto.Public, newLinkedChildren, dto, cancellationToken);
 
                     // Check if playlist creation actually succeeded
                     if (string.IsNullOrEmpty(newPlaylistId))
@@ -596,7 +596,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
         }
 
-        private async Task UpdatePlaylistPublicStatusAsync(Playlist playlist, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
+        private async Task UpdatePlaylistPublicStatusAsync(Playlist playlist, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, User user, CancellationToken cancellationToken)
         {
             _logger.LogDebug("Updating playlist {PlaylistName} public status to {PublicStatus} and items to {ItemCount}",
     playlist.Name, isPublic ? "public" : "private", linkedChildren.Length);
@@ -656,10 +656,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
 
             // Apply custom metadata after metadata refresh to prevent providers from overwriting
-            await ApplyCustomMetadataAsync(playlist, dto, cancellationToken).ConfigureAwait(false);
+            await ApplyCustomMetadataAsync(playlist, dto, user, cancellationToken).ConfigureAwait(false);
         }
 
-        private async Task<string> CreateNewPlaylistAsync(string playlistName, Guid userId, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
+        private async Task<string> CreateNewPlaylistAsync(string playlistName, User user, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
         {
             _logger.LogDebug("Creating new smart playlist {PlaylistName} with {ItemCount} items and {PublicStatus} status",
                 playlistName, linkedChildren.Length, isPublic ? "public" : "private");
@@ -667,7 +667,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             var result = await _playlistManager.CreatePlaylist(new PlaylistCreationRequest
             {
                 Name = playlistName,
-                UserId = userId,
+                UserId = user.Id,
                 Public = isPublic,
             }).ConfigureAwait(false);
 
@@ -702,7 +702,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 }
 
                 // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                await ApplyCustomMetadataAsync(newPlaylist, dto, cancellationToken).ConfigureAwait(false);
+                await ApplyCustomMetadataAsync(newPlaylist, dto, user, cancellationToken).ConfigureAwait(false);
 
                 return newPlaylist.Id.ToString("N");
             }
@@ -713,8 +713,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
         }
 
-        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
-            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken);
+        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, User user, CancellationToken cancellationToken)
+            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken, user, _userDataManager);
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin playlist.

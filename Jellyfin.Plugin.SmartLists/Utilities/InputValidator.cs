@@ -23,6 +23,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         private const int MaxExpressionsPerSet = 100;
         private const int MaxMediaTypesCount = 50;
         private const int MaxSchedulesCount = 100;
+        private const int MaxTagsCount = 100;
+        private const int MaxTagLength = 100;
 
         // Dangerous patterns
         private static readonly string[] SqlInjectionPatterns = new[]
@@ -319,6 +321,33 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             if (list.VisibilitySchedules != null && list.VisibilitySchedules.Count > MaxSchedulesCount)
             {
                 return SmartListValidationResult.Failure($"Cannot have more than {MaxSchedulesCount} visibility schedules");
+            }
+
+            // Validate managed metadata tags
+            if (list.Tags != null)
+            {
+                if (list.Tags.Count > MaxTagsCount)
+                {
+                    return SmartListValidationResult.Failure($"Cannot have more than {MaxTagsCount} tags");
+                }
+
+                foreach (var tag in list.Tags)
+                {
+                    if (tag == null)
+                    {
+                        return SmartListValidationResult.Failure("Tags cannot contain null values");
+                    }
+
+                    if (tag.Length > MaxTagLength)
+                    {
+                        return SmartListValidationResult.Failure($"Tags cannot exceed {MaxTagLength} characters");
+                    }
+
+                    if (tag.Any(c => char.IsControl(c)))
+                    {
+                        return SmartListValidationResult.Failure("Tags cannot contain control characters");
+                    }
+                }
             }
 
             return SmartListValidationResult.Success();

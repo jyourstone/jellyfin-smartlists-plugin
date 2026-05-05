@@ -122,6 +122,54 @@
     };
 
     // ===== PLAYLIST CRUD OPERATIONS =====
+    SmartLists.initMetadataTagsInput = function (page, tags) {
+        const container = page.querySelector('#metadataTagsContainer');
+        if (!container || !SmartLists.createTagBasedInput) {
+            return;
+        }
+
+        container.innerHTML = '';
+        container.classList.add('rule-value-container');
+
+        var currentValue = '';
+        if (Array.isArray(tags)) {
+            currentValue = tags.join(';');
+        } else if (typeof tags === 'string') {
+            currentValue = tags;
+        }
+
+        SmartLists.createTagBasedInput(container, currentValue);
+    };
+
+    SmartLists.getMetadataTags = function (page) {
+        const container = page.querySelector('#metadataTagsContainer');
+        if (!container) {
+            return [];
+        }
+
+        const hiddenInput = container.querySelector('input[type="hidden"].rule-value-input');
+        if (!hiddenInput || !hiddenInput.value) {
+            return [];
+        }
+
+        const seen = {};
+        return hiddenInput.value.split(';').map(function (tag) {
+            return tag.trim();
+        }).filter(function (tag) {
+            if (!tag) {
+                return false;
+            }
+
+            const key = tag.toLowerCase();
+            if (seen[key]) {
+                return false;
+            }
+
+            seen[key] = true;
+            return true;
+        });
+    };
+
     SmartLists.createPlaylist = function (page) {
         // Get edit state to determine if we're creating or updating
         const editState = SmartLists.getPageEditState(page);
@@ -235,6 +283,8 @@
             // Get metadata fields
             var sortTitleVal = SmartLists.getElementValue(page, '#metadataSortTitle');
             var overviewVal = SmartLists.getElementValue(page, '#metadataOverview');
+            var tagsVal = SmartLists.getMetadataTags ? SmartLists.getMetadataTags(page) : [];
+            var favoriteVal = SmartLists.getElementValue(page, '#metadataFavorite', '');
 
             const playlistDto = {
                 Type: listType,
@@ -254,6 +304,14 @@
             // Add metadata fields if set
             if (sortTitleVal) { playlistDto.SortTitle = sortTitleVal; }
             if (overviewVal) { playlistDto.Overview = overviewVal; }
+            if (tagsVal.length > 0 || (editState.editMode && page._metadataTagsWasManaged === true)) {
+                playlistDto.Tags = tagsVal;
+            }
+            if (favoriteVal === 'true') {
+                playlistDto.Favorite = true;
+            } else if (favoriteVal === 'false') {
+                playlistDto.Favorite = false;
+            }
 
             // Add type-specific fields
             if (isCollection) {
@@ -470,6 +528,7 @@
 
         // Clear stored edit state values
         delete page._editingPlaylistCreatedByUserId;
+        delete page._metadataTagsWasManaged;
 
         SmartLists.setElementValue(page, '#playlistName', '');
 
@@ -516,6 +575,10 @@
         // Clear metadata fields
         SmartLists.setElementValue(page, '#metadataSortTitle', '');
         SmartLists.setElementValue(page, '#metadataOverview', '');
+        SmartLists.setElementValue(page, '#metadataFavorite', '');
+        if (SmartLists.initMetadataTagsInput) {
+            SmartLists.initMetadataTagsInput(page, []);
+        }
 
         // Clear custom images container
         if (SmartLists.initCustomImagesContainer) {
@@ -777,6 +840,11 @@
                 // Populate metadata fields
                 SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
                 SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
+                SmartLists.setElementValue(page, '#metadataFavorite', playlist.Favorite === true ? 'true' : (playlist.Favorite === false ? 'false' : ''));
+                page._metadataTagsWasManaged = playlist.Tags !== undefined && playlist.Tags !== null;
+                if (SmartLists.initMetadataTagsInput) {
+                    SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
+                }
 
                 // Load existing images for this playlist
                 if (SmartLists.loadExistingImages) {
@@ -1016,6 +1084,11 @@
                 // Populate metadata fields
                 SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
                 SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
+                SmartLists.setElementValue(page, '#metadataFavorite', playlist.Favorite === true ? 'true' : (playlist.Favorite === false ? 'false' : ''));
+                page._metadataTagsWasManaged = playlist.Tags !== undefined && playlist.Tags !== null;
+                if (SmartLists.initMetadataTagsInput) {
+                    SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
+                }
 
                 // Show success message
                 SmartLists.showNotification('List "' + playlistName + '" cloned successfully! You can now modify and create the new list.', 'success');
@@ -1526,6 +1599,11 @@
         const eStatsDisplay = SmartLists.escapeHtml(statsDisplay);
         const eTotalRuntimeLong = totalRuntimeLong ? SmartLists.escapeHtml(totalRuntimeLong) : null;
         const eListType = SmartLists.escapeHtml(listType);
+        const tagsDisplayText = playlist.Tags && playlist.Tags.length > 0 ? playlist.Tags.join(', ') : 'Not set';
+        const favoriteDisplayText = playlist.Favorite === true ? 'Mark as favorite' :
+            (playlist.Favorite === false ? 'Mark as not favorite' : 'Leave unchanged');
+        const eTagsDisplayText = SmartLists.escapeHtml(tagsDisplayText);
+        const eFavoriteDisplayText = SmartLists.escapeHtml(favoriteDisplayText);
 
         // Build custom images display
         var customImagesHtml = '';
@@ -1818,6 +1896,14 @@
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Overview</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + (playlist.Overview ? SmartLists.escapeHtml(playlist.Overview) : 'Not set') + '</td>' +
             '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Tags</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eTagsDisplayText + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Favorite</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eFavoriteDisplayText + '</td>' +
+            '</tr>' +
             '</table>' +
             '</div>' +
 
@@ -2026,4 +2112,3 @@
     };
 
 })(window.SmartLists = window.SmartLists || {});
-

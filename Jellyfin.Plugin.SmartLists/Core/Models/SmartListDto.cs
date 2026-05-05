@@ -130,6 +130,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public string? Overview { get; set; }
 
         /// <summary>
+        /// Tags applied to the Jellyfin playlist/collection.
+        /// Null means tags are not managed by SmartLists; an empty list clears managed tags.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Tags { get; set; }
+
+        /// <summary>
+        /// Favorite state applied to the Jellyfin playlist/collection for the relevant user.
+        /// Null means favorite state is not managed by SmartLists.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? Favorite { get; set; }
+
+        /// <summary>
         /// Migrates legacy IsPlayed rules to PlaybackStatus.
         /// Called after deserialization.
         /// </summary>
@@ -155,4 +169,3 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         }
     }
 }
-
