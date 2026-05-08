@@ -281,6 +281,11 @@
         if (SmartLists.initializeSortSystem) {
             SmartLists.initializeSortSystem(page);
         }
+
+        // Initialize metadata tag input
+        if (SmartLists.initMetadataTagsInput) {
+            SmartLists.initMetadataTagsInput(page, []);
+        }
     };
 
     // ===== MEDIA TYPE CHECKBOXES GENERATION =====

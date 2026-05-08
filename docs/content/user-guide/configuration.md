@@ -118,8 +118,13 @@ The **Metadata** section lets you set additional properties on the Jellyfin play
 
 - **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top).
 - **Overview** – Sets a custom description that appears in Jellyfin's item detail view.
+- **Tags** – Sets tags on the generated Jellyfin playlist or collection. Enter each tag and press Enter, or paste multiple tags separated by semicolons.
+- **Favorite** – Optionally marks the generated list as favorite or not favorite. Leave it unchanged if you do not want SmartLists to manage favorite state.
 
-Both fields are optional. Leave them empty to use Jellyfin's defaults. Values are re-applied on each refresh.
+All fields are optional. Values are re-applied on each refresh.
+
+!!! note "Favorite is user-specific"
+    Favorite state in Jellyfin belongs to a user, not to the playlist or collection globally. For playlists, SmartLists applies the setting for each selected playlist user. For collections, SmartLists applies it for the selected collection reference user.
 
 !!! note "User Selection for Collections"
     When creating a collection, the user you select is used as a **reference** for rule evaluation, not as an owner. The collection itself is server-wide and visible to everyone. This user's context is important for:

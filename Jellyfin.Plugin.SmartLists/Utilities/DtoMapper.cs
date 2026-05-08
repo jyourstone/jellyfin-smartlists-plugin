@@ -41,6 +41,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 ExpressionSets = source.ExpressionSets,
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
+                IncludeExtras = source.IncludeExtras,
                 
                 // State and limits
                 Enabled = source.Enabled,
@@ -64,6 +65,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 
                 // Similarity comparison
                 SimilarityComparisonFields = source.SimilarityComparisonFields,
+
+                // Custom metadata
+                CustomImages = source.CustomImages,
+                SortTitle = source.SortTitle,
+                Overview = source.Overview,
+                Tags = source.Tags,
+                Favorite = source.Favorite,
                 
                 // Playlist-specific (initialize to defaults)
                 JellyfinPlaylistId = null,
@@ -106,6 +114,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 ExpressionSets = source.ExpressionSets,
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
+                IncludeExtras = source.IncludeExtras,
                 
                 // State and limits
                 Enabled = source.Enabled,
@@ -129,6 +138,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 
                 // Similarity comparison
                 SimilarityComparisonFields = source.SimilarityComparisonFields,
+
+                // Custom metadata
+                CustomImages = source.CustomImages,
+                SortTitle = source.SortTitle,
+                Overview = source.Overview,
+                Tags = source.Tags,
+                Favorite = source.Favorite,
                 
                 // Collection-specific (will be set by caller)
                 JellyfinCollectionId = null

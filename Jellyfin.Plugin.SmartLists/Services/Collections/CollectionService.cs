@@ -324,7 +324,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     }
 
                     // Update the collection items
-                    await UpdateCollectionItemsAsync(existingCollection, newLinkedChildren, dto, cancellationToken);
+                    await UpdateCollectionItemsAsync(existingCollection, newLinkedChildren, dto, ownerUser, cancellationToken);
 
                     _logger.LogDebug("Successfully updated existing collection: {CollectionName} with {ItemCount} items",
                         existingCollection.Name, newLinkedChildren.Length);
@@ -340,7 +340,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Create new collection
                     _logger.LogDebug("Creating new collection: {CollectionName}", collectionName);
 
-                    var newCollectionId = await CreateNewCollectionAsync(collectionName, newLinkedChildren, dto, cancellationToken);
+                    var newCollectionId = await CreateNewCollectionAsync(collectionName, newLinkedChildren, dto, ownerUser, cancellationToken);
 
                     // Check if collection creation actually succeeded
                     if (string.IsNullOrEmpty(newCollectionId))
@@ -525,7 +525,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
-        private async Task UpdateCollectionItemsAsync(BaseItem collection, LinkedChild[] linkedChildren, SmartCollectionDto dto, CancellationToken cancellationToken)
+        private async Task UpdateCollectionItemsAsync(BaseItem collection, LinkedChild[] linkedChildren, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
         {
             // Verify this is a BoxSet using BaseItemKind
             if (collection.GetBaseItemKind() != BaseItemKind.BoxSet)
@@ -594,11 +594,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                 // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                await ApplyCustomMetadataAsync(collectionAfterRefresh, dto, cancellationToken).ConfigureAwait(false);
+                await ApplyCustomMetadataAsync(collectionAfterRefresh, dto, ownerUser, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        private async Task<string> CreateNewCollectionAsync(string collectionName, LinkedChild[] linkedChildren, SmartCollectionDto dto, CancellationToken cancellationToken)
+        private async Task<string> CreateNewCollectionAsync(string collectionName, LinkedChild[] linkedChildren, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
         {
             // Apply prefix/suffix to collection name using the same configuration as playlists
             var formattedName = NameFormatter.FormatPlaylistName(collectionName);
@@ -897,7 +897,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                     // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                    await ApplyCustomMetadataAsync(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
+                    await ApplyCustomMetadataAsync(retrievedItem, dto, ownerUser, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");
@@ -909,8 +909,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
-        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, CancellationToken cancellationToken)
-            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken);
+        private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, User ownerUser, CancellationToken cancellationToken)
+            => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken, ownerUser, _userDataManager);
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin collection.
@@ -2250,4 +2250,3 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
     }
 }
-
