@@ -19,6 +19,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? JellyfinPlaylistId { get; set; }  // Jellyfin playlist ID for reliable lookup (backwards compatibility - first user's playlist)
         public bool Public { get; set; } = false; // Default to private
+        public bool AllUsers { get; set; } = false; // Create one personalized playlist for every current and future Jellyfin user
 
         /// <summary>
         /// Multi-user playlist support: Array of user-playlist mappings.
@@ -39,4 +40,3 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         }
     }
 }
-

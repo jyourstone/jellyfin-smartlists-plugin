@@ -122,6 +122,10 @@
             return Promise.resolve();
         }
 
+        if (page._pendingAllUsers || (SmartLists.isAllUsersSelected && SmartLists.isAllUsersSelected(page))) {
+            return Promise.resolve();
+        }
+
         // Don't overwrite if we have a pending collection user ID (from edit/clone mode for collections)
         if (page._pendingCollectionUserId) {
             return Promise.resolve();
@@ -661,4 +665,3 @@
     };
 
 })(window.SmartLists = window.SmartLists || {});
-

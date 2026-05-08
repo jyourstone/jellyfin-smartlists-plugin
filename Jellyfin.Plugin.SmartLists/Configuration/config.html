@@ -168,6 +168,17 @@
 
                             <!-- Playlist: Custom Multi-Select -->
                             <div id="playlistUserMultiSelect" class="playlist-only-field" style="display: none;">
+                                <label class="emby-checkbox-label" style="margin-bottom: 0.5em;">
+                                    <input type="checkbox" is="emby-checkbox" id="playlistAllUsers"
+                                        data-embycheckbox="true" class="emby-checkbox">
+                                    <span class="checkboxLabel">All users</span>
+                                    <span class="checkboxOutline">
+                                        <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                            aria-hidden="true"></span>
+                                        <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                            aria-hidden="true"></span>
+                                    </span>
+                                </label>
                                 <div class="multi-select-container">
                                     <div class="multi-select-display emby-select-withcolor" id="userMultiSelectDisplay">
                                         <span class="multi-select-placeholder">Select users...</span>

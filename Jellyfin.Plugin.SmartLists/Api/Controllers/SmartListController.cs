@@ -167,28 +167,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         private static HashSet<string> GetPlaylistUserIds(SmartPlaylistDto playlist)
         {
-            var userIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
-            {
-                foreach (var mapping in playlist.UserPlaylists)
-                {
-                    if (!string.IsNullOrEmpty(mapping.UserId) && Guid.TryParse(mapping.UserId, out var userId) && userId != Guid.Empty)
-                    {
-                        // Normalize to standard format without dashes for consistent comparison
-                        userIds.Add(userId.ToString("N"));
-                    }
-                }
-            }
-            else if (!string.IsNullOrEmpty(playlist.UserId) && Guid.TryParse(playlist.UserId, out var parsedUserId) && parsedUserId != Guid.Empty)
-            {
-                // Fallback to old format, normalize to standard format without dashes
-                // DEPRECATED: This fallback is for backwards compatibility with old single-user playlists.
-                // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
-                userIds.Add(parsedUserId.ToString("N"));
-            }
-
-            return userIds;
+            return PlaylistUserResolver.GetEffectiveUserIds(playlist);
         }
 
         /// <summary>
@@ -429,6 +408,21 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private bool NormalizeAndValidateUserPlaylists(SmartPlaylistDto playlist, out string errorMessage)
         {
             errorMessage = string.Empty;
+
+            if (playlist.AllUsers)
+            {
+                PlaylistUserResolver.ExpandAllUsers(playlist, _userManager);
+                if (playlist.UserPlaylists == null || playlist.UserPlaylists.Count == 0)
+                {
+                    errorMessage = "At least one Jellyfin user is required for all-users playlists";
+                    return false;
+                }
+
+                playlist.Public = false;
+                logger.LogDebug("All-users playlist detected ({UserCount} users), setting Public=false", playlist.UserPlaylists.Count);
+                return true;
+            }
+
             if (playlist.UserPlaylists == null || playlist.UserPlaylists.Count == 0)
             {
                 errorMessage = "At least one playlist user is required";
@@ -1274,6 +1268,17 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             playlistDto.DateCreated = existingCollection.DateCreated;
                         }
 
+                        if (!NormalizeAndValidateUserPlaylists(playlistDto, out var conversionValidationError))
+                        {
+                            logger.LogWarning("Collection-to-playlist conversion validation failed: {Error}. Name={Name}", conversionValidationError, playlistDto.Name);
+                            return BadRequest(new ProblemDetails
+                            {
+                                Title = "Validation Error",
+                                Detail = conversionValidationError,
+                                Status = StatusCodes.Status400BadRequest
+                            });
+                        }
+
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
                         var collectionService = GetCollectionService();
                         await collectionService.DeleteAsync(existingCollection);
@@ -1443,7 +1448,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 // Compare old and new user lists to detect changes
                 var oldUserIds = GetPlaylistUserIds(existingPlaylist);
-                var newUserIds = GetPlaylistUserIds(playlist);
+                var newUserIds = PlaylistUserResolver.GetEffectiveUserIds(playlist, _userManager);
                 var usersToRemove = oldUserIds.Except(newUserIds, StringComparer.OrdinalIgnoreCase).ToList();
                 var usersToAdd = newUserIds.Except(oldUserIds, StringComparer.OrdinalIgnoreCase).ToList();
                 var usersToKeep = oldUserIds.Intersect(newUserIds, StringComparer.OrdinalIgnoreCase).ToList();
@@ -3686,6 +3691,22 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     currentUserId = GetCurrentUserId();
                 }
                 return currentUserId;
+            }
+
+            if (playlist.AllUsers)
+            {
+                PlaylistUserResolver.ExpandAllUsers(playlist, _userManager);
+                if (playlist.UserPlaylists == null || playlist.UserPlaylists.Count == 0)
+                {
+                    return Task.FromResult((false, "Playlist has no valid users"));
+                }
+
+                if (Guid.TryParse(playlist.UserPlaylists[0].UserId, out var firstAllUserId))
+                {
+                    playlist.UserId = firstAllUserId.ToString("D");
+                }
+
+                return Task.FromResult((true, string.Empty));
             }
 
             // Check multi-user playlists

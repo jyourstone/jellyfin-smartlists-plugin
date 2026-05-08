@@ -385,6 +385,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private async Task ProcessPlaylistRefreshAsync(SmartPlaylistDto dto, CancellationToken cancellationToken)
         {
+            if (dto.AllUsers)
+            {
+                PlaylistUserResolver.ExpandAllUsers(dto, _userManager);
+            }
+
             // Multi-user playlists: Process each user in the UserPlaylists array
             if (dto.UserPlaylists != null && dto.UserPlaylists.Count > 0)
             {
@@ -791,4 +796,3 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
     }
 }
-

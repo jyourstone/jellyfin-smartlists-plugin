@@ -17,6 +17,12 @@ For **Playlists**, you can select one or more users who will be the **owners** o
 - Each playlist is filtered based on the respective user's own data
 - This allows the same smart playlist configuration to show different content for each user
 
+### All Users
+- When you select **All users**, a separate Jellyfin playlist is created for every current Jellyfin user
+- Future Jellyfin users are included automatically the next time the smart playlist refreshes
+- Each user still gets their own personalized version based on their own watch data, favorites, play count, and library access
+- All-user playlists are managed by administrators only
+
 !!! example "Multi-User Playlist Example"
     If you create a "My Favorites" playlist and select three users (Alice, Bob, and Charlie):
     
@@ -42,10 +48,10 @@ Playlists also have a **"Make playlist public"** option:
 - **Public (checked)**: The playlist is visible to all logged-in users on the server, but the content is still based on the owner's data
 
 !!! note "Public Playlists with Multiple Users"
-    When you select multiple users for a playlist, the "Make playlist public" option is automatically hidden and disabled. This is because each user gets their own separate playlist, and it wouldn't make sense for one user's personalized playlist to be visible to others.
+    When you select multiple users, or select **All users**, the "Make playlist public" option is automatically hidden and disabled. This is because each user gets their own separate playlist, and it wouldn't make sense for one user's personalized playlist to be visible to others.
 
 !!! warning "Multi-User Playlists and User Page Access"
-    Multi-user playlists are **only visible and editable by administrators**. Regular users accessing the SmartLists user page will not see multi-user playlists in their list, even if they are one of the selected users.
+    Multi-user and all-user playlists are **only visible and editable by administrators**. Regular users accessing the SmartLists user page will not see these smart playlist configurations in their list, even if they are one of the selected users.
     
     This is a safety measure to prevent users from accidentally modifying playlists that would affect other users. If a user needs their own version of a multi-user playlist, an administrator should create separate single-user playlists instead (one for each user).
 
@@ -88,7 +94,7 @@ For **Collections**, the user selection works differently because collections do
 | **Ownership** | Each selected user owns their playlist | No ownership (server-wide) |
 | **Visibility** | Private or public | Always visible to all users |
 | **Content Filtering** | Based on each owner's data | Based on reference user's data |
-| **Multiple Instances** | One playlist per selected user | Single collection for all users |
+| **Multiple Instances** | One playlist per selected user, or one per current/future user with All users | Single collection for all users |
 
 ## Selecting Users
 
@@ -97,8 +103,9 @@ In the SmartLists configuration interface:
 ### For Playlists
 1. Click on the **Playlist Users** multi-select dropdown
 2. Check the boxes for the users you want to create playlists for
-3. At least one user must be selected
-4. Each selected user will get their own personalized playlist
+3. Or check **All users** to include every current and future Jellyfin user
+4. At least one user must be selected unless **All users** is checked
+5. Each selected user will get their own personalized playlist
 
 ### For Collections
 1. Select a single user from the **Collection User** dropdown

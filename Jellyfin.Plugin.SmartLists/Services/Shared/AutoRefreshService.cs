@@ -1045,6 +1045,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             try
             {
+                if (playlist.AllUsers)
+                {
+                    return true;
+                }
+
                 // Check if the user is in the UserPlaylists array (multi-user playlists)
                 // UserPlaylists stores UserId in "N" format (no dashes), so normalize for comparison
                 if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
