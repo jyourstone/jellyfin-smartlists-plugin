@@ -407,6 +407,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Multi-user playlists: Process each user in the UserPlaylists array
             var userPlaylists = userPlaylistsToProcess ?? dto.UserPlaylists;
+            if (userPlaylistsToProcess != null && userPlaylistsToProcess.Count == 0)
+            {
+                _logger.LogDebug("Skipping all-users playlist '{PlaylistName}' because no triggering users matched current users", dto.Name);
+                return;
+            }
+
             if (userPlaylists != null && userPlaylists.Count > 0)
             {
                 _logger.LogDebug("Processing multi-user playlist '{PlaylistName}' with {UserCount} users", dto.Name, userPlaylists.Count);
