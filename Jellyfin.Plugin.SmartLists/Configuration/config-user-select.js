@@ -29,10 +29,11 @@
         const allUsersCheckbox = page.querySelector('#playlistAllUsers');
         if (allUsersCheckbox && !allUsersCheckbox._smartListsAllUsersInitialized) {
             allUsersCheckbox._smartListsAllUsersInitialized = true;
-            allUsersCheckbox.addEventListener('change', function () {
+            allUsersCheckbox._smartListsAllUsersChangeHandler = function () {
                 SmartLists.updateAllUsersSelectionState(page);
                 SmartLists.updatePublicCheckboxVisibility(page);
-            });
+            };
+            allUsersCheckbox.addEventListener('change', allUsersCheckbox._smartListsAllUsersChangeHandler);
         }
 
         SmartLists.updateAllUsersSelectionState(page);
@@ -181,6 +182,13 @@
      * Cleanup function to be called on page navigation to prevent memory leaks
      */
     SmartLists.cleanupUserMultiSelect = function (page) {
+        const allUsersCheckbox = page.querySelector('#playlistAllUsers');
+        if (allUsersCheckbox && allUsersCheckbox._smartListsAllUsersChangeHandler) {
+            allUsersCheckbox.removeEventListener('change', allUsersCheckbox._smartListsAllUsersChangeHandler);
+            delete allUsersCheckbox._smartListsAllUsersChangeHandler;
+            delete allUsersCheckbox._smartListsAllUsersInitialized;
+        }
+
         SmartLists.cleanupMultiSelect(page, 'playlistUserMultiSelect');
     };
 

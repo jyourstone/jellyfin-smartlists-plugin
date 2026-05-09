@@ -1268,6 +1268,21 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             playlistDto.DateCreated = existingCollection.DateCreated;
                         }
 
+                        if (!playlistDto.AllUsers && (playlistDto.UserPlaylists == null || playlistDto.UserPlaylists.Count == 0))
+                        {
+                            if (!string.IsNullOrEmpty(playlistDto.UserId) && Guid.TryParse(playlistDto.UserId, out var playlistUserId) && playlistUserId != Guid.Empty)
+                            {
+                                playlistDto.UserPlaylists =
+                                [
+                                    new SmartPlaylistDto.UserPlaylistMapping
+                                    {
+                                        UserId = playlistDto.UserId,
+                                        JellyfinPlaylistId = null
+                                    }
+                                ];
+                            }
+                        }
+
                         if (!NormalizeAndValidateUserPlaylists(playlistDto, out var conversionValidationError))
                         {
                             logger.LogWarning("Collection-to-playlist conversion validation failed: {Error}. Name={Name}", conversionValidationError, playlistDto.Name);

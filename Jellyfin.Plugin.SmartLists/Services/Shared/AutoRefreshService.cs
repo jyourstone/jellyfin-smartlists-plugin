@@ -84,6 +84,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         // Batch processing for library events (add/remove) to avoid spam during bulk operations
         private readonly ConcurrentDictionary<string, DateTime> _pendingLibraryRefreshes = new();
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _pendingUserDataRefreshUsers = new();
+        private readonly ConcurrentDictionary<string, byte> _pendingFullAutoRefreshes = new();
         private readonly Timer _batchProcessTimer;
         private readonly TimeSpan _batchDelay = TimeSpan.FromSeconds(3); // Short delay for batching library events
 
@@ -431,6 +433,19 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     foreach (var playlistId in affectedPlaylistIds)
                     {
                         _pendingLibraryRefreshes[playlistId] = DateTime.UtcNow.Add(_batchDelay);
+                        if (triggeringUserId.HasValue)
+                        {
+                            if (!_pendingFullAutoRefreshes.ContainsKey(playlistId))
+                            {
+                                var userIds = _pendingUserDataRefreshUsers.GetOrAdd(playlistId, _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+                                userIds[triggeringUserId.Value.ToString("N")] = 0;
+                            }
+                        }
+                        else
+                        {
+                            _pendingFullAutoRefreshes[playlistId] = 0;
+                            _pendingUserDataRefreshUsers.TryRemove(playlistId, out _);
+                        }
                     }
 
                     foreach (var collectionId in affectedCollectionIds)
@@ -453,6 +468,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 var now = DateTime.UtcNow;
                 var readyToProcess = new List<string>();
+                var triggeringUsersByPlaylist = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
                 // Find playlists that are ready to be refreshed (delay has passed)
                 foreach (var kvp in _pendingLibraryRefreshes.ToList())
@@ -461,6 +477,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     {
                         readyToProcess.Add(kvp.Key);
                         _pendingLibraryRefreshes.TryRemove(kvp.Key, out _);
+                        var isFullRefresh = _pendingFullAutoRefreshes.TryRemove(kvp.Key, out _);
+                        if (!isFullRefresh && _pendingUserDataRefreshUsers.TryRemove(kvp.Key, out var userIds))
+                        {
+                            triggeringUsersByPlaylist[kvp.Key] = userIds.Keys.ToList();
+                        }
+                        else
+                        {
+                            _pendingUserDataRefreshUsers.TryRemove(kvp.Key, out _);
+                        }
                     }
                 }
 
@@ -471,7 +496,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         readyToProcess.Count, _batchDelay.TotalSeconds);
 
                     // Process the batch in background - separate playlists and collections
-                    _ = Task.Run(async () => await ProcessListRefreshes(readyToProcess));
+                    _ = Task.Run(async () => await ProcessListRefreshes(readyToProcess, triggeringUsersByPlaylist));
                 }
             }
             catch (Exception ex)
@@ -1330,7 +1355,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
 
 
-        private async Task ProcessListRefreshes(List<string> listIds)
+        private async Task ProcessListRefreshes(List<string> listIds, IReadOnlyDictionary<string, List<string>>? triggeringUsersByPlaylist = null)
         {
             if (_disposed) return;
 
@@ -1368,7 +1393,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Process playlists
                 if (playlistIds.Any())
                 {
-                    await ProcessPlaylistRefreshes(playlistIds).ConfigureAwait(false);
+                    await ProcessPlaylistRefreshes(playlistIds, triggeringUsersByPlaylist).ConfigureAwait(false);
                 }
 
                 // Process collections
@@ -1383,7 +1408,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             }
         }
 
-        private async Task ProcessPlaylistRefreshes(List<string> playlistIds)
+        private async Task ProcessPlaylistRefreshes(List<string> playlistIds, IReadOnlyDictionary<string, List<string>>? triggeringUsersByPlaylist = null)
         {
             if (_disposed) return;
 
@@ -1410,6 +1435,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                                 OperationType = RefreshOperationType.Refresh,
                                 ListData = playlist,
                                 UserId = playlist.UserId,
+                                TriggeringUserIds = triggeringUsersByPlaylist != null && triggeringUsersByPlaylist.TryGetValue(playlistId, out var triggeringUserIds)
+                                    ? triggeringUserIds
+                                    : null,
                                 TriggerType = Core.Enums.RefreshTriggerType.Auto
                             };
                             
