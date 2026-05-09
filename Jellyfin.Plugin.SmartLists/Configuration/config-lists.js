@@ -27,6 +27,10 @@
             return Promise.resolve('Unknown User');
         }
 
+        if (playlist.AllUsers) {
+            return Promise.resolve('All users');
+        }
+
         // Check for multi-user playlists (UserPlaylists array)
         if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
             // Resolve all user IDs to names
@@ -240,6 +244,7 @@
 
             // Get selected user ID(s) - collections use single select, playlists use multi-select
             let userIds;
+            let allUsers = false;
             if (SmartLists.IS_USER_PAGE) {
                 // User page: always use the current logged-in user
                 const apiClient = SmartLists.getApiClient();
@@ -253,12 +258,13 @@
                 userIds = userId ? [normalizeUserId(userId)] : [];
             } else {
                 // Admin page - Playlists: potentially multiple users
-                const selectedIds = SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : [];
+                allUsers = SmartLists.isAllUsersSelected ? SmartLists.isAllUsersSelected(page) : false;
+                const selectedIds = allUsers ? [] : (SmartLists.getSelectedUserIds ? SmartLists.getSelectedUserIds(page) : []);
                 // Normalize all user IDs (remove hyphens and lowercase)
                 userIds = selectedIds.map(function(id) { return normalizeUserId(id); });
             }
 
-            if (!userIds || userIds.length === 0) {
+            if (!allUsers && (!userIds || userIds.length === 0)) {
                 SmartLists.showNotification('Please select at least one ' + (isCollection ? 'collection user' : 'playlist user') + '.');
                 return;
             }
@@ -320,14 +326,15 @@
                 // Collections are server-wide, no library assignment needed
             } else {
                 // Playlists: send UserPlaylists array structure
-                playlistDto.UserPlaylists = userIds.map(function (userId) {
+                playlistDto.AllUsers = allUsers;
+                playlistDto.UserPlaylists = allUsers ? [] : userIds.map(function (userId) {
                     return {
                         UserId: userId,
                         JellyfinPlaylistId: null  // Backend will populate on creation
                     };
                 });
-                // Only set Public for single-user playlists (multi-user playlists are always private)
-                playlistDto.Public = userIds.length === 1 ? isPublic : false;
+                // Only set Public for single-user playlists (all-user and multi-user playlists are always private)
+                playlistDto.Public = (!allUsers && userIds.length === 1) ? isPublic : false;
             }
 
             // Add similarity comparison fields if specified
@@ -528,9 +535,14 @@
 
         // Clear stored edit state values
         delete page._editingPlaylistCreatedByUserId;
+        delete page._pendingAllUsers;
+        delete page._pendingUserIds;
         delete page._metadataTagsWasManaged;
 
         SmartLists.setElementValue(page, '#playlistName', '');
+        if (SmartLists.setAllUsersSelected) {
+            SmartLists.setAllUsersSelected(page, false);
+        }
 
         // Clean up all existing event listeners before clearing rules
         const rulesContainer = page.querySelector('#rules-container');
@@ -624,6 +636,7 @@
                 // This ensures pendingUserIds is set before loadUsers checks for it
                 let userIds = [];
                 if (!isCollection) {
+                    page._pendingAllUsers = playlist.AllUsers === true;
                     // Playlists can have multiple users
                     if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
                         userIds = playlist.UserPlaylists.map(function (up) { return up.UserId; });
@@ -633,6 +646,7 @@
                     // Store userIds to set after users are loaded (loadUsers is async)
                     page._pendingUserIds = userIds;
                 } else {
+                    page._pendingAllUsers = false;
                     // Collections: store the user ID to prevent setCurrentUserAsDefault from overwriting
                     if (playlist.UserId) {
                         page._pendingCollectionUserId = String(playlist.UserId);
@@ -720,7 +734,10 @@
                     // userIds were already extracted and stored in page._pendingUserIds above
                     // Try to set immediately if users are already loaded, otherwise wait for loadUsers
                     const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox');
-                    if (checkboxes.length > 0 && page._pendingUserIds) {
+                    if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
+                        SmartLists.setAllUsersSelected(page, true);
+                        page._pendingAllUsers = false;
+                    } else if (checkboxes.length > 0 && page._pendingUserIds) {
                         // Users already loaded, set immediately
                         if (SmartLists.setSelectedUserIds) {
                             SmartLists.setSelectedUserIds(page, page._pendingUserIds);
@@ -895,6 +912,7 @@
                 // This ensures pendingUserIds is set before loadUsers checks for it
                 let userIds = [];
                 if (!isCollection) {
+                    page._pendingAllUsers = playlist.AllUsers === true;
                     // Playlists can have multiple users
                     if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
                         userIds = playlist.UserPlaylists.map(function (up) { return up.UserId; });
@@ -904,6 +922,7 @@
                     // Store userIds to set after users are loaded (loadUsers is async)
                     page._pendingUserIds = userIds;
                 } else {
+                    page._pendingAllUsers = false;
                     // Collections: store the source user ID to prevent setCurrentUserAsDefault from overwriting
                     if (playlist.UserId) {
                         page._pendingCollectionUserId = String(playlist.UserId);
@@ -990,7 +1009,10 @@
                     // userIds were already extracted and stored in page._pendingUserIds above
                     // Try to set immediately if users are already loaded, otherwise wait for loadUsers
                     const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox');
-                    if (checkboxes.length > 0 && page._pendingUserIds) {
+                    if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
+                        SmartLists.setAllUsersSelected(page, true);
+                        page._pendingAllUsers = false;
+                    } else if (checkboxes.length > 0 && page._pendingUserIds) {
                         // Users already loaded, set immediately
                         if (SmartLists.setSelectedUserIds) {
                             SmartLists.setSelectedUserIds(page, page._pendingUserIds);
@@ -1994,7 +2016,7 @@
                 processedPlaylists = processedPlaylists.filter(function (playlist) {
                     // Only show playlists that have 0 or 1 user
                     // Multi-user playlists (created by admins) should only be visible/editable by admins
-                    return !playlist.UserPlaylists || playlist.UserPlaylists.length <= 1;
+                    return !playlist.AllUsers && (!playlist.UserPlaylists || playlist.UserPlaylists.length <= 1);
                 });
             }
 

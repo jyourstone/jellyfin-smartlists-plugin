@@ -451,6 +451,9 @@
         const userSelect = page.querySelector('#playlistUser');
         if (userSelect) {
             userSelect.value = '';
+            if (SmartLists.setAllUsersSelected) {
+                SmartLists.setAllUsersSelected(page, false);
+            }
             SmartLists.setCurrentUserAsDefault(page);
         }
     };
@@ -559,7 +562,9 @@
                     }
 
                     // Check if there are pending userIds to set (from edit/clone mode)
-                    if (page._pendingUserIds && Array.isArray(page._pendingUserIds) && page._pendingUserIds.length > 0) {
+                    if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
+                        SmartLists.setAllUsersSelected(page, true);
+                    } else if (page._pendingUserIds && Array.isArray(page._pendingUserIds) && page._pendingUserIds.length > 0) {
                         // Use setTimeout to ensure checkboxes are fully rendered
                         setTimeout(function () {
                             if (SmartLists.setSelectedUserIds) {
@@ -571,7 +576,8 @@
                     } else {
                         // Check if checkboxes already have selections before defaulting to current user
                         const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
-                        if (checkboxes.length === 0) {
+                        const allUsersSelected = SmartLists.isAllUsersSelected && SmartLists.isAllUsersSelected(page);
+                        if (checkboxes.length === 0 && !allUsersSelected) {
                             // Set current user as default (only if not in edit/clone mode)
                             SmartLists.setCurrentUserAsDefault(page);
                         }
@@ -2564,6 +2570,9 @@
             // Priority: current UI state (most accurate) > pending IDs (may be stale from earlier toggles)
             var currentEditState = SmartLists.getPageEditState(page);
             if (isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
+                if (SmartLists.setAllUsersSelected) {
+                    SmartLists.setAllUsersSelected(page, false);
+                }
                 // Switching to Collection: check current checkbox selection first (highest priority)
                 var selectedCheckboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
                 if (selectedCheckboxes.length > 0) {

@@ -42,6 +42,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public RefreshOperationType OperationType { get; set; }
         public SmartListDto? ListData { get; set; }
         public string? UserId { get; set; }
+        public List<string>? TriggeringUserIds { get; set; }
         public RefreshTriggerType TriggerType { get; set; }
         public DateTime QueuedAt { get; set; }
     }
@@ -321,12 +322,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     {
                         _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
                             latestDto.Name, latestDto.CustomImages?.Count > 0);
-                        await ProcessPlaylistRefreshAsync(latestDto, cancellationToken);
+                        await ProcessPlaylistRefreshAsync(latestDto, item.TriggeringUserIds, cancellationToken);
                         return;
                     }
                 }
                 // Fallback to original DTO if reload fails
-                await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, cancellationToken);
+                await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, item.TriggeringUserIds, cancellationToken);
             }
             else if (item.ListType == SmartListType.Collection)
             {
@@ -383,15 +384,41 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Processes a playlist refresh with caching support
         /// </summary>
-        private async Task ProcessPlaylistRefreshAsync(SmartPlaylistDto dto, CancellationToken cancellationToken)
+        private async Task ProcessPlaylistRefreshAsync(SmartPlaylistDto dto, List<string>? triggeringUserIds, CancellationToken cancellationToken)
         {
-            // Multi-user playlists: Process each user in the UserPlaylists array
-            if (dto.UserPlaylists != null && dto.UserPlaylists.Count > 0)
+            List<SmartPlaylistDto.UserPlaylistMapping>? userPlaylistsToProcess = null;
+            if (dto.AllUsers)
             {
-                _logger.LogDebug("Processing multi-user playlist '{PlaylistName}' with {UserCount} users", dto.Name, dto.UserPlaylists.Count);
+                PlaylistUserResolver.ExpandAllUsers(dto, _userManager);
+
+                if (triggeringUserIds != null && triggeringUserIds.Count > 0 && dto.UserPlaylists != null)
+                {
+                    var triggeringUserSet = triggeringUserIds
+                        .Where(userId => !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _))
+                        .Select(PlaylistUserResolver.NormalizeUserId)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    userPlaylistsToProcess = dto.UserPlaylists
+                        .Where(mapping => !string.IsNullOrEmpty(mapping.UserId) &&
+                                          triggeringUserSet.Contains(PlaylistUserResolver.NormalizeUserId(mapping.UserId)))
+                        .ToList();
+                }
+            }
+
+            // Multi-user playlists: Process each user in the UserPlaylists array
+            var userPlaylists = userPlaylistsToProcess ?? dto.UserPlaylists;
+            if (userPlaylistsToProcess != null && userPlaylistsToProcess.Count == 0)
+            {
+                _logger.LogDebug("Skipping all-users playlist '{PlaylistName}' because no triggering users matched current users", dto.Name);
+                return;
+            }
+
+            if (userPlaylists != null && userPlaylists.Count > 0)
+            {
+                _logger.LogDebug("Processing multi-user playlist '{PlaylistName}' with {UserCount} users", dto.Name, userPlaylists.Count);
                 
                 var validUserCount = 0;
-                foreach (var userMapping in dto.UserPlaylists)
+                foreach (var userMapping in userPlaylists)
                 {
                     if (string.IsNullOrEmpty(userMapping.UserId) || !Guid.TryParse(userMapping.UserId, out var userId) || userId == Guid.Empty)
                     {
@@ -415,7 +442,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 if (validUserCount == 0)
                 {
                     _logger.LogWarning("Playlist '{PlaylistName}' had no valid users to refresh (all {UserCount} users were invalid or missing)", 
-                        dto.Name, dto.UserPlaylists.Count);
+                        dto.Name, userPlaylists.Count);
                 }
             }
             // Single-user playlist (backwards compatibility): Use top-level UserId
@@ -791,4 +818,3 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
     }
 }
-

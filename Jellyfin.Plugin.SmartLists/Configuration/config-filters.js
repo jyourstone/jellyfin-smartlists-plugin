@@ -68,6 +68,9 @@
                 const normalizedFilter = normalizeUserId(userFilter);
 
                 return playlists.filter(function (playlist) {
+                    if (playlist.AllUsers) {
+                        return true;
+                    }
                     // User filter applies to both playlists (owner) and collections (rule context user)
                     // Check UserPlaylists array (multi-user playlists)
                     if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
@@ -269,6 +272,10 @@
             }
 
             // Search in username (resolved from User ID or UserPlaylists)
+            if (playlist.AllUsers && ('all users'.indexOf(searchTerm) !== -1 || 'everyone'.indexOf(searchTerm) !== -1)) {
+                return true;
+            }
+
             if (page && page._usernameCache) {
                 // Check UserPlaylists array (multi-user playlists)
                 if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
@@ -599,6 +606,9 @@
 
             for (var i = 0; i < playlists.length; i++) {
                 const playlist = playlists[i];
+                if (playlist.AllUsers) {
+                    continue;
+                }
                 // Check UserPlaylists array (multi-user playlists)
                 if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
                     for (var j = 0; j < playlist.UserPlaylists.length; j++) {
@@ -773,4 +783,3 @@
     // Note: getPeopleFieldDisplayName is defined in config-formatters.js to avoid duplication
 
 })(window.SmartLists = window.SmartLists || {});
-

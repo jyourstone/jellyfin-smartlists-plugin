@@ -82,6 +82,11 @@ namespace Jellyfin.Plugin.SmartLists
 
             try
             {
+                foreach (var playlist in playlists.Where(p => p.AllUsers))
+                {
+                    PlaylistUserResolver.ExpandAllUsers(playlist, _userManager);
+                }
+
                 // Handle playlists with missing/invalid User first
                 // Helper predicate to check if a playlist has a valid user ID (either top-level UserId or UserPlaylists array)
                 static bool IsValidUserId(SmartPlaylistDto p)

@@ -76,6 +76,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 // Playlist-specific (initialize to defaults)
                 JellyfinPlaylistId = null,
                 Public = false,
+                AllUsers = false,
                 UserPlaylists = null
             };
             

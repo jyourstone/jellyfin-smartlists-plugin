@@ -287,6 +287,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                 // Override user selection - always use current user
                 // Use "N" format to exclude hyphens (consistent with admin page and API responses)
+                list.AllUsers = false;
                 list.UserId = userId.ToString("N");
                 list.UserPlaylists =
                 [
@@ -479,6 +480,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// </summary>
         private static bool IsUserInPlaylist(SmartPlaylistDto playlist, string normalizedUserId)
         {
+            if (playlist.AllUsers)
+            {
+                return false;
+            }
+
             // Check new format: UserPlaylists array
             if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
             {
@@ -633,6 +639,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     MaxItems = 0,
                     MaxPlayTimeMinutes = 0,
                     Public = false,
+                    AllUsers = false,
                     UserPlaylists =
                     [
                         new SmartPlaylistDto.UserPlaylistMapping
@@ -1143,6 +1150,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     // Preserve the original filename, user ownership, and type
                     playlistDto.FileName = existingPlaylist.FileName;
+                    playlistDto.AllUsers = false;
                     playlistDto.UserId = existingPlaylist.UserId;
                     playlistDto.UserPlaylists = existingPlaylist.UserPlaylists;
                     playlistDto.Type = Core.Enums.SmartListType.Playlist;
