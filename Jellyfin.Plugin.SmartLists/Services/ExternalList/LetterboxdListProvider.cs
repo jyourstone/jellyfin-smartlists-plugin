@@ -152,6 +152,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         {
             _uncachedCount = 0;
             using var semaphore = new SemaphoreSlim(MaxConcurrentFilmRequests, MaxConcurrentFilmRequests);
+            var resultLock = new object();
             var tasks = new List<Task>();
 
             for (int i = 0; i < filmSlugs.Count; i++)
@@ -162,12 +163,16 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 // Check cache first (no need for semaphore)
                 if (_slugToTmdbCache.TryGetValue(slug, out var cachedTmdbId))
                 {
-                    result.AddProviderIds(ExternalListItemKind.Movie, null, cachedTmdbId, null, position);
+                    lock (resultLock)
+                    {
+                        result.AddProviderIds(ExternalListItemKind.Movie, null, cachedTmdbId, null, position);
+                    }
+
                     continue;
                 }
 
                 await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-                tasks.Add(FetchFilmTmdbIdAsync(slug, position, result, semaphore, cancellationToken));
+                tasks.Add(FetchFilmTmdbIdAsync(slug, position, result, resultLock, semaphore, cancellationToken));
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -180,6 +185,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             string slug,
             int position,
             ExternalListResult result,
+            object resultLock,
             SemaphoreSlim semaphore,
             CancellationToken cancellationToken)
         {
@@ -199,7 +205,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     var tmdbId = match.Groups[1].Value;
                     _slugToTmdbCache.TryAdd(slug, tmdbId);
-                    result.AddProviderIds(ExternalListItemKind.Movie, null, tmdbId, null, position);
+                    lock (resultLock)
+                    {
+                        result.AddProviderIds(ExternalListItemKind.Movie, null, tmdbId, null, position);
+                    }
                 }
                 else
                 {

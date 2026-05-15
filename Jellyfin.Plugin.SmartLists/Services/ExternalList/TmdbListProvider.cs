@@ -349,7 +349,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
         private static ExternalListItemKind GetItemKind(string? mediaType, TmdbItem? item = null, ExternalListItemKind fallbackKind = ExternalListItemKind.Unknown)
         {
-            var kind = mediaType?.Trim().ToLowerInvariant() switch
+            var normalizedMediaType = mediaType?.Trim().ToLowerInvariant();
+            var kind = normalizedMediaType switch
             {
                 "movie" => ExternalListItemKind.Movie,
                 "tv" => ExternalListItemKind.Show,
@@ -359,6 +360,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             if (kind != ExternalListItemKind.Unknown)
             {
                 return kind;
+            }
+
+            if (!string.IsNullOrEmpty(normalizedMediaType))
+            {
+                return fallbackKind;
             }
 
             if (!string.IsNullOrEmpty(item?.Title))
