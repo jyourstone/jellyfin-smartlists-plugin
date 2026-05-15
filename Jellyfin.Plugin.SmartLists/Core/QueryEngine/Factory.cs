@@ -3827,38 +3827,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                 int matchedPosition = -1;
 
-                // Match by IMDb ID
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(imdbId) && listResult.ImdbIds.TryGetValue(imdbId, out var imdbPos))
+                if (listResult.TryGetPosition(GetExternalListItemKind(baseItem), imdbId, tmdbId, tvdbId, out var itemPosition))
                 {
-                    matchedPosition = imdbPos;
+                    matchedPosition = itemPosition;
                 }
 
-                // Match by TMDB ID
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(tmdbId) && listResult.TmdbIds.TryGetValue(tmdbId, out var tmdbPos))
+                // Match episodes by parent series IDs, but only against external show entries.
+                // Episode-level external IDs can share numeric namespaces with show IDs from
+                // other providers, especially TMDB, so mixing the buckets causes false matches.
+                if (matchedPosition < 0 && listResult.TryGetPosition(ExternalListItemKind.Show, seriesImdbId, seriesTmdbId, seriesTvdbId, out var seriesPosition))
                 {
-                    matchedPosition = tmdbPos;
-                }
-
-                // Match by TVDB ID
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(tvdbId) && listResult.TvdbIds.TryGetValue(tvdbId, out var tvdbPos))
-                {
-                    matchedPosition = tvdbPos;
-                }
-
-                // Match episodes by parent series IDs
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesImdbId) && listResult.ImdbIds.TryGetValue(seriesImdbId, out var seriesImdbPos))
-                {
-                    matchedPosition = seriesImdbPos;
-                }
-
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesTmdbId) && listResult.TmdbIds.TryGetValue(seriesTmdbId, out var seriesTmdbPos))
-                {
-                    matchedPosition = seriesTmdbPos;
-                }
-
-                if (matchedPosition < 0 && !string.IsNullOrEmpty(seriesTvdbId) && listResult.TvdbIds.TryGetValue(seriesTvdbId, out var seriesTvdbPos))
-                {
-                    matchedPosition = seriesTvdbPos;
+                    matchedPosition = seriesPosition;
                 }
 
                 if (matchedPosition >= 0)
@@ -3872,6 +3851,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             cache.ItemExternalLists[baseItem.Id] = matchingLists;
             return matchingLists;
+        }
+
+        private static ExternalListItemKind GetExternalListItemKind(BaseItem baseItem)
+        {
+            return baseItem switch
+            {
+                Movie => ExternalListItemKind.Movie,
+                Episode => ExternalListItemKind.Episode,
+                Series => ExternalListItemKind.Show,
+                _ => ExternalListItemKind.Unknown
+            };
         }
 
         /// <summary>

@@ -8,7 +8,7 @@ External Lists let you populate smart lists from external services like MDBList,
 2. Create a rule with the `External List` field, `equals` operator, and the list URL as the value
 3. On refresh, the plugin fetches the external list and matches items by provider IDs (IMDb, TMDB, TVDB) against your Jellyfin library
 
-Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the episode's own provider IDs are checked first, then the parent series IDs as a fallback. If any provider ID matches, the item is included.
+Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the episode's own provider IDs are checked first. Parent series IDs are only used as a fallback when the external list entry represents a show/series, which lets show lists produce episode playlists without letting episode-level IDs match unrelated shows.
 
 ## Supported Providers
 

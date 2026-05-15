@@ -137,7 +137,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     var id = edge.GetProperty("node").GetProperty("id").GetString();
                     if (!string.IsNullOrEmpty(id))
                     {
-                        result.ImdbIds.TryAdd(id, position);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position);
                         position++;
                         itemsInPage++;
                     }
@@ -296,7 +296,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                     if (matches)
                     {
-                        result.ImdbIds.TryAdd(titleId, position);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, titleId, (string?)null, null, position);
                         position++;
 
                         if (maxItems > 0 && position >= maxItems)
@@ -376,7 +376,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         var id = idProp.GetString();
                         if (!string.IsNullOrEmpty(id))
                         {
-                            result.ImdbIds.TryAdd(id, position);
+                            result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position);
                             position++;
                             itemsInPage++;
                         }

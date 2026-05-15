@@ -162,7 +162,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 // Check cache first (no need for semaphore)
                 if (_slugToTmdbCache.TryGetValue(slug, out var cachedTmdbId))
                 {
-                    result.TmdbIds.TryAdd(cachedTmdbId, position);
+                    result.AddProviderIds(ExternalListItemKind.Movie, null, cachedTmdbId, null, position);
                     continue;
                 }
 
@@ -199,7 +199,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     var tmdbId = match.Groups[1].Value;
                     _slugToTmdbCache.TryAdd(slug, tmdbId);
-                    result.TmdbIds.TryAdd(tmdbId, position);
+                    result.AddProviderIds(ExternalListItemKind.Movie, null, tmdbId, null, position);
                 }
                 else
                 {

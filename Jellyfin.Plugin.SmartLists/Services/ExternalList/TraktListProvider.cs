@@ -160,28 +160,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         private static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)
         {
             // Items can be wrapped (list items) or direct (trending/popular)
-            var ids = item.Episode?.Ids ?? item.Movie?.Ids ?? item.Show?.Ids ?? item.Ids;
+            var kind = ExternalListItemKind.Unknown;
+            var ids = item.Ids;
+            if (item.Episode?.Ids != null)
+            {
+                kind = ExternalListItemKind.Episode;
+                ids = item.Episode.Ids;
+            }
+            else if (item.Movie?.Ids != null)
+            {
+                kind = ExternalListItemKind.Movie;
+                ids = item.Movie.Ids;
+            }
+            else if (item.Show?.Ids != null)
+            {
+                kind = ExternalListItemKind.Show;
+                ids = item.Show.Ids;
+            }
+
             if (ids == null)
             {
                 return;
             }
 
             // TryAdd keeps first/lowest position for duplicates
-            if (!string.IsNullOrEmpty(ids.Imdb))
-            {
-                result.ImdbIds.TryAdd(ids.Imdb, position);
-            }
-
-            if (ids.Tmdb is int tmdbId and > 0)
-            {
-                result.TmdbIds.TryAdd(tmdbId.ToString(CultureInfo.InvariantCulture), position);
-            }
-
-            if (ids.Tvdb is int tvdbId and > 0)
-            {
-                result.TvdbIds.TryAdd(tvdbId.ToString(CultureInfo.InvariantCulture), position);
-            }
-
+            result.AddProviderIds(kind, ids.Imdb, ids.Tmdb, ids.Tvdb, position);
             position++;
         }
 

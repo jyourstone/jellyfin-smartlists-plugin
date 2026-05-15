@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -50,7 +49,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             var result = new ExternalListResult();
 
-            var (apiPath, endpointType) = ResolveApiPath(url);
+            var (apiPath, endpointType, itemKind) = ResolveApiPath(url);
             if (apiPath == null)
             {
                 throw new InvalidOperationException(
@@ -74,7 +73,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
             else
             {
-                await FetchPaginatedAsync(httpClient, apiPath, tmdbApiKey, result, MaxPages, maxItems, cancellationToken).ConfigureAwait(false);
+                await FetchPaginatedAsync(httpClient, apiPath, tmdbApiKey, result, MaxPages, maxItems, itemKind, cancellationToken).ConfigureAwait(false);
             }
 
             result.IsComplete = maxItems <= 0 || result.TotalItems < maxItems;
@@ -128,7 +127,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (item.Id is int id and > 0)
                     {
                         // TryAdd keeps first/lowest position for duplicates
-                        result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
+                        result.AddProviderIds(GetItemKind(item.MediaType, item), null, id, null, position);
                         totalFetched++;
                         position++;
                     }
@@ -158,6 +157,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             ExternalListResult result,
             int maxPages,
             int maxItems,
+            ExternalListItemKind fallbackKind,
             CancellationToken cancellationToken)
         {
             int totalFetched = 0;
@@ -194,7 +194,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (item.Id is int id and > 0)
                     {
                         // TryAdd keeps first/lowest position for duplicates
-                        result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
+                        result.AddProviderIds(GetItemKind(item.MediaType, item, fallbackKind), null, id, null, position);
                         totalFetched++;
                         position++;
                     }
@@ -260,7 +260,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (item.Id is int id and > 0)
                 {
-                    result.TmdbIds.TryAdd(id.ToString(CultureInfo.InvariantCulture), position);
+                    result.AddProviderIds(ExternalListItemKind.Movie, null, id, null, position);
                     position++;
                 }
             }
@@ -270,20 +270,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// Resolves a themoviedb.org URL to the corresponding API path.
         /// Returns the API path and endpoint type.
         /// </summary>
-        private static (string? ApiPath, TmdbEndpointType EndpointType) ResolveApiPath(string url)
+        private static (string? ApiPath, TmdbEndpointType EndpointType, ExternalListItemKind ItemKind) ResolveApiPath(string url)
         {
             // User list: https://www.themoviedb.org/list/{id}
             var listMatch = UserListPattern().Match(url);
             if (listMatch.Success)
             {
-                return ($"/list/{listMatch.Groups[1].Value}", TmdbEndpointType.UserList);
+                return ($"/list/{listMatch.Groups[1].Value}", TmdbEndpointType.UserList, ExternalListItemKind.Unknown);
             }
 
             // Collection: https://www.themoviedb.org/collection/{id}
             var collectionMatch = CollectionPattern().Match(url);
             if (collectionMatch.Success)
             {
-                return ($"/collection/{collectionMatch.Groups[1].Value}", TmdbEndpointType.Collection);
+                return ($"/collection/{collectionMatch.Groups[1].Value}", TmdbEndpointType.Collection, ExternalListItemKind.Movie);
             }
 
             // Trending: https://www.themoviedb.org/trending/movie/week
@@ -292,7 +292,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             {
                 var mediaType = trendingMatch.Groups[1].Value.ToLowerInvariant();
                 var window = trendingMatch.Groups[2].Value.ToLowerInvariant();
-                return ($"/trending/{mediaType}/{window}", TmdbEndpointType.Paginated);
+                return ($"/trending/{mediaType}/{window}", TmdbEndpointType.Paginated, GetItemKind(mediaType));
             }
 
             // Movie charts: https://www.themoviedb.org/movie/popular, /movie/top-rated, etc.
@@ -311,7 +311,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (apiChart != null)
                 {
-                    return ($"/movie/{apiChart}", TmdbEndpointType.Paginated);
+                    return ($"/movie/{apiChart}", TmdbEndpointType.Paginated, ExternalListItemKind.Movie);
                 }
             }
 
@@ -331,7 +331,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (apiChart != null)
                 {
-                    return ($"/tv/{apiChart}", TmdbEndpointType.Paginated);
+                    return ($"/tv/{apiChart}", TmdbEndpointType.Paginated, ExternalListItemKind.Show);
                 }
             }
 
@@ -341,10 +341,37 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             if (bareMatch.Success)
             {
                 var mediaType = bareMatch.Groups[1].Value.ToLowerInvariant();
-                return ($"/{mediaType}/popular", TmdbEndpointType.Paginated);
+                return ($"/{mediaType}/popular", TmdbEndpointType.Paginated, GetItemKind(mediaType));
             }
 
-            return (null, TmdbEndpointType.Paginated);
+            return (null, TmdbEndpointType.Paginated, ExternalListItemKind.Unknown);
+        }
+
+        private static ExternalListItemKind GetItemKind(string? mediaType, TmdbItem? item = null, ExternalListItemKind fallbackKind = ExternalListItemKind.Unknown)
+        {
+            var kind = mediaType?.Trim().ToLowerInvariant() switch
+            {
+                "movie" => ExternalListItemKind.Movie,
+                "tv" => ExternalListItemKind.Show,
+                _ => ExternalListItemKind.Unknown
+            };
+
+            if (kind != ExternalListItemKind.Unknown)
+            {
+                return kind;
+            }
+
+            if (!string.IsNullOrEmpty(item?.Title))
+            {
+                return ExternalListItemKind.Movie;
+            }
+
+            if (!string.IsNullOrEmpty(item?.Name))
+            {
+                return ExternalListItemKind.Show;
+            }
+
+            return fallbackKind;
         }
 
         [GeneratedRegex(@"themoviedb\.org/list/(\d+)", RegexOptions.IgnoreCase)]
