@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -92,7 +91,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         {
                             foreach (var item in wrapper.Movies)
                             {
-                                AddItemIds(item, result, ref position);
+                                AddItemIds(item, result, ref position, ExternalListItemKind.Movie);
                                 itemsInPage++;
                             }
                         }
@@ -101,7 +100,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         {
                             foreach (var item in wrapper.Shows)
                             {
-                                AddItemIds(item, result, ref position);
+                                AddItemIds(item, result, ref position, ExternalListItemKind.Show);
                                 itemsInPage++;
                             }
                         }
@@ -116,7 +115,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                             {
                                 foreach (var item in items)
                                 {
-                                    AddItemIds(item, result, ref position);
+                                    AddItemIds(item, result, ref position, GetItemKind(item.MediaType));
                                     itemsInPage++;
                                 }
                             }
@@ -167,29 +166,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return result;
         }
 
-        private static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position)
+        private static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
         {
             // Add IMDb ID from top-level or nested ids (TryAdd keeps first/lowest position for duplicates)
             var imdbId = item.ImdbId ?? item.Ids?.Imdb;
-            if (!string.IsNullOrEmpty(imdbId))
-            {
-                result.ImdbIds.TryAdd(imdbId, position);
-            }
-
-            // Add TMDB ID from nested ids
-            if (item.Ids?.Tmdb is int tmdbId and > 0)
-            {
-                result.TmdbIds.TryAdd(tmdbId.ToString(CultureInfo.InvariantCulture), position);
-            }
-
-            // Add TVDB ID from top-level or nested ids
             var tvdbId = item.TvdbId ?? item.Ids?.Tvdb;
-            if (tvdbId is int tvdb and > 0)
-            {
-                result.TvdbIds.TryAdd(tvdb.ToString(CultureInfo.InvariantCulture), position);
-            }
-
+            result.AddProviderIds(kind, imdbId, item.Ids?.Tmdb, tvdbId, position);
             position++;
+        }
+
+        private static ExternalListItemKind GetItemKind(string? mediaType)
+        {
+            return mediaType?.Trim().ToLowerInvariant() switch
+            {
+                "movie" or "movies" => ExternalListItemKind.Movie,
+                "show" or "shows" or "series" or "tv" => ExternalListItemKind.Show,
+                "episode" or "episodes" => ExternalListItemKind.Episode,
+                _ => ExternalListItemKind.Unknown
+            };
         }
 
         /// <summary>
