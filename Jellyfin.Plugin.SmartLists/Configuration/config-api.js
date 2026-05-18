@@ -108,6 +108,19 @@
     SmartLists.setCurrentUserAsDefault = function (page) {
         const apiClient = SmartLists.getApiClient();
         const userSelect = page.querySelector('#playlistUser');
+        const syncUserMultiSelect = function (userId) {
+            if (SmartLists.IS_USER_PAGE) {
+                return;
+            }
+
+            if (!page.querySelector('#playlistUserMultiSelect')) {
+                return;
+            }
+
+            if (SmartLists.setSelectedUserIds) {
+                SmartLists.setSelectedUserIds(page, [userId]);
+            }
+        };
 
         if (!userSelect) {
             console.warn('SmartLists.setCurrentUserAsDefault: #playlistUser element not found');
@@ -161,18 +174,12 @@
                     userId = user ? user.Id : null;
                     if (userId) {
                         userSelect.value = userId;
-                        // Also set multi-select for playlists
-                        if (SmartLists.setSelectedUserIds) {
-                            SmartLists.setSelectedUserIds(page, [userId]);
-                        }
+                        syncUserMultiSelect(userId);
                     }
                 });
             } else {
                 userSelect.value = userId;
-                // Also set multi-select for playlists
-                if (SmartLists.setSelectedUserIds) {
-                    SmartLists.setSelectedUserIds(page, [userId]);
-                }
+                syncUserMultiSelect(userId);
                 return Promise.resolve();
             }
         } catch (err) {
