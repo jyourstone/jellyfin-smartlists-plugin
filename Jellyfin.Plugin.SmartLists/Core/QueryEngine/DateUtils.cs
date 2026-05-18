@@ -53,7 +53,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 // Treat the PremiereDate as UTC to ensure consistency with user-input date handling.
                 // This assumes Jellyfin stores dates in UTC, which is the typical behavior.
-                return new DateTimeOffset(premiereDateTime, TimeSpan.Zero).ToUnixTimeSeconds();
+                try
+                {
+                    return new DateTimeOffset(premiereDateTime, TimeSpan.Zero).ToUnixTimeSeconds();
+                }
+                catch (ArgumentException)
+                {
+                    return new DateTimeOffset(premiereDateTime.ToUniversalTime(), TimeSpan.Zero).ToUnixTimeSeconds();
+                }
             }
 
             return 0;
