@@ -3228,11 +3228,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <returns>The release date or DateTime.MinValue if not available</returns>
         public static DateTime GetReleaseDate(BaseItem item)
         {
-            var unixTimestamp = DateUtils.GetReleaseDateUnixTimestamp(item);
-            if (unixTimestamp > 0)
+            if (DateUtils.TryGetPremiereDate(item, out var releaseDate))
             {
-                return DateTimeOffset.FromUnixTimeSeconds((long)unixTimestamp).DateTime;
+                return releaseDate;
             }
+
             return DateTime.MinValue;
         }
 
