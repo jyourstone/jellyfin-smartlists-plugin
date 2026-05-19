@@ -1797,6 +1797,43 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return false;
         }
 
+        private delegate bool TryResolveParentKey(BaseItem baseItem, out Guid parentId);
+
+        private static List<string>? GetOrFetchParentValues(
+            BaseItem baseItem,
+            TryResolveParentKey keyResolver,
+            ConcurrentDictionary<Guid, List<string>> cache,
+            Func<Guid, (List<string> Values, string ParentName)> fetcher,
+            Action<Guid, List<string>> logCacheHit,
+            Action<Guid, string, List<string>> logFetched,
+            Action<Exception, Guid> logFailure)
+        {
+            if (!keyResolver(baseItem, out var parentId))
+            {
+                return null;
+            }
+
+            if (cache.TryGetValue(parentId, out var cachedValues))
+            {
+                logCacheHit(parentId, cachedValues);
+                return cachedValues;
+            }
+
+            try
+            {
+                var (values, parentName) = fetcher(parentId);
+                cache[parentId] = values;
+                logFetched(parentId, parentName, values);
+                return values;
+            }
+            catch (Exception ex)
+            {
+                logFailure(ex, parentId);
+                cache[parentId] = [];
+                return [];
+            }
+        }
+
         /// <summary>
         /// Extracts the series name for episodes and extras with per-refresh caching.
         /// For episodes: uses SeriesId property directly.
@@ -2150,35 +2187,34 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     return;
                 }
 
-                if (TryGetAudioAlbumGuid(baseItem, out var albumGuid))
-                {
-                    if (cache.AlbumGenresById.TryGetValue(albumGuid, out var cachedGenres))
+                var albumGenres = GetOrFetchParentValues(
+                    baseItem,
+                    TryGetAudioAlbumGuid,
+                    cache.AlbumGenresById,
+                    albumGuid =>
                     {
-                        operand.ParentAlbumGenres = cachedGenres;
+                        var parentAlbum = libraryManager.GetItemById(albumGuid);
+                        return (parentAlbum?.Genres?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
+                    },
+                    (albumGuid, cachedGenres) =>
+                    {
                         logger?.LogDebug("Using cached parent album genres for audio track '{TrackName}' (album ID: {AlbumId}): [{Genres}]",
                             baseItem.Name, albumGuid, string.Join(", ", cachedGenres));
-                    }
-                    else
+                    },
+                    (albumGuid, albumName, fetchedGenres) =>
                     {
-                        try
-                        {
-                            var parentAlbum = libraryManager.GetItemById(albumGuid);
-                            var albumGenres = parentAlbum?.Genres?.ToList() ?? [];
+                        logger?.LogDebug("Extracted and cached parent album genres for audio track '{TrackName}' (album: '{AlbumName}'): [{Genres}]",
+                            baseItem.Name, albumName, string.Join(", ", fetchedGenres));
+                    },
+                    (ex, albumGuid) =>
+                    {
+                        logger?.LogDebug(ex, "Failed to get parent album genres for audio track '{TrackName}' with AlbumId {AlbumId}",
+                            baseItem.Name, albumGuid);
+                    });
 
-                            cache.AlbumGenresById[albumGuid] = albumGenres;
-                            operand.ParentAlbumGenres = albumGenres;
-
-                            logger?.LogDebug("Extracted and cached parent album genres for audio track '{TrackName}' (album: '{AlbumName}'): [{Genres}]",
-                                baseItem.Name, parentAlbum?.Name ?? "Unknown", string.Join(", ", albumGenres));
-                        }
-                        catch (Exception ex)
-                        {
-                            logger?.LogDebug(ex, "Failed to get parent album genres for audio track '{TrackName}' with AlbumId {AlbumId}",
-                                baseItem.Name, albumGuid);
-
-                            cache.AlbumGenresById[albumGuid] = [];
-                        }
-                    }
+                if (albumGenres != null)
+                {
+                    operand.ParentAlbumGenres = albumGenres;
                 }
                 else
                 {

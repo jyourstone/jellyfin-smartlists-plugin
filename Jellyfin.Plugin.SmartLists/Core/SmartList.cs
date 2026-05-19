@@ -52,6 +52,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private static DateTime _lastCleanupTime = DateTime.MinValue;
         private static readonly TimeSpan MIN_CLEANUP_INTERVAL = TimeSpan.FromMinutes(5); // Minimum time between cleanups
 
+        private static bool IsNonExpensiveExpression(Expression? expr)
+        {
+            return expr != null
+                && !FieldRegistry.IsExpensiveField(expr.MemberName)
+                && !IsParentAwareListExpression(expr);
+        }
+
+        private static bool IsParentAwareListExpression(Expression expr)
+        {
+            return (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
+                   (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
+                   (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true));
+        }
+
         public SmartList(SmartPlaylistDto dto)
         {
             ArgumentNullException.ThrowIfNull(dto);
@@ -955,11 +969,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         hasNonExpensiveRules = ExpressionSets
                             .SelectMany(set => set?.Expressions ?? [])
-                            .Any(expr => expr != null
-                                && !FieldRegistry.IsExpensiveField(expr.MemberName)
-                                && !(expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
-                                && !(expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
-                                && !(expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true)));
+                            .Any(IsNonExpensiveExpression);
                     }
                 }
                 catch (Exception ex)
@@ -2331,11 +2341,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                                     var compiledRule = compiledRules[setIndex][compiledIndex++];
 
-                                    // Check if this is an expensive field
-                                    bool isExpensive = FieldRegistry.IsExpensiveField(expr.MemberName) ||
-                                                      (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
-                                                      (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
-                                                      (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true));
+                                    bool isExpensive = !IsNonExpensiveExpression(expr);
 
                                     if (isExpensive)
                                     {

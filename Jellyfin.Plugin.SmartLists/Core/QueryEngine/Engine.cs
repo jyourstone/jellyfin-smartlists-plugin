@@ -95,36 +95,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildUserSpecificExpression<T>(userSpecificExpression, param, logger);
             }
 
-            // Special handling for Tags field with IncludeParentSeriesTags option
-            if (r.MemberName == "Tags" && r.IncludeParentSeriesTags == true)
+            var parentAwareExpression = BuildParentAwareListExpression(r, param, logger);
+            if (parentAwareExpression != null)
             {
-                logger?.LogDebug("SmartLists building Tags expression with parent series tags inclusion");
-                return BuildCombinedStringEnumerableExpression(r, param, logger, "Tags", "ParentSeriesTags");
-            }
-
-            // Special handling for Studios field with IncludeParentSeriesStudios option
-            if (r.MemberName == "Studios" && r.IncludeParentSeriesStudios == true)
-            {
-                logger?.LogDebug("SmartLists building Studios expression with parent series studios inclusion");
-                return BuildCombinedStringEnumerableExpression(r, param, logger, "Studios", "ParentSeriesStudios");
-            }
-
-            // Special handling for Genres field with parent item options
-            if (r.MemberName == "Genres" && (r.IncludeParentSeriesGenres == true || r.IncludeParentAlbumGenres == true))
-            {
-                var fields = new List<string> { "Genres" };
-                if (r.IncludeParentSeriesGenres == true)
-                {
-                    fields.Add("ParentSeriesGenres");
-                }
-
-                if (r.IncludeParentAlbumGenres == true)
-                {
-                    fields.Add("ParentAlbumGenres");
-                }
-
-                logger?.LogDebug("SmartLists building Genres expression with parent genre inclusion: {Fields}", string.Join(", ", fields));
-                return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
+                return parentAwareExpression;
             }
 
             // Special handling for AudioLanguages field with OnlyDefaultAudioLanguage option
@@ -188,6 +162,40 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Handle standard .NET operators for other types
             return BuildStandardOperatorExpression(r, left, tProp, logger);
+        }
+
+        private static System.Linq.Expressions.Expression? BuildParentAwareListExpression(ModelExpression r, ParameterExpression param, ILogger? logger)
+        {
+            if (r.MemberName == "Tags" && r.IncludeParentSeriesTags == true)
+            {
+                logger?.LogDebug("SmartLists building Tags expression with parent series tags inclusion");
+                return BuildCombinedStringEnumerableExpression(r, param, logger, "Tags", "ParentSeriesTags");
+            }
+
+            if (r.MemberName == "Studios" && r.IncludeParentSeriesStudios == true)
+            {
+                logger?.LogDebug("SmartLists building Studios expression with parent series studios inclusion");
+                return BuildCombinedStringEnumerableExpression(r, param, logger, "Studios", "ParentSeriesStudios");
+            }
+
+            if (r.MemberName == "Genres" && (r.IncludeParentSeriesGenres == true || r.IncludeParentAlbumGenres == true))
+            {
+                var fields = new List<string> { "Genres" };
+                if (r.IncludeParentSeriesGenres == true)
+                {
+                    fields.Add("ParentSeriesGenres");
+                }
+
+                if (r.IncludeParentAlbumGenres == true)
+                {
+                    fields.Add("ParentAlbumGenres");
+                }
+
+                logger?.LogDebug("SmartLists building Genres expression with parent genre inclusion: {Fields}", string.Join(", ", fields));
+                return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
+            }
+
+            return null;
         }
 
         /// <summary>
