@@ -95,25 +95,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildUserSpecificExpression<T>(userSpecificExpression, param, logger);
             }
 
-            // Special handling for Tags field with IncludeParentSeriesTags option
-            if (r.MemberName == "Tags" && r.IncludeParentSeriesTags == true)
+            var parentAwareExpression = BuildParentAwareListExpression(r, param, logger);
+            if (parentAwareExpression != null)
             {
-                logger?.LogDebug("SmartLists building Tags expression with parent series tags inclusion");
-                return BuildCombinedStringEnumerableExpression(r, param, "Tags", "ParentSeriesTags", logger);
-            }
-
-            // Special handling for Studios field with IncludeParentSeriesStudios option
-            if (r.MemberName == "Studios" && r.IncludeParentSeriesStudios == true)
-            {
-                logger?.LogDebug("SmartLists building Studios expression with parent series studios inclusion");
-                return BuildCombinedStringEnumerableExpression(r, param, "Studios", "ParentSeriesStudios", logger);
-            }
-
-            // Special handling for Genres field with IncludeParentSeriesGenres option
-            if (r.MemberName == "Genres" && r.IncludeParentSeriesGenres == true)
-            {
-                logger?.LogDebug("SmartLists building Genres expression with parent series genres inclusion");
-                return BuildCombinedStringEnumerableExpression(r, param, "Genres", "ParentSeriesGenres", logger);
+                return parentAwareExpression;
             }
 
             // Special handling for AudioLanguages field with OnlyDefaultAudioLanguage option
@@ -179,53 +164,78 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return BuildStandardOperatorExpression(r, left, tProp, logger);
         }
 
+        private static System.Linq.Expressions.Expression? BuildParentAwareListExpression(ModelExpression r, ParameterExpression param, ILogger? logger)
+        {
+            if (r.MemberName == "Tags" && r.IncludeParentSeriesTags == true)
+            {
+                logger?.LogDebug("SmartLists building Tags expression with parent series tags inclusion");
+                return BuildCombinedStringEnumerableExpression(r, param, logger, "Tags", "ParentSeriesTags");
+            }
+
+            if (r.MemberName == "Studios" && r.IncludeParentSeriesStudios == true)
+            {
+                logger?.LogDebug("SmartLists building Studios expression with parent series studios inclusion");
+                return BuildCombinedStringEnumerableExpression(r, param, logger, "Studios", "ParentSeriesStudios");
+            }
+
+            if (r.MemberName == "Genres" && (r.IncludeParentSeriesGenres == true || r.IncludeParentAlbumGenres == true))
+            {
+                var fields = new List<string> { "Genres" };
+                if (r.IncludeParentSeriesGenres == true)
+                {
+                    fields.Add("ParentSeriesGenres");
+                }
+
+                if (r.IncludeParentAlbumGenres == true)
+                {
+                    fields.Add("ParentAlbumGenres");
+                }
+
+                logger?.LogDebug("SmartLists building Genres expression with parent genre inclusion: {Fields}", string.Join(", ", fields));
+                return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
+            }
+
+            return null;
+        }
+
         /// <summary>
-        /// Builds combined expressions for a field that also checks its parent series equivalent.
-        /// For positive operators (Contains, IsIn, MatchRegex): Uses OR logic - item passes if EITHER field OR parent series field match
-        /// For negative operators (NotContains, IsNotIn): Uses AND logic - item passes only if BOTH field AND parent series field don't match
+        /// Builds combined expressions for a field that also checks parent item equivalents.
+        /// For positive operators: Uses OR logic - item passes if any field matches.
+        /// For negative operators: Uses AND logic - item passes only if all fields don't match.
         /// </summary>
         /// <param name="r">The expression rule</param>
         /// <param name="param">The parameter expression</param>
-        /// <param name="fieldName">The name of the field (e.g., "Tags", "Studios", "Genres")</param>
-        /// <param name="parentSeriesFieldName">The name of the parent series field (e.g., "ParentSeriesTags", "ParentSeriesStudios", "ParentSeriesGenres")</param>
         /// <param name="logger">Logger instance</param>
-        private static System.Linq.Expressions.Expression BuildCombinedStringEnumerableExpression(Expression r, ParameterExpression param, string fieldName, string parentSeriesFieldName, ILogger? logger)
+        /// <param name="fieldNames">The fields to evaluate together (e.g., "Genres", "ParentSeriesGenres", "ParentAlbumGenres")</param>
+        private static System.Linq.Expressions.Expression BuildCombinedStringEnumerableExpression(Expression r, ParameterExpression param, ILogger? logger, params string[] fieldNames)
         {
-            var fieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, fieldName);
-            var parentSeriesFieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, parentSeriesFieldName);
-
-            // For Equal/NotEqual, check membership against the combined (deduplicated) list.
-            // "Equal" = any item in the merged list matches; "NotEqual" = no item matches.
-            if (r.Operator == "Equal" || r.Operator == "NotEqual")
+            if (fieldNames.Length == 0)
             {
-                logger?.LogDebug("SmartLists building combined {Field} {Operator} against merged list", fieldName, r.Operator);
-                var right = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
-                var method = typeof(Engine).GetMethod("AnyCombinedItemEquals", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                if (method == null) throw new InvalidOperationException("Engine.AnyCombinedItemEquals method not found");
-                var equalsCall = System.Linq.Expressions.Expression.Call(method, fieldProperty, parentSeriesFieldProperty, right);
-                if (r.Operator == "Equal") return equalsCall;
-                return System.Linq.Expressions.Expression.Not(equalsCall);
+                throw new ArgumentException("At least one field name is required", nameof(fieldNames));
             }
 
-            var fieldExpression = BuildStringEnumerableExpression(r, fieldProperty, logger);
-            var parentSeriesFieldExpression = BuildStringEnumerableExpression(r, parentSeriesFieldProperty, logger);
+            var expressions = fieldNames
+                .Select(fieldName =>
+                {
+                    var fieldProperty = System.Linq.Expressions.Expression.PropertyOrField(param, fieldName);
+                    return BuildStringEnumerableExpression(r, fieldProperty, logger);
+                })
+                .ToList();
 
             // Determine if this is a negative operator
-            bool isNegativeOperator = r.Operator == "NotContains" || r.Operator == "IsNotIn";
+            bool isNegativeOperator = r.Operator == "NotEqual" || r.Operator == "NotContains" || r.Operator == "IsNotIn";
 
             if (isNegativeOperator)
             {
                 // For negative operators: Use AND logic
-                // Item passes only if BOTH field don't match AND parent series field don't match
-                logger?.LogDebug("SmartLists building combined {Field} expression with AND logic for negative operator {Operator}", fieldName, r.Operator);
-                return System.Linq.Expressions.Expression.AndAlso(fieldExpression, parentSeriesFieldExpression);
+                logger?.LogDebug("SmartLists building combined {Fields} expression with AND logic for negative operator {Operator}", string.Join(", ", fieldNames), r.Operator);
+                return expressions.Aggregate(System.Linq.Expressions.Expression.AndAlso);
             }
             else
             {
                 // For positive operators: Use OR logic
-                // Item passes if EITHER field match OR parent series field match
-                logger?.LogDebug("SmartLists building combined {Field} expression with OR logic for positive operator {Operator}", fieldName, r.Operator);
-                return System.Linq.Expressions.Expression.OrElse(fieldExpression, parentSeriesFieldExpression);
+                logger?.LogDebug("SmartLists building combined {Fields} expression with OR logic for positive operator {Operator}", string.Join(", ", fieldNames), r.Operator);
+                return expressions.Aggregate(System.Linq.Expressions.Expression.OrElse);
             }
         }
 

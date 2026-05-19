@@ -52,6 +52,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private static DateTime _lastCleanupTime = DateTime.MinValue;
         private static readonly TimeSpan MIN_CLEANUP_INTERVAL = TimeSpan.FromMinutes(5); // Minimum time between cleanups
 
+        private static bool IsNonExpensiveExpression(Expression? expr)
+        {
+            return expr != null
+                && !FieldRegistry.IsExpensiveField(expr.MemberName)
+                && !IsParentAwareListExpression(expr);
+        }
+
+        private static bool IsParentAwareListExpression(Expression expr)
+        {
+            return (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
+                   (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
+                   (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true));
+        }
+
         public SmartList(SmartPlaylistDto dto)
         {
             ArgumentNullException.ThrowIfNull(dto);
@@ -470,6 +484,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(expr.IncludeParentSeriesStudios?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesGenres?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeParentAlbumGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeCollectionOnly?.ToString() ?? "null");
                         hashBuilder.Append(':');
@@ -953,11 +969,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         hasNonExpensiveRules = ExpressionSets
                             .SelectMany(set => set?.Expressions ?? [])
-                            .Any(expr => expr != null
-                                && !FieldRegistry.IsExpensiveField(expr.MemberName)
-                                && !(expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
-                                && !(expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
-                                && !(expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true));
+                            .Any(IsNonExpensiveExpression);
                     }
                 }
                 catch (Exception ex)
@@ -2329,11 +2341,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                                     var compiledRule = compiledRules[setIndex][compiledIndex++];
 
-                                    // Check if this is an expensive field
-                                    bool isExpensive = FieldRegistry.IsExpensiveField(expr.MemberName) ||
-                                                      (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
-                                                      (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
-                                                      (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true);
+                                    bool isExpensive = !IsNonExpensiveExpression(expr);
 
                                     if (isExpensive)
                                     {
@@ -3017,6 +3025,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsParentSeriesTags => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
         public bool NeedsParentSeriesStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
         public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
+        public bool NeedsParentAlbumGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumGenres);
         public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
         public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
         public bool NeedsExternalLists => RequiredGroups.HasFlag(ExtractionGroup.ExternalLists);
@@ -3063,6 +3072,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesStudios;
                 if (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesGenres;
+                if (expr.MemberName == "Genres" && expr.IncludeParentAlbumGenres == true)
+                    requirements.RequiredGroups |= ExtractionGroup.ParentAlbumGenres;
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")

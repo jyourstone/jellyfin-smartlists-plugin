@@ -1493,8 +1493,16 @@
 
                         // Add Genres configuration info
                         let genresInfo = '';
-                        if (rule.MemberName === 'Genres' && rule.IncludeParentSeriesGenres === true) {
-                            genresInfo = ' (including parent series genres)';
+                        if (rule.MemberName === 'Genres') {
+                            const includesParentSeriesGenres = rule.IncludeParentSeriesGenres === true;
+                            const includesParentAlbumGenres = rule.IncludeParentAlbumGenres === true;
+                            if (includesParentSeriesGenres && includesParentAlbumGenres) {
+                                genresInfo = ' (including parent series/album genres)';
+                            } else if (includesParentAlbumGenres) {
+                                genresInfo = ' (including parent album genres)';
+                            } else if (includesParentSeriesGenres) {
+                                genresInfo = ' (including parent series genres)';
+                            }
                         }
 
                         // Add AudioLanguages configuration info
