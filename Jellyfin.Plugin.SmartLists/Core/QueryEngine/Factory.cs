@@ -112,6 +112,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesGenres : RequiredGroups & ~ExtractionGroup.ParentSeriesGenres;
         }
 
+        public bool ExtractParentAlbumGenres
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumGenres);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumGenres : RequiredGroups & ~ExtractionGroup.ParentAlbumGenres;
+        }
+
         public bool ExtractLastEpisodeAirDate
         {
             get => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
@@ -299,6 +305,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _parentIndexPropertyCache = new();
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _indexPropertyCache = new();
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _seriesIdPropertyCache = new();
+        private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _albumIdPropertyCache = new();
+        private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _parentIdPropertyCache = new();
 
 
         /// <summary>
@@ -1735,13 +1743,56 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             if (seriesIdProperty == null) return false;
 
             var seriesId = seriesIdProperty.GetValue(baseItem);
-            if (seriesId is Guid g) { seriesGuid = g; return true; }
-            if (seriesId != null && seriesId.GetType() == typeof(Guid?))
+            if (TryExtractGuid(seriesId, out seriesGuid)) return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Helper method to safely extract an album ID as Guid from audio items.
+        /// Prefers AlbumId when available and falls back to ParentId.
+        /// </summary>
+        private static bool TryGetAudioAlbumGuid(BaseItem baseItem, out Guid albumGuid)
+        {
+            albumGuid = Guid.Empty;
+            if (baseItem is not Audio) return false;
+
+            var audioType = baseItem.GetType();
+
+            var albumIdProperty = _albumIdPropertyCache.GetOrAdd(audioType, t => t.GetProperty("AlbumId"));
+            if (albumIdProperty != null && TryExtractGuid(albumIdProperty.GetValue(baseItem), out albumGuid))
             {
-                var nullableGuid = (Guid?)seriesId;
-                if (nullableGuid.HasValue) { seriesGuid = nullableGuid.Value; return true; }
+                return true;
             }
-            if (seriesId is string s && Guid.TryParse(s, out var parsed)) { seriesGuid = parsed; return true; }
+
+            var parentIdProperty = _parentIdPropertyCache.GetOrAdd(audioType, t => t.GetProperty("ParentId"));
+            return parentIdProperty != null && TryExtractGuid(parentIdProperty.GetValue(baseItem), out albumGuid);
+        }
+
+        private static bool TryExtractGuid(object? value, out Guid guid)
+        {
+            guid = Guid.Empty;
+            if (value is Guid g && g != Guid.Empty)
+            {
+                guid = g;
+                return true;
+            }
+
+            if (value != null && value.GetType() == typeof(Guid?))
+            {
+                var nullableGuid = (Guid?)value;
+                if (nullableGuid.HasValue && nullableGuid.Value != Guid.Empty)
+                {
+                    guid = nullableGuid.Value;
+                    return true;
+                }
+            }
+
+            if (value is string s && Guid.TryParse(s, out var parsed) && parsed != Guid.Empty)
+            {
+                guid = parsed;
+                return true;
+            }
 
             return false;
         }
@@ -2081,6 +2132,62 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             catch (Exception ex)
             {
                 logger?.LogWarning(ex, "Failed to extract parent series genres for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
+        /// Extracts parent album genres for audio tracks with per-refresh caching.
+        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
+        /// </summary>
+        private static void ExtractParentAlbumGenres(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.ParentAlbumGenres = [];
+            try
+            {
+                if (baseItem is not Audio)
+                {
+                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album genres remain empty", baseItem.Name);
+                    return;
+                }
+
+                if (TryGetAudioAlbumGuid(baseItem, out var albumGuid))
+                {
+                    if (cache.AlbumGenresById.TryGetValue(albumGuid, out var cachedGenres))
+                    {
+                        operand.ParentAlbumGenres = cachedGenres;
+                        logger?.LogDebug("Using cached parent album genres for audio track '{TrackName}' (album ID: {AlbumId}): [{Genres}]",
+                            baseItem.Name, albumGuid, string.Join(", ", cachedGenres));
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var parentAlbum = libraryManager.GetItemById(albumGuid);
+                            var albumGenres = parentAlbum?.Genres?.ToList() ?? [];
+
+                            cache.AlbumGenresById[albumGuid] = albumGenres;
+                            operand.ParentAlbumGenres = albumGenres;
+
+                            logger?.LogDebug("Extracted and cached parent album genres for audio track '{TrackName}' (album: '{AlbumName}'): [{Genres}]",
+                                baseItem.Name, parentAlbum?.Name ?? "Unknown", string.Join(", ", albumGenres));
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.LogDebug(ex, "Failed to get parent album genres for audio track '{TrackName}' with AlbumId {AlbumId}",
+                                baseItem.Name, albumGuid);
+
+                            cache.AlbumGenresById[albumGuid] = [];
+                        }
+                    }
+                }
+                else
+                {
+                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract parent album genres for item '{ItemName}'", baseItem.Name);
             }
         }
 
@@ -2437,6 +2544,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractParentSeriesTags = options.ExtractParentSeriesTags;
             var extractParentSeriesStudios = options.ExtractParentSeriesStudios;
             var extractParentSeriesGenres = options.ExtractParentSeriesGenres;
+            var extractParentAlbumGenres = options.ExtractParentAlbumGenres;
             var extractLastEpisodeAirDate = options.ExtractLastEpisodeAirDate;
 
             // Cheap extraction flags (for performance optimization)
@@ -2915,6 +3023,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             else
             {
                 operand.ParentSeriesGenres = [];
+            }
+
+            // Extract parent album genres for audio tracks - only when needed for performance
+            // This is an expensive operation (database lookup), so we use caching
+            if (extractParentAlbumGenres)
+            {
+                ExtractParentAlbumGenres(operand, baseItem, libraryManager, cache, logger);
+            }
+            else
+            {
+                operand.ParentAlbumGenres = [];
             }
 
             // AudioMetadata extraction - conditionally extracted for performance optimization

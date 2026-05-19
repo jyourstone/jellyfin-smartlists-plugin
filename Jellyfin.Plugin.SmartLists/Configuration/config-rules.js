@@ -1145,11 +1145,11 @@
             '</div>' +
             '<div class="rule-genres-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
-            'Include parent series genres:' +
+            'Include parent genres:' +
             '</label>' +
             '<select is="emby-select" class="emby-select rule-genres-select" style="width: 100%;">' +
-            '<option value="false">No - Only check episode genres</option>' +
-            '<option value="true">Yes - Also check genres from parent series</option>' +
+            '<option value="false">No - Only check item genres</option>' +
+            '<option value="true">Yes - Also check parent genres</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-audiolanguages-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1534,6 +1534,7 @@
         }
         if (fieldValue === 'Genres' && genresValue === 'true') {
             expression.IncludeParentSeriesGenres = true;
+            expression.IncludeParentAlbumGenres = true;
         }
         if (fieldValue === 'AudioLanguages' && audioLanguagesValue === 'true') {
             expression.OnlyDefaultAudioLanguage = true;
@@ -2301,12 +2302,31 @@
         const genresOptionsDiv = ruleRow.querySelector('.rule-genres-options');
 
         if (genresOptionsDiv) {
-            // Get selected media types to check if Episode is selected
+            // Get selected media types to check if Episode or Audio is selected
             const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
+            const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
 
-            // Show only if Genres field is selected AND Episode media type is selected
-            if (isGenresField && hasEpisode) {
+            const label = genresOptionsDiv.querySelector('label');
+            const select = genresOptionsDiv.querySelector('.rule-genres-select');
+            if (label && select && select.options.length >= 2) {
+                if (hasEpisode && hasAudio) {
+                    label.textContent = 'Include parent series/album genres:';
+                    select.options[0].textContent = 'No - Only check item genres';
+                    select.options[1].textContent = 'Yes - Also check genres from parent series/albums';
+                } else if (hasAudio) {
+                    label.textContent = 'Include parent album genres:';
+                    select.options[0].textContent = 'No - Only check track genres';
+                    select.options[1].textContent = 'Yes - Also check genres from parent album';
+                } else {
+                    label.textContent = 'Include parent series genres:';
+                    select.options[0].textContent = 'No - Only check episode genres';
+                    select.options[1].textContent = 'Yes - Also check genres from parent series';
+                }
+            }
+
+            // Show only if Genres field is selected AND Episode or Audio media type is selected
+            if (isGenresField && (hasEpisode || hasAudio)) {
                 genresOptionsDiv.style.display = 'block';
             } else {
                 // Hide but preserve user's selection - don't reset value
@@ -2527,6 +2547,7 @@
         const expressionSets = [];
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
+        const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioCapable = selectedMediaTypes.some(function (type) {
             return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
         });
@@ -2661,13 +2682,16 @@
                         // If false (default), don't include the parameter to save space
                     }
 
-                    // Handle Genres-specific options (only if Episode is selected)
+                    // Handle Genres-specific options (only if Episode or Audio is selected)
                     const genresSelect = rule.querySelector('.rule-genres-select');
-                    if (genresSelect && memberName === 'Genres' && hasEpisode) {
+                    if (genresSelect && memberName === 'Genres' && (hasEpisode || hasAudio)) {
                         // Convert string to boolean and only include if it's explicitly true
-                        const includeParentSeriesGenres = genresSelect.value === 'true';
-                        if (includeParentSeriesGenres) {
+                        const includeParentGenres = genresSelect.value === 'true';
+                        if (includeParentGenres && hasEpisode) {
                             expression.IncludeParentSeriesGenres = true;
+                        }
+                        if (includeParentGenres && hasAudio) {
+                            expression.IncludeParentAlbumGenres = true;
                         }
                         // If false (default), don't include the parameter to save space
                     }
@@ -2842,7 +2866,7 @@
             if (expression.MemberName === 'Genres') {
                 const genresSelect = ruleRow.querySelector('.rule-genres-select');
                 if (genresSelect) {
-                    const includeValue = expression.IncludeParentSeriesGenres === true ? 'true' : 'false';
+                    const includeValue = (expression.IncludeParentSeriesGenres === true || expression.IncludeParentAlbumGenres === true) ? 'true' : 'false';
                     genresSelect.value = includeValue;
                 }
             }
@@ -2873,4 +2897,3 @@
     };
 
 })(window.SmartLists = window.SmartLists || {});
-

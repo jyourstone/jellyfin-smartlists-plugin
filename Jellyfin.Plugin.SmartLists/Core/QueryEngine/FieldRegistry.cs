@@ -50,6 +50,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// - ParentSeriesTags: SeriesTagsById
     /// - ParentSeriesStudios: SeriesStudiosById
     /// - ParentSeriesGenres: SeriesGenresById
+    /// - ParentAlbumGenres: AlbumGenresById
     /// - LastEpisodeAirDate: LastEpisodeAirDateById
     /// - LibraryInfo: LibraryNameById
     /// </summary>
@@ -74,6 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         SimilarTo = 1 << 11,          // Fields: SimilarTo | Special handling in Engine
         LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
         ExternalLists = 1 << 20,      // Fields: ExternalList | Cache: ExternalListData, ItemExternalLists
+        ParentAlbumGenres = 1 << 21,  // Fields: Genres (with IncludeParentAlbumGenres) | Cache: AlbumGenresById
 
         // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
         // Defined in FieldRegistry.CheapExtractionGroups

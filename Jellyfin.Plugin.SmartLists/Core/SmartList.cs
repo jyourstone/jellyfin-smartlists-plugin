@@ -471,6 +471,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeParentAlbumGenres?.ToString() ?? "null");
+                        hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeCollectionOnly?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludePlaylistOnly?.ToString() ?? "null");
@@ -957,7 +959,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 && !FieldRegistry.IsExpensiveField(expr.MemberName)
                                 && !(expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
                                 && !(expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
-                                && !(expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true));
+                                && !(expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true)));
                     }
                 }
                 catch (Exception ex)
@@ -2333,7 +2335,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     bool isExpensive = FieldRegistry.IsExpensiveField(expr.MemberName) ||
                                                       (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true) ||
                                                       (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true) ||
-                                                      (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true);
+                                                      (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true));
 
                                     if (isExpensive)
                                     {
@@ -3017,6 +3019,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsParentSeriesTags => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
         public bool NeedsParentSeriesStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
         public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
+        public bool NeedsParentAlbumGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumGenres);
         public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
         public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
         public bool NeedsExternalLists => RequiredGroups.HasFlag(ExtractionGroup.ExternalLists);
@@ -3063,6 +3066,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesStudios;
                 if (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesGenres;
+                if (expr.MemberName == "Genres" && expr.IncludeParentAlbumGenres == true)
+                    requirements.RequiredGroups |= ExtractionGroup.ParentAlbumGenres;
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")

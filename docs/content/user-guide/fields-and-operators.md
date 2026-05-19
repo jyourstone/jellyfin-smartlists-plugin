@@ -186,6 +186,10 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 
 - **Include parent series [tags/studios/genres]** (default: No) - When enabled, episodes match if either the episode or its parent series has the specified value. Useful when series-level metadata is more complete.
 
+**Audio-specific option** for Genres:
+
+- **Include parent album genres** (default: No) - When enabled, audio tracks match if either the track or its parent album has the specified genre. Useful when album-level genre metadata is more complete than track-level metadata.
+
 #### Collection Name
 
 Filter items based on Jellyfin collection membership.

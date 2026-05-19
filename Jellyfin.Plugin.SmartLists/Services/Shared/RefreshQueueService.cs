@@ -738,6 +738,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, List<string>> SeriesTagsById { get; } = new();
             public ConcurrentDictionary<Guid, List<string>> SeriesStudiosById { get; } = new();
             public ConcurrentDictionary<Guid, List<string>> SeriesGenresById { get; } = new();
+            public ConcurrentDictionary<Guid, List<string>> AlbumGenresById { get; } = new();
             public ConcurrentDictionary<Guid, CategorizedPeople> ItemPeople { get; } = new();
             
             // User-specific data cache - keyed by (ItemId, UserId) to support playlist user + additional users in rules

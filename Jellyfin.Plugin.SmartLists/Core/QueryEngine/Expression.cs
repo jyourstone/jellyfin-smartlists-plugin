@@ -40,6 +40,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesGenres { get; set; } = null;
 
+        // Genres-specific option for audio tracks - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentAlbumGenres { get; set; } = null;
+
         // AudioLanguages-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyDefaultAudioLanguage { get; set; } = null;
