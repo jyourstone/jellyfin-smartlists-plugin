@@ -2015,13 +2015,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         {
             try
             {
-                var users = _userManager.Users
+                var users = PlaylistUserResolver.GetAllUsers(_userManager)
                     .Select(u => new
                     {
                         u.Id,
                         Name = u.Username,
                     })
-                    .OrderBy(u => u.Name)
                     .ToList();
 
                 return Ok(users);

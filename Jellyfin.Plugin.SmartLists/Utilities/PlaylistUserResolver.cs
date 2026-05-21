@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using MediaBrowser.Controller.Library;
@@ -21,10 +23,50 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
         public static List<User> GetAllUsers(IUserManager userManager)
         {
-            return userManager.Users
+            ArgumentNullException.ThrowIfNull(userManager);
+
+            return GetUsers(userManager)
                 .Where(u => u != null && u.Id != Guid.Empty)
                 .OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static IEnumerable<User> GetUsers(IUserManager userManager)
+        {
+            var userManagerType = userManager.GetType();
+            var getUsersMethod = userManagerType.GetMethod("GetUsers", BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes)
+                ?? typeof(IUserManager).GetMethod("GetUsers", BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
+            if (TryGetUsers(getUsersMethod?.Invoke(userManager, null), out var users))
+            {
+                return users;
+            }
+
+            var usersProperty = userManagerType.GetProperty("Users", BindingFlags.Instance | BindingFlags.Public)
+                ?? typeof(IUserManager).GetProperty("Users", BindingFlags.Instance | BindingFlags.Public);
+            if (TryGetUsers(usersProperty?.GetValue(userManager), out users))
+            {
+                return users;
+            }
+
+            throw new MissingMethodException(
+                userManagerType.FullName,
+                "GetUsers/Users");
+        }
+
+        private static bool TryGetUsers(object? value, out IEnumerable<User> users)
+        {
+            switch (value)
+            {
+                case IEnumerable<User> typedUsers:
+                    users = typedUsers;
+                    return true;
+                case IEnumerable enumerable:
+                    users = enumerable.OfType<User>();
+                    return true;
+                default:
+                    users = [];
+                    return false;
+            }
         }
 
         public static void ExpandAllUsers(SmartPlaylistDto playlist, IUserManager userManager)
