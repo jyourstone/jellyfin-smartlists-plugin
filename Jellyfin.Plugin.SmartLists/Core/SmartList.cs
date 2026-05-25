@@ -3054,6 +3054,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsTextContent => RequiredGroups.HasFlag(ExtractionGroup.TextContent);
 
         /// <summary>
+        /// Adds a parent extraction group to requirements when the expression targets the given
+        /// member name and the corresponding IncludeParent* flag is explicitly true.
+        /// </summary>
+        private static void AddParentGroupIfIncluded(
+            FieldRequirements requirements,
+            string exprMemberName,
+            string targetMemberName,
+            bool? includeFlag,
+            ExtractionGroup group)
+        {
+            if (exprMemberName == targetMemberName && includeFlag == true)
+                requirements.RequiredGroups |= group;
+        }
+
+        /// <summary>
         /// Analyzes expression sets to determine field requirements.
         /// Uses FieldRegistry for efficient extraction group lookup.
         /// </summary>
@@ -3080,18 +3095,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Handle special cases for parent series/album fields (conditional on expression flags).
                 // Only add each parent group when its corresponding IncludeParent* flag is explicitly true.
                 // OnlyParent* alone does NOT trigger extraction of both groups — use IncludeParent* to decide which.
-                if (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesTags;
-                if (expr.MemberName == "Tags" && expr.IncludeParentAlbumTags == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentAlbumTags;
-                if (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesStudios;
-                if (expr.MemberName == "Studios" && expr.IncludeParentAlbumStudios == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentAlbumStudios;
-                if (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentSeriesGenres;
-                if (expr.MemberName == "Genres" && expr.IncludeParentAlbumGenres == true)
-                    requirements.RequiredGroups |= ExtractionGroup.ParentAlbumGenres;
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentSeriesTags,    ExtractionGroup.ParentSeriesTags);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentAlbumTags,     ExtractionGroup.ParentAlbumTags);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentSeriesStudios, ExtractionGroup.ParentSeriesStudios);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentAlbumStudios,  ExtractionGroup.ParentAlbumStudios);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentSeriesGenres,  ExtractionGroup.ParentSeriesGenres);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentAlbumGenres,   ExtractionGroup.ParentAlbumGenres);
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")
