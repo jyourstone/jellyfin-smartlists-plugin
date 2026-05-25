@@ -17,15 +17,28 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             IUserDataManager userDataManager)
         {
             var cacheKey = (item.Id, user.Id);
+
+            // Positive cache hit
             if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var userData))
             {
                 return userData;
+            }
+
+            // Negative cache hit — we already know this item has no user data row
+            if (refreshCache.UserDataNegativeCache.ContainsKey(cacheKey))
+            {
+                return null;
             }
 
             userData = userDataManager.GetUserData(user, item);
             if (userData != null)
             {
                 refreshCache.UserDataCache[cacheKey] = userData;
+            }
+            else
+            {
+                // Memoize the miss so subsequent calls skip the DB round-trip
+                refreshCache.UserDataNegativeCache[cacheKey] = 0;
             }
 
             return userData;

@@ -44,21 +44,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             try
             {
                 // For aggregate items, calculate from child media when a prior filter populated the cache.
-                if (item is Season && userDataManager != null && refreshCache != null)
+                if (userDataManager != null && refreshCache != null)
                 {
-                    var key = (item.Id, user.Id);
-                    if (refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
+                    var children = TryGetAggregateChildren(item, user, refreshCache);
+                    if (children != null)
                     {
-                        return CalculateMinPlayCountFromTracks(episodes, user, userDataManager, refreshCache);
-                    }
-                }
-
-                if (item is MusicAlbum && userDataManager != null && refreshCache != null)
-                {
-                    var key = (item.Id, user.Id);
-                    if (refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
-                    {
-                        return CalculateMinPlayCountFromTracks(tracks, user, userDataManager, refreshCache);
+                        return CalculateMinPlayCountFromTracks(children, user, userDataManager, refreshCache);
                     }
                 }
 
@@ -92,6 +83,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logger?.LogDebug(ex, "Error extracting PlayCount from userData for item {ItemName}", item.Name);
                 return 0;
             }
+        }
+
+        /// <summary>
+        /// Returns the cached child array for aggregate items (Season → episodes, MusicAlbum → tracks),
+        /// or null if the item is not an aggregate type or the cache has no entry for it.
+        /// </summary>
+        private static BaseItem[]? TryGetAggregateChildren(
+            BaseItem item,
+            User user,
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            var key = (item.Id, user.Id);
+            if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
+            {
+                return episodes;
+            }
+            if (item is MusicAlbum && refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
+            {
+                return tracks;
+            }
+            return null;
         }
 
         /// <summary>
