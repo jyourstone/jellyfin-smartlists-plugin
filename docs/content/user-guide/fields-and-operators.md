@@ -182,13 +182,15 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | **Album Artists** | Album-level primary artists (music) |
 | **External List** | Match items from an external list (e.g., MDBList). [See details below.](#external-list) |
 
-**Episode-specific options** for Tags, Studios, and Genres:
+**Parent metadata options** for Tags, Studios, and Genres (shown when Episode or Audio media type is selected):
 
-- **Include parent series [tags/studios/genres]** (default: No) - When enabled, episodes match if either the episode or its parent series has the specified value. Useful when series-level metadata is more complete.
+Each of these fields has three options:
 
-**Audio-specific option** for Genres:
+- **No - Only check item [tags/studios/genres]** (default) - Only checks the item's own metadata.
+- **Yes - Also check [tags/studios/genres] from parent series/album** - Matches if either the item or its parent series/album has the specified value. Useful when parent-level metadata is more complete.
+- **Yes - Only check [tags/studios/genres] from parent series/album** - Skips the item's own metadata entirely and only checks the parent series/album. Useful when you want to filter purely by series/album-level metadata.
 
-- **Include parent album genres** (default: No) - When enabled, audio tracks match if either the track or its parent album has the specified genre. Useful when album-level genre metadata is more complete than track-level metadata.
+The label and option text adapts based on the selected media type (e.g., "parent series" for episodes, "parent album" for audio tracks).
 
 #### Collection Name
 

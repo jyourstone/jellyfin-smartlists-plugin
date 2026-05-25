@@ -1481,14 +1481,30 @@
 
                         // Add Tags configuration info
                         let tagsInfo = '';
-                        if (rule.MemberName === 'Tags' && rule.IncludeParentSeriesTags === true) {
-                            tagsInfo = ' (including parent series tags)';
+                        if (rule.MemberName === 'Tags') {
+                            if (rule.OnlyParentTags === true) {
+                                tagsInfo = ' (only parent series/album tags)';
+                            } else if (rule.IncludeParentSeriesTags === true && rule.IncludeParentAlbumTags === true) {
+                                tagsInfo = ' (including parent series/album tags)';
+                            } else if (rule.IncludeParentAlbumTags === true) {
+                                tagsInfo = ' (including parent album tags)';
+                            } else if (rule.IncludeParentSeriesTags === true) {
+                                tagsInfo = ' (including parent series tags)';
+                            }
                         }
 
                         // Add Studios configuration info
                         let studiosInfo = '';
-                        if (rule.MemberName === 'Studios' && rule.IncludeParentSeriesStudios === true) {
-                            studiosInfo = ' (including parent series studios)';
+                        if (rule.MemberName === 'Studios') {
+                            if (rule.OnlyParentStudios === true) {
+                                studiosInfo = ' (only parent series/album studios)';
+                            } else if (rule.IncludeParentSeriesStudios === true && rule.IncludeParentAlbumStudios === true) {
+                                studiosInfo = ' (including parent series/album studios)';
+                            } else if (rule.IncludeParentAlbumStudios === true) {
+                                studiosInfo = ' (including parent album studios)';
+                            } else if (rule.IncludeParentSeriesStudios === true) {
+                                studiosInfo = ' (including parent series studios)';
+                            }
                         }
 
                         // Add Genres configuration info
@@ -1496,7 +1512,9 @@
                         if (rule.MemberName === 'Genres') {
                             const includesParentSeriesGenres = rule.IncludeParentSeriesGenres === true;
                             const includesParentAlbumGenres = rule.IncludeParentAlbumGenres === true;
-                            if (includesParentSeriesGenres && includesParentAlbumGenres) {
+                            if (rule.OnlyParentGenres === true) {
+                                genresInfo = ' (only parent series/album genres)';
+                            } else if (includesParentSeriesGenres && includesParentAlbumGenres) {
                                 genresInfo = ' (including parent series/album genres)';
                             } else if (includesParentAlbumGenres) {
                                 genresInfo = ' (including parent album genres)';

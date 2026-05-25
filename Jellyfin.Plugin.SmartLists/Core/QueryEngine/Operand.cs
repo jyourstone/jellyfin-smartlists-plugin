@@ -26,7 +26,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public double ReleaseDate { get; set; } = 0;
         public List<string> Tags { get; set; } = [];
         public List<string> ParentSeriesTags { get; set; } = [];
+        public List<string> ParentAlbumTags { get; set; } = [];
         public List<string> ParentSeriesStudios { get; set; } = [];
+        public List<string> ParentAlbumStudios { get; set; } = [];
         public List<string> ParentSeriesGenres { get; set; } = [];
         public List<string> ParentAlbumGenres { get; set; } = [];
         public double RuntimeMinutes { get; set; } = 0;
