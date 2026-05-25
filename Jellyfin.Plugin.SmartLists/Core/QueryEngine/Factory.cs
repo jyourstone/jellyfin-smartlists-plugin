@@ -118,6 +118,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumGenres : RequiredGroups & ~ExtractionGroup.ParentAlbumGenres;
         }
 
+        public bool ExtractParentAlbumTags
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumTags);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumTags : RequiredGroups & ~ExtractionGroup.ParentAlbumTags;
+        }
+
+        public bool ExtractParentAlbumStudios
+        {
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumStudios);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumStudios : RequiredGroups & ~ExtractionGroup.ParentAlbumStudios;
+        }
+
         public bool ExtractLastEpisodeAirDate
         {
             get => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
@@ -2443,6 +2455,116 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Extracts parent album tags for audio tracks with per-refresh caching.
+        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
+        /// </summary>
+        private static void ExtractParentAlbumTags(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.ParentAlbumTags = [];
+            try
+            {
+                if (baseItem is not Audio)
+                {
+                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album tags remain empty", baseItem.Name);
+                    return;
+                }
+
+                var albumTags = GetOrFetchParentValues(
+                    baseItem,
+                    TryGetAudioAlbumGuid,
+                    cache.AlbumTagsById,
+                    albumGuid =>
+                    {
+                        var parentAlbum = libraryManager.GetItemById(albumGuid);
+                        return (parentAlbum?.Tags?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
+                    },
+                    (albumGuid, cachedTags) =>
+                    {
+                        logger?.LogDebug("Using cached parent album tags for audio track '{TrackName}' (album ID: {AlbumId}): [{Tags}]",
+                            baseItem.Name, albumGuid, string.Join(", ", cachedTags));
+                    },
+                    (albumGuid, albumName, fetchedTags) =>
+                    {
+                        logger?.LogDebug("Extracted and cached parent album tags for audio track '{TrackName}' (album: '{AlbumName}'): [{Tags}]",
+                            baseItem.Name, albumName, string.Join(", ", fetchedTags));
+                    },
+                    (ex, albumGuid) =>
+                    {
+                        logger?.LogDebug(ex, "Failed to get parent album tags for audio track '{TrackName}' with AlbumId {AlbumId}",
+                            baseItem.Name, albumGuid);
+                    });
+
+                if (albumTags != null)
+                {
+                    operand.ParentAlbumTags = albumTags;
+                }
+                else
+                {
+                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract parent album tags for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
+        /// Extracts parent album studios for audio tracks with per-refresh caching.
+        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
+        /// </summary>
+        private static void ExtractParentAlbumStudios(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.ParentAlbumStudios = [];
+            try
+            {
+                if (baseItem is not Audio)
+                {
+                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album studios remain empty", baseItem.Name);
+                    return;
+                }
+
+                var albumStudios = GetOrFetchParentValues(
+                    baseItem,
+                    TryGetAudioAlbumGuid,
+                    cache.AlbumStudiosById,
+                    albumGuid =>
+                    {
+                        var parentAlbum = libraryManager.GetItemById(albumGuid);
+                        return (parentAlbum?.Studios?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
+                    },
+                    (albumGuid, cachedStudios) =>
+                    {
+                        logger?.LogDebug("Using cached parent album studios for audio track '{TrackName}' (album ID: {AlbumId}): [{Studios}]",
+                            baseItem.Name, albumGuid, string.Join(", ", cachedStudios));
+                    },
+                    (albumGuid, albumName, fetchedStudios) =>
+                    {
+                        logger?.LogDebug("Extracted and cached parent album studios for audio track '{TrackName}' (album: '{AlbumName}'): [{Studios}]",
+                            baseItem.Name, albumName, string.Join(", ", fetchedStudios));
+                    },
+                    (ex, albumGuid) =>
+                    {
+                        logger?.LogDebug(ex, "Failed to get parent album studios for audio track '{TrackName}' with AlbumId {AlbumId}",
+                            baseItem.Name, albumGuid);
+                    });
+
+                if (albumStudios != null)
+                {
+                    operand.ParentAlbumStudios = albumStudios;
+                }
+                else
+                {
+                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to extract parent album studios for item '{ItemName}'", baseItem.Name);
+            }
+        }
+
+        /// <summary>
         /// Extracts people (actors, directors, producers, etc.) associated with the item.
         /// </summary>
         private static void ExtractPeople(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -3261,6 +3383,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             else
             {
                 operand.ParentAlbumGenres = [];
+            }
+
+            // Extract parent album tags for audio tracks - only when needed for performance
+            // This is an expensive operation (database lookup), so we use caching
+            if (options.ExtractParentAlbumTags)
+            {
+                ExtractParentAlbumTags(operand, baseItem, libraryManager, cache, logger);
+            }
+            else
+            {
+                operand.ParentAlbumTags = [];
+            }
+
+            // Extract parent album studios for audio tracks - only when needed for performance
+            // This is an expensive operation (database lookup), so we use caching
+            if (options.ExtractParentAlbumStudios)
+            {
+                ExtractParentAlbumStudios(operand, baseItem, libraryManager, cache, logger);
+            }
+            else
+            {
+                operand.ParentAlbumStudios = [];
             }
 
             // AudioMetadata extraction - conditionally extracted for performance optimization

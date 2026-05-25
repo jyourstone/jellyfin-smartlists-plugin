@@ -32,9 +32,25 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesTags { get; set; } = null;
 
+        // Tags-specific option for audio tracks - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentAlbumTags { get; set; } = null;
+
+        // Tags-specific option to only check parent tags (skip item's own tags) - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? OnlyParentTags { get; set; } = null;
+
         // Studios-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesStudios { get; set; } = null;
+
+        // Studios-specific option for audio tracks - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentAlbumStudios { get; set; } = null;
+
+        // Studios-specific option to only check parent studios (skip item's own studios) - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? OnlyParentStudios { get; set; } = null;
 
         // Genres-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -43,6 +59,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Genres-specific option for audio tracks - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentAlbumGenres { get; set; } = null;
+
+        // Genres-specific option to only check parent genres (skip item's own genres) - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? OnlyParentGenres { get; set; } = null;
 
         // AudioLanguages-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

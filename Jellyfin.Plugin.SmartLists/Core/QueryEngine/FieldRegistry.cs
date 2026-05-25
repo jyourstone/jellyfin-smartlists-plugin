@@ -47,11 +47,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// - Playlists: ItemPlaylists, PlaylistMembershipCache
     /// - NextUnwatched: NextUnwatched cache
     /// - SeriesName: SeriesNameById
-    /// - ParentSeriesTags: SeriesTagsById
-    /// - ParentSeriesStudios: SeriesStudiosById
-    /// - ParentSeriesGenres: SeriesGenresById
-    /// - ParentAlbumGenres: AlbumGenresById
-    /// - LastEpisodeAirDate: LastEpisodeAirDateById
+        /// - ParentSeriesTags: SeriesTagsById
+        /// - ParentSeriesStudios: SeriesStudiosById
+        /// - ParentSeriesGenres: SeriesGenresById
+        /// - ParentAlbumGenres: AlbumGenresById
+        /// - ParentAlbumTags: AlbumTagsById
+        /// - ParentAlbumStudios: AlbumStudiosById
+        /// - LastEpisodeAirDate: LastEpisodeAirDateById
     /// - LibraryInfo: LibraryNameById
     /// </summary>
     [Flags]
@@ -76,6 +78,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
         ExternalLists = 1 << 20,      // Fields: ExternalList | Cache: ExternalListData, ItemExternalLists
         ParentAlbumGenres = 1 << 21,  // Fields: Genres (with IncludeParentAlbumGenres) | Cache: AlbumGenresById
+        ParentAlbumTags = 1 << 22,    // Fields: Tags (with IncludeParentAlbumTags) | Cache: AlbumTagsById
+        ParentAlbumStudios = 1 << 23, // Fields: Studios (with IncludeParentAlbumStudios) | Cache: AlbumStudiosById
 
         // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
         // Defined in FieldRegistry.CheapExtractionGroups
