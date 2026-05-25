@@ -481,11 +481,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesTags?.ToString() ?? "null");
                         hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeParentAlbumTags?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.OnlyParentTags?.ToString() ?? "null");
+                        hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesStudios?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeParentAlbumStudios?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.OnlyParentStudios?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentSeriesGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentAlbumGenres?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.OnlyParentGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeCollectionOnly?.ToString() ?? "null");
                         hashBuilder.Append(':');
@@ -3067,18 +3077,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var group = FieldRegistry.GetExtractionGroup(expr.MemberName);
                 requirements.RequiredGroups |= group;
 
-                // Handle special cases for parent series/album fields (conditional on expression flags)
-                if (expr.MemberName == "Tags" && (expr.IncludeParentSeriesTags == true || expr.OnlyParentTags == true))
+                // Handle special cases for parent series/album fields (conditional on expression flags).
+                // Only add each parent group when its corresponding IncludeParent* flag is explicitly true.
+                // OnlyParent* alone does NOT trigger extraction of both groups — use IncludeParent* to decide which.
+                if (expr.MemberName == "Tags" && expr.IncludeParentSeriesTags == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesTags;
-                if (expr.MemberName == "Tags" && (expr.IncludeParentAlbumTags == true || expr.OnlyParentTags == true))
+                if (expr.MemberName == "Tags" && expr.IncludeParentAlbumTags == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentAlbumTags;
-                if (expr.MemberName == "Studios" && (expr.IncludeParentSeriesStudios == true || expr.OnlyParentStudios == true))
+                if (expr.MemberName == "Studios" && expr.IncludeParentSeriesStudios == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesStudios;
-                if (expr.MemberName == "Studios" && (expr.IncludeParentAlbumStudios == true || expr.OnlyParentStudios == true))
+                if (expr.MemberName == "Studios" && expr.IncludeParentAlbumStudios == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentAlbumStudios;
-                if (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.OnlyParentGenres == true))
+                if (expr.MemberName == "Genres" && expr.IncludeParentSeriesGenres == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentSeriesGenres;
-                if (expr.MemberName == "Genres" && (expr.IncludeParentAlbumGenres == true || expr.OnlyParentGenres == true))
+                if (expr.MemberName == "Genres" && expr.IncludeParentAlbumGenres == true)
                     requirements.RequiredGroups |= ExtractionGroup.ParentAlbumGenres;
 
                 // Collect SimilarTo expressions for reference item lookup

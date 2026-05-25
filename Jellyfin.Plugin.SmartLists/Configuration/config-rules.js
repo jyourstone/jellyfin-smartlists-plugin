@@ -1529,15 +1529,26 @@
                 expression.IncludePlaylistOnly = true;
             }
         }
-        if (fieldValue === 'Tags' && tagsValue === 'true') {
-            expression.IncludeParentSeriesTags = true;
+        if (fieldValue === 'Tags') {
+            if (tagsValue === 'only') {
+                expression.OnlyParentTags = true;
+            } else if (tagsValue === 'true') {
+                expression.IncludeParentSeriesTags = true;
+            }
         }
-        if (fieldValue === 'Studios' && studiosValue === 'true') {
-            expression.IncludeParentSeriesStudios = true;
+        if (fieldValue === 'Studios') {
+            if (studiosValue === 'only') {
+                expression.OnlyParentStudios = true;
+            } else if (studiosValue === 'true') {
+                expression.IncludeParentSeriesStudios = true;
+            }
         }
-        if (fieldValue === 'Genres' && genresValue === 'true') {
-            expression.IncludeParentSeriesGenres = true;
-            expression.IncludeParentAlbumGenres = true;
+        if (fieldValue === 'Genres') {
+            if (genresValue === 'only') {
+                expression.OnlyParentGenres = true;
+            } else if (genresValue === 'true') {
+                expression.IncludeParentSeriesGenres = true;
+            }
         }
         if (fieldValue === 'AudioLanguages' && audioLanguagesValue === 'true') {
             expression.OnlyDefaultAudioLanguage = true;
@@ -2356,19 +2367,22 @@
 
             const label = genresOptionsDiv.querySelector('label');
             const select = genresOptionsDiv.querySelector('.rule-genres-select');
-            if (label && select && select.options.length >= 2) {
+            if (label && select && select.options.length >= 3) {
                 if (hasEpisode && hasAudio) {
                     label.textContent = 'Include parent series/album genres:';
                     select.options[0].textContent = 'No - Only check item genres';
-                    select.options[1].textContent = 'Yes - Also check genres from parent series/albums';
+                    select.options[1].textContent = 'Yes - Also check genres from parent series/album';
+                    select.options[2].textContent = 'Yes - Only check genres from parent series/album';
                 } else if (hasAudio) {
                     label.textContent = 'Include parent album genres:';
                     select.options[0].textContent = 'No - Only check track genres';
                     select.options[1].textContent = 'Yes - Also check genres from parent album';
+                    select.options[2].textContent = 'Yes - Only check genres from parent album';
                 } else {
                     label.textContent = 'Include parent series genres:';
                     select.options[0].textContent = 'No - Only check episode genres';
                     select.options[1].textContent = 'Yes - Also check genres from parent series';
+                    select.options[2].textContent = 'Yes - Only check genres from parent series';
                 }
             }
 
@@ -2713,6 +2727,8 @@
                         const tagsSelectValue = tagsSelect.value;
                         if (tagsSelectValue === 'only') {
                             expression.OnlyParentTags = true;
+                            if (hasEpisode) expression.IncludeParentSeriesTags = true;
+                            if (hasAudio) expression.IncludeParentAlbumTags = true;
                         } else if (tagsSelectValue === 'true') {
                             if (hasEpisode) expression.IncludeParentSeriesTags = true;
                             if (hasAudio) expression.IncludeParentAlbumTags = true;
@@ -2726,6 +2742,8 @@
                         const studiosSelectValue = studiosSelect.value;
                         if (studiosSelectValue === 'only') {
                             expression.OnlyParentStudios = true;
+                            if (hasEpisode) expression.IncludeParentSeriesStudios = true;
+                            if (hasAudio) expression.IncludeParentAlbumStudios = true;
                         } else if (studiosSelectValue === 'true') {
                             if (hasEpisode) expression.IncludeParentSeriesStudios = true;
                             if (hasAudio) expression.IncludeParentAlbumStudios = true;
@@ -2739,6 +2757,8 @@
                         const genresSelectValue = genresSelect.value;
                         if (genresSelectValue === 'only') {
                             expression.OnlyParentGenres = true;
+                            if (hasEpisode) expression.IncludeParentSeriesGenres = true;
+                            if (hasAudio) expression.IncludeParentAlbumGenres = true;
                         } else if (genresSelectValue === 'true') {
                             if (hasEpisode) expression.IncludeParentSeriesGenres = true;
                             if (hasAudio) expression.IncludeParentAlbumGenres = true;

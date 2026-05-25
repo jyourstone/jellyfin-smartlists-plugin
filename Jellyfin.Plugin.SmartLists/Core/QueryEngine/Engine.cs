@@ -168,109 +168,81 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (r.MemberName == "Tags")
             {
-                // "Only parent" mode: skip item's own tags, only check parent tags
-                if (r.OnlyParentTags == true)
-                {
-                    var fields = new List<string>();
-                    if (r.IncludeParentSeriesTags == true)
-                    {
-                        fields.Add("ParentSeriesTags");
-                    }
-                    if (r.IncludeParentAlbumTags == true)
-                    {
-                        fields.Add("ParentAlbumTags");
-                    }
-                    if (fields.Count > 0)
-                    {
-                        logger?.LogDebug("SmartLists building Tags expression with ONLY parent tags: {Fields}", string.Join(", ", fields));
-                        return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
-                    }
-                }
-                else if (r.IncludeParentSeriesTags == true || r.IncludeParentAlbumTags == true)
-                {
-                    var fields = new List<string> { "Tags" };
-                    if (r.IncludeParentSeriesTags == true)
-                    {
-                        fields.Add("ParentSeriesTags");
-                    }
-                    if (r.IncludeParentAlbumTags == true)
-                    {
-                        fields.Add("ParentAlbumTags");
-                    }
-                    logger?.LogDebug("SmartLists building Tags expression with parent tags inclusion: {Fields}", string.Join(", ", fields));
-                    return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
-                }
+                return BuildParentAwareFieldExpression(r, param, logger,
+                    baseField: "Tags",
+                    parentSeriesField: "ParentSeriesTags",
+                    parentAlbumField: "ParentAlbumTags",
+                    onlyParent: r.OnlyParentTags == true,
+                    includeParentSeries: r.IncludeParentSeriesTags == true,
+                    includeParentAlbum: r.IncludeParentAlbumTags == true);
             }
 
             if (r.MemberName == "Studios")
             {
-                // "Only parent" mode: skip item's own studios, only check parent studios
-                if (r.OnlyParentStudios == true)
-                {
-                    var fields = new List<string>();
-                    if (r.IncludeParentSeriesStudios == true)
-                    {
-                        fields.Add("ParentSeriesStudios");
-                    }
-                    if (r.IncludeParentAlbumStudios == true)
-                    {
-                        fields.Add("ParentAlbumStudios");
-                    }
-                    if (fields.Count > 0)
-                    {
-                        logger?.LogDebug("SmartLists building Studios expression with ONLY parent studios: {Fields}", string.Join(", ", fields));
-                        return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
-                    }
-                }
-                else if (r.IncludeParentSeriesStudios == true || r.IncludeParentAlbumStudios == true)
-                {
-                    var fields = new List<string> { "Studios" };
-                    if (r.IncludeParentSeriesStudios == true)
-                    {
-                        fields.Add("ParentSeriesStudios");
-                    }
-                    if (r.IncludeParentAlbumStudios == true)
-                    {
-                        fields.Add("ParentAlbumStudios");
-                    }
-                    logger?.LogDebug("SmartLists building Studios expression with parent studios inclusion: {Fields}", string.Join(", ", fields));
-                    return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
-                }
+                return BuildParentAwareFieldExpression(r, param, logger,
+                    baseField: "Studios",
+                    parentSeriesField: "ParentSeriesStudios",
+                    parentAlbumField: "ParentAlbumStudios",
+                    onlyParent: r.OnlyParentStudios == true,
+                    includeParentSeries: r.IncludeParentSeriesStudios == true,
+                    includeParentAlbum: r.IncludeParentAlbumStudios == true);
             }
 
             if (r.MemberName == "Genres")
             {
-                bool hasParentGenres = r.IncludeParentSeriesGenres == true || r.IncludeParentAlbumGenres == true;
+                return BuildParentAwareFieldExpression(r, param, logger,
+                    baseField: "Genres",
+                    parentSeriesField: "ParentSeriesGenres",
+                    parentAlbumField: "ParentAlbumGenres",
+                    onlyParent: r.OnlyParentGenres == true,
+                    includeParentSeries: r.IncludeParentSeriesGenres == true,
+                    includeParentAlbum: r.IncludeParentAlbumGenres == true);
+            }
 
-                // "Only parent" mode: skip item's own genres, only check parent genres
-                if (r.OnlyParentGenres == true && hasParentGenres)
+            return null;
+        }
+
+        /// <summary>
+        /// Shared helper for Tags/Studios/Genres parent-aware expression building.
+        /// When onlyParent is true but no parent source flags are set, returns an always-false
+        /// expression rather than null so BuildExpr cannot fall back to item-level fields.
+        /// </summary>
+        private static System.Linq.Expressions.Expression? BuildParentAwareFieldExpression(
+            ModelExpression r,
+            ParameterExpression param,
+            ILogger? logger,
+            string baseField,
+            string parentSeriesField,
+            string parentAlbumField,
+            bool onlyParent,
+            bool includeParentSeries,
+            bool includeParentAlbum)
+        {
+            if (onlyParent)
+            {
+                var fields = new List<string>();
+                if (includeParentSeries) fields.Add(parentSeriesField);
+                if (includeParentAlbum) fields.Add(parentAlbumField);
+
+                if (fields.Count > 0)
                 {
-                    var fields = new List<string>();
-                    if (r.IncludeParentSeriesGenres == true)
-                    {
-                        fields.Add("ParentSeriesGenres");
-                    }
-                    if (r.IncludeParentAlbumGenres == true)
-                    {
-                        fields.Add("ParentAlbumGenres");
-                    }
-                    logger?.LogDebug("SmartLists building Genres expression with ONLY parent genres: {Fields}", string.Join(", ", fields));
+                    logger?.LogDebug("SmartLists building {Field} expression with ONLY parent fields: {Fields}", baseField, string.Join(", ", fields));
                     return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
                 }
-                else if (hasParentGenres)
-                {
-                    var fields = new List<string> { "Genres" };
-                    if (r.IncludeParentSeriesGenres == true)
-                    {
-                        fields.Add("ParentSeriesGenres");
-                    }
-                    if (r.IncludeParentAlbumGenres == true)
-                    {
-                        fields.Add("ParentAlbumGenres");
-                    }
-                    logger?.LogDebug("SmartLists building Genres expression with parent genre inclusion: {Fields}", string.Join(", ", fields));
-                    return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
-                }
+
+                // OnlyParent is true but no parent source flags are set — return always-false
+                // so the engine does not fall back to item-level field matching.
+                logger?.LogDebug("SmartLists building {Field} expression: OnlyParent is true but no IncludeParent* flags set — returning always-false", baseField);
+                return System.Linq.Expressions.Expression.Constant(false);
+            }
+
+            if (includeParentSeries || includeParentAlbum)
+            {
+                var fields = new List<string> { baseField };
+                if (includeParentSeries) fields.Add(parentSeriesField);
+                if (includeParentAlbum) fields.Add(parentAlbumField);
+                logger?.LogDebug("SmartLists building {Field} expression with parent inclusion: {Fields}", baseField, string.Join(", ", fields));
+                return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
             }
 
             return null;
