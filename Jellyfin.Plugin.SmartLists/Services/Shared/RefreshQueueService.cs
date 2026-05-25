@@ -725,6 +725,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public sealed class RefreshCache
         {
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId), BaseItem[]> SeriesEpisodes { get; } = new();
+            public ConcurrentDictionary<(Guid SeasonId, Guid UserId), BaseItem[]> SeasonEpisodes { get; } = new();
             public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
             public ConcurrentDictionary<Guid, List<string>> ItemCollections { get; } = new();
@@ -743,6 +744,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             
             // User-specific data cache - keyed by (ItemId, UserId) to support playlist user + additional users in rules
             public ConcurrentDictionary<(Guid ItemId, Guid UserId), MediaBrowser.Controller.Entities.UserItemData> UserDataCache { get; } = new();
+            // Tracks (ItemId, UserId) pairs for which GetUserData returned null, to avoid repeated DB calls.
+            public ConcurrentDictionary<(Guid ItemId, Guid UserId), byte> UserDataNegativeCache { get; } = new();
             
             // Media streams cache - keyed by ItemId only (user-agnostic)
             public ConcurrentDictionary<Guid, IEnumerable<object>> MediaStreamsCache { get; } = new();

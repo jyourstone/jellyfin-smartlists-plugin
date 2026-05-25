@@ -4,8 +4,10 @@ using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +30,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
         /// <summary>
         /// Shared logic for extracting PlayCount from user data.
-        /// For MusicAlbum, calculates the minimum PlayCount across all child tracks.
+        /// For aggregate items, calculates the minimum PlayCount across all cached child media.
         /// </summary>
         public static int GetPlayCountFromUserData(
             BaseItem item,
@@ -41,22 +43,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             ArgumentNullException.ThrowIfNull(user);
             try
             {
-                // For MusicAlbum, calculate from child tracks using cache
-                if (item is MusicAlbum && userDataManager != null && refreshCache != null)
+                // For aggregate items, calculate from child media when a prior filter populated the cache.
+                if (userDataManager != null && refreshCache != null)
                 {
-                    var key = (item.Id, user.Id);
-                    if (refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
+                    var children = TryGetAggregateChildren(item, user, refreshCache);
+                    if (children != null)
                     {
-                        return CalculateMinPlayCountFromTracks(tracks, user, userDataManager, refreshCache);
+                        return CalculateMinPlayCountFromTracks(children, user, userDataManager, refreshCache);
                     }
                 }
 
                 object? userData = null;
                 
                 // Try to get user data from cache if available
-                if (refreshCache != null && refreshCache.UserDataCache.TryGetValue((item.Id, user.Id), out var cachedUserData))
+                if (refreshCache != null && userDataManager != null)
                 {
-                    userData = cachedUserData;
+                    userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
                 }
                 else if (userDataManager != null)
                 {
@@ -84,6 +86,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
+        /// Returns the cached child array for aggregate items (Season → episodes, MusicAlbum → tracks),
+        /// or null if the item is not an aggregate type or the cache has no entry for it.
+        /// </summary>
+        private static BaseItem[]? TryGetAggregateChildren(
+            BaseItem item,
+            User user,
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            var key = (item.Id, user.Id);
+            if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
+            {
+                return episodes;
+            }
+            if (item is MusicAlbum && refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
+            {
+                return tracks;
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Shared helper: calculates the minimum PlayCount across an array of tracks.
         /// Writes fetched UserData back to the cache to avoid redundant DB hits.
         /// </summary>
@@ -101,21 +124,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             int minPlayCount = int.MaxValue;
             foreach (var track in tracks)
             {
-                int trackPlayCount = 0;
-                var cacheKey = (track.Id, user.Id);
-                if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
-                {
-                    trackPlayCount = trackUserData?.PlayCount ?? 0;
-                }
-                else
-                {
-                    var fetchedData = userDataManager.GetUserData(user, track);
-                    trackPlayCount = fetchedData?.PlayCount ?? 0;
-                    if (fetchedData != null)
-                    {
-                        refreshCache.UserDataCache[cacheKey] = fetchedData;
-                    }
-                }
+                var trackUserData = UserDataCacheHelper.GetCachedUserData(user, track, refreshCache, userDataManager);
+                var trackPlayCount = trackUserData?.PlayCount ?? 0;
 
                 if (trackPlayCount < minPlayCount)
                 {
@@ -143,4 +153,3 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 }
-
