@@ -4,6 +4,7 @@ using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
@@ -64,9 +65,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 object? userData = null;
                 
                 // Try to get user data from cache if available
-                if (refreshCache != null && refreshCache.UserDataCache.TryGetValue((item.Id, user.Id), out var cachedUserData))
+                if (refreshCache != null && userDataManager != null)
                 {
-                    userData = cachedUserData;
+                    userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
                 }
                 else if (userDataManager != null)
                 {
@@ -111,21 +112,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             int minPlayCount = int.MaxValue;
             foreach (var track in tracks)
             {
-                int trackPlayCount = 0;
-                var cacheKey = (track.Id, user.Id);
-                if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
-                {
-                    trackPlayCount = trackUserData?.PlayCount ?? 0;
-                }
-                else
-                {
-                    var fetchedData = userDataManager.GetUserData(user, track);
-                    trackPlayCount = fetchedData?.PlayCount ?? 0;
-                    if (fetchedData != null)
-                    {
-                        refreshCache.UserDataCache[cacheKey] = fetchedData;
-                    }
-                }
+                var trackUserData = UserDataCacheHelper.GetCachedUserData(user, track, refreshCache, userDataManager);
+                var trackPlayCount = trackUserData?.PlayCount ?? 0;
 
                 if (trackPlayCount < minPlayCount)
                 {

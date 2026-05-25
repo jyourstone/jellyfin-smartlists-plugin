@@ -449,18 +449,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 // Use LINQ Count with cache retrieval to count watched episodes
                 int watchedCount = validEpisodes.Count(e =>
                 {
-                    // Use UserDataCache to avoid redundant DB lookups
-                    // Only cache non-null UserData to avoid polluting the cache
-                    var cacheKey = (e.Id, user.Id);
-                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var userData))
-                    {
-                        userData = userDataManager.GetUserData(user, e);
-                        // Only add to cache if non-null
-                        if (userData != null)
-                        {
-                            cache.UserDataCache[cacheKey] = userData;
-                        }
-                    }
+                    var userData = GetCachedUserData(e, user, userDataManager, cache);
                     return userData != null && e.IsPlayed(user, userData);
                 });
                 int totalCount = validEpisodes.Count;
@@ -563,17 +552,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                 foreach (var episode in validEpisodes)
                 {
-                    // Use UserDataCache to avoid redundant DB lookups
-                    var cacheKey = (episode.Id, user.Id);
-                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var episodeUserData))
-                    {
-                        episodeUserData = userDataManager.GetUserData(user, episode);
-                        // Cache the result if non-null
-                        if (episodeUserData != null)
-                        {
-                            cache.UserDataCache[cacheKey] = episodeUserData;
-                        }
-                    }
+                    var episodeUserData = GetCachedUserData(episode, user, userDataManager, cache);
 
                     if (episodeUserData != null)
                     {
@@ -773,15 +752,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 int playedCount = 0;
                 foreach (var track in tracks)
                 {
-                    var cacheKey = (track.Id, user.Id);
-                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
-                    {
-                        trackUserData = userDataManager.GetUserData(user, track);
-                        if (trackUserData != null)
-                        {
-                            cache.UserDataCache[cacheKey] = trackUserData;
-                        }
-                    }
+                    var trackUserData = GetCachedUserData(track, user, userDataManager, cache);
 
                     if (trackUserData != null && trackUserData.Played)
                     {
@@ -857,15 +828,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                 foreach (var track in tracks)
                 {
-                    var cacheKey = (track.Id, user.Id);
-                    if (!cache.UserDataCache.TryGetValue(cacheKey, out var trackUserData))
-                    {
-                        trackUserData = userDataManager.GetUserData(user, track);
-                        if (trackUserData != null)
-                        {
-                            cache.UserDataCache[cacheKey] = trackUserData;
-                        }
-                    }
+                    var trackUserData = GetCachedUserData(track, user, userDataManager, cache);
 
                     if (trackUserData != null)
                     {
@@ -967,19 +930,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             IUserDataManager userDataManager,
             RefreshQueueServiceRefreshCache cache)
         {
-            var cacheKey = (item.Id, user.Id);
-            if (cache.UserDataCache.TryGetValue(cacheKey, out var userData))
-            {
-                return userData;
-            }
-
-            userData = userDataManager.GetUserData(user, item);
-            if (userData != null)
-            {
-                cache.UserDataCache[cacheKey] = userData;
-            }
-
-            return userData;
+            return UserDataCacheHelper.GetCachedUserData(user, item, cache, userDataManager);
         }
 
         /// <summary>
@@ -994,6 +945,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             operand.PlayCountByUser[userId] = playbackStatus == "Played" ? 1 : 0;
             operand.IsFavoriteByUser[userId] = false;
             operand.LastPlayedDateByUser[userId] = -1; // Never played,
+        }
+
+        /// <summary>
+        /// Populates normal fallback user data, then overlays derived aggregate values where available.
+        /// </summary>
+        private static void PopulateUserFallbacks(
+            Operand operand,
+            string normalizedUserId,
+            string playbackStatus,
+            BaseItem baseItem,
+            User user,
+            ILibraryManager libraryManager,
+            IUserDataManager? userDataManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            SetUserDataFallbacks(operand, normalizedUserId, playbackStatus);
+            PopulateAggregateUserDataFallbacks(operand, normalizedUserId, baseItem, user, libraryManager, userDataManager, cache, logger);
         }
 
         /// <summary>
@@ -2848,19 +2817,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Only extract user data if specifically requested or if NextUnwatched is needed (which depends on it)
             if (extractUserData || extractNextUnwatched)
             {
-                var userDataCacheKey = (baseItem.Id, user.Id);
-                if (cache.UserDataCache.TryGetValue(userDataCacheKey, out var cachedUserData))
+                if (userDataManager != null)
                 {
-                    userData = cachedUserData;
-                }
-                else if (userDataManager != null)
-                {
-                    userData = userDataManager.GetUserData(user, baseItem);
-                    // Cache the result
-                    if (userData != null)
-                    {
-                        cache.UserDataCache[userDataCacheKey] = userData;
-                    }
+                    userData = GetCachedUserData(baseItem, user, userDataManager, cache);
                 }
 
                 // Calculate playback status based on item type
@@ -2940,8 +2899,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                         // Fallback when userData is null - treat as never played for playlist user
                         // Normalize to "N" format (no dashes) to match UserPlaylists format
                         var normalizedUserId = user.Id.ToString("N");
-                        SetUserDataFallbacks(operand, normalizedUserId, playbackStatus);
-                        PopulateAggregateUserDataFallbacks(operand, normalizedUserId, baseItem, user, libraryManager, userDataManager, cache, logger);
+                        PopulateUserFallbacks(operand, normalizedUserId, playbackStatus, baseItem, user, libraryManager, userDataManager, cache, logger);
                     }
                     else
                     {
@@ -3006,22 +2964,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 var targetUser = GetUserById(userManager, userGuid);
                                 if (targetUser != null)
                                 {
-                                    // Get user data first for Jellyfin 10.11 compatibility - check cache first
-                                    MediaBrowser.Controller.Entities.UserItemData? targetUserData = null;
-                                    var targetUserDataCacheKey = (baseItem.Id, userGuid);
-                                    if (cache.UserDataCache.TryGetValue(targetUserDataCacheKey, out var cachedTargetUserData))
-                                    {
-                                        targetUserData = cachedTargetUserData;
-                                    }
-                                    else
-                                    {
-                                        targetUserData = userDataManager.GetUserData(targetUser, baseItem);
-                                        // Cache the result
-                                        if (targetUserData != null)
-                                        {
-                                            cache.UserDataCache[targetUserDataCacheKey] = targetUserData;
-                                        }
-                                    }
+                                    var targetUserData = GetCachedUserData(baseItem, targetUser, userDataManager, cache);
                                     // Calculate playback status for additional user
                                     string userPlaybackStatus = CalculatePlaybackStatusForUser(
                                         baseItem,
@@ -3039,8 +2982,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                     else
                                     {
                                         // Fallback values when targetUserData is null
-                                        SetUserDataFallbacks(operand, normalizedUserId, userPlaybackStatus);
-                                        PopulateAggregateUserDataFallbacks(operand, normalizedUserId, baseItem, targetUser, libraryManager, userDataManager, cache, logger);
+                                        PopulateUserFallbacks(operand, normalizedUserId, userPlaybackStatus, baseItem, targetUser, libraryManager, userDataManager, cache, logger);
                                     }
                                 }
                                 else

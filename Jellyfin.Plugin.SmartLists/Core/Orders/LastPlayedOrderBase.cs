@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
@@ -52,9 +53,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         object? userData = null;
                         
                         // Try to get user data from cache if available
-                        if (refreshCache != null && refreshCache.UserDataCache.TryGetValue((item.Id, user.Id), out var cachedUserData))
+                        if (refreshCache != null)
                         {
-                            userData = cachedUserData;
+                            userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
                         }
                         else
                         {
@@ -104,9 +105,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 object? userData = null;
                 
                 // Try to get user data from cache if available
-                if (refreshCache != null && refreshCache.UserDataCache.TryGetValue((item.Id, user.Id), out var cachedUserData))
+                if (refreshCache != null && userDataManager != null)
                 {
-                    userData = cachedUserData;
+                    userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
                 }
                 else if (userDataManager != null)
                 {
@@ -152,21 +153,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             DateTime maxLastPlayedDate = DateTime.MinValue;
             foreach (var child in children)
             {
-                UserItemData? childUserData = null;
-                var cacheKey = (child.Id, user.Id);
-                if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var cachedUserData))
-                {
-                    childUserData = cachedUserData;
-                }
-                else
-                {
-                    childUserData = userDataManager.GetUserData(user, child);
-                    if (childUserData != null)
-                    {
-                        refreshCache.UserDataCache[cacheKey] = childUserData;
-                    }
-                }
-
+                var childUserData = UserDataCacheHelper.GetCachedUserData(user, child, refreshCache, userDataManager);
                 var childLastPlayedDate = GetLastPlayedDateFromUserData(childUserData);
                 if (childLastPlayedDate > maxLastPlayedDate)
                 {
