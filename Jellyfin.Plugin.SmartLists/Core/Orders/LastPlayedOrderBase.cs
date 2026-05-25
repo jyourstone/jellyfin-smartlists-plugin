@@ -4,6 +4,8 @@ using System.Linq;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -40,6 +42,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 {
                     try
                     {
+                        var aggregateLastPlayedDate = GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
+                        if (aggregateLastPlayedDate.HasValue)
+                        {
+                            sortValueCache[item] = aggregateLastPlayedDate.Value;
+                            continue;
+                        }
+
                         object? userData = null;
                         
                         // Try to get user data from cache if available
@@ -83,6 +92,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             try
             {
+                if (userDataManager != null)
+                {
+                    var aggregateLastPlayedDate = GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
+                    if (aggregateLastPlayedDate.HasValue)
+                    {
+                        return aggregateLastPlayedDate.Value;
+                    }
+                }
+
                 object? userData = null;
                 
                 // Try to get user data from cache if available
@@ -102,6 +120,61 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logger?.LogError(ex, "Error getting last played date for item {ItemId} user {UserId}", item.Id, user.Id);
                 return DateTime.MinValue;
             }
+        }
+
+        /// <summary>
+        /// Gets aggregate LastPlayedDate for container items when their children are already cached.
+        /// </summary>
+        private static DateTime? GetAggregateLastPlayedDate(
+            BaseItem item,
+            User user,
+            IUserDataManager userDataManager,
+            RefreshQueueService.RefreshCache? refreshCache)
+        {
+            if (refreshCache == null)
+            {
+                return null;
+            }
+
+            BaseItem[]? children = item switch
+            {
+                Season => refreshCache.SeasonEpisodes.TryGetValue((item.Id, user.Id), out var seasonEpisodes) ? seasonEpisodes : null,
+                Series => refreshCache.SeriesEpisodes.TryGetValue((item.Id, user.Id), out var seriesEpisodes) ? seriesEpisodes : null,
+                MusicAlbum => refreshCache.AlbumTracks.TryGetValue((item.Id, user.Id), out var tracks) ? tracks : null,
+                _ => null
+            };
+
+            if (children == null || children.Length == 0)
+            {
+                return null;
+            }
+
+            DateTime maxLastPlayedDate = DateTime.MinValue;
+            foreach (var child in children)
+            {
+                UserItemData? childUserData = null;
+                var cacheKey = (child.Id, user.Id);
+                if (refreshCache.UserDataCache.TryGetValue(cacheKey, out var cachedUserData))
+                {
+                    childUserData = cachedUserData;
+                }
+                else
+                {
+                    childUserData = userDataManager.GetUserData(user, child);
+                    if (childUserData != null)
+                    {
+                        refreshCache.UserDataCache[cacheKey] = childUserData;
+                    }
+                }
+
+                var childLastPlayedDate = GetLastPlayedDateFromUserData(childUserData);
+                if (childLastPlayedDate > maxLastPlayedDate)
+                {
+                    maxLastPlayedDate = childLastPlayedDate;
+                }
+            }
+
+            return maxLastPlayedDate == DateTime.MinValue ? null : maxLastPlayedDate;
         }
 
         /// <summary>
@@ -145,4 +218,3 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 }
-

@@ -6,6 +6,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +29,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
         /// <summary>
         /// Shared logic for extracting PlayCount from user data.
-        /// For MusicAlbum, calculates the minimum PlayCount across all child tracks.
+        /// For aggregate items, calculates the minimum PlayCount across all cached child media.
         /// </summary>
         public static int GetPlayCountFromUserData(
             BaseItem item,
@@ -41,7 +42,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             ArgumentNullException.ThrowIfNull(user);
             try
             {
-                // For MusicAlbum, calculate from child tracks using cache
+                // For aggregate items, calculate from child media when a prior filter populated the cache.
+                if (item is Season && userDataManager != null && refreshCache != null)
+                {
+                    var key = (item.Id, user.Id);
+                    if (refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
+                    {
+                        return CalculateMinPlayCountFromTracks(episodes, user, userDataManager, refreshCache);
+                    }
+                }
+
                 if (item is MusicAlbum && userDataManager != null && refreshCache != null)
                 {
                     var key = (item.Id, user.Id);
@@ -143,4 +153,3 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 }
-
