@@ -968,6 +968,22 @@
                 }
             }
 
+            const moveGroupUpBtn = target.closest('.move-group-up-btn');
+            if (moveGroupUpBtn) {
+                const logicGroup = moveGroupUpBtn.closest('.logic-group');
+                if (logicGroup && SmartLists.moveLogicGroup) {
+                    SmartLists.moveLogicGroup(page, logicGroup, 'up');
+                }
+            }
+
+            const moveGroupDownBtn = target.closest('.move-group-down-btn');
+            if (moveGroupDownBtn) {
+                const logicGroup = moveGroupDownBtn.closest('.logic-group');
+                if (logicGroup && SmartLists.moveLogicGroup) {
+                    SmartLists.moveLogicGroup(page, logicGroup, 'down');
+                }
+            }
+
             const deleteGroupBtn = target.closest('.delete-group-btn');
             if (deleteGroupBtn) {
                 const logicGroup = deleteGroupBtn.closest('.logic-group');

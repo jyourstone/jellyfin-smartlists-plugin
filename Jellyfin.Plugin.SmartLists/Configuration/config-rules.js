@@ -925,6 +925,24 @@
     SmartLists.createLogicGroupHeader = function () {
         const headerDiv = SmartLists.createStyledElement('div', 'logic-group-header', SmartLists.STYLES.logicGroupHeader);
 
+        const moveUpBtn = document.createElement('button');
+        moveUpBtn.type = 'button';
+        moveUpBtn.className = 'rule-action-btn clone-btn move-group-up-btn';
+        moveUpBtn.title = 'Move OR Block Up';
+        moveUpBtn.innerHTML = '<span class="material-icons" style="font-size: 1.2em; height: 31px; display: flex; justify-content: center; align-items: center;">keyboard_arrow_up</span>';
+
+        // Style the move button using the clone button styling
+        SmartLists.styleRuleActionButton(moveUpBtn, 'clone');
+
+        const moveDownBtn = document.createElement('button');
+        moveDownBtn.type = 'button';
+        moveDownBtn.className = 'rule-action-btn clone-btn move-group-down-btn';
+        moveDownBtn.title = 'Move OR Block Down';
+        moveDownBtn.innerHTML = '<span class="material-icons" style="font-size: 1.2em; height: 31px; display: flex; justify-content: center; align-items: center;">keyboard_arrow_down</span>';
+
+        // Style the move button using the clone button styling
+        SmartLists.styleRuleActionButton(moveDownBtn, 'clone');
+
         const cloneBtn = document.createElement('button');
         cloneBtn.type = 'button';
         cloneBtn.className = 'rule-action-btn clone-btn clone-group-btn';
@@ -943,6 +961,8 @@
         // Style the delete button
         SmartLists.styleRuleActionButton(deleteBtn, 'delete');
 
+        headerDiv.appendChild(moveUpBtn);
+        headerDiv.appendChild(moveDownBtn);
         headerDiv.appendChild(cloneBtn);
         headerDiv.appendChild(deleteBtn);
 
@@ -1663,6 +1683,34 @@
         SmartLists.resolveDefaultSortForRules(page);
     };
 
+    SmartLists.moveLogicGroup = function (page, logicGroup, direction) {
+        const rulesContainer = page.querySelector('#rules-container');
+        if (!rulesContainer || !logicGroup) return;
+
+        const groups = Array.from(rulesContainer.querySelectorAll('.logic-group'));
+        const currentIndex = groups.indexOf(logicGroup);
+        if (currentIndex === -1) return;
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= groups.length) return;
+
+        groups.splice(currentIndex, 1);
+        groups.splice(targetIndex, 0, logicGroup);
+
+        rulesContainer.querySelectorAll('.logic-group-separator').forEach(function (separator) {
+            separator.remove();
+        });
+
+        groups.forEach(function (group, index) {
+            if (index > 0) {
+                rulesContainer.appendChild(SmartLists.createOrSeparator());
+            }
+            rulesContainer.appendChild(group);
+        });
+
+        SmartLists.updateRuleButtonVisibility(page);
+    };
+
     SmartLists.cleanupRuleEventListeners = function (ruleElement) {
         // Abort all event listeners for this rule
         if (ruleElement._abortController) {
@@ -1709,10 +1757,36 @@
             SmartLists.updateRuleButtonVisibility(page);
         }
 
+        SmartLists.updateLogicGroupMoveButtonVisibility(page);
+
         // Update sort options in case a Similar To rule was removed
         SmartLists.updateAllSortOptionsVisibility(page);
         // Re-resolve default sort in case the last special rule was removed
         SmartLists.resolveDefaultSortForRules(page);
+    };
+
+    SmartLists.updateLogicGroupMoveButtonVisibility = function (page) {
+        const rulesContainer = page.querySelector('#rules-container');
+        if (!rulesContainer) return;
+
+        const allLogicGroups = Array.from(rulesContainer.querySelectorAll('.logic-group'));
+        allLogicGroups.forEach(function (group, index) {
+            const moveUpBtn = group.querySelector('.move-group-up-btn');
+            const moveDownBtn = group.querySelector('.move-group-down-btn');
+            const hasMultipleGroups = allLogicGroups.length > 1;
+
+            if (moveUpBtn) {
+                moveUpBtn.disabled = !hasMultipleGroups || index === 0;
+                moveUpBtn.style.opacity = moveUpBtn.disabled ? '0.35' : '1';
+                moveUpBtn.style.cursor = moveUpBtn.disabled ? 'default' : 'pointer';
+            }
+
+            if (moveDownBtn) {
+                moveDownBtn.disabled = !hasMultipleGroups || index === allLogicGroups.length - 1;
+                moveDownBtn.style.opacity = moveDownBtn.disabled ? '0.35' : '1';
+                moveDownBtn.style.cursor = moveDownBtn.disabled ? 'default' : 'pointer';
+            }
+        });
     };
 
     SmartLists.updateRuleButtonVisibility = function (page) {
@@ -1742,6 +1816,8 @@
                 deleteBtn.style.display = 'inline-flex';
             });
         });
+
+        SmartLists.updateLogicGroupMoveButtonVisibility(page);
     };
 
     SmartLists.reinitializeExistingRules = function (page) {
