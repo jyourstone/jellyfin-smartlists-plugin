@@ -1292,12 +1292,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         private static BinaryExpression BuildStandardOperatorExpression(Expression r, MemberExpression left, Type tProp, ILogger? logger)
         {
+            if (r.MemberName == "RuntimeMinutes" &&
+                string.Equals(r.RuntimeUnit, "seconds", StringComparison.OrdinalIgnoreCase) &&
+                (r.Operator == "Equal" || r.Operator == "NotEqual"))
+            {
+                return BuildRuntimeSecondsEqualityExpression(r, left, logger);
+            }
+
             // Check if the operator is a known .NET operator
             logger?.LogDebug("SmartLists checking if {Operator} is a built-in .NET ExpressionType", r.Operator);
             if (Enum.TryParse(r.Operator, out ExpressionType tBinary))
             {
                 logger?.LogDebug("SmartLists {Operator} IS a built-in ExpressionType: {ExpressionType}", r.Operator, tBinary);
-                var right = System.Linq.Expressions.Expression.Constant(Convert.ChangeType(r.TargetValue, tProp, System.Globalization.CultureInfo.InvariantCulture));
+                var targetValue = GetStandardComparisonTargetValue(r, logger);
+                var right = System.Linq.Expressions.Expression.Constant(Convert.ChangeType(targetValue, tProp, System.Globalization.CultureInfo.InvariantCulture));
                 // use a binary operation, e.g. 'Equal' -> 'u.Age == 15'
                 return System.Linq.Expressions.Expression.MakeBinary(tBinary, left, right);
             }
@@ -1307,6 +1315,55 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             logger?.LogError("SmartLists unsupported operator '{Operator}' for field '{Field}' of type '{Type}'", r.Operator, r.MemberName, tProp.Name);
             var supportedOperators = Operators.GetSupportedOperatorsString(r.MemberName);
             throw new ArgumentException($"Operator '{r.Operator}' is not supported for field '{r.MemberName}' of type '{tProp.Name}'. Supported operators: {supportedOperators}");
+        }
+
+        private static BinaryExpression BuildRuntimeSecondsEqualityExpression(Expression r, MemberExpression left, ILogger? logger)
+        {
+            var seconds = ParseNonNegativeSeconds(r.TargetValue, logger);
+
+            var lowerBoundMinutes = Math.Max(0, seconds - 0.5) / 60.0;
+            var upperBoundMinutes = (seconds + 0.5) / 60.0;
+            var lowerBound = System.Linq.Expressions.Expression.Constant(lowerBoundMinutes, typeof(double));
+            var upperBound = System.Linq.Expressions.Expression.Constant(upperBoundMinutes, typeof(double));
+
+            var greaterThanOrEqualLower = System.Linq.Expressions.Expression.GreaterThanOrEqual(left, lowerBound);
+            var lessThanUpper = System.Linq.Expressions.Expression.LessThan(left, upperBound);
+
+            if (r.Operator == "Equal")
+            {
+                return System.Linq.Expressions.Expression.AndAlso(greaterThanOrEqualLower, lessThanUpper);
+            }
+
+            var lessThanLower = System.Linq.Expressions.Expression.LessThan(left, lowerBound);
+            var greaterThanOrEqualUpper = System.Linq.Expressions.Expression.GreaterThanOrEqual(left, upperBound);
+            return System.Linq.Expressions.Expression.OrElse(lessThanLower, greaterThanOrEqualUpper);
+        }
+
+        private static double ParseNonNegativeSeconds(string value, ILogger? logger)
+        {
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ||
+                double.IsNaN(seconds) ||
+                double.IsInfinity(seconds) ||
+                seconds < 0)
+            {
+                logger?.LogError("SmartLists runtime comparison failed: Invalid non-negative seconds value '{Value}'", value);
+                throw new ArgumentException($"Invalid runtime seconds value '{value}'. Expected a non-negative decimal number.");
+            }
+
+            return seconds;
+        }
+
+        private static string GetStandardComparisonTargetValue(Expression r, ILogger? logger)
+        {
+            if (r.MemberName != "RuntimeMinutes" ||
+                !string.Equals(r.RuntimeUnit, "seconds", StringComparison.OrdinalIgnoreCase))
+            {
+                return r.TargetValue;
+            }
+
+            var seconds = ParseNonNegativeSeconds(r.TargetValue, logger);
+
+            return (seconds / 60.0).ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>

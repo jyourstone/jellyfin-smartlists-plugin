@@ -68,6 +68,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyDefaultAudioLanguage { get; set; } = null;
 
+        // RuntimeMinutes-specific option - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RuntimeUnit { get; set; } = null;
+
         // Collections-specific depth option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? CollectionSearchDepth { get; set; } = null;

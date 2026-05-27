@@ -1401,6 +1401,7 @@
 
                         let fieldName = rule.MemberName;
                         if (fieldName === 'ItemType') fieldName = 'Media Type';
+                        if (fieldName === 'RuntimeMinutes') fieldName = 'Runtime';
 
                         // Map people field names to friendly display names
                         const displayName = SmartLists.getPeopleFieldDisplayName(fieldName);
@@ -1434,6 +1435,9 @@
                         // Format weekday operator value to show day name instead of number
                         if (rule.Operator === 'Weekday') {
                             value = SmartLists.getDayNameFromValue(value);
+                        }
+                        if (rule.MemberName === 'RuntimeMinutes') {
+                            value = value + ' ' + (String(rule.RuntimeUnit).toLowerCase() === 'seconds' ? 'seconds' : 'minutes');
                         }
 
                         // Check if this rule has a specific user and resolve username
