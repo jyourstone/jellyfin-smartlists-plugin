@@ -73,7 +73,7 @@ The audio language tracks available for the media item.
 |-------|-------------|
 | **Community Rating** | User ratings (0-10) |
 | **Critic Rating** | Professional critic ratings |
-| **Runtime (Minutes)** | Duration of the content |
+| **Runtime** | Duration of the content. Runtime rules can use minutes or seconds. |
 
 #### User-Specific Fields
 

@@ -262,7 +262,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
             AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
-            AddField(fields, "RuntimeMinutes", "Runtime (Minutes)", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
+            AddField(fields, "RuntimeMinutes", "Runtime", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
 
             // File Fields - conditionally extracted via ExtractionGroup.FileInfo
             AddField(fields, "FileName", "File Name", FieldType.Text, FieldCategory.File, StringOperators, ExtractionGroup.FileInfo);

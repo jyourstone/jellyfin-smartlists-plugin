@@ -136,10 +136,11 @@
     };
 
     // ===== VALUE INPUT MANAGEMENT =====
-    SmartLists.setValueInput = function (fieldValue, valueContainer, operatorValue, explicitCurrentValue) {
+    SmartLists.setValueInput = function (fieldValue, valueContainer, operatorValue, explicitCurrentValue, explicitRuntimeUnit) {
         // Store the current value before clearing the container
         // For relative date operators, we need to capture both number and unit
         let currentValue = explicitCurrentValue;
+        let currentRuntimeUnit = explicitRuntimeUnit;
 
         // Only auto-capture value from DOM if explicitCurrentValue was not provided (null/undefined)
         // An explicit empty string means "clear the value"
@@ -154,6 +155,7 @@
             } else {
                 const currentValueInput = valueContainer.querySelector('.rule-value-input');
                 const currentUnitSelect = valueContainer.querySelector('.rule-value-unit');
+                const currentRuntimeUnitSelect = valueContainer.querySelector('.rule-runtime-unit');
 
                 if (currentValueInput) {
                     if (currentUnitSelect && currentUnitSelect.value) {
@@ -164,8 +166,12 @@
                         currentValue = currentValueInput.value;
                     }
                 }
+                if (currentRuntimeUnitSelect && currentRuntimeUnitSelect.value) {
+                    currentRuntimeUnit = currentRuntimeUnitSelect.value;
+                }
             }
         }
+        currentRuntimeUnit = currentRuntimeUnit || 'minutes';
 
         valueContainer.innerHTML = '';
 
@@ -189,7 +195,7 @@
         } else if (SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleBooleanFieldInput(valueContainer, fieldValue, currentValue);
         } else if (SmartLists.FIELD_TYPES.NUMERIC_FIELDS.indexOf(fieldValue) !== -1) {
-            SmartLists.handleNumericFieldInput(valueContainer, fieldValue, currentValue);
+            SmartLists.handleNumericFieldInput(valueContainer, fieldValue, currentValue, currentRuntimeUnit);
         } else if (SmartLists.FIELD_TYPES.DATE_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleDateFieldInput(valueContainer, currentOperator, currentValue);
         } else if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) {
@@ -199,7 +205,7 @@
         }
 
         // Restore the current value if it exists and is valid for the new field type
-        SmartLists.restoreFieldValue(valueContainer, fieldValue, currentOperator, currentValue, isMultiValueOperator);
+        SmartLists.restoreFieldValue(valueContainer, fieldValue, currentOperator, currentValue, isMultiValueOperator, currentRuntimeUnit);
     };
 
     SmartLists.handleSimpleFieldInput = function (valueContainer, currentValue) {
@@ -303,7 +309,16 @@
         valueContainer.appendChild(select);
     };
 
-    SmartLists.handleNumericFieldInput = function (valueContainer, fieldValue, currentValue) {
+    SmartLists.handleNumericFieldInput = function (valueContainer, fieldValue, currentValue, currentRuntimeUnit) {
+        const inputParent = fieldValue === 'RuntimeMinutes' ? document.createElement('div') : valueContainer;
+        if (fieldValue === 'RuntimeMinutes') {
+            inputParent.style.display = 'flex';
+            inputParent.style.gap = '0.5em';
+            inputParent.style.alignItems = 'center';
+            inputParent.style.width = '100%';
+            valueContainer.appendChild(inputParent);
+        }
+
         const input = document.createElement('input');
         input.type = 'number';
         input.className = 'emby-input rule-value-input';
@@ -311,16 +326,38 @@
         input.style.width = '100%';
 
         // Set appropriate step for decimal fields like Framerate
-        if (fieldValue === 'Framerate' || fieldValue === 'CommunityRating' || fieldValue === 'CriticRating') {
+        if (fieldValue === 'Framerate' || fieldValue === 'CommunityRating' || fieldValue === 'CriticRating' || fieldValue === 'RuntimeMinutes') {
             input.step = 'any'; // Allow any decimal precision
         } else {
-            input.step = '1'; // Integer fields like ProductionYear, RuntimeMinutes, PlayCount
+            input.step = '1'; // Integer fields like ProductionYear and PlayCount
         }
 
         if (currentValue) {
             input.value = currentValue;
         }
-        valueContainer.appendChild(input);
+        inputParent.appendChild(input);
+
+        if (fieldValue === 'RuntimeMinutes') {
+            input.style.flex = '1 1 auto';
+
+            const unitSelect = document.createElement('select');
+            unitSelect.className = 'emby-select rule-runtime-unit';
+            unitSelect.setAttribute('is', 'emby-select');
+            unitSelect.style.flex = '0 0 8.5em';
+
+            [
+                { value: 'minutes', label: 'Minutes' },
+                { value: 'seconds', label: 'Seconds' }
+            ].forEach(function (opt) {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.label;
+                unitSelect.appendChild(option);
+            });
+
+            unitSelect.value = String(currentRuntimeUnit).toLowerCase() === 'seconds' ? 'seconds' : 'minutes';
+            inputParent.appendChild(unitSelect);
+        }
     };
 
     SmartLists.handleDateFieldInput = function (valueContainer, currentOperator, currentValue) {
@@ -463,8 +500,13 @@
     };
 
     // ===== VALUE RESTORATION =====
-    SmartLists.restoreFieldValue = function (valueContainer, fieldValue, currentOperator, currentValue, isMultiValueOperator) {
+    SmartLists.restoreFieldValue = function (valueContainer, fieldValue, currentOperator, currentValue, isMultiValueOperator, currentRuntimeUnit) {
         const newValueInput = valueContainer.querySelector('.rule-value-input');
+        const runtimeUnitSelect = valueContainer.querySelector('.rule-runtime-unit');
+        if (runtimeUnitSelect) {
+            runtimeUnitSelect.value = String(currentRuntimeUnit).toLowerCase() === 'seconds' ? 'seconds' : 'minutes';
+        }
+
         if (newValueInput && currentValue) {
             // Store the original value as a data attribute for potential restoration
             newValueInput.setAttribute('data-original-value', currentValue);
@@ -1487,6 +1529,8 @@
         const genresValue = genresSelect ? genresSelect.value : '';
         const audioLanguagesSelect = ruleRow.querySelector('.rule-audiolanguages-select');
         const audioLanguagesValue = audioLanguagesSelect ? audioLanguagesSelect.value : '';
+        const runtimeUnitSelect = ruleRow.querySelector('.rule-runtime-unit');
+        const runtimeUnitValue = runtimeUnitSelect ? runtimeUnitSelect.value : '';
 
         // Extract Similarity options (checkboxes)
         const similarityOptionsDiv = ruleRow.querySelector('.rule-similarity-options');
@@ -1524,6 +1568,9 @@
         // Add optional fields
         if (userId) {
             expression.UserId = userId;
+        }
+        if (actualMemberName === 'RuntimeMinutes' && runtimeUnitValue === 'seconds') {
+            expression.RuntimeUnit = 'seconds';
         }
         if (fieldValue === 'NextUnwatched' && nextUnwatchedValue === 'false') {
             expression.IncludeUnwatchedSeries = false;
@@ -2725,6 +2772,11 @@
                 if (memberName && operator && targetValue) {
                     const expression = { MemberName: memberName, Operator: operator, TargetValue: targetValue };
 
+                    const runtimeUnitSelect = rule.querySelector('.rule-runtime-unit');
+                    if (memberName === 'RuntimeMinutes' && runtimeUnitSelect && runtimeUnitSelect.value === 'seconds') {
+                        expression.RuntimeUnit = 'seconds';
+                    }
+
                     // Check if a specific user is selected for user data fields
                     const userSelect = rule.querySelector('.rule-user-select');
                     if (userSelect && userSelect.value) {
@@ -2936,7 +2988,7 @@
             }
 
             if (valueContainer && expression.TargetValue !== undefined) {
-                SmartLists.setValueInput(actualMemberName, valueContainer, expression.Operator, expression.TargetValue);
+                SmartLists.setValueInput(actualMemberName, valueContainer, expression.Operator, expression.TargetValue, expression.RuntimeUnit || 'minutes');
             }
 
             // Handle user-specific rules
