@@ -1319,11 +1319,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         private static BinaryExpression BuildRuntimeSecondsEqualityExpression(Expression r, MemberExpression left, ILogger? logger)
         {
-            if (!double.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
-            {
-                logger?.LogError("SmartLists runtime comparison failed: Invalid seconds value '{Value}'", r.TargetValue);
-                throw new ArgumentException($"Invalid runtime seconds value '{r.TargetValue}'. Expected a decimal number.");
-            }
+            var seconds = ParseNonNegativeSeconds(r.TargetValue, logger);
 
             var lowerBoundMinutes = Math.Max(0, seconds - 0.5) / 60.0;
             var upperBoundMinutes = (seconds + 0.5) / 60.0;
@@ -1343,6 +1339,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return System.Linq.Expressions.Expression.OrElse(lessThanLower, greaterThanOrEqualUpper);
         }
 
+        private static double ParseNonNegativeSeconds(string value, ILogger? logger)
+        {
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ||
+                double.IsNaN(seconds) ||
+                double.IsInfinity(seconds) ||
+                seconds < 0)
+            {
+                logger?.LogError("SmartLists runtime comparison failed: Invalid non-negative seconds value '{Value}'", value);
+                throw new ArgumentException($"Invalid runtime seconds value '{value}'. Expected a non-negative decimal number.");
+            }
+
+            return seconds;
+        }
+
         private static string GetStandardComparisonTargetValue(Expression r, ILogger? logger)
         {
             if (r.MemberName != "RuntimeMinutes" ||
@@ -1351,11 +1361,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return r.TargetValue;
             }
 
-            if (!double.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
-            {
-                logger?.LogError("SmartLists runtime comparison failed: Invalid seconds value '{Value}'", r.TargetValue);
-                throw new ArgumentException($"Invalid runtime seconds value '{r.TargetValue}'. Expected a decimal number.");
-            }
+            var seconds = ParseNonNegativeSeconds(r.TargetValue, logger);
 
             return (seconds / 60.0).ToString(CultureInfo.InvariantCulture);
         }
