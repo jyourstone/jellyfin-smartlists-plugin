@@ -331,6 +331,9 @@
         } else {
             input.step = '1'; // Integer fields like ProductionYear and PlayCount
         }
+        if (fieldValue === 'RuntimeMinutes') {
+            input.min = '0';
+        }
 
         if (currentValue) {
             input.value = currentValue;
