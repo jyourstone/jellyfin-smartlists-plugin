@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Microsoft.Extensions.Logging;
@@ -34,9 +33,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <param name="urls">The external list URLs to fetch.</param>
         /// <param name="cache">The refresh cache to populate with results.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <param name="maxItems">Maximum number of items to fetch per list (0 = unlimited).
-        /// When the primary sort is "External List Order Ascending" with a limit, callers pass the
-        /// limit here so providers can stop fetching early.</param>
+        /// <param name="maxItems">Maximum number of items to fetch per list (0 = unlimited).</param>
         public async Task PreFetchListsAsync(
             IEnumerable<string> urls,
             RefreshQueueService.RefreshCache cache,
@@ -105,33 +102,19 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <summary>
-        /// Computes the fetch limit for external list providers based on the smart list's sort order and max items.
-        /// When the primary sort is "External List Order Ascending" and a max items limit is set,
-        /// providers can stop fetching early since only the first N items from the list are needed.
+        /// Computes the fetch limit for external list providers.
         /// </summary>
         /// <param name="dto">The smart list DTO containing sort and limit configuration.</param>
         /// <returns>The max items to fetch (0 = unlimited).</returns>
         public static int ComputeFetchLimit(SmartListDto dto)
         {
-            if (!dto.MaxItems.HasValue || dto.MaxItems.Value <= 0)
-            {
-                return 0;
-            }
+            ArgumentNullException.ThrowIfNull(dto);
 
-            bool isAscendingExternalListOrder = false;
-
-            if (dto.Order?.SortOptions?.Count > 0)
-            {
-                var primary = dto.Order.SortOptions[0];
-                isAscendingExternalListOrder = primary.SortBy == "External List Order"
-                    && primary.SortOrder == SortOrder.Ascending;
-            }
-            else if (dto.Order?.Name == "External List Order Ascending")
-            {
-                isAscendingExternalListOrder = true;
-            }
-
-            return isAscendingExternalListOrder ? dto.MaxItems.Value : 0;
+            // The smart list MaxItems limit is applied after Jellyfin library filtering and sorting.
+            // Applying it while fetching the external list truncates membership itself: for example,
+            // fetching only the first 100 Criterion spine entries can yield far fewer than 100 owned
+            // movies if many early spine numbers are not in the user's library.
+            return 0;
         }
     }
 }
