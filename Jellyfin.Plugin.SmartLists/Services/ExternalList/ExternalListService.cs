@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Microsoft.Extensions.Logging;
 
@@ -104,12 +103,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <summary>
         /// Computes the fetch limit for external list providers.
         /// </summary>
-        /// <param name="dto">The smart list DTO containing sort and limit configuration.</param>
         /// <returns>The max items to fetch (0 = unlimited).</returns>
-        public static int ComputeFetchLimit(SmartListDto dto)
+        public static int ComputeFetchLimit()
         {
-            ArgumentNullException.ThrowIfNull(dto);
-
             // The smart list MaxItems limit is applied after Jellyfin library filtering and sorting.
             // Applying it while fetching the external list truncates membership itself: for example,
             // fetching only the first 100 Criterion spine entries can yield far fewer than 100 owned
