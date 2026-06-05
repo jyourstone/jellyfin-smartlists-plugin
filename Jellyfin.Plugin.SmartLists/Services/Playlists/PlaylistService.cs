@@ -166,7 +166,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         refreshCache.ItemExternalLists.Clear();
                         refreshCache.ExternalListPositions.Clear();
 
-                        var fetchLimit = ExternalListService.ComputeFetchLimit(dto);
+                        var fetchLimit = ExternalListService.ComputeFetchLimit();
                         logger.LogDebug("Pre-fetching {Count} external list(s) for playlist '{PlaylistName}' (fetchLimit: {FetchLimit})", fieldReqs.ExternalListUrls.Count, dto.Name, fetchLimit);
                         await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);
                     }
