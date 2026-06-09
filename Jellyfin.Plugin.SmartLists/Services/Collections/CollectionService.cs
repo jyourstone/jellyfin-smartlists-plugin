@@ -258,10 +258,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
                 // Include both media items and collections (if IncludeCollectionOnly is enabled) and playlists (if IncludePlaylistOnly is enabled)
-                var mediaLookup = allMedia.ToDictionary(m => m.Id, m => m);
+                var mediaLookup = allMedia
+                    .GroupBy(m => m.Id)
+                    .ToDictionary(g => g.Key, g => g.First());
                 AddIncludeOnlyItemsToLookup(mediaLookup, allCollections);
                 AddIncludeOnlyItemsToLookup(mediaLookup, allPlaylists);
                 var newLinkedChildren = newItems
+                    .Distinct()
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
                     .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
                     .ToArray();
@@ -1098,11 +1101,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var validTopParentIds = GetLibraryTopParentIds();
 
             // Query all items the owner user has access to
+            var includeVirtualItems = UsesLibraryNameRule(dto);
             var query = new InternalItemsQuery(ownerUser)
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
-                IsVirtualItem = false,
+                IsVirtualItem = includeVirtualItems ? null : false,
                 TopParentIds = validTopParentIds,
             };
 
@@ -1120,6 +1124,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
+
+        private static bool UsesLibraryNameRule(SmartListDto? dto)
+        {
+            return dto?.ExpressionSets?.Any(set =>
+                set.Expressions?.Any(expr =>
+                    string.Equals(expr.MemberName, "LibraryName", StringComparison.OrdinalIgnoreCase)) == true) == true;
+        }
 
         /// <summary>
         /// Refreshes collection metadata including cover image generation.
