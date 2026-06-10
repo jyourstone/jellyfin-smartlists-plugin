@@ -258,13 +258,40 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
                 // Include both media items and collections (if IncludeCollectionOnly is enabled) and playlists (if IncludePlaylistOnly is enabled)
-                var mediaLookup = allMedia
-                    .GroupBy(m => m.Id)
-                    .ToDictionary(g => g.Key, g => g.First());
+                var groupedMedia = allMedia.GroupBy(m => m.Id).ToList();
+                var duplicateMediaGroups = groupedMedia.Where(g => g.Count() > 1).ToList();
+                if (duplicateMediaGroups.Count > 0 && SmartListUtilities.UsesLibraryNameRule(dto))
+                {
+                    var sampleIds = duplicateMediaGroups
+                        .Take(10)
+                        .Select(g => $"{g.Key} ({g.Count()} copies)");
+                    _logger.LogDebug(
+                        "Collection '{CollectionName}' GetAllMedia returned {DuplicateGroupCount} duplicate item id groups while LibraryName virtual-library matching is enabled (TopParentIds={TopParentCount}); mediaLookup will keep the first item for each id. Sample duplicate ids: {DuplicateIds}",
+                        dto.Name,
+                        duplicateMediaGroups.Count,
+                        GetLibraryTopParentIds().Length,
+                        string.Join(", ", sampleIds));
+                }
+
+                var mediaLookup = groupedMedia.ToDictionary(g => g.Key, g => g.First());
                 AddIncludeOnlyItemsToLookup(mediaLookup, allCollections);
                 AddIncludeOnlyItemsToLookup(mediaLookup, allPlaylists);
-                var newLinkedChildren = newItems
-                    .Distinct()
+                var distinctNewItems = newItems.Distinct().ToArray();
+                if (distinctNewItems.Length != newItems.Length)
+                {
+                    var duplicateIds = newItems
+                        .GroupBy(itemId => itemId)
+                        .Where(g => g.Count() > 1)
+                        .Take(10)
+                        .Select(g => $"{g.Key} ({g.Count()} copies)");
+                    _logger.LogDebug(
+                        "Collection '{CollectionName}' filtered newItems contained {DuplicateItemCount} duplicate ids before LinkedChild creation; using Distinct() for linked children. Sample duplicate ids: {DuplicateIds}",
+                        dto.Name,
+                        newItems.Length - distinctNewItems.Length,
+                        string.Join(", ", duplicateIds));
+                }
+
+                var newLinkedChildren = distinctNewItems
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
                     .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
                     .ToArray();
