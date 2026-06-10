@@ -177,8 +177,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     dto.Name, newItems.Length, allUserMedia.Length);
 
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
-                var mediaLookup = allUserMedia.ToDictionary(m => m.Id, m => m);
+                var mediaLookup = allUserMedia
+                    .GroupBy(m => m.Id)
+                    .ToDictionary(g => g.Key, g => g.First());
                 var newLinkedChildren = newItems
+                    .Distinct()
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
                     .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
                     .ToArray();
@@ -972,11 +975,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             // (which points to the physical folder). We resolve physical folder IDs via FindByPath.
             var validTopParentIds = GetLibraryTopParentIds();
 
+            var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
             var query = new InternalItemsQuery(user)
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
-                IsVirtualItem = false,
+                IsVirtualItem = includeVirtualItems ? null : false,
                 TopParentIds = validTopParentIds,
             };
 

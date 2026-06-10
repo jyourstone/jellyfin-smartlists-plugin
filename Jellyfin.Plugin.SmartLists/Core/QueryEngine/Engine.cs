@@ -101,6 +101,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return parentAwareExpression;
             }
 
+            if (r.MemberName == "LibraryName")
+            {
+                var libraryNamesProperty = System.Linq.Expressions.Expression.PropertyOrField(param, "LibraryNames");
+                var enumerableExpr = BuildEnumerableExpression(r, libraryNamesProperty, libraryNamesProperty.Type, logger);
+                if (enumerableExpr != null)
+                {
+                    return enumerableExpr;
+                }
+            }
+
             // Special handling for AudioLanguages field with OnlyDefaultAudioLanguage option
             if (r.MemberName == "AudioLanguages" && r.OnlyDefaultAudioLanguage == true)
             {

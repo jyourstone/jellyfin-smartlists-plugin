@@ -771,8 +771,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // Last episode air date cache for Series items - maps SeriesId → Unix timestamp of most recent episode
             public ConcurrentDictionary<Guid, double> LastEpisodeAirDateById { get; } = new();
 
-            // Library name cache - maps ItemId → library name (from GetCollectionFolders API)
-            public ConcurrentDictionary<Guid, string> LibraryNameById { get; } = new();
+            // Library name cache - maps item identity/path → library names (from GetCollectionFolders API)
+            public ConcurrentDictionary<(Guid ItemId, string Path, string FolderPath), IReadOnlyList<string>> LibraryNamesByItemKey { get; } = new();
 
             // Extra → owning Series ID cache (reverse lookup from extra ID to its parent Series)
             // Populated by PlaylistService/CollectionService when fetching extras

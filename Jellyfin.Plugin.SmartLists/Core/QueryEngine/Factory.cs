@@ -3333,11 +3333,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // LibraryInfo extraction - conditionally extracted for performance optimization
             if (extractLibraryInfo)
             {
-                operand.LibraryName = ExtractLibraryName(baseItem, libraryManager, cache, logger);
+                operand.LibraryNames = ExtractLibraryNames(baseItem, libraryManager, cache, logger);
+                operand.LibraryName = operand.LibraryNames.Count > 0
+                    ? string.Join("; ", operand.LibraryNames)
+                    : string.Empty;
             }
             else
             {
                 operand.LibraryName = string.Empty;
+                operand.LibraryNames = [];
                 logger?.LogDebug("LibraryInfo extraction skipped for item {Name} - not needed by rules", baseItem.Name);
             }
 
@@ -3941,13 +3945,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="libraryManager">Library manager for library lookups</param>
         /// <param name="cache">Cache for storing library name lookups</param>
         /// <param name="logger">Logger for debugging</param>
-        /// <returns>The library name this item belongs to, or empty string if not found</returns>
-        private static string ExtractLibraryName(BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        /// <returns>The library names this item belongs to, or an empty list if not found</returns>
+        private static IReadOnlyList<string> ExtractLibraryNames(BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
+            var cacheKey = (
+                baseItem.Id,
+                baseItem.Path ?? string.Empty,
+                baseItem.ContainingFolderPath ?? string.Empty);
+
             // Check cache first
-            if (cache.LibraryNameById.TryGetValue(baseItem.Id, out var cachedName))
+            if (cache.LibraryNamesByItemKey.TryGetValue(cacheKey, out var cachedNames))
             {
-                return cachedName;
+                return cachedNames;
             }
 
             try
@@ -3956,9 +3965,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
                 if (collectionFolders != null && collectionFolders.Count > 0)
                 {
-                    var libraryName = collectionFolders[0].Name;
-                    cache.LibraryNameById[baseItem.Id] = libraryName;
-                    return libraryName;
+                    var libraryNames = collectionFolders
+                        .Select(folder => folder.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                        .AsReadOnly();
+
+                    cache.LibraryNamesByItemKey[cacheKey] = libraryNames;
+                    return libraryNames;
                 }
             }
             catch (Exception ex)
@@ -3967,8 +3982,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Cache empty result too to avoid repeated failed lookups
-            cache.LibraryNameById[baseItem.Id] = string.Empty;
-            return string.Empty;
+            var emptyLibraryNames = Array.Empty<string>();
+            cache.LibraryNamesByItemKey[cacheKey] = emptyLibraryNames;
+            return emptyLibraryNames;
         }
 
         /// <summary>
