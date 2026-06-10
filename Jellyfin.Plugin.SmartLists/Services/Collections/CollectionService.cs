@@ -1101,7 +1101,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var validTopParentIds = GetLibraryTopParentIds();
 
             // Query all items the owner user has access to
-            var includeVirtualItems = UsesLibraryNameRule(dto);
+            var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
             var query = new InternalItemsQuery(ownerUser)
             {
                 IncludeItemTypes = baseItemKinds,
@@ -1124,13 +1124,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
-
-        private static bool UsesLibraryNameRule(SmartListDto? dto)
-        {
-            return dto?.ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    string.Equals(expr.MemberName, "LibraryName", StringComparison.OrdinalIgnoreCase)) == true) == true;
-        }
 
         /// <summary>
         /// Refreshes collection metadata including cover image generation.

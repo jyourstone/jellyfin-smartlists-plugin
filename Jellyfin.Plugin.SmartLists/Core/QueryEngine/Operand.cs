@@ -107,7 +107,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         // Library name - the Jellyfin library this item belongs to (e.g., "Movies", "TV Shows", "Music")
         public string LibraryName { get; set; } = string.Empty;
-        public List<string> LibraryNames { get; set; } = [];
+        public IReadOnlyList<string> LibraryNames { get; set; } = [];
 
         // Custom rating - user-defined rating field (can be text or numeric)
         public string CustomRating { get; set; } = string.Empty;

@@ -975,7 +975,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             // (which points to the physical folder). We resolve physical folder IDs via FindByPath.
             var validTopParentIds = GetLibraryTopParentIds();
 
-            var includeVirtualItems = UsesLibraryNameRule(dto);
+            var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
             var query = new InternalItemsQuery(user)
             {
                 IncludeItemTypes = baseItemKinds,
@@ -998,13 +998,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
-
-        private static bool UsesLibraryNameRule(SmartListDto? dto)
-        {
-            return dto?.ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    string.Equals(expr.MemberName, "LibraryName", StringComparison.OrdinalIgnoreCase)) == true) == true;
-        }
 
         /// <summary>
         /// Refreshes playlist metadata to trigger Jellyfin's auto-generation of cover images.

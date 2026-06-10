@@ -3946,7 +3946,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="cache">Cache for storing library name lookups</param>
         /// <param name="logger">Logger for debugging</param>
         /// <returns>The library names this item belongs to, or an empty list if not found</returns>
-        private static List<string> ExtractLibraryNames(BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        private static IReadOnlyList<string> ExtractLibraryNames(BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
             var cacheKey = (
                 baseItem.Id,
@@ -3969,7 +3969,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                         .Select(folder => folder.Name)
                         .Where(name => !string.IsNullOrWhiteSpace(name))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
+                        .ToList()
+                        .AsReadOnly();
 
                     cache.LibraryNamesByItemKey[cacheKey] = libraryNames;
                     return libraryNames;
@@ -3981,8 +3982,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Cache empty result too to avoid repeated failed lookups
-            cache.LibraryNamesByItemKey[cacheKey] = [];
-            return [];
+            var emptyLibraryNames = Array.Empty<string>();
+            cache.LibraryNamesByItemKey[cacheKey] = emptyLibraryNames;
+            return emptyLibraryNames;
         }
 
         /// <summary>
