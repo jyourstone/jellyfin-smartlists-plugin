@@ -1133,13 +1133,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
-                IsVirtualItem = includeVirtualItems ? null : false,
             };
 
-            if (!includeVirtualItems)
-            {
-                query.TopParentIds = validTopParentIds;
-            }
+            LibraryManagerHelper.ApplyVirtualItemQueryScope(query, includeVirtualItems, validTopParentIds);
 
             var items = _libraryManager.GetItemsResult(query).Items;
 

@@ -130,6 +130,16 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 .AsReadOnly();
         }
 
+        public static void ApplyVirtualItemQueryScope(InternalItemsQuery query, bool includeVirtualItems, Guid[] validTopParentIds)
+        {
+            query.IsVirtualItem = includeVirtualItems ? null : false;
+
+            if (!includeVirtualItems)
+            {
+                query.TopParentIds = validTopParentIds;
+            }
+        }
+
         private static bool IsPathInLocation(string? itemPath, string location)
         {
             if (string.IsNullOrWhiteSpace(itemPath))
@@ -146,7 +156,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
         private static string NormalizePathForPrefixMatch(string path)
         {
-            return path.Replace('\\', '/').TrimEnd('/');
+            var normalizedPath = path.Replace('\\', '/').TrimEnd('/');
+            return normalizedPath.Length == 0 ? "/" : normalizedPath;
         }
 
         /// <summary>
