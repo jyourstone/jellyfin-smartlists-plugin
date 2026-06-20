@@ -3961,19 +3961,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             try
             {
+                var libraryNames = new List<string>();
                 var collectionFolders = libraryManager.GetCollectionFolders(baseItem);
 
                 if (collectionFolders != null && collectionFolders.Count > 0)
                 {
-                    var libraryNames = collectionFolders
+                    libraryNames.AddRange(collectionFolders
                         .Select(folder => folder.Name)
                         .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Select(name => name!));
+                }
+
+                libraryNames.AddRange(LibraryManagerHelper.GetLibraryNamesForItemPath(libraryManager, baseItem));
+
+                if (libraryNames.Count > 0)
+                {
+                    var distinctLibraryNames = libraryNames
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList()
                         .AsReadOnly();
 
-                    cache.LibraryNamesByItemKey[cacheKey] = libraryNames;
-                    return libraryNames;
+                    cache.LibraryNamesByItemKey[cacheKey] = distinctLibraryNames;
+                    return distinctLibraryNames;
                 }
             }
             catch (Exception ex)

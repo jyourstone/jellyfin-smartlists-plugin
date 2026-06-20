@@ -96,6 +96,60 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         }
 
         /// <summary>
+        /// Resolves library names by comparing an item's file path with configured virtual folder locations.
+        /// This supplements GetCollectionFolders for symlinked libraries whose collection-folder lookup may
+        /// resolve to the source item instead of the virtual recommendation library.
+        /// </summary>
+        public static IReadOnlyList<string> GetLibraryNamesForItemPath(ILibraryManager libraryManager, BaseItem item)
+        {
+            var names = new List<string>();
+            var itemPaths = new[]
+            {
+                item.Path,
+                item.ContainingFolderPath,
+            };
+
+            foreach (var vf in libraryManager.GetVirtualFolders())
+            {
+                if (string.IsNullOrWhiteSpace(vf.Name) || vf.Locations == null)
+                {
+                    continue;
+                }
+
+                if (vf.Locations.Any(location =>
+                    !string.IsNullOrWhiteSpace(location) &&
+                    itemPaths.Any(itemPath => IsPathInLocation(itemPath, location))))
+                {
+                    names.Add(vf.Name);
+                }
+            }
+
+            return names
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+                .AsReadOnly();
+        }
+
+        private static bool IsPathInLocation(string? itemPath, string location)
+        {
+            if (string.IsNullOrWhiteSpace(itemPath))
+            {
+                return false;
+            }
+
+            var normalizedPath = NormalizePathForPrefixMatch(itemPath);
+            var normalizedLocation = NormalizePathForPrefixMatch(location);
+
+            return normalizedPath.Equals(normalizedLocation, StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.StartsWith(normalizedLocation + "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizePathForPrefixMatch(string path)
+        {
+            return path.Replace('\\', '/').TrimEnd('/');
+        }
+
+        /// <summary>
         /// Parent item kinds that can own extras (behind the scenes, deleted scenes, featurettes, etc.).
         /// </summary>
         private static readonly BaseItemKind[] ExtrasParentKinds =

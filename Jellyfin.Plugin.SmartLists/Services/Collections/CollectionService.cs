@@ -1134,8 +1134,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 IncludeItemTypes = baseItemKinds,
                 Recursive = true,
                 IsVirtualItem = includeVirtualItems ? null : false,
-                TopParentIds = validTopParentIds,
             };
+
+            if (!includeVirtualItems)
+            {
+                query.TopParentIds = validTopParentIds;
+            }
 
             var items = _libraryManager.GetItemsResult(query).Items;
 
