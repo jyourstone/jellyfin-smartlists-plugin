@@ -293,7 +293,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 var newLinkedChildren = distinctNewItems
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
-                    .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
+                    .Select(itemId => LinkedChildFactory.Create(itemId, mediaLookup[itemId]))
                     .ToArray();
 
                 // Calculate collection statistics from the same filtered list used for the actual collection

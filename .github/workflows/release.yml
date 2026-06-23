@@ -6,9 +6,9 @@ on:
       - 'v*'
 
 env:
-  DOTNET_VERSION: 9.0.x
+  DOTNET_VERSION: 10.0.x
   PRERELEASE_STR: false
-  TARGET_ABI: 10.11.0
+  TARGETS: '[{"abi":"10.11.0","framework":"net9.0"},{"abi":"12.0.0","framework":"net10.0"}]'
 
 jobs:
   build:
@@ -32,7 +32,7 @@ jobs:
         id: check_preview
         run: |
           # Check if tag name contains "preview" or "rc" after version
-          TAG_NAME="${{ github.ref_name }}"
+          TAG_NAME="$GITHUB_REF_NAME"
           if echo "$TAG_NAME" | grep -E "preview|rc" > /dev/null; then
             echo "is_preview=true" >> $GITHUB_OUTPUT
             echo "Preview tag detected: $TAG_NAME"
@@ -47,29 +47,39 @@ jobs:
       - name: Build plugin
         run: |
           # Strip preview/rc suffixes for .NET versioning
-          VERSION=$(echo "${{ github.ref_name }}" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
-          echo "Building version: $VERSION (stripped from tag: ${{ github.ref_name }})"
-          dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj \
-            --configuration Release --no-restore -o ./build_output \
-            /p:Version=$VERSION /p:AssemblyVersion=$VERSION
+          VERSION=$(echo "$GITHUB_REF_NAME" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
+          echo "Building version: $VERSION (stripped from tag: $GITHUB_REF_NAME)"
+          echo "$TARGETS" | jq -c '.[]' | while read -r target; do
+            TARGET_ABI=$(echo "$target" | jq -r '.abi')
+            TARGET_FRAMEWORK=$(echo "$target" | jq -r '.framework')
+            echo "Building Jellyfin ABI ${TARGET_ABI} (${TARGET_FRAMEWORK})"
+            dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj \
+              --framework "$TARGET_FRAMEWORK" \
+              --configuration Release --no-restore -o "./build_output/${TARGET_ABI}" \
+              /p:Version=$VERSION /p:AssemblyVersion=$VERSION
+          done
 
       - name: Create Plugin Zip
         run: |
-          mkdir -p staging
-          cp ./build_output/Jellyfin.Plugin.SmartLists.dll staging/
-          cp ./build_output/SixLabors.ImageSharp.dll staging/
-          cp ./build_output/Jellyfin.Plugin.SmartLists.deps.json staging/
-          cp images/logo.jpg staging/logo.jpg
-          cd staging
-          zip -X ../Jellyfin.Plugin.SmartLists_${{ github.ref_name }}.zip *
-          cd ..
+          echo "$TARGETS" | jq -c '.[]' | while read -r target; do
+            TARGET_ABI=$(echo "$target" | jq -r '.abi')
+            STAGING_DIR="staging/${TARGET_ABI}"
+            mkdir -p "$STAGING_DIR"
+            cp "./build_output/${TARGET_ABI}/Jellyfin.Plugin.SmartLists.dll" "$STAGING_DIR/"
+            cp "./build_output/${TARGET_ABI}/SixLabors.ImageSharp.dll" "$STAGING_DIR/"
+            cp "./build_output/${TARGET_ABI}/Jellyfin.Plugin.SmartLists.deps.json" "$STAGING_DIR/"
+            cp images/logo.jpg "$STAGING_DIR/logo.jpg"
+            cd "$STAGING_DIR"
+            zip -X "../../Jellyfin.Plugin.SmartLists_${GITHUB_REF_NAME}_${TARGET_ABI}.zip" *
+            cd ../..
+          done
 
       - name: Create Release (auto notes from PRs)
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           name: Release ${{ github.ref_name }}
-          files: ./Jellyfin.Plugin.SmartLists_${{ github.ref_name }}.zip
+          files: ./Jellyfin.Plugin.SmartLists_${{ github.ref_name }}_*.zip
           draft: false
           # Use the dynamically determined prerelease status
           prerelease: ${{ steps.check_preview.outputs.is_preview }}
@@ -83,7 +93,7 @@ jobs:
         run: |
           set -e
           resp=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                 "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}")
+                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")
           body=$(echo "$resp" | jq -r '.body // ""')
           {
             echo 'body<<EOM'
@@ -98,12 +108,8 @@ jobs:
           CHANGELOG_BODY: ${{ steps.read_release.outputs.body }}
         run: |
           # Strip preview/rc suffixes for .NET versioning
-          VERSION=$(echo "${{ github.ref_name }}" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
+          VERSION=$(echo "$GITHUB_REF_NAME" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
           ASSEMBLY_VERSION="${VERSION}"
-          ZIP_NAME="Jellyfin.Plugin.SmartLists_${{ github.ref_name }}.zip"
-          CHECKSUM=$(md5sum ${ZIP_NAME} | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
-          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${ZIP_NAME}"
-          TARGET_ABI="${{ env.TARGET_ABI }}"
           TIMESTAMP=$(date -u +'%Y-%m-%d')
           # Sanitize changelog: remove trailing "by @user in <link>" fragments GitHub adds
           CLEAN_CHANGELOG=$(echo "$CHANGELOG_BODY" | sed -E 's/[[:space:]]*by @[[:alnum:]-]+ in https?:\/\/[^[:space:]]+//g')
@@ -118,15 +124,6 @@ jobs:
             echo "[]" > "$MANIFEST_FILE"
           fi
 
-          NEW_PACKAGE=$(jq -n \
-            --arg version "$ASSEMBLY_VERSION" \
-            --arg abi "$TARGET_ABI" \
-            --arg url "$DOWNLOAD_URL" \
-            --arg checksum "$CHECKSUM" \
-            --arg changelog "$CLEAN_CHANGELOG" \
-            --arg timestamp "$TIMESTAMP" \
-            '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
-
           if ! jq -e --arg guid "$PLUGIN_GUID" 'any(.[]; .guid == $guid)' "$MANIFEST_FILE" > /dev/null; then
             PLUGIN_ENTRY=$(jq -n \
               --arg name "SmartLists" \
@@ -140,9 +137,23 @@ jobs:
             jq --argjson new_entry "$PLUGIN_ENTRY" '. += [$new_entry]' "$MANIFEST_FILE" > tmp && mv tmp "$MANIFEST_FILE"
           fi
 
-          jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
-            '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
-            "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
+          echo "$TARGETS" | jq -c '.[]' | while read -r target; do
+            TARGET_ABI=$(echo "$target" | jq -r '.abi')
+            ZIP_NAME="Jellyfin.Plugin.SmartLists_${GITHUB_REF_NAME}_${TARGET_ABI}.zip"
+            CHECKSUM=$(md5sum "../${ZIP_NAME}" | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
+            DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+            NEW_PACKAGE=$(jq -n \
+              --arg version "$ASSEMBLY_VERSION" \
+              --arg abi "$TARGET_ABI" \
+              --arg url "$DOWNLOAD_URL" \
+              --arg checksum "$CHECKSUM" \
+              --arg changelog "$CLEAN_CHANGELOG" \
+              --arg timestamp "$TIMESTAMP" \
+              '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
+            jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
+              '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
+              "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
+          done
 
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -157,12 +168,8 @@ jobs:
           CHANGELOG_BODY: ${{ steps.read_release.outputs.body }}
         run: |
           # Strip preview/rc suffixes for .NET versioning
-          VERSION=$(echo "${{ github.ref_name }}" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
-          FULL_VERSION=$(echo "${{ github.ref_name }}" | sed 's/v//')
-          ZIP_NAME="Jellyfin.Plugin.SmartLists_${{ github.ref_name }}.zip"
-          CHECKSUM=$(md5sum ${ZIP_NAME} | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
-          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${ZIP_NAME}"
-          TARGET_ABI="${{ env.TARGET_ABI }}"
+          VERSION=$(echo "$GITHUB_REF_NAME" | sed -E 's/(preview|rc).*$//' | sed 's/v//' | sed 's/-$//')
+          FULL_VERSION=$(echo "$GITHUB_REF_NAME" | sed 's/v//')
           TIMESTAMP=$(date -u +'%Y-%m-%d')
           # Sanitize changelog: remove trailing "by @user in <link>" fragments GitHub adds
           CLEAN_CHANGELOG=$(echo "$CHANGELOG_BODY" | sed -E 's/[[:space:]]*by @[[:alnum:]-]+ in https?:\/\/[^[:space:]]+//g')
@@ -181,15 +188,6 @@ jobs:
             echo "[]" > "$MANIFEST_FILE"
           fi
 
-          NEW_PACKAGE=$(jq -n \
-            --arg version "$VERSION" \
-            --arg abi "$TARGET_ABI" \
-            --arg url "$DOWNLOAD_URL" \
-            --arg checksum "$CHECKSUM" \
-            --arg changelog "$CLEAN_CHANGELOG" \
-            --arg timestamp "$TIMESTAMP" \
-            '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
-
           if ! jq -e --arg guid "$PLUGIN_GUID" 'any(.[]; .guid == $guid)' "$MANIFEST_FILE" > /dev/null; then
             PLUGIN_ENTRY=$(jq -n \
               --arg name "SmartLists" \
@@ -203,9 +201,23 @@ jobs:
             jq --argjson new_entry "$PLUGIN_ENTRY" '. += [$new_entry]' "$MANIFEST_FILE" > tmp && mv tmp "$MANIFEST_FILE"
           fi
 
-          jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
-            '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
-            "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
+          echo "$TARGETS" | jq -c '.[]' | while read -r target; do
+            TARGET_ABI=$(echo "$target" | jq -r '.abi')
+            ZIP_NAME="Jellyfin.Plugin.SmartLists_${GITHUB_REF_NAME}_${TARGET_ABI}.zip"
+            CHECKSUM=$(md5sum "../${ZIP_NAME}" | cut -d' ' -f1 | tr '[:lower:]' '[:upper:]')
+            DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+            NEW_PACKAGE=$(jq -n \
+              --arg version "$VERSION" \
+              --arg abi "$TARGET_ABI" \
+              --arg url "$DOWNLOAD_URL" \
+              --arg checksum "$CHECKSUM" \
+              --arg changelog "$CLEAN_CHANGELOG" \
+              --arg timestamp "$TIMESTAMP" \
+              '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
+            jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
+              '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
+              "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
+          done
 
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
