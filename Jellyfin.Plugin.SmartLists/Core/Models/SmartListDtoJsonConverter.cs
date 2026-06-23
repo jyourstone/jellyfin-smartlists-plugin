@@ -39,26 +39,50 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
 
         private static SmartListType GetListType(JsonElement root)
         {
-            if (!root.TryGetProperty("Type", out var typeElement))
+            if (!TryGetProperty(root, "Type", out var typeElement))
             {
-                return SmartListType.Playlist;
+                throw new JsonException("Smart list JSON is missing required Type property.");
             }
 
             if (typeElement.ValueKind == JsonValueKind.String
                 && Enum.TryParse<SmartListType>(typeElement.GetString(), ignoreCase: true, out var stringType))
             {
+                if (!Enum.IsDefined(stringType))
+                {
+                    throw new JsonException($"Smart list Type value '{typeElement.GetString()}' is not supported.");
+                }
+
                 return stringType;
             }
 
             if (typeElement.ValueKind == JsonValueKind.Number
                 && typeElement.TryGetInt32(out var numericType))
             {
-                return numericType == (int)SmartListType.Collection
-                    ? SmartListType.Collection
-                    : SmartListType.Playlist;
+                var listType = (SmartListType)numericType;
+                if (!Enum.IsDefined(listType))
+                {
+                    throw new JsonException($"Smart list Type value '{numericType}' is not supported.");
+                }
+
+                return listType;
             }
 
-            return SmartListType.Playlist;
+            throw new JsonException("Smart list Type must be either a string or numeric SmartListType value.");
+        }
+
+        private static bool TryGetProperty(JsonElement root, string propertyName, out JsonElement value)
+        {
+            foreach (var property in root.EnumerateObject())
+            {
+                if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
         }
     }
 }
