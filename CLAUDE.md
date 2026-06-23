@@ -75,7 +75,34 @@ Adding new sort options requires updates in: `Core/Orders/`, `OrderFactory.cs`, 
 ### Media Type Constants
 Use `MediaTypes.Episode` instead of `"Episode"` - see `Core/Constants/MediaTypes.cs`.
 
+## Versioning & Releases
+
+Releases are triggered by pushing a git tag matching `v*` (see `.github/workflows/release.yml`).
+
+### Version Format
+
+Jellyfin plugins use .NET `System.Version` (`Major.Minor.Build.Revision` — four integers). Unlike SemVer, there are **no pre-release labels** (`-rc.1`, `-alpha`, etc.) and comparison is purely numeric left-to-right. The convention below encodes RC status into the four-part version instead:
+
+- **Revision > 0** → Release Candidate (the revision number is the RC number)
+- **Revision = 0** → Stable release
+
+The `-rc` suffix on the git tag is only a workflow marker — it routes the build to the **unstable** manifest branch and marks the GitHub release as a prerelease. It is stripped before building (the .NET version is the four-part number).
+
+### Tag Examples
+
+| Git Tag | Manifest Version | Manifest Branch | Notes |
+|---|---|---|---|
+| `v12.0.0.1-rc` | `12.0.0.1` | unstable | First RC for 12.0 |
+| `v12.0.0.2-rc` | `12.0.0.2` | unstable | Second RC |
+| `v12.0.1.0` | `12.0.1.0` | stable (main) | Final stable release |
+| `v12.0.2.0` | `12.0.2.0` | stable (main) | Hotfix (no RC) |
+| `v12.1.0.1-rc` | `12.1.0.1` | unstable | RC for next minor |
+| `v12.1.1.0` | `12.1.1.0` | stable (main) | Stable for next minor |
+
+Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-update through RCs and into the final stable release. Because Revision is reserved for RC numbers, stable releases always bump the **Build** component (never use Revision for stable).
+
 ## When Making Changes
+
 
 - Update the mkdocs `/docs/content/` when adding user-facing features. Put any examples in the example sections.
 - **UI changes must update both HTML files**: `config.html` (admin) and `user-playlists.html` (user) - the JS modules are shared
