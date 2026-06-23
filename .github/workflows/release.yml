@@ -76,7 +76,7 @@ jobs:
 
       - name: Create Release (auto notes from PRs)
         id: create_release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ github.ref_name }}
           files: ./Jellyfin.Plugin.SmartLists_${{ github.ref_name }}_*.zip
