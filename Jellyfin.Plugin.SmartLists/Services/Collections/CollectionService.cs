@@ -293,7 +293,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 var newLinkedChildren = distinctNewItems
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
-                    .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
+                    .Select(itemId => CreateLinkedChild(itemId, mediaLookup[itemId]))
                     .ToArray();
 
                 // Calculate collection statistics from the same filtered list used for the actual collection
@@ -2278,6 +2278,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 mediaLookup[item.Id] = item;
             }
         }
+
+#if NET10_0_OR_GREATER
+        private static LinkedChild CreateLinkedChild(Guid itemId, BaseItem item) => new() { ItemId = itemId };
+#else
+        private static LinkedChild CreateLinkedChild(Guid itemId, BaseItem item) => new() { ItemId = itemId, Path = item.Path };
+#endif
 
     }
 }

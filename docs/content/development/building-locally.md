@@ -44,9 +44,22 @@ cd dev
 ```
 
 The build scripts automatically:
-- Build the plugin
+- Build the plugin for the configured Jellyfin ABI
 - Restart the Jellyfin Docker container
 - Make the plugin available in your local Jellyfin instance
+
+By default, the scripts build for Jellyfin ABI `12.0.0` using `net10.0`, which matches the Jellyfin 12 RC development container. To test against Jellyfin 10.11, set `JELLYFIN_ABI=10.11.0` before running the script:
+
+```bash
+cd dev
+JELLYFIN_ABI=10.11.0 ./build-local.sh
+```
+
+```powershell
+cd dev
+$env:JELLYFIN_ABI = "10.11.0"
+.\build-local.ps1
+```
 
 ### 2. Access Jellyfin
 
@@ -86,4 +99,4 @@ dev/jellyfin-data/config/log/
 
 ### Development Metadata
 
-**`meta-dev.json`** is a development-specific plugin manifest. It overrides the main `meta.json` during local builds to ensure the plugin works correctly in the development environment.
+**`meta-dev.json`** is a development-specific plugin manifest for the default Jellyfin 12 development setup. The build scripts generate `build_output/meta.json` from the selected `JELLYFIN_ABI` value during local builds.

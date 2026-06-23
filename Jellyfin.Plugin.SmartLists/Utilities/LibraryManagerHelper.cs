@@ -209,7 +209,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
             foreach (var parent in parents)
             {
-                if (parent.ExtraIds == null || parent.ExtraIds.Length == 0)
+                var extras = parent.GetExtras().ToArray();
+                if (extras.Length == 0)
                 {
                     continue;
                 }
@@ -228,7 +229,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     }
                 }
 
-                foreach (var extra in parent.GetExtras())
+                foreach (var extra in extras)
                 {
                     if (seenIds.Add(extra.Id))
                     {

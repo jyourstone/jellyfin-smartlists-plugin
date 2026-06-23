@@ -12,9 +12,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
     /// Contains all shared properties and logic
     /// </summary>
     [Serializable]
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "Type")]
-    [JsonDerivedType(typeof(SmartPlaylistDto), typeDiscriminator: "Playlist")]
-    [JsonDerivedType(typeof(SmartCollectionDto), typeDiscriminator: "Collection")]
+    [JsonConverter(typeof(SmartListDtoJsonConverter))]
     public abstract class SmartListDto
     {
         /// <summary>

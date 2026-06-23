@@ -183,7 +183,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 var newLinkedChildren = newItems
                     .Distinct()
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
-                    .Select(itemId => new LinkedChild { ItemId = itemId, Path = mediaLookup[itemId].Path })
+                    .Select(itemId => CreateLinkedChild(itemId, mediaLookup[itemId]))
                     .ToArray();
 
                 // Calculate playlist statistics from the same filtered list used for the actual playlist
@@ -1211,6 +1211,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 }
             }
         }
+
+#if NET10_0_OR_GREATER
+        private static LinkedChild CreateLinkedChild(Guid itemId, BaseItem item) => new() { ItemId = itemId };
+#else
+        private static LinkedChild CreateLinkedChild(Guid itemId, BaseItem item) => new() { ItemId = itemId, Path = item.Path };
+#endif
 
     }
 }
