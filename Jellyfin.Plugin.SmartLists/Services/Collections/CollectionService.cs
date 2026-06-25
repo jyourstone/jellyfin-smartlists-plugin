@@ -1006,12 +1006,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         File.Copy(sourcePath, destPath, overwrite: true);
                         _logger.LogDebug("Copied custom {ImageType} image to collection: {DestPath}", imageTypeName, destPath);
 
-                        // Remove existing image of the same type
-                        var existingImage = imageInfos.FirstOrDefault(i => i.Type == imageType);
-                        if (existingImage != null)
-                        {
-                            imageInfos.Remove(existingImage);
-                        }
+                        // Remove same-slot files after replacement so folder.jpg and folder.jpeg cannot compete.
+                        _imageService.DeleteJellyfinImageFilesForType(itemPath, imageType, destPath, cancellationToken);
+
+                        // Remove existing images of the same type
+                        imageInfos.RemoveAll(i => i.Type == imageType);
 
                         // Add the new image info
                         var imageInfo = new ItemImageInfo
