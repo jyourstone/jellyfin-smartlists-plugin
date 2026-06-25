@@ -31,10 +31,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Allowed image extensions (matching Jellyfin's supported formats).
         /// </summary>
-        private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly string[] SupportedImageExtensions =
         {
             ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg", ".tiff", ".tif", ".apng", ".ico"
         };
+
+        private static readonly HashSet<string> AllowedExtensions = new(SupportedImageExtensions, StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Valid image types that can be uploaded.
@@ -503,7 +505,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Allowed image file extensions for cleanup operations.
         /// </summary>
-        public static readonly string[] ImageFileExtensions = { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".svg", ".tiff", ".tif", ".apng", ".ico" };
+        public static readonly string[] ImageFileExtensions = SupportedImageExtensions;
 
         /// <summary>
         /// Deletes standard Jellyfin image files for an image type from an item folder.

@@ -775,12 +775,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         var destFileName = GetImageFileName(imageType, extension);
                         var destPath = Path.Combine(itemPath, destFileName);
 
-                        // Remove same-slot files first so folder.jpg and folder.jpeg cannot compete.
-                        _imageService.DeleteJellyfinImageFilesForType(itemPath, imageType, destPath, cancellationToken);
-
                         // Copy the image to the playlist folder
                         File.Copy(sourcePath, destPath, overwrite: true);
                         _logger.LogDebug("Copied custom {ImageType} image to playlist: {DestPath}", imageTypeName, destPath);
+
+                        // Remove same-slot files after replacement so folder.jpg and folder.jpeg cannot compete.
+                        _imageService.DeleteJellyfinImageFilesForType(itemPath, imageType, destPath, cancellationToken);
 
                         // Remove existing images of the same type
                         imageInfos.RemoveAll(i => i.Type == imageType);
