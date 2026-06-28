@@ -61,8 +61,8 @@
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="10.11.0" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Jellyfin.Model" Version="10.11.0" Condition="'$(TargetFramework)' == 'net9.0'" />
-    <PackageReference Include="Jellyfin.Controller" Version="12.0.0-rc1" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="Jellyfin.Model" Version="12.0.0-rc1" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.*-*" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Jellyfin.Model" Version="12.0.*-*" Condition="'$(TargetFramework)' == 'net10.0'" />
     <!-- ImageSharp is bundled with the plugin as Jellyfin doesn't provide it -->
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12">
       <Private>true</Private>

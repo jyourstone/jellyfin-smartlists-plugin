@@ -1,6 +1,6 @@
 services:
   jellyfin:
-    image: jellyfin/jellyfin:12.0-rc1
+    image: jellyfin/jellyfin:12.0-rc2
     container_name: jellyfin
     user: 1000:1000
     environment:
@@ -20,4 +20,4 @@ services:
       - ./media/books:/books # You can place some books here for testing.
       - ./media/homevideosandphotos:/homevideosandphotos # You can place some home videos and photos here for testing.
       - ../build_output:/config/plugins/SmartLists # Mount the build output directly into the plugins directory.
-    restart: "unless-stopped" 
+    restart: "unless-stopped"
