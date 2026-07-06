@@ -76,6 +76,10 @@
         if (!enabled) return null;
 
         var groupBy = SmartLists.getElementValue(page, '#randomGroupSelectionGroupBy', '');
+        // Guard against an incomplete config reaching the server: Random Group Selection
+        // is only valid when a non-empty Group By field is selected.
+        if (!groupBy) return null;
+
         var minimumItemsInput = SmartLists.getElementValue(page, '#randomGroupSelectionMinimumItems', '');
         var minimumItems = 0;
         if (minimumItemsInput !== '') {

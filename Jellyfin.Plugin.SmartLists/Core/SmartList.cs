@@ -1218,7 +1218,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 }
 
                 var groupBy = RandomGroupSelection!.GroupBy!;
-                var requiredGroup = GetRandomGroupSelectionExtractionGroup(groupBy);
+                var requiredGroup = RandomGroupSelectionDto.GetExtractionGroup(groupBy);
                 if (requiredGroup == ExtractionGroup.None)
                 {
                     logger?.LogWarning("Random Group Selection for playlist '{PlaylistName}' uses unsupported field '{GroupBy}'. Skipping group selection.", Name, groupBy);
@@ -1285,17 +1285,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogError(ex, "Error applying Random Group Selection for playlist '{PlaylistName}'. Returning ungrouped items.", Name);
                 return items;
             }
-        }
-
-        private static ExtractionGroup GetRandomGroupSelectionExtractionGroup(string groupBy)
-        {
-            return groupBy switch
-            {
-                "Artists" or "AlbumArtists" or "Album" => ExtractionGroup.AudioMetadata,
-                "SeriesName" => ExtractionGroup.SeriesName,
-                "Genres" or "Studios" or "Tags" => ExtractionGroup.ItemLists,
-                _ => ExtractionGroup.None,
-            };
         }
 
         private static List<string> GetRandomGroupKeys(Operand operand, string groupBy)
@@ -3210,13 +3199,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             if (randomGroupSelection?.Enabled == true && !string.IsNullOrWhiteSpace(randomGroupSelection.GroupBy))
             {
-                requirements.RequiredGroups |= randomGroupSelection.GroupBy switch
-                {
-                    "Artists" or "AlbumArtists" or "Album" => ExtractionGroup.AudioMetadata,
-                    "SeriesName" => ExtractionGroup.SeriesName,
-                    "Genres" or "Studios" or "Tags" => ExtractionGroup.ItemLists,
-                    _ => ExtractionGroup.None,
-                };
+                requirements.RequiredGroups |= RandomGroupSelectionDto.GetExtractionGroup(randomGroupSelection.GroupBy);
             }
 
             if (expressionSets == null) return requirements;
