@@ -184,6 +184,58 @@ Next refresh:
 !!! tip "Simulating a TV channel"
     Combine with **Auto Refresh** to get a different "channel lineup" on a schedule. Each refresh reshuffles which show appears first while keeping episodes in order within each show.
 
+## Random Group Selection
+
+Random Group Selection chooses one random group from the items that already matched your rules, then continues with your normal sort and limit settings.
+
+**How it works**:
+
+1. Your rules create the eligible item pool
+2. One group is selected at random
+3. Items outside that group are removed
+4. Sort options and limits are applied to the selected group
+
+**Supported groups**:
+
+- Artist
+- Album Artist
+- Album
+- Series Name
+- Genre
+- Studio
+- Tag
+
+For fields with multiple values, such as Artists, Genres, Studios, and Tags, an item can belong to every value it has.
+
+**Example: 50 random tracks from one random artist**
+
+1. Select **Audio (Music)** as the media type
+2. Enable **Random Group Selection**
+3. Set **Group By** to **Artist**
+4. Set **Minimum Items in Group** to `50`
+5. Set **Sort By** to **Random**
+6. Set **Max Items** to `50`
+
+One refresh might choose Eminem and return 50 Eminem tracks. The next refresh might choose Katy Perry and return 50 Katy Perry tracks.
+
+**Example: least-listened tracks from one random artist**
+
+Use the same settings as above, but set **Sort By** to **Play Count (owner)** and **Sort Order** to **Ascending**.
+
+**Example: most-listened tracks from one random artist**
+
+Use the same settings as above, but set **Sort By** to **Play Count (owner)** and **Sort Order** to **Descending**.
+
+**Other examples**:
+
+- Random series, then episodes from that series
+- Random genre, then movies from that genre
+- Random studio, then movies from that studio
+- Random tag, then items with that tag
+
+!!! tip "Minimum Items"
+    Set **Minimum Items in Group** when you need a full list. For example, set it to `50` if you only want artists with at least 50 matching tracks.
+
 ### External List Order
 Sort items in the same order as the external list they were matched from. Only available when using the "External List" filter field in your rules.
 

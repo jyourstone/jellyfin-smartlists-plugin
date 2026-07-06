@@ -102,6 +102,16 @@
         { value: 'Studios', label: 'Studio (first)', mediaTypes: null }
     ];
 
+    SmartLists.RANDOM_GROUP_FIELDS = [
+        { value: 'Artists', label: 'Artist', mediaTypes: ['Audio', 'MusicVideo'] },
+        { value: 'AlbumArtists', label: 'Album Artist', mediaTypes: ['Audio', 'MusicVideo'] },
+        { value: 'Album', label: 'Album', mediaTypes: ['Audio', 'MusicVideo'] },
+        { value: 'SeriesName', label: 'Series Name', mediaTypes: ['Episode'] },
+        { value: 'Genres', label: 'Genre', mediaTypes: null },
+        { value: 'Studios', label: 'Studio', mediaTypes: null },
+        { value: 'Tags', label: 'Tag', mediaTypes: null }
+    ];
+
     // Sort fields that support child value aggregation (for collections containing collections/playlists)
     // When enabled, sort values are calculated from the Max of child items (e.g., newest DateCreated among children)
     SmartLists.CHILD_VALUE_SORT_FIELDS = ['ProductionYear', 'CommunityRating', 'DateCreated', 'ReleaseDate'];

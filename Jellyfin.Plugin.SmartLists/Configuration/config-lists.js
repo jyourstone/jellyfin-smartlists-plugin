@@ -19,6 +19,103 @@
         return userId.replace(/-/g, '').toLowerCase();
     };
 
+    SmartLists.getFilteredRandomGroupFields = function (page) {
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
+        return (SmartLists.RANDOM_GROUP_FIELDS || []).filter(function (field) {
+            if (!field.mediaTypes) return true;
+            if (!selectedMediaTypes || selectedMediaTypes.length === 0) return true;
+            for (var i = 0; i < field.mediaTypes.length; i++) {
+                if (selectedMediaTypes.indexOf(field.mediaTypes[i]) !== -1) return true;
+            }
+            return false;
+        });
+    };
+
+    SmartLists.getRandomGroupFieldLabel = function (fieldValue) {
+        var fields = SmartLists.RANDOM_GROUP_FIELDS || [];
+        for (var i = 0; i < fields.length; i++) {
+            if (fields[i].value === fieldValue) {
+                return fields[i].label;
+            }
+        }
+        return fieldValue || '';
+    };
+
+    SmartLists.syncRandomGroupSelectionUI = function (page, selectedGroupBy) {
+        var enabledCheckbox = page.querySelector('#randomGroupSelectionEnabled');
+        var fieldsContainer = page.querySelector('#randomGroupSelectionFields');
+        var groupBySelect = page.querySelector('#randomGroupSelectionGroupBy');
+        if (!enabledCheckbox || !fieldsContainer || !groupBySelect) return;
+
+        fieldsContainer.style.display = enabledCheckbox.checked ? '' : 'none';
+
+        var currentValue = selectedGroupBy || groupBySelect.value;
+        var filteredFields = SmartLists.getFilteredRandomGroupFields(page);
+        var options = filteredFields.map(function (field) {
+            return {
+                value: field.value,
+                label: field.label,
+                selected: field.value === currentValue
+            };
+        });
+
+        SmartLists.populateSelectElement(groupBySelect, options);
+
+        var isCurrentValueValid = filteredFields.some(function (field) {
+            return field.value === currentValue;
+        });
+        if (isCurrentValueValid) {
+            groupBySelect.value = currentValue;
+        } else if (filteredFields.length > 0) {
+            groupBySelect.value = filteredFields[0].value;
+        }
+    };
+
+    SmartLists.collectRandomGroupSelectionFromForm = function (page) {
+        var enabled = SmartLists.getElementChecked(page, '#randomGroupSelectionEnabled', false);
+        if (!enabled) return null;
+
+        var groupBy = SmartLists.getElementValue(page, '#randomGroupSelectionGroupBy', '');
+        // Guard against an incomplete config reaching the server: Random Group Selection
+        // is only valid when a non-empty Group By field is selected.
+        if (!groupBy) return null;
+
+        var minimumItemsInput = SmartLists.getElementValue(page, '#randomGroupSelectionMinimumItems', '');
+        var minimumItems = 0;
+        if (minimumItemsInput !== '') {
+            var parsedMinimum = parseInt(minimumItemsInput, 10);
+            minimumItems = (isNaN(parsedMinimum) || parsedMinimum < 0) ? 0 : parsedMinimum;
+        }
+
+        return {
+            Enabled: true,
+            GroupBy: groupBy,
+            MinimumItems: minimumItems
+        };
+    };
+
+    SmartLists.loadRandomGroupSelectionIntoUI = function (page, playlist) {
+        var selection = playlist && playlist.RandomGroupSelection ? playlist.RandomGroupSelection : null;
+        var enabled = selection && selection.Enabled === true;
+
+        SmartLists.setElementChecked(page, '#randomGroupSelectionEnabled', enabled);
+        SmartLists.setElementValue(page, '#randomGroupSelectionMinimumItems', enabled && selection.MinimumItems ? selection.MinimumItems : '');
+        SmartLists.syncRandomGroupSelectionUI(page, enabled ? selection.GroupBy : null);
+    };
+
+    SmartLists.formatRandomGroupSelectionDisplay = function (playlist) {
+        var selection = playlist && playlist.RandomGroupSelection ? playlist.RandomGroupSelection : null;
+        if (!selection || selection.Enabled !== true || !selection.GroupBy) {
+            return 'Disabled';
+        }
+
+        var text = 'Random ' + SmartLists.getRandomGroupFieldLabel(selection.GroupBy);
+        if (selection.MinimumItems && selection.MinimumItems > 0) {
+            text += ' (min ' + selection.MinimumItems + ' items)';
+        }
+        return text;
+    };
+
     // ===== USER MANAGEMENT =====
     // Note: loadUsers, loadUsersForRule, and setCurrentUserAsDefault are defined in config-api.js to avoid duplication
 
@@ -291,6 +388,7 @@
             var overviewVal = SmartLists.getElementValue(page, '#metadataOverview');
             var tagsVal = SmartLists.getMetadataTags ? SmartLists.getMetadataTags(page) : [];
             var favoriteVal = SmartLists.getElementValue(page, '#metadataFavorite', '');
+            var randomGroupSelection = SmartLists.collectRandomGroupSelectionFromForm(page);
 
             const playlistDto = {
                 Type: listType,
@@ -317,6 +415,9 @@
                 playlistDto.Favorite = true;
             } else if (favoriteVal === 'false') {
                 playlistDto.Favorite = false;
+            }
+            if (randomGroupSelection) {
+                playlistDto.RandomGroupSelection = randomGroupSelection;
             }
 
             // Add type-specific fields
@@ -557,6 +658,7 @@
 
         // Clear media type selections
         SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
+        SmartLists.loadRandomGroupSelectionIntoUI(page, null);
 
         // Apply all form defaults using shared helper (DRY)
         // Skip loading config on user pages (admin-only endpoint)
@@ -683,6 +785,8 @@
                 // Handle visibility schedule settings
                 SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
 
+                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
+
                 // Handle MaxItems with backward compatibility for existing playlists
                 // Default to 0 (unlimited) for old playlists that didn't have this setting
                 const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
@@ -720,6 +824,7 @@
                 if (SmartLists.updateIncludeExtrasVisibility) {
                     SmartLists.updateIncludeExtrasVisibility(page);
                 }
+                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
 
                 // Set the list owner (for both playlists and collections)
                 // isCollection is already declared above on line 425
@@ -969,6 +1074,8 @@
                 // Handle visibility schedule settings (same as editPlaylist)
                 SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
 
+                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
+
                 // Handle MaxItems
                 const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
                 const maxItemsElement = page.querySelector('#playlistMaxItems');
@@ -995,6 +1102,7 @@
                 if (SmartLists.updateIncludeExtrasVisibility) {
                     SmartLists.updateIncludeExtrasVisibility(page);
                 }
+                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
 
                 // Set the list owner (for both playlists and collections)
                 // isCollection is already declared above on line 650
@@ -1656,6 +1764,7 @@
             (playlist.Favorite === false ? 'Mark as not favorite' : 'Leave unchanged');
         const eTagsDisplayText = SmartLists.escapeHtml(tagsDisplayText);
         const eFavoriteDisplayText = SmartLists.escapeHtml(favoriteDisplayText);
+        const eRandomGroupSelectionDisplay = SmartLists.escapeHtml(SmartLists.formatRandomGroupSelectionDisplay(playlist));
 
         // Build custom images display
         var customImagesHtml = '';
@@ -1909,6 +2018,10 @@
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Sort</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eSortName + '</td>' +
+            '</tr>' +
+            '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+            '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Random Group Selection</td>' +
+            '<td style="padding: 0.5em 0.75em; ">' + eRandomGroupSelectionDisplay + '</td>' +
             '</tr>' +
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Max Items</td>' +

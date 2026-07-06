@@ -312,6 +312,12 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return maxPlayTimeResult;
             }
 
+            var randomGroupSelectionResult = ValidateRandomGroupSelection(list.RandomGroupSelection);
+            if (!randomGroupSelectionResult.IsValid)
+            {
+                return randomGroupSelectionResult;
+            }
+
             // Validate schedules count
             if (list.Schedules != null && list.Schedules.Count > MaxSchedulesCount)
             {
@@ -351,6 +357,26 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             return SmartListValidationResult.Success();
+        }
+
+        private static SmartListValidationResult ValidateRandomGroupSelection(RandomGroupSelectionDto? randomGroupSelection)
+        {
+            if (randomGroupSelection == null || !randomGroupSelection.Enabled)
+            {
+                return SmartListValidationResult.Success();
+            }
+
+            if (string.IsNullOrWhiteSpace(randomGroupSelection.GroupBy))
+            {
+                return SmartListValidationResult.Failure("RandomGroupSelection.GroupBy is required when random group selection is enabled");
+            }
+
+            if (!RandomGroupSelectionDto.IsSupportedGroupByField(randomGroupSelection.GroupBy))
+            {
+                return SmartListValidationResult.Failure($"Invalid RandomGroupSelection.GroupBy value: {randomGroupSelection.GroupBy}");
+            }
+
+            return ValidateInteger(randomGroupSelection.MinimumItems, min: 0, max: 100000, fieldName: "RandomGroupSelection.MinimumItems");
         }
 
         /// <summary>

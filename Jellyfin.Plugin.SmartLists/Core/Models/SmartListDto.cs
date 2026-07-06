@@ -79,6 +79,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public int? MaxItems { get; set; } // Nullable to support backwards compatibility
         public int? MaxPlayTimeMinutes { get; set; } // Nullable to support backwards compatibility
 
+        /// <summary>
+        /// Optional post-filter grouping step that randomly selects one group before sorting and limits.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public RandomGroupSelectionDto? RandomGroupSelection { get; set; }
+
         // Auto-refresh
         public AutoRefreshMode AutoRefresh { get; set; } = AutoRefreshMode.Never; // Default to never for backward compatibility
 
