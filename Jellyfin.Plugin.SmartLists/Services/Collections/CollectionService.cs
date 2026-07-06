@@ -607,24 +607,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var collectionAfterRefresh = _libraryManager.GetItemById(collection.Id);
             if (collectionAfterRefresh != null && collectionAfterRefresh.GetBaseItemKind() == BaseItemKind.BoxSet)
             {
-                if (collectionAfterRefresh.Name != expectedName)
-                {
-                    _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')",
-                        expectedName, collectionAfterRefresh.Name);
-                }
-                collectionAfterRefresh.Name = expectedName;
-                await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
-                // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                // Pass linkedChildren to ensure we use the freshly-set items rather than potentially stale cache
-                await SetPhotoForCollection(collectionAfterRefresh, linkedChildren, cancellationToken).ConfigureAwait(false);
-
-                // Set DisplayOrder to "Default" to respect the plugin's custom sort order
-                SetCollectionDisplayOrder(collectionAfterRefresh);
-                await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
-                // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                await ApplyCustomMetadataAsync(collectionAfterRefresh, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                await FinalizeCollectionMetadataAsync(collectionAfterRefresh, expectedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -909,25 +892,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 retrievedItem = _libraryManager.GetItemById(collectionId);
                 if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
-                    if (retrievedItem.Name != formattedName)
-                    {
-                        _logger.LogDebug("Setting collection name to '{FormattedName}' after metadata refresh (was '{CurrentName}')",
-                            formattedName, retrievedItem.Name);
-                    }
-                    retrievedItem.Name = formattedName;
-                    await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
-                    // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                    // Pass linkedChildren to avoid stale cache issues - the collection object may not have
-                    // updated LinkedChildren yet after AddToCollectionAsync, especially for large libraries
-                    await SetPhotoForCollection(retrievedItem, linkedChildren, cancellationToken).ConfigureAwait(false);
-
-                    // Set DisplayOrder to "Default" to respect the plugin's custom sort order
-                    SetCollectionDisplayOrder(retrievedItem);
-                    await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
-                    // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                    await ApplyCustomMetadataAsync(retrievedItem, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                    await FinalizeCollectionMetadataAsync(retrievedItem, formattedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");
@@ -941,6 +906,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, User ownerUser, CancellationToken cancellationToken)
             => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken, ownerUser, _userDataManager);
+
+        private async Task FinalizeCollectionMetadataAsync(
+            BaseItem collection,
+            string expectedName,
+            LinkedChild[] linkedChildren,
+            SmartCollectionDto dto,
+            User ownerUser,
+            CancellationToken cancellationToken)
+        {
+            var metadataChanged = false;
+            if (collection.Name != expectedName)
+            {
+                _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')",
+                    expectedName, collection.Name);
+                collection.Name = expectedName;
+                metadataChanged = true;
+            }
+
+            // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks).
+            await SetPhotoForCollection(collection, linkedChildren, cancellationToken).ConfigureAwait(false);
+
+            metadataChanged |= SetCollectionDisplayOrder(collection);
+            if (metadataChanged)
+            {
+                await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Apply custom metadata after metadata refresh to prevent providers from overwriting.
+            await ApplyCustomMetadataAsync(collection, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+        }
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin collection.
@@ -2199,7 +2194,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// "Default" corresponds to "Date Modified" in Jellyfin's internal logic for Collections,
         /// which respects the order of items added to the collection.
         /// </summary>
-        private void SetCollectionDisplayOrder(BaseItem collection)
+        private bool SetCollectionDisplayOrder(BaseItem collection)
         {
             try
             {
@@ -2207,8 +2202,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 var displayOrderProperty = collection.GetType().GetProperty("DisplayOrder");
                 if (displayOrderProperty != null && displayOrderProperty.CanWrite)
                 {
+                    if (displayOrderProperty.GetValue(collection) is string currentDisplayOrder &&
+                        string.Equals(currentDisplayOrder, "Default", StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
                     displayOrderProperty.SetValue(collection, "Default");
                     _logger.LogDebug("Set DisplayOrder to 'Default' for collection {CollectionName}", collection.Name);
+                    return true;
                 }
                 else
                 {
@@ -2219,6 +2221,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 _logger.LogWarning(ex, "Failed to set DisplayOrder for collection {CollectionName}", collection.Name);
             }
+
+            return false;
         }
 
         /// <summary>
