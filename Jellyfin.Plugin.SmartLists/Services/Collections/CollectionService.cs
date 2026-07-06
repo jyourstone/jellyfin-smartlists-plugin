@@ -607,28 +607,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var collectionAfterRefresh = _libraryManager.GetItemById(collection.Id);
             if (collectionAfterRefresh != null && collectionAfterRefresh.GetBaseItemKind() == BaseItemKind.BoxSet)
             {
-                var metadataChanged = false;
-                if (collectionAfterRefresh.Name != expectedName)
-                {
-                    _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')",
-                        expectedName, collectionAfterRefresh.Name);
-                    collectionAfterRefresh.Name = expectedName;
-                    metadataChanged = true;
-                }
-
-                // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                // Pass linkedChildren to ensure we use the freshly-set items rather than potentially stale cache
-                await SetPhotoForCollection(collectionAfterRefresh, linkedChildren, cancellationToken).ConfigureAwait(false);
-
-                // Set DisplayOrder to "Default" to respect the plugin's custom sort order
-                metadataChanged |= SetCollectionDisplayOrder(collectionAfterRefresh);
-                if (metadataChanged)
-                {
-                    await collectionAfterRefresh.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                }
-
-                // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                await ApplyCustomMetadataAsync(collectionAfterRefresh, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                await FinalizeCollectionMetadataAsync(collectionAfterRefresh, expectedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -913,29 +892,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 retrievedItem = _libraryManager.GetItemById(collectionId);
                 if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
-                    var metadataChanged = false;
-                    if (retrievedItem.Name != formattedName)
-                    {
-                        _logger.LogDebug("Setting collection name to '{FormattedName}' after metadata refresh (was '{CurrentName}')",
-                            formattedName, retrievedItem.Name);
-                        retrievedItem.Name = formattedName;
-                        metadataChanged = true;
-                    }
-
-                    // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks)
-                    // Pass linkedChildren to avoid stale cache issues - the collection object may not have
-                    // updated LinkedChildren yet after AddToCollectionAsync, especially for large libraries
-                    await SetPhotoForCollection(retrievedItem, linkedChildren, cancellationToken).ConfigureAwait(false);
-
-                    // Set DisplayOrder to "Default" to respect the plugin's custom sort order
-                    metadataChanged |= SetCollectionDisplayOrder(retrievedItem);
-                    if (metadataChanged)
-                    {
-                        await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                    }
-
-                    // Apply custom metadata after metadata refresh to prevent providers from overwriting
-                    await ApplyCustomMetadataAsync(retrievedItem, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                    await FinalizeCollectionMetadataAsync(retrievedItem, formattedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");
@@ -949,6 +906,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, User ownerUser, CancellationToken cancellationToken)
             => MetadataHelper.ApplyCustomMetadataAsync(item, dto, _logger, cancellationToken, ownerUser, _userDataManager);
+
+        private async Task FinalizeCollectionMetadataAsync(
+            BaseItem collection,
+            string expectedName,
+            LinkedChild[] linkedChildren,
+            SmartCollectionDto dto,
+            User ownerUser,
+            CancellationToken cancellationToken)
+        {
+            var metadataChanged = false;
+            if (collection.Name != expectedName)
+            {
+                _logger.LogDebug("Setting collection name to '{ExpectedName}' after metadata refresh (was '{CurrentName}')",
+                    expectedName, collection.Name);
+                collection.Name = expectedName;
+                metadataChanged = true;
+            }
+
+            // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks).
+            await SetPhotoForCollection(collection, linkedChildren, cancellationToken).ConfigureAwait(false);
+
+            metadataChanged |= SetCollectionDisplayOrder(collection);
+            if (metadataChanged)
+            {
+                await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Apply custom metadata after metadata refresh to prevent providers from overwriting.
+            await ApplyCustomMetadataAsync(collection, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+        }
 
         /// <summary>
         /// Applies custom images from the smart list configuration to the Jellyfin collection.
