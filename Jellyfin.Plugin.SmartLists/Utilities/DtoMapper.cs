@@ -47,6 +47,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Enabled = source.Enabled,
                 MaxItems = source.MaxItems,
                 MaxPlayTimeMinutes = source.MaxPlayTimeMinutes,
+                RandomGroupSelection = source.RandomGroupSelection,
                 
                 // Auto-refresh
                 AutoRefresh = source.AutoRefresh,
@@ -120,6 +121,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Enabled = source.Enabled,
                 MaxItems = source.MaxItems,
                 MaxPlayTimeMinutes = source.MaxPlayTimeMinutes,
+                RandomGroupSelection = source.RandomGroupSelection,
                 
                 // Auto-refresh
                 AutoRefresh = source.AutoRefresh,

@@ -149,6 +149,45 @@
                             <div id="sorts-container"></div>
                         </div>
 
+                        <div class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="randomGroupSelectionEnabled"
+                                    data-embycheckbox="true" class="emby-checkbox">
+                                <span class="checkboxLabel">
+                                    Random Group Selection
+                                    <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#random-group-selection"
+                                        target="_blank" rel="noopener noreferrer" title="Documentation"
+                                        style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                        <span class="material-icons" aria-hidden="true"
+                                            style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                    </a>
+                                </span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">Randomly choose one group from the filtered item pool before
+                                sorting and limits are applied.</div>
+                            <div id="randomGroupSelectionFields" style="display: none; margin-top: 0.75em;">
+                                <div class="selectContainer" style="margin-bottom: 0.75em;">
+                                    <label class="selectLabel" for="randomGroupSelectionGroupBy">Group By</label>
+                                    <select id="randomGroupSelectionGroupBy" is="emby-select"
+                                        class="emby-select-withcolor emby-select"></select>
+                                </div>
+                                <div class="inputContainer" style="margin-bottom: 0;">
+                                    <label class="inputLabel" for="randomGroupSelectionMinimumItems">Minimum Items in Group</label>
+                                    <input type="number" id="randomGroupSelectionMinimumItems" class="emby-input"
+                                        min="0" step="1">
+                                    <div class="fieldDescription">Only consider groups with at least this many items. Leave blank or set to 0 to include all groups.</div>
+                                </div>
+                            </div>
+                        </div>
+
+
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" for="playlistUser" style="display: flex; align-items: center;">
                                 <span class="playlist-only-label">Playlist Users</span>

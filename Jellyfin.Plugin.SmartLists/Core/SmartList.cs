@@ -31,6 +31,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public List<ExpressionSet> ExpressionSets { get; set; }
         public int MaxItems { get; set; }
         public int MaxPlayTimeMinutes { get; set; }
+        public RandomGroupSelectionDto? RandomGroupSelection { get; set; }
         public List<string>? SimilarityComparisonFields { get; set; }
 
         // UserManager for resolving user-specific queries (Jellyfin 10.11+)
@@ -157,6 +158,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             MediaTypes = dto.MediaTypes != null ? new List<string>(dto.MediaTypes) : null; // Create defensive copy to prevent corruption
             MaxItems = dto.MaxItems ?? 0; // Default to 0 (unlimited) for backwards compatibility
             MaxPlayTimeMinutes = dto.MaxPlayTimeMinutes ?? 0; // Default to 0 (unlimited) for backwards compatibility
+            RandomGroupSelection = dto.RandomGroupSelection;
             SimilarityComparisonFields = dto.SimilarityComparisonFields != null ? new List<string>(dto.SimilarityComparisonFields) : null; // Create defensive copy
 
             if (dto.ExpressionSets != null && dto.ExpressionSets.Count > 0)
@@ -783,7 +785,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     if (ExpressionSets != null)
                     {
-                        fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders);
+                        fieldReqs = FieldRequirements.Analyze(ExpressionSets, Orders, RandomGroupSelection);
                         // Set collection recursion depth from list-level setting
                         fieldReqs.CollectionRecursionDepth = collectionRecursionDepth;
 
@@ -1075,6 +1077,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Playlist '{PlaylistName}' expanded from {OriginalCount} items to {ExpandedCount} items after Collections processing",
                     Name, results.Count, expandedResults.Count);
 
+                expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
+
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
                 {
@@ -1189,6 +1193,130 @@ namespace Jellyfin.Plugin.SmartLists.Core
         private bool NeedsGroupTracking()
         {
             return HasPerGroupLimits() || UsesRuleBlockOrdering();
+        }
+
+        private bool HasRandomGroupSelection()
+        {
+            return RandomGroupSelection?.Enabled == true
+                && !string.IsNullOrWhiteSpace(RandomGroupSelection.GroupBy)
+                && RandomGroupSelectionDto.IsSupportedGroupByField(RandomGroupSelection.GroupBy);
+        }
+
+        private List<BaseItem> ApplyRandomGroupSelection(
+            List<BaseItem> items,
+            ILibraryManager libraryManager,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache refreshCache)
+        {
+            try
+            {
+                if (!HasRandomGroupSelection() || items == null || items.Count == 0)
+                {
+                    return items ?? new List<BaseItem>();
+                }
+
+                var groupBy = RandomGroupSelection!.GroupBy!;
+                var requiredGroup = GetRandomGroupSelectionExtractionGroup(groupBy);
+                if (requiredGroup == ExtractionGroup.None)
+                {
+                    logger?.LogWarning("Random Group Selection for playlist '{PlaylistName}' uses unsupported field '{GroupBy}'. Skipping group selection.", Name, groupBy);
+                    return items;
+                }
+
+                var extractionOptions = new MediaTypeExtractionOptions
+                {
+                    RequiredGroups = requiredGroup,
+                    IncludeUnwatchedSeries = true,
+                    OriginListName = Name,
+                };
+
+                var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var item in items)
+                {
+                    try
+                    {
+                        var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
+                        var keys = GetRandomGroupKeys(operand, groupBy);
+
+                        foreach (var key in keys)
+                        {
+                            if (!groups.TryGetValue(key, out var groupItems))
+                            {
+                                groupItems = new List<BaseItem>();
+                                groups[key] = groupItems;
+                            }
+
+                            groupItems.Add(item);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogDebug(ex, "Error extracting Random Group Selection key '{GroupBy}' for item '{ItemName}'. Skipping item for grouping.", groupBy, item.Name);
+                    }
+                }
+
+                var minimumItems = RandomGroupSelection.MinimumItems.GetValueOrDefault();
+                var eligibleGroups = groups
+                    .Where(kvp => minimumItems <= 0 || kvp.Value.Count >= minimumItems)
+                    .ToList();
+
+                if (eligibleGroups.Count == 0)
+                {
+                    logger?.LogInformation("Random Group Selection for playlist '{PlaylistName}' found no eligible '{GroupBy}' groups from {GroupCount} total groups (MinimumItems: {MinimumItems}). Returning no items.",
+                        Name, groupBy, groups.Count, minimumItems);
+                    return [];
+                }
+
+#pragma warning disable CA5394
+                var random = new Random((int)(DateTime.Now.Ticks & 0x7FFFFFFF));
+                var selectedGroup = eligibleGroups[random.Next(eligibleGroups.Count)];
+#pragma warning restore CA5394
+
+                logger?.LogInformation("Random Group Selection for playlist '{PlaylistName}' selected {GroupBy} '{GroupName}' with {ItemCount} items from {EligibleGroupCount} eligible groups",
+                    Name, groupBy, selectedGroup.Key, selectedGroup.Value.Count, eligibleGroups.Count);
+
+                return selectedGroup.Value;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Error applying Random Group Selection for playlist '{PlaylistName}'. Returning ungrouped items.", Name);
+                return items;
+            }
+        }
+
+        private static ExtractionGroup GetRandomGroupSelectionExtractionGroup(string groupBy)
+        {
+            return groupBy switch
+            {
+                "Artists" or "AlbumArtists" or "Album" => ExtractionGroup.AudioMetadata,
+                "SeriesName" => ExtractionGroup.SeriesName,
+                "Genres" or "Studios" or "Tags" => ExtractionGroup.ItemLists,
+                _ => ExtractionGroup.None,
+            };
+        }
+
+        private static List<string> GetRandomGroupKeys(Operand operand, string groupBy)
+        {
+            IEnumerable<string> values = groupBy switch
+            {
+                "Artists" => operand.Artists,
+                "AlbumArtists" => operand.AlbumArtists,
+                "Album" => [operand.Album],
+                "SeriesName" => [operand.SeriesName],
+                "Genres" => operand.Genres,
+                "Studios" => operand.Studios,
+                "Tags" => operand.Tags,
+                _ => [],
+            };
+
+            return values
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         /// <summary>
@@ -3076,9 +3204,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         /// <param name="expressionSets">Filter expression sets to analyze</param>
         /// <param name="orders">Optional sorting orders to check for field requirements</param>
-        public static FieldRequirements Analyze(List<ExpressionSet> expressionSets, List<Order>? orders = null)
+        public static FieldRequirements Analyze(List<ExpressionSet> expressionSets, List<Order>? orders = null, RandomGroupSelectionDto? randomGroupSelection = null)
         {
             var requirements = new FieldRequirements();
+
+            if (randomGroupSelection?.Enabled == true && !string.IsNullOrWhiteSpace(randomGroupSelection.GroupBy))
+            {
+                requirements.RequiredGroups |= randomGroupSelection.GroupBy switch
+                {
+                    "Artists" or "AlbumArtists" or "Album" => ExtractionGroup.AudioMetadata,
+                    "SeriesName" => ExtractionGroup.SeriesName,
+                    "Genres" or "Studios" or "Tags" => ExtractionGroup.ItemLists,
+                    _ => ExtractionGroup.None,
+                };
+            }
 
             if (expressionSets == null) return requirements;
 

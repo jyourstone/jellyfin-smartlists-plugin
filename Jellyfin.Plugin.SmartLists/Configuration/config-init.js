@@ -337,6 +337,9 @@
             if (SmartLists.updateAllSortOptionsVisibility) {
                 SmartLists.updateAllSortOptionsVisibility(page);
             }
+            if (SmartLists.syncRandomGroupSelectionUI) {
+                SmartLists.syncRandomGroupSelectionUI(page);
+            }
 
             // 4) Update Include Extras checkbox visibility based on media types
             if (SmartLists.updateIncludeExtrasVisibility) {
@@ -1254,6 +1257,15 @@
                 e.preventDefault();
                 if (SmartLists.createPlaylist) {
                     SmartLists.createPlaylist(page);
+                }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
+        const randomGroupSelectionEnabled = page.querySelector('#randomGroupSelectionEnabled');
+        if (randomGroupSelectionEnabled) {
+            randomGroupSelectionEnabled.addEventListener('change', function () {
+                if (SmartLists.syncRandomGroupSelectionUI) {
+                    SmartLists.syncRandomGroupSelectionUI(page);
                 }
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
@@ -2710,6 +2722,9 @@
         // Update "Use Child Values" checkbox visibility in sort boxes when switching between Playlist/Collection
         if (SmartLists.updateUseChildValuesVisibility) {
             SmartLists.updateUseChildValuesVisibility(page);
+        }
+        if (SmartLists.syncRandomGroupSelectionUI) {
+            SmartLists.syncRandomGroupSelectionUI(page);
         }
 
         // Update Include Extras checkbox visibility based on media types
