@@ -6,15 +6,23 @@ Enable debug logging for the SmartLists plugin to troubleshoot issues or get det
 
 To enable debug logging specifically for the SmartLists plugin:
 
-1. **Create a logging configuration file** in your Jellyfin config directory:
+1. **Create a logging configuration file** directly in your Jellyfin config directory:
    ```
-   {JellyfinConfigPath}/config/logging.json
+   {JellyfinConfigPath}/logging.json
    ```
    
-   Where `{JellyfinConfigPath}` is typically:
-   - **Linux**: `/config/config/` (Docker) or `/var/lib/jellyfin/config/` (system install)
-   - **Windows**: `C:\ProgramData\Jellyfin\Server\config\`
-   - **macOS**: `~/Library/Application Support/Jellyfin/Server/config/`
+   Do not add another `config` path segment if your Jellyfin config directory already ends in `config`.
+
+   Typical full paths for `logging.json` are:
+   - **Docker**: `/config/config/logging.json` inside the container, or `{host path mounted as /config}/config/logging.json` on the host
+   - **Linux system install**: `/var/lib/jellyfin/config/logging.json`
+   - **Windows**: `C:\ProgramData\Jellyfin\Server\config\logging.json`
+   - **macOS**: `~/Library/Application Support/Jellyfin/Server/config/logging.json`
+
+   For this repository's local development Docker setup, the host path is:
+   ```
+   dev/jellyfin-data/config/config/logging.json
+   ```
 
 2. **Add the following content** to `logging.json`:
    ```json
@@ -35,7 +43,7 @@ To enable debug logging specifically for the SmartLists plugin:
 
 After enabling debug logging, you can view the detailed logs:
 
-- **Log location**: `{JellyfinConfigPath}/log/`
+- **Log location**: `{JellyfinDataPath}/log/` (for Docker, usually `/config/log/` inside the container)
 - **Log files**: Look for files named `log_YYYYMMDD.log` (e.g., `log_20251109.log`)
 
 The debug logs will include detailed information about:
@@ -77,4 +85,3 @@ Or modify the file to remove the SmartLists override section.
 
 !!! tip "Performance Note"
     Debug logging generates significantly more log output and may impact performance. Only enable it when troubleshooting issues or during development.
-
