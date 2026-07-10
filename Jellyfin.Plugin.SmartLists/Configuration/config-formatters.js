@@ -435,7 +435,7 @@
                 }
                 // Random, Random Round Robin, and Default don't have meaningful order, so don't show "Ascending"
                 // Normalize "NoOrder" to "Default" for display consistency
-                if (displaySortBy === 'Random' || displaySortBy === 'Random Round Robin' || displaySortBy === 'Shuffled Round Robin' || displaySortBy === 'NoOrder' || displaySortBy === 'No Order' || displaySortBy === 'Default') {
+                if (SmartLists.isOrderlessSort(displaySortBy) || displaySortBy === 'No Order' || displaySortBy === 'Default') {
                     return (displaySortBy === 'NoOrder' || displaySortBy === 'No Order') ? 'Default' : displaySortBy;
                 }
                 var result = displaySortBy + ' ' + opt.SortOrder;

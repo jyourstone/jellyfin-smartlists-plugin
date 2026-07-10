@@ -89,6 +89,20 @@
         { value: 'NoOrder', label: 'Default' }
     ];
 
+    // Sorts that have no Ascending/Descending direction
+    SmartLists.ORDERLESS_SORTS = ['Random', 'Random Round Robin', 'Shuffled Round Robin', 'NoOrder'];
+
+    // Round Robin sort variants (all use a GroupBy field)
+    SmartLists.ROUND_ROBIN_SORTS = ['Round Robin', 'Random Round Robin', 'Shuffled Round Robin'];
+
+    SmartLists.isOrderlessSort = function (name) {
+        return SmartLists.ORDERLESS_SORTS.indexOf(name) !== -1;
+    };
+
+    SmartLists.isRoundRobinSort = function (name) {
+        return SmartLists.ROUND_ROBIN_SORTS.indexOf(name) !== -1;
+    };
+
     SmartLists.SORT_ORDER_OPTIONS = [
         { value: 'Ascending', label: 'Ascending' },
         { value: 'Descending', label: 'Descending' }

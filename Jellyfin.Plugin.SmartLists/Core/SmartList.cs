@@ -117,20 +117,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 Orders = dto.Order.SortOptions
                     .Select(so =>
                     {
-                        // Special handling for sorts that don't have Ascending/Descending variants
-                        if (so.SortBy == "Random" || so.SortBy == "NoOrder")
-                        {
-                            return OrderFactory.CreateOrder(so.SortBy);
-                        }
-
-                        if (so.SortBy == "Random Round Robin" || so.SortBy == "Shuffled Round Robin")
-                        {
-                            var rrRandom = (RoundRobinBase)OrderFactory.CreateOrder(so.SortBy);
-                            rrRandom.GroupByField = so.GroupByField;
-                            return rrRandom;
-                        }
-                        // For all other sorts, append the sort order
-                        var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
+                        // Directionless sorts (no Ascending/Descending variants) are registered in the
+                        // OrderMap under their bare name; all other sorts append the sort order
+                        var order = OrderFactory.IsDirectionless(so.SortBy)
+                            ? OrderFactory.CreateOrder(so.SortBy)
+                            : OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
 
                         if (order is RoundRobinBase rr)
                         {
@@ -3108,6 +3099,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return OrderMap.TryGetValue(orderName ?? "", out var factory)
                 ? factory()
                 : new NoOrder();
+        }
+
+        /// <summary>
+        /// True when the sort is registered under its bare name (no Ascending/Descending variants),
+        /// e.g. Random, NoOrder, Random Round Robin, Shuffled Round Robin.
+        /// </summary>
+        public static bool IsDirectionless(string orderName)
+        {
+            return OrderMap.ContainsKey(orderName ?? "");
         }
     }
 

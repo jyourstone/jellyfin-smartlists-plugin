@@ -119,7 +119,7 @@
         if (!sortOrderContainer || !sortOrderSelect) return;
         
         // Hide Sort Order for Random, Random Round Robin, and Default (they don't use ordering)
-        if (sortByValue === 'Random' || sortByValue === 'Random Round Robin' || sortByValue === 'Shuffled Round Robin' || sortByValue === 'NoOrder') {
+        if (SmartLists.isOrderlessSort(sortByValue)) {
             sortOrderContainer.style.display = 'none';
         } else {
             sortOrderContainer.style.display = '';
@@ -132,7 +132,7 @@
 
         // Show/hide GroupBy dropdown for Round Robin and Random Round Robin
         if (groupByContainer) {
-            groupByContainer.style.display = (sortByValue === 'Round Robin' || sortByValue === 'Random Round Robin' || sortByValue === 'Shuffled Round Robin') ? '' : 'none';
+            groupByContainer.style.display = SmartLists.isRoundRobinSort(sortByValue) ? '' : 'none';
         }
     };
     
@@ -290,7 +290,7 @@
             return { value: f.value, label: f.label, selected: f.value === savedGroupBy };
         });
         SmartLists.populateSelectElement(groupByField.input, groupByOptions);
-        groupByField.container.style.display = (actualSortBy === 'Round Robin' || actualSortBy === 'Random Round Robin' || actualSortBy === 'Shuffled Round Robin') ? '' : 'none';
+        groupByField.container.style.display = SmartLists.isRoundRobinSort(actualSortBy) ? '' : 'none';
         fieldsContainer.appendChild(groupByField.container);
 
         box.appendChild(fieldsContainer);
@@ -425,7 +425,7 @@
             if (!sortBySelect || !sortBySelect.value) return; // Skip if no sort by selected
 
             let sortBy = sortBySelect.value;
-            const sortOrder = (sortBy === 'Random' || sortBy === 'Random Round Robin' || sortBy === 'Shuffled Round Robin' || sortBy === 'NoOrder') ? 'Ascending' : (sortOrderSelect ? sortOrderSelect.value : 'Ascending');
+            const sortOrder = SmartLists.isOrderlessSort(sortBy) ? 'Ascending' : (sortOrderSelect ? sortOrderSelect.value : 'Ascending');
 
             // Handle "Ignore Articles" checkbox - convert to "(Ignore Articles)" for backwards compatibility
             if ((sortBy === 'Name' || sortBy === 'SeriesName') && ignoreArticlesCheckbox && ignoreArticlesCheckbox.checked) {
@@ -438,7 +438,7 @@
             };
 
             // Include GroupByField for Round Robin and Random Round Robin sorts
-            if (sortBy === 'Round Robin' || sortBy === 'Random Round Robin' || sortBy === 'Shuffled Round Robin') {
+            if (SmartLists.isRoundRobinSort(sortBy)) {
                 var groupBySelect = box.querySelector('[id^="sort-groupby-"]');
                 if (groupBySelect && groupBySelect.value) {
                     sortEntry.GroupByField = groupBySelect.value;
@@ -577,7 +577,7 @@
             const orderName = playlist.Order.Name;
             let sortBy, sortOrder;
             
-            if (orderName === 'Random' || orderName === 'Random Round Robin' || orderName === 'Shuffled Round Robin' || orderName === 'NoOrder' || orderName === 'No Order' || orderName === 'Default') {
+            if (SmartLists.isOrderlessSort(orderName) || orderName === 'No Order' || orderName === 'Default') {
                 sortBy = (orderName === 'No Order' || orderName === 'Default') ? 'NoOrder' : orderName;
                 sortOrder = 'Ascending';
             } else {
