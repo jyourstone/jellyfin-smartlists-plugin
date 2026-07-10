@@ -283,7 +283,7 @@ git commit -m "Show effective defaults on collapsed Advanced options header"
 - Consumes: `toggleAdvancedOptions` (Task 1), `renderAdvancedSummaryFromForm`'s `_editMode` guard (Task 3), `SmartLists.loadExistingImages(page, id)` which returns a Promise (`config-images.js:545`).
 - Produces: `SmartLists.syncAdvancedSection(page, playlist)` — renders edit chips from the DTO + DOM image rows, expands the fold when any chip fires; idempotent, expand-only.
 
-- [ ] **Step 1: Add `syncAdvancedSection` to config-lists.js**
+- [x] **Step 1: Add `syncAdvancedSection` to config-lists.js**
 
 Insert directly AFTER `renderAdvancedSummaryFromForm`:
 
@@ -328,7 +328,7 @@ Insert directly AFTER `renderAdvancedSummaryFromForm`:
 
 (Signals deliberately exclude async-default fields — MaxItems, AutoRefresh, IsPublic — per the spec: their non-defaultness is ambiguous and they round-trip regardless of fold state.)
 
-- [ ] **Step 2: Collapse the fold on every form reset**
+- [x] **Step 2: Collapse the fold on every form reset**
 
 In `SmartLists.clearForm`, directly before the closing `};` (line 733, after the `initCustomImagesContainer` block):
 
@@ -341,7 +341,7 @@ In `SmartLists.clearForm`, directly before the closing `};` (line 733, after the
 
 (The default chips re-render via the async `applyFormDefaults`/`applyFallbackDefaults` calls already inside `clearForm`; `cancelEdit` runs `setPageEditState(false)` before `clearForm`, so the `_editMode` guard has already been lifted.)
 
-- [ ] **Step 3: Wire editPlaylist**
+- [x] **Step 3: Wire editPlaylist**
 
 In `SmartLists.editPlaylist`, replace the existing images call (lines 966-969):
 
@@ -367,7 +367,7 @@ with:
                 SmartLists.syncAdvancedSection(page, playlist);
 ```
 
-- [ ] **Step 4: Wire clonePlaylist**
+- [x] **Step 4: Wire clonePlaylist**
 
 In `SmartLists.clonePlaylist`, directly after the metadata tags population (line 1191-1192, anchor `SmartLists.initMetadataTagsInput(page, playlist.Tags || []);` and its closing `}`), insert:
 
@@ -391,7 +391,7 @@ Manual checks (admin page; create test lists first if needed):
 6. Update a configured list successfully → form clears, fold collapsed.
 7. Repeat check 1 on the user page.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/config-lists.js
