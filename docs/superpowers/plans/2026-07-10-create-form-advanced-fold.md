@@ -32,7 +32,7 @@
 - Consumes: nothing new.
 - Produces: DOM ids `#advanced-options-header`, `#advanced-expand-icon`, `#advanced-summary`, `#advanced-options-body`; function `SmartLists.toggleAdvancedOptions(page, force)` — `force` optional boolean (true=expand, false=collapse, undefined=toggle). Tasks 2–5 rely on these exact names.
 
-- [ ] **Step 1: Reorder and wrap the advanced blocks in config.html**
+- [x] **Step 1: Reorder and wrap the advanced blocks in config.html**
 
 Work only inside `<form id="playlistForm">` (lines 47–463). Three operations, all static cut/paste of existing blocks (do NOT edit the blocks' inner content except where shown):
 
@@ -109,7 +109,7 @@ Notes:
 - Do NOT add a class to the Bumpers h3 — it is inside `#bumper-section`, which `updateBumperSectionVisibility` already hides for Collections.
 - All ids, classes, `style` attributes, labels, descriptions, and doc links inside moved blocks stay byte-identical (except the two inner edits above).
 
-- [ ] **Step 2: Add `SmartLists.toggleAdvancedOptions` to config-lists.js**
+- [x] **Step 2: Add `SmartLists.toggleAdvancedOptions` to config-lists.js**
 
 Insert directly ABOVE `SmartLists.clearForm = function (page) {` (line 664):
 
@@ -132,7 +132,7 @@ Insert directly ABOVE `SmartLists.clearForm = function (page) {` (line 664):
     };
 ```
 
-- [ ] **Step 3: Wire the header click via the existing page-level delegation**
+- [x] **Step 3: Wire the header click via the existing page-level delegation**
 
 In `config-init.js`, inside the big click listener, directly BEFORE the `.playlist-header` block (line 1253, anchor: `if (target.closest('.playlist-header')) {`), insert:
 
@@ -157,7 +157,7 @@ Manual checks at http://localhost:8096 → Dashboard → Plugins → SmartLists 
 4. Keyboard: Tab reaches the bar, Enter toggles it.
 5. Create a simple playlist (name + media type + one rule) without touching the fold → saves successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/config.html Jellyfin.Plugin.SmartLists/Configuration/config-lists.js Jellyfin.Plugin.SmartLists/Configuration/config-init.js

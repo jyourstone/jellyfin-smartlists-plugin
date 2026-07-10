@@ -661,6 +661,23 @@
         }
     };
 
+    SmartLists.toggleAdvancedOptions = function (page, force) {
+        const body = page.querySelector('#advanced-options-body');
+        if (!body) {
+            return;
+        }
+        const expand = force !== undefined ? force : body.style.display === 'none';
+        body.style.display = expand ? 'block' : 'none';
+        const icon = page.querySelector('#advanced-expand-icon');
+        if (icon) {
+            icon.textContent = expand ? '▼' : '▶';
+        }
+        const header = page.querySelector('#advanced-options-header');
+        if (header) {
+            header.setAttribute('aria-expanded', expand ? 'true' : 'false');
+        }
+    };
+
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 

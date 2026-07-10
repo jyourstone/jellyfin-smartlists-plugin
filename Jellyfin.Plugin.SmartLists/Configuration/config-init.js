@@ -1250,6 +1250,13 @@
                 SmartLists.closeAllKebabMenus(page);
             }
 
+            if (target.closest('#advanced-options-header')) {
+                if (SmartLists.toggleAdvancedOptions) {
+                    SmartLists.toggleAdvancedOptions(page);
+                }
+                return;
+            }
+
             if (target.closest('.playlist-header')) {
                 const playlistCard = target.closest('.playlist-card');
                 if (playlistCard && SmartLists.togglePlaylistCard) {
