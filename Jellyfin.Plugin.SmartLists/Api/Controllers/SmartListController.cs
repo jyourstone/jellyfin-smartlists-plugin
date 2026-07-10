@@ -584,6 +584,19 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 });
             }
 
+            // Validate the entire smart list structure (same validation the user API applies)
+            var validationResult = InputValidator.ValidateSmartList(list);
+            if (!validationResult.IsValid)
+            {
+                logger.LogWarning("Validation failed creating list '{Name}': {Error}", list.Name, validationResult.ErrorMessage);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Validation Error",
+                    Detail = validationResult.ErrorMessage,
+                    Status = StatusCodes.Status400BadRequest
+                });
+            }
+
             // Route to appropriate handler based on type
             if (list.Type == Core.Enums.SmartListType.Collection)
             {
@@ -1064,6 +1077,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (list == null)
             {
                 return BadRequest("List data is required");
+            }
+
+            // Validate the entire smart list structure (same validation the user API applies)
+            var updateValidationResult = InputValidator.ValidateSmartList(list);
+            if (!updateValidationResult.IsValid)
+            {
+                logger.LogWarning("Validation failed updating list '{Name}': {Error}", list.Name, updateValidationResult.ErrorMessage);
+                return BadRequest(updateValidationResult.ErrorMessage);
             }
 
             var stopwatch = Stopwatch.StartNew();
