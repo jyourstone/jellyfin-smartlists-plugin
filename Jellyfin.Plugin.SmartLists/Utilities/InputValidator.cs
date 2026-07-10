@@ -318,6 +318,14 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     return SmartListValidationResult.Failure($"{unsupportedBumperType} media type is not supported for bumpers. Bumpers are woven into playlists, which cannot contain {unsupportedBumperType} items.");
                 }
 
+                if (!string.IsNullOrEmpty(bumpers.BumperOrder)
+                    && bumpers.BumperOrder != "Random"
+                    && bumpers.BumperOrder != "Name"
+                    && bumpers.BumperOrder != "ReleaseDate")
+                {
+                    return SmartListValidationResult.Failure($"Invalid bumper order '{bumpers.BumperOrder}'. Allowed values: Random, Name, ReleaseDate");
+                }
+
                 var bumperRuleGroupsResult = ValidateRuleGroups(bumpers.ExpressionSets, "Bumpers");
                 if (!bumperRuleGroupsResult.IsValid)
                 {

@@ -1084,7 +1084,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             if (!updateValidationResult.IsValid)
             {
                 logger.LogWarning("Validation failed updating list '{Name}': {Error}", list.Name, updateValidationResult.ErrorMessage);
-                return BadRequest(updateValidationResult.ErrorMessage);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Validation Error",
+                    Detail = updateValidationResult.ErrorMessage,
+                    Status = StatusCodes.Status400BadRequest
+                });
             }
 
             var stopwatch = Stopwatch.StartNew();

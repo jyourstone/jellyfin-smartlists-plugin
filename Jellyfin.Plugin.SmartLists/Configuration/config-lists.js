@@ -412,11 +412,12 @@
             var tagsVal = SmartLists.getMetadataTags ? SmartLists.getMetadataTags(page) : [];
             var favoriteVal = SmartLists.getElementValue(page, '#metadataFavorite', '');
             var randomGroupSelection = SmartLists.collectRandomGroupSelectionFromForm(page);
-            var bumperConfig = isCollection ? null : SmartLists.collectBumperConfigFromForm(page);
-            if (bumperConfig === 'invalid') {
+            var bumperResult = isCollection ? { valid: true, config: null } : SmartLists.collectBumperConfigFromForm(page);
+            if (!bumperResult.valid) {
                 SmartLists.showNotification('Bumper rules are incomplete. Complete at least one bumper rule or set the bumper media type to None.');
                 return;
             }
+            var bumperConfig = bumperResult.config;
 
             const playlistDto = {
                 Type: listType,

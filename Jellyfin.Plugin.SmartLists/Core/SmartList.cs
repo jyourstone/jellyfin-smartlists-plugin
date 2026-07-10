@@ -3101,13 +3101,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 : new NoOrder();
         }
 
+        private static readonly HashSet<string> DirectionlessOrders = new(StringComparer.Ordinal)
+        {
+            "Random",
+            "Random Round Robin",
+            "Shuffled Round Robin",
+            "NoOrder",
+        };
+
         /// <summary>
-        /// True when the sort is registered under its bare name (no Ascending/Descending variants),
-        /// e.g. Random, NoOrder, Random Round Robin, Shuffled Round Robin.
+        /// True for sorts that have no Ascending/Descending variants and are registered
+        /// under their bare name. Mirrors ORDERLESS_SORTS in config-core.js.
         /// </summary>
         public static bool IsDirectionless(string orderName)
         {
-            return OrderMap.ContainsKey(orderName ?? "");
+            return DirectionlessOrders.Contains(orderName ?? "");
         }
     }
 
