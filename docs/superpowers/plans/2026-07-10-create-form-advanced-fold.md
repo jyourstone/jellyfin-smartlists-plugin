@@ -409,7 +409,7 @@ git commit -m "Auto-expand Advanced options with summary chips in edit and clone
 - Consumes: `toggleAdvancedOptions` (Task 1), `#advanced-options-body`, `#advanced-expand-icon`.
 - Produces: nothing new — behavior only.
 
-- [ ] **Step 1: Expand the fold when native validation trips inside it**
+- [x] **Step 1: Expand the fold when native validation trips inside it**
 
 In `config-init.js`, directly after the existing `playlistForm.addEventListener('submit', ...)` block (lines 1287-1295), still inside the `if (playlistForm) {` guard:
 
@@ -427,7 +427,7 @@ In `config-init.js`, directly after the existing `playlistForm.addEventListener(
 
 (Match the options argument style used elsewhere in this listener block: if the file passes `SmartLists.getEventListenerOptions(pageSignal)`, extend with capture via `{ capture: true, signal: pageSignal }` only if `getEventListenerOptions` returns `{ signal: pageSignal }`; otherwise mirror whatever that helper returns plus `capture: true`. Check `getEventListenerOptions`' definition first: `grep -n "getEventListenerOptions = " Jellyfin.Plugin.SmartLists/Configuration/*.js`.)
 
-- [ ] **Step 2: Re-sync the expand icon on pageshow**
+- [x] **Step 2: Re-sync the expand icon on pageshow**
 
 In the `pageshow` handler, inside the `if (page._pageInitialized) {` block (line 2542, next to `SmartLists.handleListTypeChange(page);`), add:
 
@@ -447,7 +447,7 @@ Manual checks:
 1. Temporarily add `required` to `#playlistMaxItems` via devtools, clear its value, fold collapsed, hit Create → fold expands and browser focuses the field (no console error "not focusable"). Remove the attribute after.
 2. Expand fold → navigate to user page → browser Back → icon matches body state.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/config-init.js
