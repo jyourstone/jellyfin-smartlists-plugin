@@ -464,7 +464,7 @@ git commit -m "Guard Advanced fold against hidden invalid controls and bfcache d
 
 **Interfaces:** none.
 
-- [ ] **Step 1: Update user docs**
+- [x] **Step 1: Update user docs**
 
 In the configuration page of the mkdocs docs, where the create-form fields are described, add a short note near the top of the field list (adapt heading level to the page):
 
@@ -479,7 +479,7 @@ In the configuration page of the mkdocs docs, where the create-form fields are d
 
 Also reorder/regroup the field documentation if it mirrors the old on-screen order (check whether the page lists fields in form order; if it does, note the new grouping: Limits / Bumpers / Automation / Sharing / Presentation).
 
-- [ ] **Step 2: Add future-field rules to CLAUDE.md**
+- [x] **Step 2: Add future-field rules to CLAUDE.md**
 
 In root `CLAUDE.md`, under "When Making Changes", add:
 
@@ -493,7 +493,7 @@ In root `CLAUDE.md`, under "When Making Changes", add:
   and auto-expands.
 ```
 
-- [ ] **Step 3: Verify docs build (optional, if mkdocs installed) and commit**
+- [x] **Step 3: Verify docs build (optional, if mkdocs installed) and commit**
 
 ```bash
 git add docs/content CLAUDE.md

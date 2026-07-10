@@ -97,7 +97,7 @@ SmartLists allows you to upload custom images for your playlists and collections
 
 **How to Use:**
 
-1. When creating or editing a smart list, scroll to the **Custom Images** section
+1. When creating or editing a smart list, expand **Advanced options** and scroll to the **Custom Images** section
 2. Click **Add Image** to add a new image
 3. Select the image type from the dropdown (each type can only be used once)
 4. Choose an image file from your computer
@@ -143,19 +143,37 @@ The web interface is organized into tabs. The available tabs and features depend
 
 This is where you build new playlists and collections:
 
+!!! note "Advanced options"
+    Fields beyond List Type, Name, Media Types, Rules, Sort Options, and Users live
+    in a collapsed **Advanced options** section on the create/edit form. The collapsed
+    header always shows a summary of what applies (e.g. `500 items max · refresh on
+    library changes`, or `Bumpers · 2 schedules` when editing a configured list), and
+    the section expands automatically when you edit a list that uses advanced features.
+
 - Choose whether to create a Playlist or Collection
 - Define the rules for including items
 - Choose the sort order
 - Select which user(s) should be associated with the list:
   - **For Playlists**: You can select one or more users. Each selected user will get their own personalized Jellyfin playlist based on their playback data. This allows the same smart playlist to show different content for each user (e.g., "My Favorites" showing each user's actual favorites).
   - **For Collections**: Select a single reference user whose context will be used for rule evaluation and library access permissions
-- Set the maximum number of items
-- Set the maximum playtime for the list (playlists only)
-- Decide if the list should be public or private (playlists only - collections are always server-wide)
 - Include extras (behind the scenes, deleted scenes, featurettes, trailers) in the item pool — this option is only visible when the Video media type is selected
-- Choose whether or not to enable the list
-- Configure auto-refresh behavior (Never, On Library Changes, On All Changes)
-- Set custom refresh schedule (Daily, Weekly, Monthly, Yearly, Interval or No schedule)
+
+The remaining fields live inside the collapsed **Advanced options** section, grouped as:
+
+- **Limits**
+  - Set the maximum number of items
+  - Set the maximum playtime for the list (playlists only)
+  - Configure random group selection (see [Random Group Selection](sorting-and-limits.md#random-group-selection))
+- **Bumpers** — weave short interstitial items between the playlist's main items (playlists only, see [Bumpers](bumpers.md))
+- **Automation**
+  - Choose whether or not to enable the list
+  - Configure auto-refresh behavior (Never, On Library Changes, On All Changes)
+  - Set custom refresh schedule (Daily, Weekly, Monthly, Yearly, Interval or No schedule)
+  - Set visibility schedules (see [Visibility Scheduling](auto-refresh.md#visibility-scheduling))
+- **Sharing**
+  - Decide if the list should be public or private (playlists only - collections are always server-wide)
+- **Presentation**
+  - Upload custom images and set metadata such as sort title, overview, tags and favorite (see [Custom Images](#custom-images) and [Metadata](#metadata) above)
 
 !!! info "User Page Differences"
     On the **User Page**, you can only select yourself for playlists and must use your own account as the reference user for collections. Admins can select any user(s) from the dropdown.
