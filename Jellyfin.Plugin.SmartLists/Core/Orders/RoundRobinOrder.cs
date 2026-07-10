@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
@@ -307,5 +308,80 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public override string Name => "Shuffled Round Robin";
 
         protected override bool ShuffleWithinGroups => true;
+    }
+
+    /// <summary>
+    /// Round Robin sort with groups ordered by how recently the user watched anything in them:
+    /// least recently watched first, never-watched groups first of all (alphabetical tie-break).
+    /// The rotation "continues where the user left off" with no persisted state - it is derived
+    /// entirely from per-user LastPlayedDate data, so it is deterministic for a given watch history.
+    /// </summary>
+    public class RoundRobinLeastRecentlyWatchedOrder : RoundRobinBase
+    {
+        public override string Name => "Least Recently Watched Round Robin";
+
+        /// <summary>
+        /// Group key → most recent per-user LastPlayedDate, computed from the UNFILTERED media
+        /// pool (rules like "Playback Status is Unwatched" remove watched items from the results,
+        /// so recency derived from filtered items would see every group as never watched).
+        /// Set by SmartList before <see cref="RoundRobinBase.PreComputePositions"/>.
+        /// Groups absent from the map are treated as never watched and sort first.
+        /// </summary>
+        public Dictionary<string, DateTime> GroupRecency { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
+        {
+            return keys
+                .OrderBy(k => GroupRecency.TryGetValue(k, out var d) ? d : DateTime.MinValue)
+                .ThenBy(k => k, OrderUtilities.SharedNaturalComparer)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Builds the group key → most recent LastPlayedDate map for one user across the given items.
+        /// Container items (Series/Season/MusicAlbum) use the aggregate-over-children date when the
+        /// refresh cache has their children, mirroring LastPlayedOrderBase.
+        /// </summary>
+        internal static Dictionary<string, DateTime> BuildGroupRecency(
+            IEnumerable<BaseItem> items,
+            string? groupByField,
+            User user,
+            IUserDataManager? userDataManager,
+            RefreshQueueService.RefreshCache? refreshCache,
+            ILogger? logger)
+        {
+            var recency = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(groupByField) || userDataManager == null || user == null)
+            {
+                logger?.LogWarning("Least Recently Watched Round Robin: missing GroupByField or user context - groups fall back to alphabetical order");
+                return recency;
+            }
+
+            foreach (var item in items)
+            {
+                try
+                {
+                    var key = ExtractGroupKey(item, groupByField);
+
+                    var lastPlayed = LastPlayedOrderBase.GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache)
+                        ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(
+                            refreshCache != null
+                                ? UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager)
+                                : userDataManager.GetUserData(user, item));
+
+                    if (lastPlayed > DateTime.MinValue &&
+                        (!recency.TryGetValue(key, out var existing) || lastPlayed > existing))
+                    {
+                        recency[key] = lastPlayed;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "Error reading last played date for item {ItemName}", item.Name);
+                }
+            }
+
+            return recency;
+        }
     }
 }

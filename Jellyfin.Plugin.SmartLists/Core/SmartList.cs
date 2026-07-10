@@ -3091,6 +3091,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
             { "Random Round Robin", () => new RoundRobinRandomOrder() },
             { "Shuffled Round Robin", () => new RoundRobinShuffledOrder() },
+            { "Least Recently Watched Round Robin", () => new RoundRobinLeastRecentlyWatchedOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 
@@ -3106,6 +3107,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             "Random",
             "Random Round Robin",
             "Shuffled Round Robin",
+            "Least Recently Watched Round Robin",
             "NoOrder",
         };
 
