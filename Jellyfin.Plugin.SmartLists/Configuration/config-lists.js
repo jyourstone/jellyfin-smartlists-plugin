@@ -116,6 +116,29 @@
         return text;
     };
 
+    SmartLists.formatBumpersDisplay = function (playlist) {
+        var bumpers = playlist && playlist.Bumpers ? playlist.Bumpers : null;
+        if (!bumpers || !bumpers.ExpressionSets || bumpers.ExpressionSets.length === 0) {
+            return 'Disabled';
+        }
+
+        var mediaTypeValue = (bumpers.MediaTypes && bumpers.MediaTypes.length > 0) ? bumpers.MediaTypes[0] : '';
+        var mediaTypeLabel = mediaTypeValue;
+        for (var i = 0; i < SmartLists.mediaTypes.length; i++) {
+            if (SmartLists.mediaTypes[i].Value === mediaTypeValue) {
+                mediaTypeLabel = SmartLists.mediaTypes[i].Label;
+                break;
+            }
+        }
+
+        var orderLabel = bumpers.BumperOrder === 'ReleaseDate' ? 'Release Date' : (bumpers.BumperOrder || 'Random');
+        var interval = (bumpers.Interval && bumpers.Interval > 0) ? bumpers.Interval : 1;
+        var ruleGroups = bumpers.ExpressionSets.length;
+        return mediaTypeLabel + ' · ' + orderLabel + ' order · every ' +
+            interval + (interval === 1 ? ' item' : ' items') + ' · ' +
+            ruleGroups + (ruleGroups === 1 ? ' rule group' : ' rule groups');
+    };
+
     // ===== USER MANAGEMENT =====
     // Note: loadUsers, loadUsersForRule, and setCurrentUserAsDefault are defined in config-api.js to avoid duplication
 
@@ -1748,6 +1771,7 @@
         const eTagsDisplayText = SmartLists.escapeHtml(tagsDisplayText);
         const eFavoriteDisplayText = SmartLists.escapeHtml(favoriteDisplayText);
         const eRandomGroupSelectionDisplay = SmartLists.escapeHtml(SmartLists.formatRandomGroupSelectionDisplay(playlist));
+        const eBumpersDisplay = SmartLists.escapeHtml(SmartLists.formatBumpersDisplay(playlist));
 
         // Build custom images display
         var customImagesHtml = '';
@@ -2006,6 +2030,12 @@
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Random Group Selection</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eRandomGroupSelectionDisplay + '</td>' +
             '</tr>' +
+            (!isCollection ?
+                '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Bumpers</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + eBumpersDisplay + '</td>' +
+                '</tr>' : ''
+            ) +
             '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
             '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Max Items</td>' +
             '<td style="padding: 0.5em 0.75em; ">' + eMaxItems + '</td>' +
