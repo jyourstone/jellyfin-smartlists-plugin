@@ -62,11 +62,9 @@ No change to the `OrderGroupKeys` hook signature — the recency map is instance
 
 ### Auto-refresh (`Services/Shared/AutoRefreshService.cs`)
 
-Without this, the rotation only advances on library changes or schedule — watching an episode wouldn't reorder anything until some unrelated refresh. Playlists using this sort must be treated as playback-relevant:
+**Verified during planning: no code change needed.** Playback events already reach every playlist this sort cares about: `IsRelevantUserDataChange` treats a `LastPlayedDate` change as significant, `GetAffectedPlaylistsFromCacheAsync` selects playlists by **media type** (the field-level `_ruleTypeToPlaylistsCache` is not consulted for filtering — "kept for potential future optimizations"), and `IsUserRelevantToPlaylist` is a membership check (AllUsers / UserPlaylists / owner) that the watching user always passes for their own playlists. A playlist with Auto-refresh **On all changes** therefore re-sorts right after a watch with zero changes here.
 
-- In `AddPlaylistToRuleCache`: when any sort option's `SortBy` is "Least Recently Watched Round Robin", register the playlist under the same `"{MediaType}+PlaybackStatus"`-style cache keys as if it had a `PlaybackStatus` rule (for each of the playlist's media types).
-- In the `IsItemRelevantToPlaylist` fallback: also return true for playback-data changes when the playlist uses this sort.
-- Docs note: per-play rotation advance requires Auto-refresh **On all changes** (playback events route through `OnUserDataSaved` → `HandleLibraryChangeAsync`, which filters to OnAllChanges playlists).
+- Docs note only: per-play rotation advance requires Auto-refresh **On all changes**; other modes advance the rotation at their next refresh.
 
 ### UI (`Configuration/config-core.js`, `config-sorts.js`)
 
@@ -106,7 +104,7 @@ Document as an example on the sorting docs page (and cross-link from the round-r
 
 | Area | Files |
 | --- | --- |
-| Backend | `Core/Orders/RoundRobinOrder.cs`, `Core/SmartList.cs`, `Services/Shared/AutoRefreshService.cs` |
+| Backend | `Core/Orders/RoundRobinOrder.cs`, `Core/Orders/LastPlayedOrderBase.cs` (promote two private helpers), `Core/SmartList.cs` |
 | UI | `Configuration/config-core.js` (constants), `config-sorts.js`/`config-formatters.js` (verify predicates only) |
 | Docs | `/docs/content/` sorting page + example |
 
@@ -119,4 +117,4 @@ No test suite; verify against local Jellyfin (`cd dev && ./build-local.sh`, both
 3. Mark an episode of Show A watched (via UI or API) → playlist auto-refreshes → rotation now B, C, A; Show A's watched episode gone (unwatched rule), its next episode appears in Show A's slots.
 4. Watch Show B → rotation C, A, B.
 5. Remove the unwatched rule, refresh: watched episodes reappear in natural order within their groups; rotation still least-recently-watched first.
-6. Regression: Round Robin Ascending/Descending/Random/Shuffled playlists refresh unchanged; a playlist without this sort does not start refreshing on playback events (cache keys scoped to LRW playlists only).
+6. Regression: Round Robin Ascending/Descending/Random/Shuffled playlists refresh unchanged (auto-refresh behavior is untouched — no AutoRefreshService changes in this feature).
