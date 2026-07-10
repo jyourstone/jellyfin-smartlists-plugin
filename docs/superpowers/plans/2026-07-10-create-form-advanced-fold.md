@@ -211,7 +211,7 @@ git commit -m "Mirror Advanced options fold on user config page"
 - Consumes: `#advanced-summary` (Task 1), `SmartLists.getElementValue` (existing helper).
 - Produces: `SmartLists.renderAdvancedSummaryFromForm(page)` — reads current form values, writes the summary line; no-ops in edit mode (`page._editMode`). Task 4 relies on the `page._editMode` guard so edit chips are not overwritten by late-arriving defaults.
 
-- [ ] **Step 1: Add `renderAdvancedSummaryFromForm` to config-lists.js**
+- [x] **Step 1: Add `renderAdvancedSummaryFromForm` to config-lists.js**
 
 Insert directly AFTER the `toggleAdvancedOptions` function from Task 1:
 
@@ -246,7 +246,7 @@ Insert directly AFTER the `toggleAdvancedOptions` function from Task 1:
 
 (Verify the option values first: `grep -n "OnLibraryChanges\|OnAllChanges\|'Never'" Jellyfin.Plugin.SmartLists/Configuration/config-init.js` — the map keys must match the values used when `#autoRefreshMode` options are populated. Add any missing value to `refreshLabels`.)
 
-- [ ] **Step 2: Invoke it whenever defaults are applied**
+- [x] **Step 2: Invoke it whenever defaults are applied**
 
 In `config-init.js`, add as the LAST line inside `SmartLists.applyFormDefaults` (before its closing `};` at line 462) and inside `SmartLists.applyFallbackDefaults` (before its closing `};` at line 493):
 
@@ -265,7 +265,7 @@ Manual checks:
 2. Change Settings default Max Items → save → back to Create tab (Clear Form) → chip updates.
 3. User page shows the fallback defaults chip (`500 items max · refresh on library changes`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/config-lists.js Jellyfin.Plugin.SmartLists/Configuration/config-init.js

@@ -678,6 +678,33 @@
         }
     };
 
+    SmartLists.renderAdvancedSummaryFromForm = function (page) {
+        // Edit mode owns the summary via syncAdvancedSection; don't let
+        // late-arriving async defaults overwrite its chips.
+        if (page._editMode) {
+            return;
+        }
+        const summaryEl = page.querySelector('#advanced-summary');
+        if (!summaryEl) {
+            return;
+        }
+        const parts = [];
+        const maxItems = parseInt(SmartLists.getElementValue(page, '#playlistMaxItems', '0'), 10);
+        if (!isNaN(maxItems)) {
+            parts.push(maxItems > 0 ? maxItems + ' items max' : 'unlimited items');
+        }
+        const refreshLabels = {
+            'Never': 'no auto-refresh',
+            'OnLibraryChanges': 'refresh on library changes',
+            'OnAllChanges': 'refresh on all changes'
+        };
+        const refreshValue = SmartLists.getElementValue(page, '#autoRefreshMode', '');
+        if (refreshValue) {
+            parts.push(refreshLabels[refreshValue] || refreshValue);
+        }
+        summaryEl.textContent = parts.join(' · ');
+    };
+
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 

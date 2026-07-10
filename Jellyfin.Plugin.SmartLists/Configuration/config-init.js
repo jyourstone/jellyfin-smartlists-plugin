@@ -459,6 +459,10 @@
             }
             SmartLists.setCurrentUserAsDefault(page);
         }
+
+        if (SmartLists.renderAdvancedSummaryFromForm) {
+            SmartLists.renderAdvancedSummaryFromForm(page);
+        }
     };
 
     // Fallback defaults when config fails to load
@@ -489,6 +493,10 @@
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: 'NoOrder', SortOrder: 'Ascending' });
+        }
+
+        if (SmartLists.renderAdvancedSummaryFromForm) {
+            SmartLists.renderAdvancedSummaryFromForm(page);
         }
     };
 
