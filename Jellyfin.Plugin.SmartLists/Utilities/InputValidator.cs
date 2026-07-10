@@ -299,6 +299,44 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 }
             }
 
+            // Validate bumper configuration (playlists only)
+            if (list is SmartPlaylistDto playlistDto && playlistDto.Bumpers != null)
+            {
+                var bumpers = playlistDto.Bumpers;
+
+                if (bumpers.Interval < 1)
+                {
+                    return SmartListValidationResult.Failure("Bumper interval must be at least 1");
+                }
+
+                if (bumpers.MediaTypes != null && bumpers.MediaTypes.Count > 0)
+                {
+                    var validBumperMediaTypes = Core.Constants.MediaTypes.All;
+                    var invalidBumperMediaTypes = bumpers.MediaTypes
+                        .Where(mt => !validBumperMediaTypes.Contains(mt))
+                        .ToList();
+
+                    if (invalidBumperMediaTypes.Count > 0)
+                    {
+                        return SmartListValidationResult.Failure($"Invalid bumper media type(s): {string.Join(", ", invalidBumperMediaTypes)}");
+                    }
+                }
+
+                if (bumpers.ExpressionSets != null)
+                {
+                    if (bumpers.ExpressionSets.Count > MaxExpressionSetsCount)
+                    {
+                        return SmartListValidationResult.Failure($"Bumpers cannot have more than {MaxExpressionSetsCount} rule groups");
+                    }
+
+                    var bumperExpressionResult = ValidateExpressionSets(bumpers.ExpressionSets);
+                    if (!bumperExpressionResult.IsValid)
+                    {
+                        return bumperExpressionResult;
+                    }
+                }
+            }
+
             // Validate numeric fields
             var maxItemsResult = ValidateInteger(list.MaxItems, min: 0, max: 100000, fieldName: "MaxItems");
             if (!maxItemsResult.IsValid)

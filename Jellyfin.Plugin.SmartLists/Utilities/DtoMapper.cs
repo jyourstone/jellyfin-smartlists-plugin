@@ -48,6 +48,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 MaxItems = source.MaxItems,
                 MaxPlayTimeMinutes = source.MaxPlayTimeMinutes,
                 RandomGroupSelection = source.RandomGroupSelection,
+                Bumpers = (source as SmartPlaylistDto)?.Bumpers,
                 
                 // Auto-refresh
                 AutoRefresh = source.AutoRefresh,
