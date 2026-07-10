@@ -370,7 +370,7 @@
 
             // Collect similarity comparison fields from SimilarTo rules
             let similarityComparisonFields = null;
-            const allRules = page.querySelectorAll('.rule-row');
+            const allRules = page.querySelectorAll('#rules-container .rule-row');
             for (var i = 0; i < allRules.length; i++) {
                 const ruleRow = allRules[i];
                 const fieldSelect = ruleRow.querySelector('.rule-field-select');

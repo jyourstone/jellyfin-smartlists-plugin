@@ -139,14 +139,23 @@
         { Value: "AudioBook", Label: "Audiobook" }
     ];
 
-    // Utility function to get selected media types from page
-    SmartLists.getSelectedMediaTypes = function (page) {
+    // Resolve the rules container for a scope: 'main' (default) or 'bumper'
+    SmartLists.getRulesContainer = function (page, scope) {
+        return page.querySelector(scope === 'bumper' ? '#bumper-rules-container' : '#rules-container');
+    };
+
+    // Utility function to get selected media types from page for a scope: 'main' (default) or 'bumper'
+    SmartLists.getSelectedMediaTypes = function (page, scope) {
+        if (scope === 'bumper') {
+            var bumperSelect = page.querySelector('#bumperMediaType');
+            return (bumperSelect && bumperSelect.value) ? [bumperSelect.value] : [];
+        }
         return SmartLists.getSelectedItems(page, 'mediaTypesMultiSelect', 'media-type-multi-select-checkbox');
     };
 
     // Check if any rule has "Similar To" field selected
     SmartLists.hasSimilarToRuleInForm = function (page) {
-        const allRules = page.querySelectorAll('.rule-row');
+        const allRules = page.querySelectorAll('#rules-container .rule-row');
         for (var i = 0; i < allRules.length; i++) {
             const ruleRow = allRules[i];
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
@@ -158,7 +167,7 @@
     };
 
     SmartLists.hasExternalListRuleInForm = function (page) {
-        const allRules = page.querySelectorAll('.rule-row');
+        const allRules = page.querySelectorAll('#rules-container .rule-row');
         for (var i = 0; i < allRules.length; i++) {
             const ruleRow = allRules[i];
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
