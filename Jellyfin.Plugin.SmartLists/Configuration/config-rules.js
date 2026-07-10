@@ -2958,7 +2958,65 @@
         return expressionSets;
     };
 
+    // Collect the bumper configuration from the form. Returns null when disabled
+    // (no media type selected or no bumper rules defined).
+    SmartLists.collectBumperConfigFromForm = function (page) {
+        var mediaTypeSelect = page.querySelector('#bumperMediaType');
+        if (!mediaTypeSelect || !mediaTypeSelect.value) {
+            return null;
+        }
+        var expressionSets = SmartLists.collectRulesFromForm(page, 'bumper');
+        if (!expressionSets || expressionSets.length === 0) {
+            return null;
+        }
+        var intervalInput = page.querySelector('#bumperInterval');
+        var interval = intervalInput ? parseInt(intervalInput.value, 10) : 1;
+        var orderSelect = page.querySelector('#bumperOrder');
+        return {
+            ExpressionSets: expressionSets,
+            MediaTypes: [mediaTypeSelect.value],
+            BumperOrder: (orderSelect && orderSelect.value) ? orderSelect.value : 'Random',
+            Interval: (isNaN(interval) || interval < 1) ? 1 : interval
+        };
+    };
+
     // ===== RULE POPULATION (for edit/clone) =====
+
+    // Populate a logic group's rule rows and per-group MaxItems from an expression set.
+    // The group's existing first rule row is reused for the first expression; subsequent
+    // expressions get new rows via addRuleToGroup, each populated via populateRuleRow.
+    SmartLists.populateLogicGroupExpressions = function (page, logicGroup, expressionSet) {
+        if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
+            expressionSet.Expressions.forEach(function (expression, expIndex) {
+                if (expIndex === 0) {
+                    // Use the first rule row that's already in the group
+                    const firstRuleRow = logicGroup.querySelector('.rule-row');
+                    if (firstRuleRow) {
+                        SmartLists.populateRuleRow(firstRuleRow, expression, page);
+                    }
+                } else {
+                    // Add additional rule rows
+                    SmartLists.addRuleToGroup(page, logicGroup);
+                    // Use querySelectorAll to get the last rule row, since :last-child doesn't work
+                    // when the MaxItems container is appended after the rule rows
+                    const ruleRowsInGroup = logicGroup.querySelectorAll('.rule-row');
+                    const newRuleRow = ruleRowsInGroup[ruleRowsInGroup.length - 1];
+                    if (newRuleRow) {
+                        SmartLists.populateRuleRow(newRuleRow, expression, page);
+                    }
+                }
+            });
+        }
+
+        // Populate MaxItems for this group if it exists
+        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
+            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
+            if (maxItemsInput) {
+                maxItemsInput.value = expressionSet.MaxItems;
+            }
+        }
+    };
+
     SmartLists.populateRuleRow = function (ruleRow, expression, page) {
         try {
             const fieldSelect = ruleRow.querySelector('.rule-field-select');

@@ -389,12 +389,14 @@
             var tagsVal = SmartLists.getMetadataTags ? SmartLists.getMetadataTags(page) : [];
             var favoriteVal = SmartLists.getElementValue(page, '#metadataFavorite', '');
             var randomGroupSelection = SmartLists.collectRandomGroupSelectionFromForm(page);
+            var bumperConfig = isCollection ? null : SmartLists.collectBumperConfigFromForm(page);
 
             const playlistDto = {
                 Type: listType,
                 Name: playlistName,
                 ExpressionSets: expressionSets,
                 Order: { SortOptions: sortOptions },
+                Bumpers: bumperConfig,
                 Enabled: isEnabled,
                 IncludeExtras: includeExtras,
                 MediaTypes: selectedMediaTypes,
@@ -656,6 +658,26 @@
             rulesContainer.innerHTML = '';
         }
 
+        // Reset the bumper section (rules, media type, order, interval)
+        const bumperRulesContainer = page.querySelector('#bumper-rules-container');
+        if (bumperRulesContainer) {
+            const allBumperRules = bumperRulesContainer.querySelectorAll('.rule-row');
+            allBumperRules.forEach(function (rule) {
+                SmartLists.cleanupRuleEventListeners(rule);
+            });
+
+            bumperRulesContainer.innerHTML = '';
+        }
+        const bumperMediaSelect = page.querySelector('#bumperMediaType');
+        if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
+        const bumperOrderSelect = page.querySelector('#bumperOrder');
+        if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
+        const bumperIntervalInput = page.querySelector('#bumperInterval');
+        if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
+        if (SmartLists.updateBumperSectionVisibility) {
+            SmartLists.updateBumperSectionVisibility(page);
+        }
+
         // Clear media type selections
         SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
         SmartLists.loadRandomGroupSelectionIntoUI(page, null);
@@ -864,60 +886,44 @@
                 if (playlist.ExpressionSets && playlist.ExpressionSets.length > 0 &&
                     playlist.ExpressionSets.some(function (es) { return es.Expressions && es.Expressions.length > 0; })) {
                     playlist.ExpressionSets.forEach(function (expressionSet, groupIndex) {
-                        let logicGroup;
-
-                        if (groupIndex === 0) {
-                            // Create first logic group
-                            logicGroup = SmartLists.createInitialLogicGroup(page);
-                            // Remove only the rules, preserve the label
-                            const rulesToRemove = logicGroup.querySelectorAll('.rule-row, .rule-within-group-separator');
-                            rulesToRemove.forEach(function (rule) {
-                                rule.remove();
-                            });
-                        } else {
-                            // Add subsequent logic groups
-                            logicGroup = SmartLists.addNewLogicGroup(page);
-                            // Remove only the rules, preserve the label
-                            const rulesToRemove = logicGroup.querySelectorAll('.rule-row, .rule-within-group-separator');
-                            rulesToRemove.forEach(function (rule) {
-                                rule.remove();
-                            });
-                        }
+                        const logicGroup = groupIndex === 0 ? SmartLists.createInitialLogicGroup(page) : SmartLists.addNewLogicGroup(page);
 
                         // Store similarity comparison fields on page for populateRuleRow to access
                         page._editingPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
 
-                        // Add rules to this logic group
-                        if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
-                            expressionSet.Expressions.forEach(function (expression) {
-                                SmartLists.addRuleToGroup(page, logicGroup);
-                                const ruleRows = logicGroup.querySelectorAll('.rule-row');
-                                const currentRule = ruleRows[ruleRows.length - 1];
-
-                                // Use populateRuleRow for consistency with clone flow
-                                // populateRuleRow handles all field population including:
-                                // - People sub-fields
-                                // - User-specific rules
-                                // - Value inputs (including relative date operators)
-                                // - Per-field option selects (NextUnwatched, Collections, Tags, Studios, Genres, SimilarTo)
-                                // - Regex help updates
-                                SmartLists.populateRuleRow(currentRule, expression, page);
-                            });
-                        }
-
-                        // Populate MaxItems for this group if it exists
-                        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
-                            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
-                            if (maxItemsInput) {
-                                maxItemsInput.value = expressionSet.MaxItems;
-                            }
-                        }
+                        // Populate rules and per-group MaxItems into this logic group
+                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
                     });
                 } else {
                     // No rules exist - create an initial logic group with a placeholder rule
                     // This matches the behavior when creating a new playlist
                     SmartLists.createInitialLogicGroup(page);
                 }
+
+                // Clear and populate bumper rules
+                const bumperRulesContainer = page.querySelector('#bumper-rules-container');
+                if (bumperRulesContainer) {
+                    bumperRulesContainer.innerHTML = '';
+                }
+                const bumperMediaSelect = page.querySelector('#bumperMediaType');
+                const bumperOrderSelect = page.querySelector('#bumperOrder');
+                const bumperIntervalInput = page.querySelector('#bumperInterval');
+                if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
+                    if (bumperMediaSelect) {
+                        bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
+                    }
+                    if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
+                    if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
+                    playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
+                        const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
+                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
+                    });
+                } else {
+                    if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
+                    if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
+                    if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
+                }
+                SmartLists.updateBumperSectionVisibility(page);
 
                 // Set sort options AFTER rules are populated so hasSimilarToRuleInForm() can detect them
                 SmartLists.loadSortOptionsIntoUI(page, playlist);
@@ -1148,40 +1154,38 @@
                         // Store similarity comparison fields on page for populateRuleRow to access
                         page._cloningPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
 
-                        if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
-                            expressionSet.Expressions.forEach(function (expression, expIndex) {
-                                if (expIndex === 0) {
-                                    // Use the first rule row that's already in the group
-                                    const firstRuleRow = logicGroup.querySelector('.rule-row');
-                                    if (firstRuleRow) {
-                                        SmartLists.populateRuleRow(firstRuleRow, expression, page);
-                                    }
-                                } else {
-                                    // Add additional rule rows
-                                    SmartLists.addRuleToGroup(page, logicGroup);
-                                    // Use querySelectorAll to get the last rule row, since :last-child doesn't work
-                                    // when the MaxItems container is appended after the rule rows
-                                    const ruleRowsInGroup = logicGroup.querySelectorAll('.rule-row');
-                                    const newRuleRow = ruleRowsInGroup[ruleRowsInGroup.length - 1];
-                                    if (newRuleRow) {
-                                        SmartLists.populateRuleRow(newRuleRow, expression, page);
-                                    }
-                                }
-                            });
-                        }
-
-                        // Populate MaxItems for this group if it exists
-                        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
-                            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
-                            if (maxItemsInput) {
-                                maxItemsInput.value = expressionSet.MaxItems;
-                            }
-                        }
+                        // Populate rules and per-group MaxItems into this logic group
+                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
                     });
                 } else {
                     // If no rules, create initial empty group
                     SmartLists.createInitialLogicGroup(page);
                 }
+
+                // Clear and populate bumper rules
+                const bumperRulesContainer = page.querySelector('#bumper-rules-container');
+                if (bumperRulesContainer) {
+                    bumperRulesContainer.innerHTML = '';
+                }
+                const bumperMediaSelect = page.querySelector('#bumperMediaType');
+                const bumperOrderSelect = page.querySelector('#bumperOrder');
+                const bumperIntervalInput = page.querySelector('#bumperInterval');
+                if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
+                    if (bumperMediaSelect) {
+                        bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
+                    }
+                    if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
+                    if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
+                    playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
+                        const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
+                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
+                    });
+                } else {
+                    if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
+                    if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
+                    if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
+                }
+                SmartLists.updateBumperSectionVisibility(page);
 
                 // Update button visibility
                 SmartLists.updateRuleButtonVisibility(page);

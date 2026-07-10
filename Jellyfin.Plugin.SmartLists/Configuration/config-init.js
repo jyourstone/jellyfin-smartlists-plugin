@@ -927,6 +927,27 @@
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
 
+        // Setup bumper section handlers
+        const bumperMediaTypeSelect = page.querySelector('#bumperMediaType');
+        if (bumperMediaTypeSelect) {
+            bumperMediaTypeSelect.addEventListener('change', function () {
+                SmartLists.updateBumperSectionVisibility(page);
+                // Create the first rule group on first enable; refilter fields on type change
+                const container = page.querySelector('#bumper-rules-container');
+                if (this.value && container && container.children.length === 0) {
+                    SmartLists.createInitialLogicGroup(page, 'bumper');
+                } else if (SmartLists.updateAllFieldSelects) {
+                    SmartLists.updateAllFieldSelects(page);
+                }
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+        const addBumperGroupBtn = page.querySelector('#add-bumper-rule-group');
+        if (addBumperGroupBtn) {
+            addBumperGroupBtn.addEventListener('click', function () {
+                SmartLists.addNewLogicGroup(page, 'bumper');
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
         page.addEventListener('click', function (e) {
             const target = e.target;
 
@@ -943,7 +964,10 @@
             const orBtn = target.closest('.or-btn');
             if (orBtn) {
                 if (SmartLists.addNewLogicGroup) {
-                    SmartLists.addNewLogicGroup(page);
+                    // Add the new group to the same container (main or bumper) as the clicked rule
+                    const orLogicGroup = orBtn.closest('.logic-group');
+                    const orScope = (orLogicGroup && orLogicGroup.getAttribute('data-rule-scope')) || 'main';
+                    SmartLists.addNewLogicGroup(page, orScope);
                 }
             }
 
@@ -2534,6 +2558,20 @@
     });
 
     // ===== LIST TYPE CHANGE HANDLER =====
+    // Show bumper detail controls only when a bumper media type is chosen;
+    // hide the whole section for collections.
+    SmartLists.updateBumperSectionVisibility = function (page) {
+        var section = page.querySelector('#bumper-section');
+        if (!section) { return; }
+        var listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
+        section.style.display = (listType === 'Collection') ? 'none' : '';
+        var mediaTypeSelect = page.querySelector('#bumperMediaType');
+        var enabled = !!(mediaTypeSelect && mediaTypeSelect.value);
+        section.querySelectorAll('.bumper-detail').forEach(function (el) {
+            el.style.display = enabled ? '' : 'none';
+        });
+    };
+
     SmartLists.handleListTypeChange = function (page) {
         const listTypeSelect = page.querySelector('#listType');
         if (!listTypeSelect) return;
@@ -2730,6 +2768,11 @@
         // Update Include Extras checkbox visibility based on media types
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
+        }
+
+        // Hide the bumper section for collections (playlists only feature)
+        if (SmartLists.updateBumperSectionVisibility) {
+            SmartLists.updateBumperSectionVisibility(page);
         }
 
         // Collections are server-wide, no library loading needed
