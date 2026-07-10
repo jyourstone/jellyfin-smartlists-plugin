@@ -930,6 +930,15 @@
         // Setup bumper section handlers
         const bumperMediaTypeSelect = page.querySelector('#bumperMediaType');
         if (bumperMediaTypeSelect) {
+            // Populate from the canonical media-type constant, filtered to playlist-supported
+            // types (bumpers are woven into playlists, so collection-only types are excluded)
+            const bumperTypeOptions = [{ value: '', label: 'None (disabled)' }];
+            SmartLists.mediaTypes.forEach(function (mediaType) {
+                if (!mediaType.CollectionOnly) {
+                    bumperTypeOptions.push({ value: mediaType.Value, label: mediaType.Label });
+                }
+            });
+            SmartLists.populateSelectElement(bumperMediaTypeSelect, bumperTypeOptions);
             bumperMediaTypeSelect.addEventListener('change', function () {
                 SmartLists.updateBumperSectionVisibility(page);
                 // Create the first rule group on first enable; refilter fields on type change

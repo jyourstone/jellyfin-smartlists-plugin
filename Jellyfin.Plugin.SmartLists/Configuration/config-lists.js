@@ -390,6 +390,10 @@
             var favoriteVal = SmartLists.getElementValue(page, '#metadataFavorite', '');
             var randomGroupSelection = SmartLists.collectRandomGroupSelectionFromForm(page);
             var bumperConfig = isCollection ? null : SmartLists.collectBumperConfigFromForm(page);
+            if (bumperConfig === 'invalid') {
+                SmartLists.showNotification('Bumper rules are incomplete. Complete at least one bumper rule or set the bumper media type to None.');
+                return;
+            }
 
             const playlistDto = {
                 Type: listType,
@@ -659,24 +663,7 @@
         }
 
         // Reset the bumper section (rules, media type, order, interval)
-        const bumperRulesContainer = page.querySelector('#bumper-rules-container');
-        if (bumperRulesContainer) {
-            const allBumperRules = bumperRulesContainer.querySelectorAll('.rule-row');
-            allBumperRules.forEach(function (rule) {
-                SmartLists.cleanupRuleEventListeners(rule);
-            });
-
-            bumperRulesContainer.innerHTML = '';
-        }
-        const bumperMediaSelect = page.querySelector('#bumperMediaType');
-        if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
-        const bumperOrderSelect = page.querySelector('#bumperOrder');
-        if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
-        const bumperIntervalInput = page.querySelector('#bumperInterval');
-        if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
-        if (SmartLists.updateBumperSectionVisibility) {
-            SmartLists.updateBumperSectionVisibility(page);
-        }
+        SmartLists.populateBumperConfigIntoForm(page, {});
 
         // Clear media type selections
         SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
@@ -1453,6 +1440,10 @@
     SmartLists.populateBumperConfigIntoForm = function (page, playlist) {
         const bumperRulesContainer = page.querySelector('#bumper-rules-container');
         if (bumperRulesContainer) {
+            // Clean up existing event listeners before clearing rules to avoid leaks
+            bumperRulesContainer.querySelectorAll('.rule-row').forEach(function (rule) {
+                SmartLists.cleanupRuleEventListeners(rule);
+            });
             bumperRulesContainer.innerHTML = '';
         }
         const bumperMediaSelect = page.querySelector('#bumperMediaType');
@@ -1460,7 +1451,11 @@
         const bumperIntervalInput = page.querySelector('#bumperInterval');
         if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
             if (bumperMediaSelect) {
-                bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
+                const savedType = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
+                bumperMediaSelect.value = savedType;
+                if (bumperMediaSelect.value !== savedType) {
+                    SmartLists.showNotification('Bumper media type "' + savedType + '" is not supported for playlists - bumper configuration disabled.');
+                }
             }
             if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
             if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }

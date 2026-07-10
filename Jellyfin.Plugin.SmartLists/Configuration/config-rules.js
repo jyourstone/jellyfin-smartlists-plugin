@@ -1347,8 +1347,8 @@
             SmartLists.updateAllSortOptionsVisibility(page);
             // Auto-resolve "Default" sort to match the new rules
             SmartLists.resolveDefaultSortForRules(page);
-            // Auto-check Include Extras when ExtraType rule is selected
-            if (newField === 'ExtraType') {
+            // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
+            if (newField === 'ExtraType' && SmartLists.getRowScope(newRuleRow) === 'main') {
                 SmartLists.autoCheckIncludeExtras(page);
             }
         }, listenerOptions);
@@ -1812,8 +1812,6 @@
             SmartLists.updateRuleButtonVisibility(page);
         }
 
-        SmartLists.updateLogicGroupMoveButtonVisibility(page);
-
         // Update sort options in case a Similar To rule was removed
         SmartLists.updateAllSortOptionsVisibility(page);
         // Re-resolve default sort in case the last special rule was removed
@@ -1963,8 +1961,8 @@
                     SmartLists.updateAllSortOptionsVisibility(page);
                     // Auto-resolve "Default" sort to match the new rules
                     SmartLists.resolveDefaultSortForRules(page);
-                    // Auto-check Include Extras when ExtraType rule is selected
-                    if (newField === 'ExtraType') {
+                    // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
+                    if (newField === 'ExtraType' && SmartLists.getRowScope(ruleRow) === 'main') {
                         SmartLists.autoCheckIncludeExtras(page);
                     }
                 }, listenerOptions);
@@ -2114,13 +2112,17 @@
 
         const listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
 
+        // Hoist the two possible media-type arrays; each row picks by its scope below
+        const mainTypes = SmartLists.getSelectedMediaTypes(page, 'main');
+        const bumperTypes = SmartLists.getSelectedMediaTypes(page, 'bumper');
+
         const allRuleRows = page.querySelectorAll('.rule-row');
         allRuleRows.forEach(function (ruleRow) {
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
             if (fieldSelect) {
                 // Resolve each row's scope so bumper rows use bumper media types
                 const rowScope = SmartLists.getRowScope(ruleRow);
-                const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, rowScope);
+                const selectedMediaTypes = rowScope === 'bumper' ? bumperTypes : mainTypes;
                 const currentValue = fieldSelect.value;
                 SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page, rowScope);
 
@@ -2957,7 +2959,8 @@
     };
 
     // Collect the bumper configuration from the form. Returns null when disabled
-    // (no media type selected or no bumper rules defined).
+    // (no media type selected), or the string 'invalid' when a media type is
+    // selected but no complete bumper rules exist (the save must be blocked).
     SmartLists.collectBumperConfigFromForm = function (page) {
         var mediaTypeSelect = page.querySelector('#bumperMediaType');
         if (!mediaTypeSelect || !mediaTypeSelect.value) {
@@ -2965,7 +2968,7 @@
         }
         var expressionSets = SmartLists.collectRulesFromForm(page, 'bumper');
         if (!expressionSets || expressionSets.length === 0) {
-            return null;
+            return 'invalid';
         }
         var intervalInput = page.querySelector('#bumperInterval');
         var interval = intervalInput ? parseInt(intervalInput.value, 10) : 1;
