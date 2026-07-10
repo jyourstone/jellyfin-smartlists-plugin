@@ -271,32 +271,17 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             // Validate media types values
-            if (list.MediaTypes != null && list.MediaTypes.Count > 0)
+            var mediaTypesResult = ValidateMediaTypeValues(list.MediaTypes, "media type");
+            if (!mediaTypesResult.IsValid)
             {
-                var validMediaTypes = Core.Constants.MediaTypes.All;
-                var invalidMediaTypes = list.MediaTypes
-                    .Where(mt => !validMediaTypes.Contains(mt))
-                    .ToList();
-
-                if (invalidMediaTypes.Count > 0)
-                {
-                    return SmartListValidationResult.Failure($"Invalid media type(s): {string.Join(", ", invalidMediaTypes)}. Allowed types: {string.Join(", ", validMediaTypes)}");
-                }
+                return mediaTypesResult;
             }
 
             // Validate expression sets
-            if (list.ExpressionSets != null)
+            var ruleGroupsResult = ValidateRuleGroups(list.ExpressionSets, string.Empty);
+            if (!ruleGroupsResult.IsValid)
             {
-                if (list.ExpressionSets.Count > MaxExpressionSetsCount)
-                {
-                    return SmartListValidationResult.Failure($"Cannot have more than {MaxExpressionSetsCount} rule groups");
-                }
-
-                var expressionResult = ValidateExpressionSets(list.ExpressionSets);
-                if (!expressionResult.IsValid)
-                {
-                    return expressionResult;
-                }
+                return ruleGroupsResult;
             }
 
             // Validate bumper configuration (playlists only)
@@ -304,36 +289,39 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             {
                 var bumpers = playlistDto.Bumpers;
 
-                if (bumpers.Interval < 1)
+                var intervalResult = ValidateInteger(bumpers.Interval, min: 1, max: 10000, fieldName: "Bumper interval");
+                if (!intervalResult.IsValid)
                 {
-                    return SmartListValidationResult.Failure("Bumper interval must be at least 1");
+                    return intervalResult;
                 }
 
-                if (bumpers.MediaTypes != null && bumpers.MediaTypes.Count > 0)
+                // Bumpers with rules configured require a media type to fetch content from
+                if (bumpers.ExpressionSets != null && bumpers.ExpressionSets.Count > 0
+                    && (bumpers.MediaTypes == null || bumpers.MediaTypes.Count == 0))
                 {
-                    var validBumperMediaTypes = Core.Constants.MediaTypes.All;
-                    var invalidBumperMediaTypes = bumpers.MediaTypes
-                        .Where(mt => !validBumperMediaTypes.Contains(mt))
-                        .ToList();
-
-                    if (invalidBumperMediaTypes.Count > 0)
-                    {
-                        return SmartListValidationResult.Failure($"Invalid bumper media type(s): {string.Join(", ", invalidBumperMediaTypes)}");
-                    }
+                    return SmartListValidationResult.Failure("Bumpers require at least one media type");
                 }
 
-                if (bumpers.ExpressionSets != null)
+                var bumperMediaTypesResult = ValidateMediaTypeValues(bumpers.MediaTypes, "bumper media type");
+                if (!bumperMediaTypesResult.IsValid)
                 {
-                    if (bumpers.ExpressionSets.Count > MaxExpressionSetsCount)
-                    {
-                        return SmartListValidationResult.Failure($"Bumpers cannot have more than {MaxExpressionSetsCount} rule groups");
-                    }
+                    return bumperMediaTypesResult;
+                }
 
-                    var bumperExpressionResult = ValidateExpressionSets(bumpers.ExpressionSets);
-                    if (!bumperExpressionResult.IsValid)
-                    {
-                        return bumperExpressionResult;
-                    }
+                // Bumpers are woven into playlists, so their media types must be playlist-supported
+                var unsupportedBumperType = bumpers.MediaTypes?.FirstOrDefault(mt =>
+                    mt == Core.Constants.MediaTypes.Series
+                    || mt == Core.Constants.MediaTypes.Season
+                    || mt == Core.Constants.MediaTypes.MusicAlbum);
+                if (unsupportedBumperType != null)
+                {
+                    return SmartListValidationResult.Failure($"{unsupportedBumperType} media type is not supported for bumpers. Bumpers are woven into playlists, which cannot contain {unsupportedBumperType} items.");
+                }
+
+                var bumperRuleGroupsResult = ValidateRuleGroups(bumpers.ExpressionSets, "Bumpers");
+                if (!bumperRuleGroupsResult.IsValid)
+                {
+                    return bumperRuleGroupsResult;
                 }
             }
 
@@ -415,6 +403,52 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             return ValidateInteger(randomGroupSelection.MinimumItems, min: 0, max: 100000, fieldName: "RandomGroupSelection.MinimumItems");
+        }
+
+        /// <summary>
+        /// Validates that all media type values are known media types.
+        /// <paramref name="label"/> names the field in the failure message
+        /// (e.g. "media type" or "bumper media type").
+        /// </summary>
+        private static SmartListValidationResult ValidateMediaTypeValues(List<string>? types, string label)
+        {
+            if (types == null || types.Count == 0)
+            {
+                return SmartListValidationResult.Success();
+            }
+
+            var validMediaTypes = Core.Constants.MediaTypes.All;
+            var invalidMediaTypes = types
+                .Where(mt => !validMediaTypes.Contains(mt))
+                .ToList();
+
+            if (invalidMediaTypes.Count > 0)
+            {
+                return SmartListValidationResult.Failure($"Invalid {label}(s): {string.Join(", ", invalidMediaTypes)}. Allowed types: {string.Join(", ", validMediaTypes)}");
+            }
+
+            return SmartListValidationResult.Success();
+        }
+
+        /// <summary>
+        /// Validates rule groups: caps the group count and validates every expression.
+        /// <paramref name="label"/> names the owner in the failure message
+        /// (empty for the main rule groups, "Bumpers" for bumper rule groups).
+        /// </summary>
+        private static SmartListValidationResult ValidateRuleGroups(List<ExpressionSet>? sets, string label)
+        {
+            if (sets == null)
+            {
+                return SmartListValidationResult.Success();
+            }
+
+            if (sets.Count > MaxExpressionSetsCount)
+            {
+                var subject = string.IsNullOrEmpty(label) ? "Cannot" : $"{label} cannot";
+                return SmartListValidationResult.Failure($"{subject} have more than {MaxExpressionSetsCount} rule groups");
+            }
+
+            return ValidateExpressionSets(sets);
         }
 
         /// <summary>

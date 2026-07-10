@@ -102,6 +102,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             var itemsList = items.ToList();
             if (itemsList.Count == 0 || string.IsNullOrEmpty(groupByField))
             {
+                if (itemsList.Count > 0)
+                {
+                    logger?.LogWarning("{LogPrefix}: no GroupByField configured - items returned in original order", logPrefix);
+                }
+
                 return positions;
             }
 
@@ -297,17 +302,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
     /// Each refresh produces a fully random rotation: random group interleaving and
     /// random order inside every group ("turning on a TV at a random time").
     /// </summary>
-    public class RoundRobinShuffledOrder : RoundRobinBase
+    public class RoundRobinShuffledOrder : RoundRobinRandomOrder
     {
         public override string Name => "Shuffled Round Robin";
 
         protected override bool ShuffleWithinGroups => true;
-
-        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
-        {
-            var list = keys.ToList();
-            Shuffle(list, Random.Shared);
-            return list;
-        }
     }
 }

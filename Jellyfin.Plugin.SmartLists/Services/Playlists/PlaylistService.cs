@@ -1042,6 +1042,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             try
             {
                 var bumpers = dto.Bumpers!;
+
+                // Defense in depth: bumpers are woven into playlists, so bumper media types
+                // must be playlist-supported. The validator rejects these at save time; this
+                // guard covers lists saved before that check existed.
+                var bumperMediaCheck = ValidateUnsupportedMediaTypes(bumpers.MediaTypes, dto.Name + " (Bumpers)");
+                if (!bumperMediaCheck.IsValid)
+                {
+                    logger.LogWarning("Skipping bumpers for playlist '{PlaylistName}': {Error}", dto.Name, bumperMediaCheck.ErrorMessage);
+                    return [];
+                }
+
                 var sortOption = bumpers.BumperOrder switch
                 {
                     "Name" => new SortOption { SortBy = "Name", SortOrder = SortOrder.Ascending },
@@ -1057,6 +1068,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     ExpressionSets = bumpers.ExpressionSets,
                     MediaTypes = bumpers.MediaTypes ?? [],
                     Order = new OrderDto { SortOptions = [sortOption] },
+
+                    // Extras (trailers, interstitials, etc.) are the archetypal bumper
+                    // content, so bumper pools always fetch them; bumper rules still filter.
+                    IncludeExtras = true,
                 };
 
                 var bumperList = new Core.SmartList(bumperDto)
@@ -1067,14 +1082,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 var bumperIds = bumperList.FilterPlaylistItems(bumperMedia, _libraryManager, user, refreshCache, _userDataManager, logger, null);
 
                 var mainSet = new HashSet<Guid>(mainItemIds);
-                var bumperMediaLookup = bumperMedia
-                    .GroupBy(m => m.Id)
-                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Single pass over bumperMedia resolving only the ids the filter returned,
+                // instead of building a GroupBy lookup over the entire bumper scan.
+                var bumperIdSet = new HashSet<Guid>(bumperIds);
+                var matchedBumperItems = new Dictionary<Guid, BaseItem>(bumperIdSet.Count);
+                foreach (var mediaItem in bumperMedia)
+                {
+                    if (bumperIdSet.Contains(mediaItem.Id))
+                    {
+                        matchedBumperItems.TryAdd(mediaItem.Id, mediaItem);
+                    }
+                }
 
                 var result = new List<Guid>();
+                var seen = new HashSet<Guid>();
                 foreach (var id in bumperIds)
                 {
-                    if (mainSet.Contains(id) || !bumperMediaLookup.TryGetValue(id, out var item))
+                    // LibraryName virtual-item queries can emit duplicate ids - skip repeats
+                    // so the woven pool never contains the same bumper twice in a row.
+                    if (mainSet.Contains(id) || !seen.Add(id) || !matchedBumperItems.TryGetValue(id, out var item))
                     {
                         continue;
                     }
