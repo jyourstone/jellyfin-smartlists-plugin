@@ -113,6 +113,18 @@ The `-rc` suffix on the git tag is only a workflow marker — it routes the buil
 
 Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-update through RCs and into the final stable release. Because Revision is reserved for RC numbers, stable releases always bump the **Build** component (never use Revision for stable).
 
+### Release Lines (current, while Jellyfin 12 is in RC)
+
+Every tag builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 and 12.0.0/net10.0) and writes both `targetAbi` entries to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
+
+- **RCs** are tagged on `main` and MUST use `v12.x.y.z-rc` numbering. The unstable manifest already carries ABI-10.11 entries at version `12.x` from past RCs, so a lower-numbered RC tag (e.g. `v10.11.x.y-rc`) would sort below them and never be offered to existing RC users.
+- **Stable releases** (until Jellyfin 12 final) are tagged on `10.11-release` as `v10.11.X.0`, keeping the plugin-version-follows-Jellyfin convention prod users expect. Promotion flow:
+  1. Merge `main` into `10.11-release` (never fast-forward assumptions — the branch carries its own commits), and merge back so the trees converge.
+  2. Smoke test against a real 10.11 container: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
+  3. Tag `v10.11.X.0` on `10.11-release`.
+- Known cosmetic trade-off: RC users don't auto-roll into a `10.11.X.0` stable (it sorts below `12.x` RC versions); they stay on the byte-identical RC build until the next RC.
+- **When Jellyfin 12 final ships**: cut the first `v12.0.X.0` stable from `main` — it sorts above both lines, all users converge, and the split-line scheme ends.
+
 ## When Making Changes
 
 
