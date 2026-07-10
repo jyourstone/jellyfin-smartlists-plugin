@@ -135,39 +135,48 @@
                             <div id="sorts-container"></div>
                         </div>
 
-                        <div id="bumper-section" class="inputContainer" style="margin-bottom: 1em;">
-                            <label class="inputLabel">Bumpers (optional)</label>
-                            <div class="fieldDescription" style="margin-bottom: 0.5em;">
-                                Insert short "bumper" items (commercials, interstitials, idents) between playlist
-                                items. Bumpers are selected by their own rules, repeat if fewer than needed, and do
-                                not count toward Max Items.</div>
-                            <div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 0.5em;">
-                                <div class="selectContainer" style="min-width: 180px;">
-                                    <label class="selectLabel" for="bumperMediaType">Bumper media type</label>
-                                    <select is="emby-select" id="bumperMediaType"
-                                        class="emby-select-withcolor emby-select">
-                                        <option value="">None (disabled)</option>
-                                    </select>
-                                </div>
-                                <div class="selectContainer bumper-detail" style="min-width: 160px; display: none;">
-                                    <label class="selectLabel" for="bumperOrder">Bumper order</label>
-                                    <select is="emby-select" id="bumperOrder"
-                                        class="emby-select-withcolor emby-select">
-                                        <option value="Random">Random</option>
-                                        <option value="Name">Name</option>
-                                        <option value="ReleaseDate">Release Date</option>
-                                    </select>
-                                </div>
-                                <div class="inputContainer bumper-detail" style="min-width: 120px; display: none;">
-                                    <label class="inputLabel" for="bumperInterval">Every N items</label>
-                                    <input type="number" class="emby-input" id="bumperInterval" min="1" max="10000" value="1" />
-                                </div>
+                        <!-- User selection hidden for user pages - user is always themselves -->
+                        <input type="hidden" id="playlistUser" value="">
+
+                        <button type="button" id="advanced-options-header" class="emby-button"
+                            aria-expanded="false" aria-controls="advanced-options-body"
+                            style="width: 100%; display: flex; align-items: center; gap: 0.5em; text-align: left; padding: 0.75em 1em; margin-bottom: 1em; background: rgba(128, 128, 128, 0.1); border-radius: 4px;">
+                            <span id="advanced-expand-icon" aria-hidden="true">&#9654;</span>
+                            <span style="font-weight: 500;">Advanced options</span>
+                            <span id="advanced-summary" class="fieldDescription" style="margin-left: auto; margin-top: 0; text-align: right;"></span>
+                        </button>
+                        <div id="advanced-options-body" style="display: none;">
+                            <h3 class="sectionTitle" style="margin-top: 0.5em;">Limits</h3>
+                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel" for="playlistMaxItems"
+                                style="display: flex; align-items: center;">
+                                Max Items
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-items"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <input type="number" id="playlistMaxItems" class="emby-input" min="0" step="1">
+                            <div class="fieldDescription">Maximum number of items in this list. Set to 0 for no limit.
                             </div>
-                            <div id="bumper-rules-container" class="bumper-detail" style="display: none;"></div>
-                            <button type="button" id="add-bumper-rule-group" class="raised emby-button bumper-detail"
-                                style="margin-top: 0.5em; display: none;">
-                                <span>Add Bumper Rule Group</span>
-                            </button>
+                        </div>
+
+                        <div class="inputContainer playlist-only-field" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel" for="playlistMaxPlayTimeMinutes"
+                                style="display: flex; align-items: center;">
+                                Max Playtime (Minutes)
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-playtime"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <input type="number" id="playlistMaxPlayTimeMinutes" class="emby-input" min="0" step="1">
+                            <div class="fieldDescription">Maximum playtime in minutes for this list. Set to 0 for no
+                                limit.</div>
                         </div>
 
                         <div class="checkboxList paperList"
@@ -208,58 +217,42 @@
                             </div>
                         </div>
 
-
-                        <!-- User selection hidden for user pages - user is always themselves -->
-                        <input type="hidden" id="playlistUser" value="">
-
-                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
-                            <label class="inputLabel" for="playlistMaxItems"
-                                style="display: flex; align-items: center;">
-                                Max Items
-                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-items"
-                                    target="_blank" rel="noopener noreferrer" title="Documentation"
-                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
-                                    <span class="material-icons" aria-hidden="true"
-                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
-                                </a>
-                            </label>
-                            <input type="number" id="playlistMaxItems" class="emby-input" min="0" step="1">
-                            <div class="fieldDescription">Maximum number of items in this list. Set to 0 for no limit.
+                        <div id="bumper-section" class="inputContainer" style="margin-bottom: 1em;">
+                            <h3 class="sectionTitle" style="margin-top: 1.5em;">Bumpers</h3>
+                            <div class="fieldDescription" style="margin-bottom: 0.5em;">
+                                Insert short "bumper" items (commercials, interstitials, idents) between playlist
+                                items. Bumpers are selected by their own rules, repeat if fewer than needed, and do
+                                not count toward Max Items.</div>
+                            <div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 0.5em;">
+                                <div class="selectContainer" style="min-width: 180px;">
+                                    <label class="selectLabel" for="bumperMediaType">Bumper media type</label>
+                                    <select is="emby-select" id="bumperMediaType"
+                                        class="emby-select-withcolor emby-select">
+                                        <option value="">None (disabled)</option>
+                                    </select>
+                                </div>
+                                <div class="selectContainer bumper-detail" style="min-width: 160px; display: none;">
+                                    <label class="selectLabel" for="bumperOrder">Bumper order</label>
+                                    <select is="emby-select" id="bumperOrder"
+                                        class="emby-select-withcolor emby-select">
+                                        <option value="Random">Random</option>
+                                        <option value="Name">Name</option>
+                                        <option value="ReleaseDate">Release Date</option>
+                                    </select>
+                                </div>
+                                <div class="inputContainer bumper-detail" style="min-width: 120px; display: none;">
+                                    <label class="inputLabel" for="bumperInterval">Every N items</label>
+                                    <input type="number" class="emby-input" id="bumperInterval" min="1" max="10000" value="1" />
+                                </div>
                             </div>
+                            <div id="bumper-rules-container" class="bumper-detail" style="display: none;"></div>
+                            <button type="button" id="add-bumper-rule-group" class="raised emby-button bumper-detail"
+                                style="margin-top: 0.5em; display: none;">
+                                <span>Add Bumper Rule Group</span>
+                            </button>
                         </div>
 
-                        <div class="inputContainer playlist-only-field" style="margin-bottom: 1em; margin-top: 1em;">
-                            <label class="inputLabel" for="playlistMaxPlayTimeMinutes"
-                                style="display: flex; align-items: center;">
-                                Max Playtime (Minutes)
-                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/sorting-and-limits/#max-playtime"
-                                    target="_blank" rel="noopener noreferrer" title="Documentation"
-                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
-                                    <span class="material-icons" aria-hidden="true"
-                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
-                                </a>
-                            </label>
-                            <input type="number" id="playlistMaxPlayTimeMinutes" class="emby-input" min="0" step="1">
-                            <div class="fieldDescription">Maximum playtime in minutes for this list. Set to 0 for no
-                                limit.</div>
-                        </div>
-
-                        <div id="publicCheckboxContainer" class="checkboxList paperList playlist-only-field"
-                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" is="emby-checkbox" id="playlistIsPublic" data-embycheckbox="true"
-                                    class="emby-checkbox">
-                                <span class="checkboxLabel">Make playlist public</span>
-                                <span class="checkboxOutline">
-                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
-                                        aria-hidden="true"></span>
-                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
-                                        aria-hidden="true"></span>
-                                </span>
-                            </label>
-                            <div class="fieldDescription">Allow this playlist to be viewed by any logged in user.</div>
-                        </div>
-
+                            <h3 class="sectionTitle" style="margin-top: 1.5em;">Automation</h3>
                         <div class="checkboxList paperList"
                             style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
                             <label class="emby-checkbox-label">
@@ -332,6 +325,24 @@
                             <div class="fieldDescription">Control when this list appears in Jellyfin. Use Enable/Disable actions to automatically show or hide the list on specific dates (e.g., show Christmas movies only in December).</div>
                         </div>
 
+                            <h3 class="sectionTitle playlist-only-field" style="margin-top: 1.5em;">Sharing</h3>
+                        <div id="publicCheckboxContainer" class="checkboxList paperList playlist-only-field"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="playlistIsPublic" data-embycheckbox="true"
+                                    class="emby-checkbox">
+                                <span class="checkboxLabel">Make playlist public</span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">Allow this playlist to be viewed by any logged in user.</div>
+                        </div>
+
+                            <h3 class="sectionTitle" style="margin-top: 1.5em;">Presentation</h3>
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" style="display: flex; align-items: center;">
                                 Custom Images
@@ -351,7 +362,7 @@
                         </div>
 
                         <div class="inputContainer" style="margin-bottom: 1em;">
-                            <h3 class="sectionTitle" style="margin-top: 1em; display: flex; align-items: center;">
+                            <label class="inputLabel" style="display: flex; align-items: center;">
                                 Metadata
                                 <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#metadata"
                                     target="_blank" rel="noopener noreferrer" title="Documentation"
@@ -359,7 +370,7 @@
                                     <span class="material-icons" aria-hidden="true"
                                         style="font-size: 1.1em; line-height: 0;">info_outline</span>
                                 </a>
-                            </h3>
+                            </label>
                             <div style="margin-top: 0.5em;">
                                 <label class="inputLabel" for="metadataSortTitle">Sort Title</label>
                                 <input type="text" id="metadataSortTitle" class="emby-input"
@@ -387,6 +398,7 @@
                                 </select>
                                 <div class="fieldDescription">Set whether the created list is favorited for your user.</div>
                             </div>
+                        </div>
                         </div>
 
                         <div style="margin-top: 2em;">

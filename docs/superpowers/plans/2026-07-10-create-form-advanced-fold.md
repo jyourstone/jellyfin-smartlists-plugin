@@ -175,7 +175,7 @@ git commit -m "Add collapsed Advanced options fold to admin create form"
 - Consumes: nothing (pure HTML; JS from Task 1 is shared and picks up the new ids automatically).
 - Produces: identical fold markup/ids on the user page.
 
-- [ ] **Step 1: Apply the same restructure**
+- [x] **Step 1: Apply the same restructure**
 
 Same three operations as Task 1 Step 1, with these user-page differences:
 - There is no visible Users block. The hidden `<input type="hidden" id="playlistUser" value="">` (line 213) must stay OUTSIDE the fold — leave it directly after the Sort Options container (line 135 area).
@@ -192,7 +192,7 @@ Manual checks on the user config page (link "Open User Config Page" at top of ad
 2. Create a simple playlist as a non-admin user without opening the fold → saves.
 3. List Type switch gating works inside the fold (user page still has both list types).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/user-playlists.html
