@@ -94,6 +94,25 @@ Like the TV Channel playlist above, but the show order changes on each refresh:
 
 Result: Same interleaving as Round Robin, but which show appears first is randomized each time. One refresh might start with Show C, the next with Show A.
 
+### Fully Random TV Channel (Shuffled Round Robin)
+Like the Shuffled TV Channel above, but the episodes within each show are shuffled too:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed
+- **Sort by**: Shuffled Round Robin (Interleave), **Group By**: Series Name
+
+Result: Shuffled Round Robin over shows A, B, C might produce: Show A S02E03, Show C S01E01, Show B S03E02, Show A S01E01, Show C S02E04, Show B S01E05, etc. Both the show rotation and the episode order within each show are random — a new arrangement on every refresh.
+
+### TV Channel with Commercials (Bumpers)
+Take any of the TV Channel playlists above and weave "commercial break" clips between the episodes:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed
+- **Sort by**: Shuffled Round Robin (Interleave), **Group By**: Series Name
+- **Bumpers**: Bumper media type **Video** (home videos), rule `Name contains "bumper"`, Bumper order **Random**, Every **1** items
+
+Result: A random episode from a random show, then a bumper clip, then the next episode, and so on. With 4 bumper clips and dozens of episodes, the bumpers repeat in rotation — just like real station idents. See [Bumpers](../user-guide/bumpers.md) for details.
+
 ### Music Album Sampler (Round Robin)
 Create a playlist that samples tracks from different albums:
 

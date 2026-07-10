@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.SmartLists;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
@@ -155,10 +156,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Report initial total items count
                 progressCallback?.Invoke(0, allUserMedia.Length);
 
-                // Pre-fetch external lists if any ExternalList rules are present
+                // Pre-fetch external lists if any ExternalList rules are present.
+                // Bumper rule sets are included so ExternalList rules work in bumper pools too.
                 if (_externalListService != null && dto.ExpressionSets != null)
                 {
-                    var fieldReqs = FieldRequirements.Analyze(dto.ExpressionSets);
+                    var expressionSetsForAnalysis = dto.Bumpers?.ExpressionSets is { Count: > 0 } bumperSets
+                        ? dto.ExpressionSets.Concat(bumperSets).ToList()
+                        : dto.ExpressionSets;
+                    var fieldReqs = FieldRequirements.Analyze(expressionSetsForAnalysis);
                     if (fieldReqs.NeedsExternalLists && fieldReqs.ExternalListUrls.Count > 0)
                     {
                         // Clear per-item external list caches so items are re-evaluated against this playlist's lists.
@@ -180,9 +185,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 var mediaLookup = allUserMedia
                     .GroupBy(m => m.Id)
                     .ToDictionary(g => g.Key, g => g.First());
-                var newLinkedChildren = newItems
+
+                var mainItemIds = newItems
                     .Distinct()
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
+                    .ToList();
+
+                // Weave bumper items between main items. Bumpers may legitimately repeat,
+                // so the woven list must NOT be deduplicated.
+                var finalItemIds = mainItemIds;
+                if (dto.Bumpers != null && dto.Bumpers.ExpressionSets != null && dto.Bumpers.ExpressionSets.Count > 0 && mainItemIds.Count > 0)
+                {
+                    var bumperItemIds = GetBumperItemIds(dto, user, refreshCache, mainItemIds, mediaLookup, logger);
+                    if (bumperItemIds.Count > 0)
+                    {
+                        finalItemIds = WeaveBumpers(mainItemIds, bumperItemIds, Math.Max(1, dto.Bumpers.Interval));
+                        logger.LogDebug("Wove bumpers into playlist '{PlaylistName}' every {Interval} item(s): {MainCount} main + {BumperPool} pool -> {TotalCount} entries",
+                            dto.Name, dto.Bumpers.Interval, mainItemIds.Count, bumperItemIds.Count, finalItemIds.Count);
+                    }
+                    else
+                    {
+                        logger.LogDebug("Bumper rules matched no items for playlist '{PlaylistName}'; writing playlist without bumpers", dto.Name);
+                    }
+                }
+
+                var newLinkedChildren = finalItemIds
                     .Select(itemId => LinkedChildFactory.Create(itemId, mediaLookup[itemId]))
                     .ToArray();
 
@@ -997,6 +1024,123 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
+
+        /// <summary>
+        /// Builds the ordered bumper item pool by running the playlist's bumper rule sets
+        /// through a synthetic SmartList. Items already in the main list are excluded so an
+        /// item is never both content and bumper. Bumper media is added to
+        /// <paramref name="mediaLookup"/> so LinkedChildren can be created for woven entries.
+        /// </summary>
+        private List<Guid> GetBumperItemIds(
+            SmartPlaylistDto dto,
+            User user,
+            RefreshQueueService.RefreshCache refreshCache,
+            List<Guid> mainItemIds,
+            Dictionary<Guid, BaseItem> mediaLookup,
+            ILogger logger)
+        {
+            try
+            {
+                var bumpers = dto.Bumpers!;
+
+                // Defense in depth: bumpers are woven into playlists, so bumper media types
+                // must be playlist-supported. The validator rejects these at save time; this
+                // guard covers lists saved before that check existed.
+                var bumperMediaCheck = ValidateUnsupportedMediaTypes(bumpers.MediaTypes, dto.Name + " (Bumpers)");
+                if (!bumperMediaCheck.IsValid)
+                {
+                    logger.LogWarning("Skipping bumpers for playlist '{PlaylistName}': {Error}", dto.Name, bumperMediaCheck.ErrorMessage);
+                    return [];
+                }
+
+                var sortOption = bumpers.BumperOrder switch
+                {
+                    "Name" => new SortOption { SortBy = "Name", SortOrder = SortOrder.Ascending },
+                    "ReleaseDate" => new SortOption { SortBy = "ReleaseDate", SortOrder = SortOrder.Ascending },
+                    _ => new SortOption { SortBy = "Random", SortOrder = SortOrder.Ascending },
+                };
+
+                var bumperDto = new SmartPlaylistDto
+                {
+                    // The SmartList ctor requires a non-null Id; derive one from the parent playlist.
+                    Id = (dto.Id ?? Guid.NewGuid().ToString("N")) + "-bumpers",
+                    Name = dto.Name + " (Bumpers)",
+                    ExpressionSets = bumpers.ExpressionSets,
+                    MediaTypes = bumpers.MediaTypes ?? [],
+                    Order = new OrderDto { SortOptions = [sortOption] },
+
+                    // Extras (trailers, interstitials, etc.) are the archetypal bumper
+                    // content, so bumper pools always fetch them; bumper rules still filter.
+                    IncludeExtras = true,
+                };
+
+                var bumperList = new Core.SmartList(bumperDto)
+                {
+                    UserManager = _userManager // Set UserManager for Jellyfin 10.11+ user resolution,
+                };
+                var bumperMedia = GetAllUserMedia(user, bumperDto.MediaTypes, bumperDto).ToArray();
+                var bumperIds = bumperList.FilterPlaylistItems(bumperMedia, _libraryManager, user, refreshCache, _userDataManager, logger, null);
+
+                var mainSet = new HashSet<Guid>(mainItemIds);
+
+                // Single pass over bumperMedia resolving only the ids the filter returned,
+                // instead of building a GroupBy lookup over the entire bumper scan.
+                var bumperIdSet = new HashSet<Guid>(bumperIds);
+                var matchedBumperItems = new Dictionary<Guid, BaseItem>(bumperIdSet.Count);
+                foreach (var mediaItem in bumperMedia)
+                {
+                    if (bumperIdSet.Contains(mediaItem.Id))
+                    {
+                        matchedBumperItems.TryAdd(mediaItem.Id, mediaItem);
+                    }
+                }
+
+                var result = new List<Guid>();
+                var seen = new HashSet<Guid>();
+                foreach (var id in bumperIds)
+                {
+                    // LibraryName virtual-item queries can emit duplicate ids - skip repeats
+                    // so the woven pool never contains the same bumper twice in a row.
+                    if (mainSet.Contains(id) || !seen.Add(id) || !matchedBumperItems.TryGetValue(id, out var item))
+                    {
+                        continue;
+                    }
+
+                    result.Add(id);
+                    mediaLookup.TryAdd(id, item);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to build bumper pool for playlist '{PlaylistName}'. Playlist will be written without bumpers.", dto.Name);
+                return [];
+            }
+        }
+
+        /// <summary>
+        /// Inserts one bumper after every <paramref name="interval"/> main items, cycling
+        /// through the bumper pool with wraparound. No bumper follows the final main item.
+        /// Main item order is never altered.
+        /// </summary>
+        internal static List<Guid> WeaveBumpers(List<Guid> mainItemIds, List<Guid> bumperItemIds, int interval)
+        {
+            var result = new List<Guid>(mainItemIds.Count + (mainItemIds.Count / interval) + 1);
+            int bumperIndex = 0;
+            for (int i = 0; i < mainItemIds.Count; i++)
+            {
+                result.Add(mainItemIds[i]);
+                bool isLast = i == mainItemIds.Count - 1;
+                if (!isLast && (i + 1) % interval == 0)
+                {
+                    result.Add(bumperItemIds[bumperIndex % bumperItemIds.Count]);
+                    bumperIndex++;
+                }
+            }
+
+            return result;
+        }
 
         /// <summary>
         /// Refreshes playlist metadata to trigger Jellyfin's auto-generation of cover images.

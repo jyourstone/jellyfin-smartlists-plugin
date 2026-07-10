@@ -271,31 +271,65 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             // Validate media types values
-            if (list.MediaTypes != null && list.MediaTypes.Count > 0)
+            var mediaTypesResult = ValidateMediaTypeValues(list.MediaTypes, "media type");
+            if (!mediaTypesResult.IsValid)
             {
-                var validMediaTypes = Core.Constants.MediaTypes.All;
-                var invalidMediaTypes = list.MediaTypes
-                    .Where(mt => !validMediaTypes.Contains(mt))
-                    .ToList();
-
-                if (invalidMediaTypes.Count > 0)
-                {
-                    return SmartListValidationResult.Failure($"Invalid media type(s): {string.Join(", ", invalidMediaTypes)}. Allowed types: {string.Join(", ", validMediaTypes)}");
-                }
+                return mediaTypesResult;
             }
 
             // Validate expression sets
-            if (list.ExpressionSets != null)
+            var ruleGroupsResult = ValidateRuleGroups(list.ExpressionSets, string.Empty);
+            if (!ruleGroupsResult.IsValid)
             {
-                if (list.ExpressionSets.Count > MaxExpressionSetsCount)
+                return ruleGroupsResult;
+            }
+
+            // Validate bumper configuration (playlists only)
+            if (list is SmartPlaylistDto playlistDto && playlistDto.Bumpers != null)
+            {
+                var bumpers = playlistDto.Bumpers;
+
+                var intervalResult = ValidateInteger(bumpers.Interval, min: 1, max: 10000, fieldName: "Bumper interval");
+                if (!intervalResult.IsValid)
                 {
-                    return SmartListValidationResult.Failure($"Cannot have more than {MaxExpressionSetsCount} rule groups");
+                    return intervalResult;
                 }
 
-                var expressionResult = ValidateExpressionSets(list.ExpressionSets);
-                if (!expressionResult.IsValid)
+                // Bumpers with rules configured require a media type to fetch content from
+                if (bumpers.ExpressionSets != null && bumpers.ExpressionSets.Count > 0
+                    && (bumpers.MediaTypes == null || bumpers.MediaTypes.Count == 0))
                 {
-                    return expressionResult;
+                    return SmartListValidationResult.Failure("Bumpers require at least one media type");
+                }
+
+                var bumperMediaTypesResult = ValidateMediaTypeValues(bumpers.MediaTypes, "bumper media type");
+                if (!bumperMediaTypesResult.IsValid)
+                {
+                    return bumperMediaTypesResult;
+                }
+
+                // Bumpers are woven into playlists, so their media types must be playlist-supported
+                var unsupportedBumperType = bumpers.MediaTypes?.FirstOrDefault(mt =>
+                    mt == Core.Constants.MediaTypes.Series
+                    || mt == Core.Constants.MediaTypes.Season
+                    || mt == Core.Constants.MediaTypes.MusicAlbum);
+                if (unsupportedBumperType != null)
+                {
+                    return SmartListValidationResult.Failure($"{unsupportedBumperType} media type is not supported for bumpers. Bumpers are woven into playlists, which cannot contain {unsupportedBumperType} items.");
+                }
+
+                if (!string.IsNullOrEmpty(bumpers.BumperOrder)
+                    && bumpers.BumperOrder != "Random"
+                    && bumpers.BumperOrder != "Name"
+                    && bumpers.BumperOrder != "ReleaseDate")
+                {
+                    return SmartListValidationResult.Failure($"Invalid bumper order '{bumpers.BumperOrder}'. Allowed values: Random, Name, ReleaseDate");
+                }
+
+                var bumperRuleGroupsResult = ValidateRuleGroups(bumpers.ExpressionSets, "Bumpers");
+                if (!bumperRuleGroupsResult.IsValid)
+                {
+                    return bumperRuleGroupsResult;
                 }
             }
 
@@ -377,6 +411,52 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             return ValidateInteger(randomGroupSelection.MinimumItems, min: 0, max: 100000, fieldName: "RandomGroupSelection.MinimumItems");
+        }
+
+        /// <summary>
+        /// Validates that all media type values are known media types.
+        /// <paramref name="label"/> names the field in the failure message
+        /// (e.g. "media type" or "bumper media type").
+        /// </summary>
+        private static SmartListValidationResult ValidateMediaTypeValues(List<string>? types, string label)
+        {
+            if (types == null || types.Count == 0)
+            {
+                return SmartListValidationResult.Success();
+            }
+
+            var validMediaTypes = Core.Constants.MediaTypes.All;
+            var invalidMediaTypes = types
+                .Where(mt => !validMediaTypes.Contains(mt))
+                .ToList();
+
+            if (invalidMediaTypes.Count > 0)
+            {
+                return SmartListValidationResult.Failure($"Invalid {label}(s): {string.Join(", ", invalidMediaTypes)}. Allowed types: {string.Join(", ", validMediaTypes)}");
+            }
+
+            return SmartListValidationResult.Success();
+        }
+
+        /// <summary>
+        /// Validates rule groups: caps the group count and validates every expression.
+        /// <paramref name="label"/> names the owner in the failure message
+        /// (empty for the main rule groups, "Bumpers" for bumper rule groups).
+        /// </summary>
+        private static SmartListValidationResult ValidateRuleGroups(List<ExpressionSet>? sets, string label)
+        {
+            if (sets == null)
+            {
+                return SmartListValidationResult.Success();
+            }
+
+            if (sets.Count > MaxExpressionSetsCount)
+            {
+                var subject = string.IsNullOrEmpty(label) ? "Cannot" : $"{label} cannot";
+                return SmartListValidationResult.Failure($"{subject} have more than {MaxExpressionSetsCount} rule groups");
+            }
+
+            return ValidateExpressionSets(sets);
         }
 
         /// <summary>

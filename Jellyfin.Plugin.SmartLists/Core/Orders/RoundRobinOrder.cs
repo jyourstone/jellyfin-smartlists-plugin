@@ -26,6 +26,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public string? GroupByField { get; set; }
 
         /// <summary>
+        /// When true, items within each group are shuffled instead of sorted in natural order.
+        /// </summary>
+        protected virtual bool ShuffleWithinGroups => false;
+
+        /// <summary>
         /// Pre-computed interleave positions for each item.
         /// Set by <see cref="PreComputePositions"/> before sorting.
         /// </summary>
@@ -38,12 +43,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
         /// <summary>
         /// Pre-computes interleave positions for all items using the subclass group ordering strategy.
-        /// Groups items by the configured field, sorts within each group by natural order,
+        /// Groups items by the configured field, orders items within each group by natural order
+        /// (or shuffles them when <see cref="ShuffleWithinGroups"/> is true),
         /// orders groups via <see cref="OrderGroupKeys"/>, then assigns positions via round-robin interleaving.
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger);
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -79,21 +85,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Shared algorithm for all round-robin variants: groups items, sorts within each group
-        /// by natural order, orders groups via the supplied strategy, then interleaves round-robin.
+        /// Shared algorithm for all round-robin variants: groups items, orders items within each
+        /// group by natural order (or shuffles them when <paramref name="shuffleWithinGroups"/> is true),
+        /// orders groups via the supplied strategy, then interleaves round-robin.
         /// </summary>
         internal static ConcurrentDictionary<Guid, int> BuildInterleavedPositions(
             IEnumerable<BaseItem> items,
             string? groupByField,
             Func<IEnumerable<string>, List<string>> orderGroupKeys,
             string logPrefix,
-            ILogger? logger)
+            ILogger? logger,
+            bool shuffleWithinGroups = false)
         {
             var positions = new ConcurrentDictionary<Guid, int>();
 
             var itemsList = items.ToList();
             if (itemsList.Count == 0 || string.IsNullOrEmpty(groupByField))
             {
+                if (itemsList.Count > 0)
+                {
+                    logger?.LogWarning("{LogPrefix}: no GroupByField configured - items returned in original order", logPrefix);
+                }
+
                 return positions;
             }
 
@@ -115,7 +128,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             foreach (var kvp in groups)
             {
-                kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
+                if (shuffleWithinGroups)
+                {
+                    Shuffle(kvp.Value, Random.Shared);
+                }
+                else
+                {
+                    kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
+                }
             }
 
             var orderedKeys = orderGroupKeys(groups.Keys);
@@ -275,5 +295,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             Shuffle(list, Random.Shared);
             return list;
         }
+    }
+
+    /// <summary>
+    /// Round Robin sort with groups in random order AND items shuffled within each group.
+    /// Each refresh produces a fully random rotation: random group interleaving and
+    /// random order inside every group ("turning on a TV at a random time").
+    /// </summary>
+    public class RoundRobinShuffledOrder : RoundRobinRandomOrder
+    {
+        public override string Name => "Shuffled Round Robin";
+
+        protected override bool ShuffleWithinGroups => true;
     }
 }

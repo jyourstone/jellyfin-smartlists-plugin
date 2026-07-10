@@ -1052,13 +1052,14 @@
         return container;
     };
 
-    SmartLists.createInitialLogicGroup = function (page) {
-        const rulesContainer = page.querySelector('#rules-container');
+    SmartLists.createInitialLogicGroup = function (page, scope) {
+        const rulesContainer = SmartLists.getRulesContainer(page, scope);
         const logicGroupId = 'logic-group-' + Date.now();
 
         // Create logic group with paperList class for theme-aware background
         const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
+        logicGroupDiv.setAttribute('data-rule-scope', scope === 'bumper' ? 'bumper' : 'main');
 
         rulesContainer.appendChild(logicGroupDiv);
 
@@ -1077,6 +1078,7 @@
     };
 
     SmartLists.addRuleToGroup = function (page, logicGroup) {
+        const scope = logicGroup.getAttribute('data-rule-scope') || 'main';
         const existingRules = logicGroup.querySelectorAll('.rule-row');
 
         // Add AND separator if this isn't the first rule in the group
@@ -1263,7 +1265,7 @@
         const valueContainer = newRuleRow.querySelector('.rule-value-container');
 
         if (SmartLists.availableFields.ContentFields) {
-            SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, null, page);
+            SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, null, page, scope);
         }
 
         // Enhance field select with searchable dropdown
@@ -1345,8 +1347,8 @@
             SmartLists.updateAllSortOptionsVisibility(page);
             // Auto-resolve "Default" sort to match the new rules
             SmartLists.resolveDefaultSortForRules(page);
-            // Auto-check Include Extras when ExtraType rule is selected
-            if (newField === 'ExtraType') {
+            // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
+            if (newField === 'ExtraType' && SmartLists.getRowScope(newRuleRow) === 'main') {
                 SmartLists.autoCheckIncludeExtras(page);
             }
         }, listenerOptions);
@@ -1411,8 +1413,8 @@
         SmartLists.updateRuleButtonVisibility(page);
     };
 
-    SmartLists.addNewLogicGroup = function (page) {
-        const rulesContainer = page.querySelector('#rules-container');
+    SmartLists.addNewLogicGroup = function (page, scope) {
+        const rulesContainer = SmartLists.getRulesContainer(page, scope);
 
         // Add OR separator between groups
         const orSeparator = SmartLists.createOrSeparator();
@@ -1422,6 +1424,7 @@
         const logicGroupId = 'logic-group-' + Date.now();
         const logicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         logicGroupDiv.setAttribute('data-group-id', logicGroupId);
+        logicGroupDiv.setAttribute('data-rule-scope', scope === 'bumper' ? 'bumper' : 'main');
 
         rulesContainer.appendChild(logicGroupDiv);
 
@@ -1665,7 +1668,7 @@
     };
 
     SmartLists.cloneLogicGroup = function (page, logicGroup) {
-        const rulesContainer = page.querySelector('#rules-container');
+        const rulesContainer = logicGroup.closest('#rules-container, #bumper-rules-container') || page.querySelector('#rules-container');
         if (!rulesContainer) return;
 
         // Extract all rules from the source logic group
@@ -1690,6 +1693,7 @@
         const logicGroupId = 'logic-group-' + Date.now();
         const newLogicGroupDiv = SmartLists.createStyledElement('div', 'logic-group paperList', SmartLists.STYLES.logicGroup);
         newLogicGroupDiv.setAttribute('data-group-id', logicGroupId);
+        newLogicGroupDiv.setAttribute('data-rule-scope', logicGroup.getAttribute('data-rule-scope') || 'main');
         rulesContainer.appendChild(newLogicGroupDiv);
 
         // Add header with clone button
@@ -1734,8 +1738,9 @@
     };
 
     SmartLists.moveLogicGroup = function (page, logicGroup, direction) {
-        const rulesContainer = page.querySelector('#rules-container');
-        if (!rulesContainer || !logicGroup) return;
+        if (!logicGroup) return;
+        const rulesContainer = logicGroup.closest('#rules-container, #bumper-rules-container') || page.querySelector('#rules-container');
+        if (!rulesContainer) return;
 
         const groups = Array.from(rulesContainer.querySelectorAll('.logic-group'));
         const currentIndex = groups.indexOf(logicGroup);
@@ -1770,7 +1775,7 @@
     };
 
     SmartLists.removeLogicGroup = function (page, logicGroup) {
-        const rulesContainer = page.querySelector('#rules-container');
+        const rulesContainer = logicGroup.closest('#rules-container, #bumper-rules-container') || page.querySelector('#rules-container');
         const allGroups = rulesContainer.querySelectorAll('.logic-group');
 
         // Clean up all event listeners in this group
@@ -1807,8 +1812,6 @@
             SmartLists.updateRuleButtonVisibility(page);
         }
 
-        SmartLists.updateLogicGroupMoveButtonVisibility(page);
-
         // Update sort options in case a Similar To rule was removed
         SmartLists.updateAllSortOptionsVisibility(page);
         // Re-resolve default sort in case the last special rule was removed
@@ -1816,54 +1819,60 @@
     };
 
     SmartLists.updateLogicGroupMoveButtonVisibility = function (page) {
-        const rulesContainer = page.querySelector('#rules-container');
-        if (!rulesContainer) return;
+        ['#rules-container', '#bumper-rules-container'].forEach(function (sel) {
+            const rulesContainer = page.querySelector(sel);
+            if (!rulesContainer) { return; }
 
-        const allLogicGroups = Array.from(rulesContainer.querySelectorAll('.logic-group'));
-        allLogicGroups.forEach(function (group, index) {
-            const moveUpBtn = group.querySelector('.move-group-up-btn');
-            const moveDownBtn = group.querySelector('.move-group-down-btn');
-            const hasMultipleGroups = allLogicGroups.length > 1;
+            const allLogicGroups = Array.from(rulesContainer.querySelectorAll('.logic-group'));
+            allLogicGroups.forEach(function (group, index) {
+                const moveUpBtn = group.querySelector('.move-group-up-btn');
+                const moveDownBtn = group.querySelector('.move-group-down-btn');
+                const hasMultipleGroups = allLogicGroups.length > 1;
 
-            if (moveUpBtn) {
-                moveUpBtn.disabled = !hasMultipleGroups || index === 0;
-                moveUpBtn.style.opacity = moveUpBtn.disabled ? '0.35' : '1';
-                moveUpBtn.style.cursor = moveUpBtn.disabled ? 'default' : 'pointer';
-            }
+                if (moveUpBtn) {
+                    moveUpBtn.disabled = !hasMultipleGroups || index === 0;
+                    moveUpBtn.style.opacity = moveUpBtn.disabled ? '0.35' : '1';
+                    moveUpBtn.style.cursor = moveUpBtn.disabled ? 'default' : 'pointer';
+                }
 
-            if (moveDownBtn) {
-                moveDownBtn.disabled = !hasMultipleGroups || index === allLogicGroups.length - 1;
-                moveDownBtn.style.opacity = moveDownBtn.disabled ? '0.35' : '1';
-                moveDownBtn.style.cursor = moveDownBtn.disabled ? 'default' : 'pointer';
-            }
+                if (moveDownBtn) {
+                    moveDownBtn.disabled = !hasMultipleGroups || index === allLogicGroups.length - 1;
+                    moveDownBtn.style.opacity = moveDownBtn.disabled ? '0.35' : '1';
+                    moveDownBtn.style.cursor = moveDownBtn.disabled ? 'default' : 'pointer';
+                }
+            });
         });
     };
 
     SmartLists.updateRuleButtonVisibility = function (page) {
-        const rulesContainer = page.querySelector('#rules-container');
-        const allLogicGroups = rulesContainer.querySelectorAll('.logic-group');
+        ['#rules-container', '#bumper-rules-container'].forEach(function (sel) {
+            const rulesContainer = page.querySelector(sel);
+            if (!rulesContainer) { return; }
 
-        allLogicGroups.forEach(function (group) {
-            const rulesInGroup = group.querySelectorAll('.rule-row');
+            const allLogicGroups = rulesContainer.querySelectorAll('.logic-group');
 
-            rulesInGroup.forEach(function (rule, index) {
-                const andBtn = rule.querySelector('.and-btn');
-                const orBtn = rule.querySelector('.or-btn');
-                const cloneBtn = rule.querySelector('.clone-btn');
-                const deleteBtn = rule.querySelector('.delete-btn');
+            allLogicGroups.forEach(function (group) {
+                const rulesInGroup = group.querySelectorAll('.rule-row');
 
-                // Hide AND and OR buttons if this is not the last rule in the group
-                if (index < rulesInGroup.length - 1) {
-                    andBtn.style.display = 'none';
-                    orBtn.style.display = 'none';
-                } else {
-                    andBtn.style.display = 'inline-flex';
-                    orBtn.style.display = 'inline-flex';
-                }
+                rulesInGroup.forEach(function (rule, index) {
+                    const andBtn = rule.querySelector('.and-btn');
+                    const orBtn = rule.querySelector('.or-btn');
+                    const cloneBtn = rule.querySelector('.clone-btn');
+                    const deleteBtn = rule.querySelector('.delete-btn');
 
-                // Always show CLONE and DELETE buttons
-                if (cloneBtn) cloneBtn.style.display = 'inline-flex';
-                deleteBtn.style.display = 'inline-flex';
+                    // Hide AND and OR buttons if this is not the last rule in the group
+                    if (index < rulesInGroup.length - 1) {
+                        andBtn.style.display = 'none';
+                        orBtn.style.display = 'none';
+                    } else {
+                        andBtn.style.display = 'inline-flex';
+                        orBtn.style.display = 'inline-flex';
+                    }
+
+                    // Always show CLONE and DELETE buttons
+                    if (cloneBtn) cloneBtn.style.display = 'inline-flex';
+                    deleteBtn.style.display = 'inline-flex';
+                });
             });
         });
 
@@ -1893,7 +1902,8 @@
 
                 // Re-populate field options if needed
                 if (SmartLists.availableFields.ContentFields && fieldSelect.children.length <= 1) {
-                    SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, fieldSelect.value, page);
+                    const rowScope = SmartLists.getRowScope(ruleRow);
+                    SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, fieldSelect.value, page, rowScope);
                 }
 
                 // Re-populate operator options if needed
@@ -1951,8 +1961,8 @@
                     SmartLists.updateAllSortOptionsVisibility(page);
                     // Auto-resolve "Default" sort to match the new rules
                     SmartLists.resolveDefaultSortForRules(page);
-                    // Auto-check Include Extras when ExtraType rule is selected
-                    if (newField === 'ExtraType') {
+                    // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
+                    if (newField === 'ExtraType' && SmartLists.getRowScope(ruleRow) === 'main') {
                         SmartLists.autoCheckIncludeExtras(page);
                     }
                 }, listenerOptions);
@@ -2035,11 +2045,11 @@
     };
 
     // ===== FIELD POPULATION AND VISIBILITY =====
-    SmartLists.populateFieldSelect = function (selectElement, fieldGroups, defaultValue, page) {
+    SmartLists.populateFieldSelect = function (selectElement, fieldGroups, defaultValue, page, scope) {
         if (!selectElement || !fieldGroups) return;
 
         // Get selected media types for filtering
-        const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+        const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, scope) : [];
         const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
         const filteredFieldGroups = SmartLists.filterFieldsByMediaType(fieldGroups, selectedMediaTypes, listType);
 
@@ -2068,6 +2078,11 @@
                 optgroup.label = group.label;
 
                 fields.forEach(function (field) {
+                    // SimilarTo is main-list only: its comparison fields have no home on BumperConfigDto
+                    if (scope === 'bumper' && field.Value === 'SimilarTo') {
+                        return;
+                    }
+
                     const option = document.createElement('option');
                     option.value = field.Value;
                     option.textContent = field.Label;
@@ -2095,16 +2110,21 @@
             return;
         }
 
-        // Compute selected media types once before the loop for better performance
-        const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
         const listType = SmartLists.getElementValue(page, '#listType', 'Playlist');
+
+        // Hoist the two possible media-type arrays; each row picks by its scope below
+        const mainTypes = SmartLists.getSelectedMediaTypes(page, 'main');
+        const bumperTypes = SmartLists.getSelectedMediaTypes(page, 'bumper');
 
         const allRuleRows = page.querySelectorAll('.rule-row');
         allRuleRows.forEach(function (ruleRow) {
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
             if (fieldSelect) {
+                // Resolve each row's scope so bumper rows use bumper media types
+                const rowScope = SmartLists.getRowScope(ruleRow);
+                const selectedMediaTypes = rowScope === 'bumper' ? bumperTypes : mainTypes;
                 const currentValue = fieldSelect.value;
-                SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page);
+                SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page, rowScope);
 
                 // If the current field is no longer valid, clear it and reset the rule
                 if (currentValue && !SmartLists.shouldShowField(currentValue, selectedMediaTypes, listType)) {
@@ -2320,8 +2340,9 @@
                 const episodesDiv = ruleRow.querySelector('.rule-collections-episodes');
                 let episodesVisible = false;
                 if (episodesDiv) {
-                    // Get selected media types to check if Episode is selected
-                    const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+                    // Get selected media types to check if Episode is selected (scoped to this row's editor)
+                    const ruleScope = SmartLists.getRowScope(ruleRow);
+                    const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
                     const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
 
                     // Show only if collection-only is disabled AND Episode media type is selected
@@ -2395,7 +2416,8 @@
 
         if (tagsOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+            const ruleScope = SmartLists.getRowScope(ruleRow);
+            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
 
@@ -2441,7 +2463,8 @@
 
         if (studiosOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+            const ruleScope = SmartLists.getRowScope(ruleRow);
+            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
 
@@ -2487,7 +2510,8 @@
 
         if (genresOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+            const ruleScope = SmartLists.getRowScope(ruleRow);
+            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
 
@@ -2533,7 +2557,8 @@
 
         if (audioLanguagesOptionsDiv) {
             // Get selected media types to check if any audio-capable type is selected
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page) : [];
+            const ruleScope = SmartLists.getRowScope(ruleRow);
+            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasAudioCapable = selectedMediaTypes.some(function (type) {
                 return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
             });
@@ -2730,16 +2755,18 @@
     // are defined in config-sorts.js and config-core.js to avoid duplication
 
     // ===== RULE COLLECTION =====
-    SmartLists.collectRulesFromForm = function (page) {
+    SmartLists.collectRulesFromForm = function (page, scope) {
         const expressionSets = [];
-        const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
+        const container = SmartLists.getRulesContainer(page, scope);
+        if (!container) { return expressionSets; }
+        const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, scope);
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
         const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioCapable = selectedMediaTypes.some(function (type) {
             return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
         });
 
-        page.querySelectorAll('.logic-group').forEach(function (logicGroup) {
+        container.querySelectorAll('.logic-group').forEach(function (logicGroup) {
             const expressions = [];
             logicGroup.querySelectorAll('.rule-row').forEach(function (rule) {
                 let memberName = rule.querySelector('.rule-field-select').value;
@@ -2931,7 +2958,69 @@
         return expressionSets;
     };
 
+    // Collect the bumper configuration from the form. Returns { valid, config }:
+    // valid is false when a media type is selected but no complete bumper rules
+    // exist (the save must be blocked); config is null when bumpers are disabled.
+    SmartLists.collectBumperConfigFromForm = function (page) {
+        var mediaTypeSelect = page.querySelector('#bumperMediaType');
+        if (!mediaTypeSelect || !mediaTypeSelect.value) {
+            return { valid: true, config: null };
+        }
+        var expressionSets = SmartLists.collectRulesFromForm(page, 'bumper');
+        if (!expressionSets || expressionSets.length === 0) {
+            return { valid: false, config: null };
+        }
+        var intervalInput = page.querySelector('#bumperInterval');
+        var interval = intervalInput ? parseInt(intervalInput.value, 10) : 1;
+        var orderSelect = page.querySelector('#bumperOrder');
+        return {
+            valid: true,
+            config: {
+                ExpressionSets: expressionSets,
+                MediaTypes: [mediaTypeSelect.value],
+                BumperOrder: (orderSelect && orderSelect.value) ? orderSelect.value : 'Random',
+                Interval: (isNaN(interval) || interval < 1) ? 1 : interval
+            }
+        };
+    };
+
     // ===== RULE POPULATION (for edit/clone) =====
+
+    // Populate a logic group's rule rows and per-group MaxItems from an expression set.
+    // The group's existing first rule row is reused for the first expression; subsequent
+    // expressions get new rows via addRuleToGroup, each populated via populateRuleRow.
+    SmartLists.populateLogicGroupExpressions = function (page, logicGroup, expressionSet) {
+        if (expressionSet.Expressions && expressionSet.Expressions.length > 0) {
+            expressionSet.Expressions.forEach(function (expression, expIndex) {
+                if (expIndex === 0) {
+                    // Use the first rule row that's already in the group
+                    const firstRuleRow = logicGroup.querySelector('.rule-row');
+                    if (firstRuleRow) {
+                        SmartLists.populateRuleRow(firstRuleRow, expression, page);
+                    }
+                } else {
+                    // Add additional rule rows
+                    SmartLists.addRuleToGroup(page, logicGroup);
+                    // Use querySelectorAll to get the last rule row, since :last-child doesn't work
+                    // when the MaxItems container is appended after the rule rows
+                    const ruleRowsInGroup = logicGroup.querySelectorAll('.rule-row');
+                    const newRuleRow = ruleRowsInGroup[ruleRowsInGroup.length - 1];
+                    if (newRuleRow) {
+                        SmartLists.populateRuleRow(newRuleRow, expression, page);
+                    }
+                }
+            });
+        }
+
+        // Populate MaxItems for this group if it exists
+        if (expressionSet.MaxItems !== undefined && expressionSet.MaxItems !== null) {
+            const maxItemsInput = logicGroup.querySelector('.group-max-items-input');
+            if (maxItemsInput) {
+                maxItemsInput.value = expressionSet.MaxItems;
+            }
+        }
+    };
+
     SmartLists.populateRuleRow = function (ruleRow, expression, page) {
         try {
             const fieldSelect = ruleRow.querySelector('.rule-field-select');

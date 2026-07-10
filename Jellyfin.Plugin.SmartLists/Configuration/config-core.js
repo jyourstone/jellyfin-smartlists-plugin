@@ -84,9 +84,24 @@
         { value: 'External List Order', label: 'External List Order' },
         { value: 'Round Robin', label: 'Round Robin (Interleave)' },
         { value: 'Random Round Robin', label: 'Random Round Robin (Interleave)' },
+        { value: 'Shuffled Round Robin', label: 'Shuffled Round Robin (Interleave)' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'Default' }
     ];
+
+    // Sorts that have no Ascending/Descending direction
+    SmartLists.ORDERLESS_SORTS = ['Random', 'Random Round Robin', 'Shuffled Round Robin', 'NoOrder'];
+
+    // Round Robin sort variants (all use a GroupBy field)
+    SmartLists.ROUND_ROBIN_SORTS = ['Round Robin', 'Random Round Robin', 'Shuffled Round Robin'];
+
+    SmartLists.isOrderlessSort = function (name) {
+        return SmartLists.ORDERLESS_SORTS.indexOf(name) !== -1;
+    };
+
+    SmartLists.isRoundRobinSort = function (name) {
+        return SmartLists.ROUND_ROBIN_SORTS.indexOf(name) !== -1;
+    };
 
     SmartLists.SORT_ORDER_OPTIONS = [
         { value: 'Ascending', label: 'Ascending' },
@@ -138,14 +153,29 @@
         { Value: "AudioBook", Label: "Audiobook" }
     ];
 
-    // Utility function to get selected media types from page
-    SmartLists.getSelectedMediaTypes = function (page) {
+    // Resolve the rules container for a scope: 'main' (default) or 'bumper'
+    SmartLists.getRulesContainer = function (page, scope) {
+        return page.querySelector(scope === 'bumper' ? '#bumper-rules-container' : '#rules-container');
+    };
+
+    // Utility function to get selected media types from page for a scope: 'main' (default) or 'bumper'
+    SmartLists.getSelectedMediaTypes = function (page, scope) {
+        if (scope === 'bumper') {
+            var bumperSelect = page.querySelector('#bumperMediaType');
+            return (bumperSelect && bumperSelect.value) ? [bumperSelect.value] : [];
+        }
         return SmartLists.getSelectedItems(page, 'mediaTypesMultiSelect', 'media-type-multi-select-checkbox');
+    };
+
+    // Resolve a rule row's editor scope ('main' or 'bumper') from its logic group's data-rule-scope attribute
+    SmartLists.getRowScope = function (ruleRow) {
+        var logicGroup = ruleRow && ruleRow.closest ? ruleRow.closest('.logic-group') : null;
+        return (logicGroup && logicGroup.getAttribute('data-rule-scope')) || 'main';
     };
 
     // Check if any rule has "Similar To" field selected
     SmartLists.hasSimilarToRuleInForm = function (page) {
-        const allRules = page.querySelectorAll('.rule-row');
+        const allRules = page.querySelectorAll('#rules-container .rule-row');
         for (var i = 0; i < allRules.length; i++) {
             const ruleRow = allRules[i];
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
@@ -157,7 +187,7 @@
     };
 
     SmartLists.hasExternalListRuleInForm = function (page) {
-        const allRules = page.querySelectorAll('.rule-row');
+        const allRules = page.querySelectorAll('#rules-container .rule-row');
         for (var i = 0; i < allRules.length; i++) {
             const ruleRow = allRules[i];
             const fieldSelect = ruleRow.querySelector('.rule-field-select');

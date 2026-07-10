@@ -29,6 +29,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public List<UserPlaylistMapping>? UserPlaylists { get; set; }
 
         /// <summary>
+        /// Optional bumper configuration: items matching these rules are woven between
+        /// the playlist's main items at refresh time. Null = feature disabled.
+        /// Bumpers do not count toward MaxItems/MaxPlayTimeMinutes.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public BumperConfigDto? Bumpers { get; set; }
+
+        /// <summary>
         /// Mapping between a user ID and their associated Jellyfin playlist ID
         /// </summary>
         [Serializable]

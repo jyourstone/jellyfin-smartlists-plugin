@@ -117,20 +117,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 Orders = dto.Order.SortOptions
                     .Select(so =>
                     {
-                        // Special handling for sorts that don't have Ascending/Descending variants
-                        if (so.SortBy == "Random" || so.SortBy == "NoOrder")
-                        {
-                            return OrderFactory.CreateOrder(so.SortBy);
-                        }
-
-                        if (so.SortBy == "Random Round Robin")
-                        {
-                            var rrRandom = (RoundRobinBase)OrderFactory.CreateOrder(so.SortBy);
-                            rrRandom.GroupByField = so.GroupByField;
-                            return rrRandom;
-                        }
-                        // For all other sorts, append the sort order
-                        var order = OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
+                        // Directionless sorts (no Ascending/Descending variants) are registered in the
+                        // OrderMap under their bare name; all other sorts append the sort order
+                        var order = OrderFactory.IsDirectionless(so.SortBy)
+                            ? OrderFactory.CreateOrder(so.SortBy)
+                            : OrderFactory.CreateOrder($"{so.SortBy} {so.SortOrder.ToString()}");
 
                         if (order is RoundRobinBase rr)
                         {
@@ -3099,6 +3090,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Round Robin Ascending", () => new RoundRobinOrder() },
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
             { "Random Round Robin", () => new RoundRobinRandomOrder() },
+            { "Shuffled Round Robin", () => new RoundRobinShuffledOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 
@@ -3107,6 +3099,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return OrderMap.TryGetValue(orderName ?? "", out var factory)
                 ? factory()
                 : new NoOrder();
+        }
+
+        private static readonly HashSet<string> DirectionlessOrders = new(StringComparer.Ordinal)
+        {
+            "Random",
+            "Random Round Robin",
+            "Shuffled Round Robin",
+            "NoOrder",
+        };
+
+        /// <summary>
+        /// True for sorts that have no Ascending/Descending variants and are registered
+        /// under their bare name. Mirrors ORDERLESS_SORTS in config-core.js.
+        /// </summary>
+        public static bool IsDirectionless(string orderName)
+        {
+            return DirectionlessOrders.Contains(orderName ?? "");
         }
     }
 

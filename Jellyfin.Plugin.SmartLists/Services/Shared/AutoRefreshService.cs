@@ -509,6 +509,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             var mediaTypes = playlist.MediaTypes?.ToList() ?? [.. MediaTypes.All];
 
+            // Bumper pools select from their own media types - include them so library
+            // changes to bumper-relevant items also trigger a refresh
+            if (playlist.Bumpers?.MediaTypes?.Count > 0)
+            {
+                mediaTypes = mediaTypes.Union(playlist.Bumpers.MediaTypes).ToList();
+            }
+
             // Add to the simple media type cache (always, regardless of rules)
             if (string.IsNullOrEmpty(playlist.Id))
             {
@@ -551,8 +558,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return;
             }
 
-            // Handle playlists with specific rules
-            foreach (var expressionSet in playlist.ExpressionSets)
+            // Handle playlists with specific rules - include bumper rule sets so
+            // bumper-relevant field changes are also registered
+            var expressionSets = playlist.ExpressionSets.AsEnumerable();
+            if (playlist.Bumpers?.ExpressionSets != null)
+            {
+                expressionSets = expressionSets.Concat(playlist.Bumpers.ExpressionSets);
+            }
+
+            foreach (var expressionSet in expressionSets)
             {
                 if (expressionSet.Expressions == null) continue;
 
@@ -1101,29 +1115,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     return true;
                 }
 
-                // Check if the playlist has user-specific rules that reference this user
-                if (playlist.ExpressionSets != null)
+                // Check if the playlist (or its bumper rules) has user-specific rules that reference this user
+                if (HasUserSpecificExpression(playlist.ExpressionSets, userId) ||
+                    HasUserSpecificExpression(playlist.Bumpers?.ExpressionSets, userId))
                 {
-                    foreach (var expressionSet in playlist.ExpressionSets)
-                    {
-                        if (expressionSet.Expressions != null)
-                        {
-                            foreach (var expression in expressionSet.Expressions)
-                            {
-                                // Check if this expression is user-specific and references our user explicitly
-                                // Normalize UserId to "N" format for comparison
-                                if (!string.IsNullOrEmpty(expression.UserId))
-                                {
-                                    var normalizedExpressionUserId = NormalizeUserIdForComparison(expression.UserId);
-                                    var normalizedTriggeringUserId = userId.ToString("N");
-                                    if (normalizedExpressionUserId == normalizedTriggeringUserId)
-                                    {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    return true;
                 }
 
                 return false;
@@ -1133,6 +1129,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _logger.LogError(ex, "Error checking user relevance for playlist {PlaylistName}", playlist.Name);
                 return true; // Default to including the playlist if we can't determine relevance,
             }
+        }
+
+        /// <summary>
+        /// Checks whether any expression in the given sets is user-specific and references the given user.
+        /// </summary>
+        private static bool HasUserSpecificExpression(List<ExpressionSet>? expressionSets, Guid userId)
+        {
+            if (expressionSets == null)
+            {
+                return false;
+            }
+
+            var normalizedTriggeringUserId = userId.ToString("N");
+            foreach (var expressionSet in expressionSets)
+            {
+                if (expressionSet.Expressions == null) continue;
+
+                foreach (var expression in expressionSet.Expressions)
+                {
+                    // Check if this expression is user-specific and references our user explicitly
+                    // Normalize UserId to "N" format for comparison
+                    if (!string.IsNullOrEmpty(expression.UserId) &&
+                        NormalizeUserIdForComparison(expression.UserId) == normalizedTriggeringUserId)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1248,8 +1274,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return true;
 
             // Check if the item's type matches any of the playlist's media types
+            // or the bumper pool's media types
             var itemMediaType = GetMediaTypeForItem(item);
-            return playlist.MediaTypes.Contains(itemMediaType);
+            return playlist.MediaTypes.Contains(itemMediaType) ||
+                playlist.Bumpers?.MediaTypes?.Contains(itemMediaType) == true;
         }
 
         private static bool ShouldCollectionRefreshForChangeType(SmartCollectionDto collection, LibraryChangeType changeType)
