@@ -84,6 +84,7 @@
         { value: 'External List Order', label: 'External List Order' },
         { value: 'Round Robin', label: 'Round Robin (Interleave)' },
         { value: 'Random Round Robin', label: 'Random Round Robin (Interleave)' },
+        { value: 'Shuffled Round Robin', label: 'Shuffled Round Robin (Interleave)' },
         { value: 'Random', label: 'Random' },
         { value: 'NoOrder', label: 'Default' }
     ];

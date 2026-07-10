@@ -184,6 +184,35 @@ Next refresh:
 !!! tip "Simulating a TV channel"
     Combine with **Auto Refresh** to get a different "channel lineup" on a schedule. Each refresh reshuffles which show appears first while keeping episodes in order within each show.
 
+### Shuffled Round Robin (Interleave)
+Like Random Round Robin, groups are interleaved in random order — and additionally, the items **within each group are shuffled** too. Every refresh produces a completely new arrangement: a random show rotation with episodes in random order, like turning on a TV at a random time.
+
+**How the round robin variants compare**:
+
+- **Round Robin**: Groups in alphabetical order, items within each group in natural order.
+- **Random Round Robin**: Group order randomized each refresh, items within each group in natural order.
+- **Shuffled Round Robin**: Group order randomized each refresh AND items within each group shuffled.
+
+**Example** — Shuffled Round Robin (Group By: Series Name) over shows A, B, C might produce:
+
+| Position | Item |
+|----------|------|
+| 1 | Show A - S02E03 |
+| 2 | Show C - S01E01 |
+| 3 | Show B - S03E02 |
+| 4 | Show A - S01E01 |
+| 5 | Show C - S02E04 |
+| 6 | Show B - S01E05 |
+
+Both the show rotation and the episode order within each show are random, and refreshing again produces a different arrangement.
+
+**Configuration**:
+
+1. Add rules that match the episodes you want (e.g., `Playback Status = Unplayed`)
+2. Select **Shuffled Round Robin (Interleave)** as your sort
+3. Choose the **Group By** field (e.g., Series Name for TV episodes) — the same Group By fields as Round Robin are supported
+4. No Sort Order is needed — both group order and item order are always randomized
+
 ## Random Group Selection
 
 Random Group Selection chooses one random group from the items that already matched your rules, then continues with your normal sort and limit settings.
