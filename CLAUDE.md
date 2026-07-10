@@ -5,12 +5,19 @@ A Jellyfin plugin that creates dynamic playlists and collections based on user-d
 ## Development Commands
 
 ```bash
-# Build locally (from /dev directory)
-./build-local.sh
+# Build + restart local Jellyfin Docker container (from /dev directory)
+./build-local.sh                        # defaults to Jellyfin 12.x (net10.0)
+JELLYFIN_ABI=10.11.0 ./build-local.sh   # build for Jellyfin 10.11 (net9.0)
 
 # View logs
+docker logs jellyfin 2>&1 | grep -i "Smart"
+# or
 tail -f dev/jellyfin-data/config/log/log_*.log | grep "Smart"
 ```
+
+The project multi-targets `net9.0` (Jellyfin 10.11) and `net10.0` (Jellyfin 12.x). The build treats all warnings as errors with `AnalysisMode=Recommended` — CA analyzer warnings (e.g. CA1822 make-static, CA1305 locale) fail the build.
+
+There is no test suite; verification is done by building and exercising the plugin against the local Jellyfin instance (<http://localhost:8096>).
 
 ## Project Structure
 
@@ -28,8 +35,10 @@ Jellyfin.Plugin.SmartLists/
 │   ├── Abstractions/        # ISmartListService, ISmartListStore
 │   ├── Playlists/           # PlaylistService, PlaylistStore
 │   ├── Collections/         # CollectionService, CollectionStore
+│   ├── ExternalList/        # External list providers: MDBList, IMDb, Trakt, TMDB
+│   ├── Users/               # User resolution/lookup services
 │   └── Shared/              # AutoRefreshService, RefreshQueueService, etc.
-├── Configuration/           # Two HTML pages + shared JS modules (11 files)
+├── Configuration/           # Two HTML pages + shared config-*.js modules
 │   ├── config.html          # Admin configuration page
 │   └── user-playlists.html  # User configuration page
 └── Utilities/               # DtoMapper, InputValidator, LibraryManagerHelper, etc.
@@ -74,6 +83,9 @@ Adding new sort options requires updates in: `Core/Orders/`, `OrderFactory.cs`, 
 
 ### Media Type Constants
 Use `MediaTypes.Episode` instead of `"Episode"` - see `Core/Constants/MediaTypes.cs`.
+
+### Manual Service Construction
+`RefreshQueueService` creates `PlaylistService`/`CollectionService` via `new`, not DI. New constructor dependencies for those services must be threaded through `RefreshQueueService` manually.
 
 ## Versioning & Releases
 
