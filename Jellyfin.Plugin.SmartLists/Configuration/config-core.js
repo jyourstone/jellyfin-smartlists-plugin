@@ -153,6 +153,12 @@
         return SmartLists.getSelectedItems(page, 'mediaTypesMultiSelect', 'media-type-multi-select-checkbox');
     };
 
+    // Resolve a rule row's editor scope ('main' or 'bumper') from its logic group's data-rule-scope attribute
+    SmartLists.getRowScope = function (ruleRow) {
+        var logicGroup = ruleRow && ruleRow.closest ? ruleRow.closest('.logic-group') : null;
+        return (logicGroup && logicGroup.getAttribute('data-rule-scope')) || 'main';
+    };
+
     // Check if any rule has "Similar To" field selected
     SmartLists.hasSimilarToRuleInForm = function (page) {
         const allRules = page.querySelectorAll('#rules-container .rule-row');

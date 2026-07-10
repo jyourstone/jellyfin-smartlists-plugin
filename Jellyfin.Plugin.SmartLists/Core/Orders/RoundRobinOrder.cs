@@ -43,7 +43,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
         /// <summary>
         /// Pre-computes interleave positions for all items using the subclass group ordering strategy.
-        /// Groups items by the configured field, sorts within each group by natural order,
+        /// Groups items by the configured field, orders items within each group by natural order
+        /// (or shuffles them when <see cref="ShuffleWithinGroups"/> is true),
         /// orders groups via <see cref="OrderGroupKeys"/>, then assigns positions via round-robin interleaving.
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
@@ -84,8 +85,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Shared algorithm for all round-robin variants: groups items, sorts within each group
-        /// by natural order, orders groups via the supplied strategy, then interleaves round-robin.
+        /// Shared algorithm for all round-robin variants: groups items, orders items within each
+        /// group by natural order (or shuffles them when <paramref name="shuffleWithinGroups"/> is true),
+        /// orders groups via the supplied strategy, then interleaves round-robin.
         /// </summary>
         internal static ConcurrentDictionary<Guid, int> BuildInterleavedPositions(
             IEnumerable<BaseItem> items,

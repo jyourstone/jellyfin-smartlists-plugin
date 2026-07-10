@@ -156,10 +156,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Report initial total items count
                 progressCallback?.Invoke(0, allUserMedia.Length);
 
-                // Pre-fetch external lists if any ExternalList rules are present
+                // Pre-fetch external lists if any ExternalList rules are present.
+                // Bumper rule sets are included so ExternalList rules work in bumper pools too.
                 if (_externalListService != null && dto.ExpressionSets != null)
                 {
-                    var fieldReqs = FieldRequirements.Analyze(dto.ExpressionSets);
+                    var expressionSetsForAnalysis = dto.Bumpers?.ExpressionSets is { Count: > 0 } bumperSets
+                        ? dto.ExpressionSets.Concat(bumperSets).ToList()
+                        : dto.ExpressionSets;
+                    var fieldReqs = FieldRequirements.Analyze(expressionSetsForAnalysis);
                     if (fieldReqs.NeedsExternalLists && fieldReqs.ExternalListUrls.Count > 0)
                     {
                         // Clear per-item external list caches so items are re-evaluated against this playlist's lists.

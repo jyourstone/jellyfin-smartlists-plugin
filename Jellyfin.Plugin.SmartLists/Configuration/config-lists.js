@@ -901,29 +901,7 @@
                 }
 
                 // Clear and populate bumper rules
-                const bumperRulesContainer = page.querySelector('#bumper-rules-container');
-                if (bumperRulesContainer) {
-                    bumperRulesContainer.innerHTML = '';
-                }
-                const bumperMediaSelect = page.querySelector('#bumperMediaType');
-                const bumperOrderSelect = page.querySelector('#bumperOrder');
-                const bumperIntervalInput = page.querySelector('#bumperInterval');
-                if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
-                    if (bumperMediaSelect) {
-                        bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
-                    }
-                    if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
-                    if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
-                    playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
-                        const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
-                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
-                    });
-                } else {
-                    if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
-                    if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
-                    if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
-                }
-                SmartLists.updateBumperSectionVisibility(page);
+                SmartLists.populateBumperConfigIntoForm(page, playlist);
 
                 // Set sort options AFTER rules are populated so hasSimilarToRuleInForm() can detect them
                 SmartLists.loadSortOptionsIntoUI(page, playlist);
@@ -1163,29 +1141,7 @@
                 }
 
                 // Clear and populate bumper rules
-                const bumperRulesContainer = page.querySelector('#bumper-rules-container');
-                if (bumperRulesContainer) {
-                    bumperRulesContainer.innerHTML = '';
-                }
-                const bumperMediaSelect = page.querySelector('#bumperMediaType');
-                const bumperOrderSelect = page.querySelector('#bumperOrder');
-                const bumperIntervalInput = page.querySelector('#bumperInterval');
-                if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
-                    if (bumperMediaSelect) {
-                        bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
-                    }
-                    if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
-                    if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
-                    playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
-                        const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
-                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
-                    });
-                } else {
-                    if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
-                    if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
-                    if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
-                }
-                SmartLists.updateBumperSectionVisibility(page);
+                SmartLists.populateBumperConfigIntoForm(page, playlist);
 
                 // Update button visibility
                 SmartLists.updateRuleButtonVisibility(page);
@@ -1491,6 +1447,34 @@
     };
 
     // Note: getPeopleFieldDisplayName is defined in config-formatters.js to avoid duplication
+
+    // Populate the bumper section (media type, order, interval, rules) from a playlist's
+    // Bumpers config, clearing existing bumper rules first; shared by edit and clone paths.
+    SmartLists.populateBumperConfigIntoForm = function (page, playlist) {
+        const bumperRulesContainer = page.querySelector('#bumper-rules-container');
+        if (bumperRulesContainer) {
+            bumperRulesContainer.innerHTML = '';
+        }
+        const bumperMediaSelect = page.querySelector('#bumperMediaType');
+        const bumperOrderSelect = page.querySelector('#bumperOrder');
+        const bumperIntervalInput = page.querySelector('#bumperInterval');
+        if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
+            if (bumperMediaSelect) {
+                bumperMediaSelect.value = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
+            }
+            if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
+            if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
+            playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
+                const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
+                SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
+            });
+        } else {
+            if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
+            if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
+            if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
+        }
+        SmartLists.updateBumperSectionVisibility(page);
+    };
 
     // ===== GENERATE RULES HTML =====
     SmartLists.generateRulesHtml = async function (playlist, apiClient) {

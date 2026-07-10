@@ -1904,8 +1904,7 @@
 
                 // Re-populate field options if needed
                 if (SmartLists.availableFields.ContentFields && fieldSelect.children.length <= 1) {
-                    const rowLogicGroup = ruleRow.closest('.logic-group');
-                    const rowScope = (rowLogicGroup && rowLogicGroup.getAttribute('data-rule-scope')) || 'main';
+                    const rowScope = SmartLists.getRowScope(ruleRow);
                     SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, fieldSelect.value, page, rowScope);
                 }
 
@@ -2081,6 +2080,11 @@
                 optgroup.label = group.label;
 
                 fields.forEach(function (field) {
+                    // SimilarTo is main-list only: its comparison fields have no home on BumperConfigDto
+                    if (scope === 'bumper' && field.Value === 'SimilarTo') {
+                        return;
+                    }
+
                     const option = document.createElement('option');
                     option.value = field.Value;
                     option.textContent = field.Label;
@@ -2115,8 +2119,7 @@
             const fieldSelect = ruleRow.querySelector('.rule-field-select');
             if (fieldSelect) {
                 // Resolve each row's scope so bumper rows use bumper media types
-                const rowLogicGroup = ruleRow.closest('.logic-group');
-                const rowScope = (rowLogicGroup && rowLogicGroup.getAttribute('data-rule-scope')) || 'main';
+                const rowScope = SmartLists.getRowScope(ruleRow);
                 const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, rowScope);
                 const currentValue = fieldSelect.value;
                 SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page, rowScope);
@@ -2336,8 +2339,7 @@
                 let episodesVisible = false;
                 if (episodesDiv) {
                     // Get selected media types to check if Episode is selected (scoped to this row's editor)
-                    const ruleLogicGroup = ruleRow.closest('.logic-group');
-                    const ruleScope = (ruleLogicGroup && ruleLogicGroup.getAttribute('data-rule-scope')) || 'main';
+                    const ruleScope = SmartLists.getRowScope(ruleRow);
                     const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
                     const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
 
@@ -2412,8 +2414,7 @@
 
         if (tagsOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const ruleLogicGroup = ruleRow.closest('.logic-group');
-            const ruleScope = (ruleLogicGroup && ruleLogicGroup.getAttribute('data-rule-scope')) || 'main';
+            const ruleScope = SmartLists.getRowScope(ruleRow);
             const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
@@ -2460,8 +2461,7 @@
 
         if (studiosOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const ruleLogicGroup = ruleRow.closest('.logic-group');
-            const ruleScope = (ruleLogicGroup && ruleLogicGroup.getAttribute('data-rule-scope')) || 'main';
+            const ruleScope = SmartLists.getRowScope(ruleRow);
             const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
@@ -2508,8 +2508,7 @@
 
         if (genresOptionsDiv) {
             // Get selected media types to check if Episode or Audio is selected
-            const ruleLogicGroup = ruleRow.closest('.logic-group');
-            const ruleScope = (ruleLogicGroup && ruleLogicGroup.getAttribute('data-rule-scope')) || 'main';
+            const ruleScope = SmartLists.getRowScope(ruleRow);
             const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
             const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
@@ -2556,8 +2555,7 @@
 
         if (audioLanguagesOptionsDiv) {
             // Get selected media types to check if any audio-capable type is selected
-            const ruleLogicGroup = ruleRow.closest('.logic-group');
-            const ruleScope = (ruleLogicGroup && ruleLogicGroup.getAttribute('data-rule-scope')) || 'main';
+            const ruleScope = SmartLists.getRowScope(ruleRow);
             const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
             const hasAudioCapable = selectedMediaTypes.some(function (type) {
                 return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
