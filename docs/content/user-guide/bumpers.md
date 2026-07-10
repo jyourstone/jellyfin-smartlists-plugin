@@ -63,9 +63,17 @@ There are more gaps (5) than bumpers (4), so the pool wraps around and Bumper 1 
 
 - **Limits**: Bumpers do **not** count toward [Max Items or Max Playtime](sorting-and-limits.md#limits) — those limits apply to the main content only. A playlist with Max Items 50 contains 50 main items *plus* bumpers. The playlist's displayed item count and total runtime do include bumpers, since they are real playlist content.
 - **Main content wins**: An item that matches both the main rules and the bumper rules is treated as main content only — it is never also inserted as a bumper.
+- **Empty pool**: If the bumper rules match no items (or every match was claimed by the main rules — see below), the playlist refreshes normally without bumpers. The server log records the reason (`grep -i bumper` in the Jellyfin log).
 - **Extras always included**: The bumper pool always includes [extras](media-types.md#extras-special-features) (trailers, interstitials, theme videos, etc.) — trailers are classic bumper material. This is independent of the playlist's own **Include Extras** setting, and no checkbox is needed for the bumper rules. Use a bumper rule like `Extra Type` = Trailer to build the pool from extras, or narrow it with any other rules.
 - **Random order**: With **Bumper order** set to Random, the pool is reshuffled on every refresh, so the bumper rotation changes each time.
-- **Empty pool**: If the bumper rules match no items, the playlist refreshes normally without bumpers.
+
+!!! warning "Keep the bumper rules and main rules disjoint"
+    Because main content wins, bumpers silently disappear when your main rules also match your bumper items — each overlapping item becomes ordinary playlist content and is removed from the bumper pool. This is easy to hit when the bumper media type is the **same** as the playlist's (e.g., an Episode playlist with broad genre rules and Episode bumpers): the main rules swallow the whole pool and the playlist refreshes with no bumpers at all.
+
+    Two easy ways to avoid it:
+
+    - Use a bumper media type the playlist doesn't include (the classic setup: **Video** clips as bumpers between **Episodes**) — overlap becomes impossible.
+    - Or explicitly exclude the bumper content from the main rules, e.g. main rule `Series Name` `does not contain` `"bumper"`.
 
 !!! tip "Building a bumper pool"
     Put your bumper clips (station idents, retro commercials, intros) in a Home Videos library and tag them or give them a common name prefix, then match them with a single rule like `Name contains "bumper"`.
