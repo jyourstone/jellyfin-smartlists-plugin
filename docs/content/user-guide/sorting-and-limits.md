@@ -241,7 +241,7 @@ Unlike Random Round Robin, the rotation is not shuffled — it is derived entire
 With other auto-refresh modes the rotation still advances, but only at the next refresh (scheduled or on library changes).
 
 !!! note "Per-user rotation"
-    For lists shared with multiple users, each user gets their own rotation based on their own watch history.
+    For playlists shared with multiple users, each user gets their own rotation based on their own watch history. Collections use the [reference user's](user-selection.md#collections-reference-user) watch history, so all users see the same rotation.
 
 ## Random Group Selection
 
