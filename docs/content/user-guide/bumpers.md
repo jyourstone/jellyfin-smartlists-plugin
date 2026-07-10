@@ -23,7 +23,7 @@ The **Bumpers (optional)** section appears below the sorting options in the play
 
 | Setting | Description |
 |---------|-------------|
-| **Bumper media type** | The media type of the bumper pool — it can differ from the playlist's main media types (e.g., Home Videos as bumpers between Episodes). Only playlist-supported types are available: Series, Season, and Album are collection-only and cannot be used as bumpers, since bumpers are woven into playlists. Set to **None (disabled)** to turn bumpers off. |
+| **Bumper media type** | The media type of the bumper pool — it can differ from the playlist's main media types (e.g., Video items as bumpers between Episodes). Only playlist-supported types are available: Series, Season, and Album are collection-only and cannot be used as bumpers, since bumpers are woven into playlists. Set to **None (disabled)** to turn bumpers off. |
 | **Bumper order** | How the bumper pool is cycled: **Random** (reshuffled on every refresh), **Name**, or **Release Date**. |
 | **Every N items** | How many main items play between bumpers. `1` inserts a bumper after every item, `2` after every second item, and so on. |
 | **Bumper rules** | A full rule editor, exactly like the main rules — including multiple rule groups via **Add Bumper Rule Group**. Only items matching these rules are used as bumpers. |

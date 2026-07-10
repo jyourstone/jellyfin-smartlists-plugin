@@ -109,7 +109,7 @@ Take any of the TV Channel playlists above and weave "commercial break" clips be
 - **Media Types**: Episode
 - **Playback Status** = Unplayed
 - **Sort by**: Shuffled Round Robin (Interleave), **Group By**: Series Name
-- **Bumpers**: Bumper media type **Home Videos**, rule `Name contains "bumper"`, Bumper order **Random**, Every **1** items
+- **Bumpers**: Bumper media type **Video** (home videos), rule `Name contains "bumper"`, Bumper order **Random**, Every **1** items
 
 Result: A random episode from a random show, then a bumper clip, then the next episode, and so on. With 4 bumper clips and dozens of episodes, the bumpers repeat in rotation — just like real station idents. See [Bumpers](../user-guide/bumpers.md) for details.
 
