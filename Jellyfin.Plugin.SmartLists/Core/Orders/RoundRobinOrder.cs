@@ -26,6 +26,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public string? GroupByField { get; set; }
 
         /// <summary>
+        /// When true, items within each group are shuffled instead of sorted in natural order.
+        /// </summary>
+        protected virtual bool ShuffleWithinGroups => false;
+
+        /// <summary>
         /// Pre-computed interleave positions for each item.
         /// Set by <see cref="PreComputePositions"/> before sorting.
         /// </summary>
@@ -43,7 +48,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger);
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -87,7 +92,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             string? groupByField,
             Func<IEnumerable<string>, List<string>> orderGroupKeys,
             string logPrefix,
-            ILogger? logger)
+            ILogger? logger,
+            bool shuffleWithinGroups = false)
         {
             var positions = new ConcurrentDictionary<Guid, int>();
 
@@ -115,7 +121,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             foreach (var kvp in groups)
             {
-                kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
+                if (shuffleWithinGroups)
+                {
+                    Shuffle(kvp.Value, Random.Shared);
+                }
+                else
+                {
+                    kvp.Value.Sort((a, b) => CompareWithinGroup(a, b));
+                }
             }
 
             var orderedKeys = orderGroupKeys(groups.Keys);
@@ -268,6 +281,25 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
     public class RoundRobinRandomOrder : RoundRobinBase
     {
         public override string Name => "Random Round Robin";
+
+        protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
+        {
+            var list = keys.ToList();
+            Shuffle(list, Random.Shared);
+            return list;
+        }
+    }
+
+    /// <summary>
+    /// Round Robin sort with groups in random order AND items shuffled within each group.
+    /// Each refresh produces a fully random rotation: random group interleaving and
+    /// random order inside every group ("turning on a TV at a random time").
+    /// </summary>
+    public class RoundRobinShuffledOrder : RoundRobinBase
+    {
+        public override string Name => "Shuffled Round Robin";
+
+        protected override bool ShuffleWithinGroups => true;
 
         protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
         {

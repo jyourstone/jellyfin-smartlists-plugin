@@ -123,7 +123,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             return OrderFactory.CreateOrder(so.SortBy);
                         }
 
-                        if (so.SortBy == "Random Round Robin")
+                        if (so.SortBy == "Random Round Robin" || so.SortBy == "Shuffled Round Robin")
                         {
                             var rrRandom = (RoundRobinBase)OrderFactory.CreateOrder(so.SortBy);
                             rrRandom.GroupByField = so.GroupByField;
@@ -3099,6 +3099,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Round Robin Ascending", () => new RoundRobinOrder() },
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
             { "Random Round Robin", () => new RoundRobinRandomOrder() },
+            { "Shuffled Round Robin", () => new RoundRobinShuffledOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 
