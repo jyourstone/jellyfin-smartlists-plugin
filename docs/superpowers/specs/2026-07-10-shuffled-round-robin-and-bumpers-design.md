@@ -17,7 +17,7 @@ A new sort option, **"Shuffled Round Robin"**, extends the existing round-robin 
 Existing variants are unchanged:
 
 | Variant | Group order | Within-group order |
-|---|---|---|
+| --- | --- | --- |
 | Round Robin Ascending | A→Z | Natural (season/episode, disc/track, name) |
 | Round Robin Descending | Z→A | Natural |
 | Random Round Robin | Shuffled | Natural |
@@ -81,7 +81,7 @@ Consequences and decisions:
 - **Limits:** bumpers do not count toward MaxItems/MaxPlayTimeMinutes (weave happens after limits). MaxItems=50 means 50 real episodes plus bumpers.
 - **Stats:** `dto.ItemCount` and `TotalRuntimeMinutes` are computed from the woven list, since that is the actual playlist content.
 - **Randomness:** `BumperOrder = "Random"` reshuffles the pool each refresh.
-- **Refresh change detection:** the rule-hash used for auto-refresh must include `Bumpers` so config changes trigger a refresh.
+- **Refresh change detection:** no hash changes needed — the rule-hash gates the compiled-rule cache per `SmartList` instance, and the synthetic bumper `SmartList` hashes its own ExpressionSets; saving a playlist queues a refresh unconditionally.
 - **Sorting pipeline isolation:** the weave never enters `Orders`, `GetSortKey`, or any of the three sort call sites. Any sort combination on the main list works with bumpers.
 
 Edge handling:
@@ -113,7 +113,7 @@ New collapsible **"Bumpers"** section in the playlist form (below sorting): medi
 ## Touched files (summary)
 
 | Area | Files |
-|---|---|
+| --- | --- |
 | Part 1 backend | `Core/Orders/RoundRobinOrder.cs`, `Core/SmartList.cs` |
 | Part 1 UI | `Configuration/config-sorts.js` |
 | Part 2 DTO | `Core/Models/SmartPlaylistDto.cs` (+ new `BumperConfigDto`), `Utilities/DtoMapper.cs`, `Utilities/InputValidator.cs` |
