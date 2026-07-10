@@ -23,7 +23,7 @@ The **Bumpers (optional)** section appears below the sorting options in the play
 
 | Setting | Description |
 |---------|-------------|
-| **Bumper media type** | The media type of the bumper pool — it can differ from the playlist's main media types (e.g., Home Videos as bumpers between Episodes). Set to **None (disabled)** to turn bumpers off. |
+| **Bumper media type** | The media type of the bumper pool — it can differ from the playlist's main media types (e.g., Home Videos as bumpers between Episodes). Only playlist-supported types are available: Series, Season, and Album are collection-only and cannot be used as bumpers, since bumpers are woven into playlists. Set to **None (disabled)** to turn bumpers off. |
 | **Bumper order** | How the bumper pool is cycled: **Random** (reshuffled on every refresh), **Name**, or **Release Date**. |
 | **Every N items** | How many main items play between bumpers. `1` inserts a bumper after every item, `2` after every second item, and so on. |
 | **Bumper rules** | A full rule editor, exactly like the main rules — including multiple rule groups via **Add Bumper Rule Group**. Only items matching these rules are used as bumpers. |
@@ -35,6 +35,9 @@ The **Bumpers (optional)** section appears below the sorting options in the play
 3. Add one or more bumper rules (e.g., `Name contains "bumper"` or `Tags contains "ident"`)
 4. Pick a **Bumper order** and set **Every N items**
 5. Save — bumpers are woven in on the next refresh
+
+!!! warning "Complete rules required"
+    Once a bumper media type is chosen, at least one **complete** bumper rule is required — saving is blocked with a message otherwise. To save without bumpers, set the bumper media type back to **None (disabled)**.
 
 ## Worked Example
 
@@ -60,6 +63,7 @@ There are more gaps (5) than bumpers (4), so the pool wraps around and Bumper 1 
 
 - **Limits**: Bumpers do **not** count toward [Max Items or Max Playtime](sorting-and-limits.md#limits) — those limits apply to the main content only. A playlist with Max Items 50 contains 50 main items *plus* bumpers. The playlist's displayed item count and total runtime do include bumpers, since they are real playlist content.
 - **Main content wins**: An item that matches both the main rules and the bumper rules is treated as main content only — it is never also inserted as a bumper.
+- **Extras always included**: The bumper pool always includes [extras](media-types.md#extras-special-features) (trailers, interstitials, theme videos, etc.) — trailers are classic bumper material. This is independent of the playlist's own **Include Extras** setting, and no checkbox is needed for the bumper rules. Use a bumper rule like `Extra Type` = Trailer to build the pool from extras, or narrow it with any other rules.
 - **Random order**: With **Bumper order** set to Random, the pool is reshuffled on every refresh, so the bumper rotation changes each time.
 - **Empty pool**: If the bumper rules match no items, the playlist refreshes normally without bumpers.
 
