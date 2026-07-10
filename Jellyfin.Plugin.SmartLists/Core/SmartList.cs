@@ -758,6 +758,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     return [];
                 }
 
+                // Least Recently Watched Round Robin needs per-group watch recency computed from the
+                // UNFILTERED pool: rules like "Playback Status is Unwatched" remove watched items from
+                // the results, so recency derived from filtered items would see every group as unwatched.
+                // Same injection pattern as SimilarityOrder.Scores / RuleBlockOrder.GroupMappings.
+                foreach (var lrwOrder in Orders.OfType<RoundRobinLeastRecentlyWatchedOrder>())
+                {
+                    lrwOrder.GroupRecency = RoundRobinLeastRecentlyWatchedOrder.BuildGroupRecency(
+                        itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger);
+                }
+
                 // Media type filtering is now handled at the API level in PlaylistService.GetAllUserMedia()
                 // This provides significant performance improvements by filtering at the database level
                 logger?.LogDebug("Processing {ItemCount} items (already filtered by media type at API level)", itemCount);
