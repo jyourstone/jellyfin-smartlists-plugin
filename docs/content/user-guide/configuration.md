@@ -97,7 +97,7 @@ SmartLists allows you to upload custom images for your playlists and collections
 
 **How to Use:**
 
-1. When creating or editing a smart list, expand **Advanced options** and scroll to the **Custom Images** section
+1. When creating or editing a smart list, expand **More options** and scroll to the **Custom Images** section
 2. Click **Add Image** to add a new image
 3. Select the image type from the dropdown (each type can only be used once)
 4. Choose an image file from your computer
@@ -143,9 +143,9 @@ The web interface is organized into tabs. The available tabs and features depend
 
 This is where you build new playlists and collections:
 
-!!! note "Advanced options"
+!!! note "More options"
     Fields beyond List Type, Name, Media Types (with its Include Extras option), Rules,
-    Sort Options, and Users live in a collapsed **Advanced options** section on the create/edit form. The collapsed
+    Sort Options, and Users live in a collapsed **More options** section on the create/edit form. The collapsed
     header always shows a summary of what applies (e.g. `500 items max · refresh on
     library changes`, or `Bumpers · 2 schedules` when editing a configured list), and
     the section expands automatically when you edit a list that uses advanced features.
@@ -158,7 +158,7 @@ This is where you build new playlists and collections:
   - **For Collections**: Select a single reference user whose context will be used for rule evaluation and library access permissions
 - Include extras (behind the scenes, deleted scenes, featurettes, trailers) in the item pool — this option is only visible when the Video media type is selected
 
-The remaining fields live inside the collapsed **Advanced options** section, grouped as:
+The remaining fields live inside the collapsed **More options** section, grouped as:
 
 - **Limits**
   - Set the maximum number of items

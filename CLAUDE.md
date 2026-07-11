@@ -131,7 +131,7 @@ Every tag builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 and 12.
 - Update the mkdocs `/docs/content/` when adding user-facing features. Put any examples in the example sections.
 - **UI changes must update both HTML files**: `config.html` (admin) and `user-playlists.html` (user) - the JS modules are shared
 - Form fields need updates in: HTML (both pages), JS (create/edit/display), and backend DTOs
-- **Create-form fields and the Advanced options fold**: required inputs must never
+- **Create-form fields and the "More options" fold**: required inputs must never
   be placed inside `#advanced-options-body` (collapsed `display:none` hides native
   validation). New advanced fields go under the matching sub-heading inside the fold
   (Limits / Bumpers / Automation / Sharing / Presentation); new core fields go above
