@@ -16,6 +16,9 @@
      * @param {HTMLSelectElement} selectElement - The native select to enhance
      * @param {Object} [options] - Configuration options
      * @param {AbortSignal} [options.signal] - AbortController signal for cleanup
+     * @param {string} [options.searchPlaceholder] - Placeholder for the search input (default 'Search fields...')
+     * @param {string} [options.placeholder] - Display text when nothing is selected (default '-- Field --')
+     * @param {string} [options.noResultsText] - Message when no options match the search (default 'No matching fields')
      */
     SmartLists.initSearchableSelect = function (selectElement, options) {
         if (!selectElement) return;
@@ -27,6 +30,11 @@
         }
 
         options = options || {};
+        // Captured in the closures below (buildOptions/updateDisplayText/filterOptions),
+        // so they survive refreshSearchableSelect and repeated init calls.
+        const searchPlaceholder = options.searchPlaceholder || 'Search fields...';
+        const placeholder = options.placeholder || '-- Field --';
+        const noResultsText = options.noResultsText || 'No matching fields';
         const wrapper = document.createElement('div');
         wrapper.className = 'searchable-select-container';
 
@@ -71,7 +79,7 @@
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.className = 'searchable-select-search emby-input';
-        searchInput.placeholder = 'Search fields...';
+        searchInput.placeholder = searchPlaceholder;
         searchInput.autocomplete = 'off';
         searchWrap.appendChild(searchInput);
 
@@ -161,7 +169,7 @@
         function updateDisplayText() {
             const selected = selectElement.value;
             if (!selected) {
-                displayText.textContent = '-- Field --';
+                displayText.textContent = placeholder;
                 displayText.classList.add('searchable-select-placeholder');
             } else {
                 const selectedOpt = selectElement.querySelector('option[value="' + CSS.escape(selected) + '"]');
@@ -277,7 +285,7 @@
                 if (!noResults) {
                     noResults = document.createElement('div');
                     noResults.className = 'searchable-select-no-results';
-                    noResults.textContent = 'No matching fields';
+                    noResults.textContent = noResultsText;
                     optionsContainer.appendChild(noResults);
                 }
                 noResults.style.display = '';
@@ -363,6 +371,13 @@
             if (isOpen && !wrapper.contains(e.target)) {
                 closeDropdown();
             }
+        }, listenerOptions);
+
+        // Keep display text in sync when the native select changes outside the
+        // overlay (e.g. a label click focuses the hidden select and arrow keys
+        // change its value)
+        selectElement.addEventListener('change', function () {
+            updateDisplayText();
         }, listenerOptions);
 
         // Build initial options

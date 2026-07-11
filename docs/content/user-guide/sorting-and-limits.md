@@ -8,6 +8,8 @@ You can add up to **3 sorting options** for both playlists and collections to cr
 
 ## Sort Fields
 
+The **Sort By** dropdown is searchable and its options are grouped into sections: General, Dates, Ratings & Playback, TV, Music, Media Info, Rule-Based, and Round Robin.
+
 ### Default
 Automatically selects the best sort order based on your rules. If your list uses an **External List** rule, items are sorted in the external list's order. If it uses a **Similar To** rule, items are sorted by similarity score. Otherwise, items are sorted alphabetically by name. This is the default sort for new lists.
 
