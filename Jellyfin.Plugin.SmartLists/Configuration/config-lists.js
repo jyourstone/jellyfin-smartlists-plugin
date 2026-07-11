@@ -661,6 +661,98 @@
         }
     };
 
+    SmartLists.toggleAdvancedOptions = function (page, force) {
+        const body = page.querySelector('#advanced-options-body');
+        if (!body) {
+            return;
+        }
+        const expand = force !== undefined ? force : body.style.display === 'none';
+        body.style.display = expand ? 'block' : 'none';
+        const icon = page.querySelector('#advanced-expand-icon');
+        if (icon) {
+            icon.textContent = expand ? '▼' : '▶';
+        }
+        const header = page.querySelector('#advanced-options-header');
+        if (header) {
+            header.setAttribute('aria-expanded', expand ? 'true' : 'false');
+        }
+    };
+
+    // Value chips (Max Items, auto-refresh) read from the populated form.
+    // Shared by the create-mode default summary and the edit/clone summary.
+    SmartLists.getAdvancedValueChips = function (page) {
+        const parts = [];
+        const maxItems = parseInt(SmartLists.getElementValue(page, '#playlistMaxItems', '0'), 10);
+        if (!isNaN(maxItems)) {
+            parts.push(maxItems > 0 ? maxItems + ' items max' : 'unlimited items');
+        }
+        const refreshLabels = {
+            'Never': 'no auto-refresh',
+            'OnLibraryChanges': 'refresh on library changes',
+            'OnAllChanges': 'refresh on all changes'
+        };
+        const refreshValue = SmartLists.getElementValue(page, '#autoRefreshMode', '');
+        if (refreshValue) {
+            parts.push(refreshLabels[refreshValue] || refreshValue);
+        }
+        return parts;
+    };
+
+    SmartLists.renderAdvancedSummaryFromForm = function (page) {
+        // Edit mode owns the summary via syncAdvancedSection; don't let
+        // late-arriving async defaults overwrite its chips.
+        if (page._editMode) {
+            return;
+        }
+        const summaryEl = page.querySelector('#advanced-summary');
+        if (!summaryEl) {
+            return;
+        }
+        summaryEl.textContent = SmartLists.getAdvancedValueChips(page).join(' · ');
+    };
+
+    SmartLists.syncAdvancedSection = function (page, playlist) {
+        const summaryEl = page.querySelector('#advanced-summary');
+        if (!summaryEl || !playlist) {
+            return;
+        }
+        const chips = [];
+        if (playlist.Bumpers && playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) {
+            chips.push('Bumpers');
+        }
+        const scheduleCount = (playlist.Schedules || []).length + (playlist.VisibilitySchedules || []).length;
+        if (scheduleCount > 0) {
+            chips.push(scheduleCount + (scheduleCount === 1 ? ' schedule' : ' schedules'));
+        }
+        if (playlist.RandomGroupSelection && playlist.RandomGroupSelection.Enabled) {
+            chips.push('Random groups');
+        }
+        if (playlist.MaxPlayTimeMinutes > 0) {
+            chips.push('Playtime limit');
+        }
+        if (playlist.Enabled === false) {
+            chips.push('Disabled');
+        }
+        if (playlist.SortTitle || playlist.Overview || playlist.Favorite === true || playlist.Favorite === false ||
+            (playlist.Tags && playlist.Tags.length > 0)) {
+            chips.push('Metadata');
+        }
+        // Images arrive via a separate async endpoint; count what's in the DOM.
+        const imageRows = page.querySelectorAll('#custom-images-container [id^="image-row-"]').length;
+        if (imageRows > 0) {
+            chips.push(imageRows === 1 ? '1 image' : imageRows + ' images');
+        }
+        // Feature signals first, then the always-present value chips (Max Items,
+        // auto-refresh) read from the populated form, so applied configuration
+        // stays visible on the collapsed header in edit/clone mode too.
+        summaryEl.textContent = chips.concat(SmartLists.getAdvancedValueChips(page)).join(' · ');
+        // Auto-expand only on unambiguous feature signals — value fields have
+        // async-loaded defaults, so "non-default" can't be determined reliably.
+        if (chips.length > 0) {
+            SmartLists.toggleAdvancedOptions(page, true);
+        }
+    };
+
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 
@@ -730,6 +822,11 @@
         // Clear custom images container
         if (SmartLists.initCustomImagesContainer) {
             SmartLists.initCustomImagesContainer(page);
+        }
+
+        // Reset the Advanced options fold to collapsed
+        if (SmartLists.toggleAdvancedOptions) {
+            SmartLists.toggleAdvancedOptions(page, false);
         }
     };
 
@@ -963,10 +1060,16 @@
                     SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
                 }
 
-                // Load existing images for this playlist
+                // Load existing images for this playlist, then re-sync the
+                // Advanced fold so an images-only list still expands.
                 if (SmartLists.loadExistingImages) {
-                    SmartLists.loadExistingImages(page, playlistId);
+                    SmartLists.loadExistingImages(page, playlistId).then(function () {
+                        SmartLists.syncAdvancedSection(page, playlist);
+                    });
                 }
+
+                // Chips + auto-expand from the loaded list (images re-sync above)
+                SmartLists.syncAdvancedSection(page, playlist);
 
             } catch (formError) {
                 console.error('Error populating form for edit:', formError);
@@ -1190,6 +1293,9 @@
                 if (SmartLists.initMetadataTagsInput) {
                     SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
                 }
+
+                // Chips + auto-expand for cloned advanced config
+                SmartLists.syncAdvancedSection(page, playlist);
 
                 // Show success message
                 SmartLists.showNotification('List "' + playlistName + '" cloned successfully! You can now modify and create the new list.', 'success');

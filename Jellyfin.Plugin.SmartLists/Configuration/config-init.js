@@ -459,6 +459,10 @@
             }
             SmartLists.setCurrentUserAsDefault(page);
         }
+
+        if (SmartLists.renderAdvancedSummaryFromForm) {
+            SmartLists.renderAdvancedSummaryFromForm(page);
+        }
     };
 
     // Fallback defaults when config fails to load
@@ -489,6 +493,10 @@
         const sortsContainer = page.querySelector('#sorts-container');
         if (sortsContainer && sortsContainer.querySelectorAll('.sort-box').length === 0) {
             SmartLists.safeAddSortBox(page, { SortBy: 'NoOrder', SortOrder: 'Ascending' });
+        }
+
+        if (SmartLists.renderAdvancedSummaryFromForm) {
+            SmartLists.renderAdvancedSummaryFromForm(page);
         }
     };
 
@@ -1250,6 +1258,13 @@
                 SmartLists.closeAllKebabMenus(page);
             }
 
+            if (target.closest('#advanced-options-header')) {
+                if (SmartLists.toggleAdvancedOptions) {
+                    SmartLists.toggleAdvancedOptions(page);
+                }
+                return;
+            }
+
             if (target.closest('.playlist-header')) {
                 const playlistCard = target.closest('.playlist-card');
                 if (playlistCard && SmartLists.togglePlaylistCard) {
@@ -1292,6 +1307,16 @@
                     SmartLists.createPlaylist(page);
                 }
             }, SmartLists.getEventListenerOptions(pageSignal));
+
+            // If native validation flags a control hidden inside the collapsed
+            // Advanced fold, expand the fold so the browser can focus it.
+            // ('invalid' doesn't bubble — use capture.)
+            playlistForm.addEventListener('invalid', function (e) {
+                const body = page.querySelector('#advanced-options-body');
+                if (body && body.style.display === 'none' && body.contains(e.target)) {
+                    SmartLists.toggleAdvancedOptions(page, true);
+                }
+            }, { capture: true, signal: pageSignal });
         }
 
         const randomGroupSelectionEnabled = page.querySelector('#randomGroupSelectionEnabled');
@@ -2541,6 +2566,11 @@
             // Re-apply list type visibility after cleanup
             if (page._pageInitialized) {
                 SmartLists.handleListTypeChange(page);
+                // bfcache can restore the fold body/icon out of sync
+                const advBody = page.querySelector('#advanced-options-body');
+                if (advBody && SmartLists.toggleAdvancedOptions) {
+                    SmartLists.toggleAdvancedOptions(page, advBody.style.display !== 'none');
+                }
                 // Reload backup list when navigating back to the page (admin pages only)
                 if (!SmartLists.IS_USER_PAGE && SmartLists.loadBackupList) {
                     SmartLists.loadBackupList();

@@ -164,16 +164,25 @@
         const userIds = SmartLists.getSelectedUserIds(page);
         const allUsers = SmartLists.isAllUsersSelected(page);
         const publicCheckboxContainer = page.querySelector('#publicCheckboxContainer');
+        // The "Sharing" sub-heading in the Advanced fold has no content besides
+        // the public checkbox, so it must follow the same visibility.
+        const sharingTitle = page.querySelector('#sharingSectionTitle');
 
         if (publicCheckboxContainer) {
             if (allUsers || userIds.length > 1) {
                 // Hide public checkbox for all-user and multi-user playlists (using inline style)
                 // Note: We use removeProperty() when showing to avoid style persistence across navigations
                 publicCheckboxContainer.style.display = 'none';
+                if (sharingTitle) {
+                    sharingTitle.style.display = 'none';
+                }
             } else {
                 // Show public checkbox for single-user playlists
                 // Remove inline style to prevent persistence across page navigations
                 publicCheckboxContainer.style.removeProperty('display');
+                if (sharingTitle) {
+                    sharingTitle.style.removeProperty('display');
+                }
             }
         }
     };
