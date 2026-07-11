@@ -103,6 +103,16 @@ Like the Shuffled TV Channel above, but the episodes within each show are shuffl
 
 Result: Shuffled Round Robin over shows A, B, C might produce: Show A S02E03, Show C S01E01, Show B S03E02, Show A S01E01, Show C S02E04, Show B S01E05, etc. Both the show rotation and the episode order within each show are random — a new arrangement on every refresh.
 
+### Continue-Where-You-Left-Off TV Channel (Least Recently Watched Round Robin)
+Like the TV Channel playlist above, but the show rotation follows your watch history instead of alphabetical order:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed
+- **Sort by**: Least Recently Watched Round Robin (Interleave), **Group By**: Series Name
+- **Auto Refresh**: On All Changes
+
+Result: Shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A, and on the next refresh Show A moves to the end while the other shows shift forward — the rotation "continues where you left off".
+
 ### TV Channel with Commercials (Bumpers)
 Take any of the TV Channel playlists above and weave "commercial break" clips between the episodes:
 

@@ -758,6 +758,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     return [];
                 }
 
+                // Least Recently Watched Round Robin needs per-group watch recency computed from the
+                // UNFILTERED pool: rules like "Playback Status is Unwatched" remove watched items from
+                // the results, so recency derived from filtered items would see every group as unwatched.
+                // Same injection pattern as SimilarityOrder.Scores / RuleBlockOrder.GroupMappings.
+                foreach (var lrwOrder in Orders.OfType<RoundRobinLeastRecentlyWatchedOrder>())
+                {
+                    lrwOrder.GroupRecency = RoundRobinLeastRecentlyWatchedOrder.BuildGroupRecency(
+                        itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger);
+                }
+
                 // Media type filtering is now handled at the API level in PlaylistService.GetAllUserMedia()
                 // This provides significant performance improvements by filtering at the database level
                 logger?.LogDebug("Processing {ItemCount} items (already filtered by media type at API level)", itemCount);
@@ -3091,6 +3101,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "Round Robin Descending", () => new RoundRobinOrderDesc() },
             { "Random Round Robin", () => new RoundRobinRandomOrder() },
             { "Shuffled Round Robin", () => new RoundRobinShuffledOrder() },
+            { "Least Recently Watched Round Robin", () => new RoundRobinLeastRecentlyWatchedOrder() },
             { "NoOrder", () => new NoOrder() },
         };
 
@@ -3106,6 +3117,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             "Random",
             "Random Round Robin",
             "Shuffled Round Robin",
+            "Least Recently Watched Round Robin",
             "NoOrder",
         };
 

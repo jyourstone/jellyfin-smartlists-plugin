@@ -192,6 +192,7 @@ Like Random Round Robin, groups are interleaved in random order — and addition
 - **Round Robin**: Groups in alphabetical order, items within each group in natural order.
 - **Random Round Robin**: Group order randomized each refresh, items within each group in natural order.
 - **Shuffled Round Robin**: Group order randomized each refresh AND items within each group shuffled.
+- **Least Recently Watched Round Robin**: Group order follows your watch history (least recently watched first), items within each group in natural order.
 
 **Example** — Shuffled Round Robin (Group By: Series Name) over shows A, B, C might produce:
 
@@ -212,6 +213,35 @@ Both the show rotation and the episode order within each show are random, and re
 2. Select **Shuffled Round Robin (Interleave)** as your sort
 3. Choose the **Group By** field (e.g., Series Name for TV episodes) — the same Group By fields as Round Robin are supported
 4. No Sort Order is needed — both group order and item order are always randomized
+
+### Least Recently Watched Round Robin (Interleave)
+Rotates through your shows starting with the one you watched **least** recently — shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A today, and on the next refresh Show A moves to the end of the rotation while the other shows shift forward. Within each group, items stay in natural order (episodes by season/episode number).
+
+Unlike Random Round Robin, the rotation is not shuffled — it is derived entirely from your watch history, so it "continues where you left off" across refreshes, and refreshing without watching anything produces the same order.
+
+**Example** — 3 shows: you have never watched Show C, watched Show A last week, and watched Show B yesterday:
+
+| Position | Item |
+|----------|------|
+| 1 | Show C - S01E01 |
+| 2 | Show A - S01E01 |
+| 3 | Show B - S01E01 |
+| 4 | Show C - S01E02 |
+| 5 | Show A - S01E02 |
+| 6 | Show B - S01E02 |
+
+**Recommended setup for a fair TV rotation**:
+
+1. Add the rule `Playback Status = Unplayed` — watched episodes drop off, and each show's next unwatched episode surfaces automatically
+2. Select **Least Recently Watched Round Robin (Interleave)** as your sort
+3. Choose the **Group By** field (e.g., Series Name for TV episodes)
+4. No Sort Order is needed — group order always follows watch recency (never watched first, most recently watched last, alphabetical tie-break)
+5. Set [Auto Refresh](auto-refresh.md) to **On All Changes** so the rotation advances right after you finish watching something
+
+With other auto-refresh modes the rotation still advances, but only at the next refresh (scheduled or on library changes).
+
+!!! note "Per-user rotation"
+    For playlists shared with multiple users, each user gets their own rotation based on their own watch history. Collections use the [reference user's](user-selection.md#collections-reference-user) watch history, so all users see the same rotation.
 
 ## Random Group Selection
 

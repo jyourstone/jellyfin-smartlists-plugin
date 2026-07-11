@@ -126,7 +126,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Gets aggregate LastPlayedDate for container items when their children are already cached.
         /// </summary>
-        private static DateTime? GetAggregateLastPlayedDate(
+        internal static DateTime? GetAggregateLastPlayedDate(
             BaseItem item,
             User user,
             IUserDataManager userDataManager,
@@ -167,7 +167,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Extracts LastPlayedDate from user data, handling both DateTime and Nullable&lt;DateTime&gt;
         /// </summary>
-        private static DateTime GetLastPlayedDateFromUserData(object? userData)
+        internal static DateTime GetLastPlayedDateFromUserData(object? userData)
         {
             if (userData == null) return DateTime.MinValue;
 
