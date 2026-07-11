@@ -678,16 +678,9 @@
         }
     };
 
-    SmartLists.renderAdvancedSummaryFromForm = function (page) {
-        // Edit mode owns the summary via syncAdvancedSection; don't let
-        // late-arriving async defaults overwrite its chips.
-        if (page._editMode) {
-            return;
-        }
-        const summaryEl = page.querySelector('#advanced-summary');
-        if (!summaryEl) {
-            return;
-        }
+    // Value chips (Max Items, auto-refresh) read from the populated form.
+    // Shared by the create-mode default summary and the edit/clone summary.
+    SmartLists.getAdvancedValueChips = function (page) {
         const parts = [];
         const maxItems = parseInt(SmartLists.getElementValue(page, '#playlistMaxItems', '0'), 10);
         if (!isNaN(maxItems)) {
@@ -702,7 +695,20 @@
         if (refreshValue) {
             parts.push(refreshLabels[refreshValue] || refreshValue);
         }
-        summaryEl.textContent = parts.join(' · ');
+        return parts;
+    };
+
+    SmartLists.renderAdvancedSummaryFromForm = function (page) {
+        // Edit mode owns the summary via syncAdvancedSection; don't let
+        // late-arriving async defaults overwrite its chips.
+        if (page._editMode) {
+            return;
+        }
+        const summaryEl = page.querySelector('#advanced-summary');
+        if (!summaryEl) {
+            return;
+        }
+        summaryEl.textContent = SmartLists.getAdvancedValueChips(page).join(' · ');
     };
 
     SmartLists.syncAdvancedSection = function (page, playlist) {
@@ -736,7 +742,12 @@
         if (imageRows > 0) {
             chips.push(imageRows === 1 ? '1 image' : imageRows + ' images');
         }
-        summaryEl.textContent = chips.join(' · ');
+        // Feature signals first, then the always-present value chips (Max Items,
+        // auto-refresh) read from the populated form, so applied configuration
+        // stays visible on the collapsed header in edit/clone mode too.
+        summaryEl.textContent = chips.concat(SmartLists.getAdvancedValueChips(page)).join(' · ');
+        // Auto-expand only on unambiguous feature signals — value fields have
+        // async-loaded defaults, so "non-default" can't be determined reliably.
         if (chips.length > 0) {
             SmartLists.toggleAdvancedOptions(page, true);
         }

@@ -144,8 +144,8 @@ The web interface is organized into tabs. The available tabs and features depend
 This is where you build new playlists and collections:
 
 !!! note "Advanced options"
-    Fields beyond List Type, Name, Media Types, Rules, Sort Options, and Users live
-    in a collapsed **Advanced options** section on the create/edit form. The collapsed
+    Fields beyond List Type, Name, Media Types (with its Include Extras option), Rules,
+    Sort Options, and Users live in a collapsed **Advanced options** section on the create/edit form. The collapsed
     header always shows a summary of what applies (e.g. `500 items max · refresh on
     library changes`, or `Bumpers · 2 schedules` when editing a configured list), and
     the section expands automatically when you edit a list that uses advanced features.

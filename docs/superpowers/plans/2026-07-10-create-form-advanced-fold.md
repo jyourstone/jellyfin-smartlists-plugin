@@ -147,7 +147,7 @@ In `config-init.js`, inside the big click listener, directly BEFORE the `.playli
 
 - [ ] **Step 4: Build and verify on the admin page**
 
-Run: `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh`
+Run: `cd dev && ./build-local.sh`
 Expected: build succeeds, Jellyfin container restarts.
 
 Manual checks at http://localhost:8096 → Dashboard → Plugins → SmartLists (hard-refresh; embedded resources cache aggressively — use devtools "Disable cache" or bump-refresh):
@@ -184,7 +184,7 @@ Same three operations as Task 1 Step 1, with these user-page differences:
 
 - [ ] **Step 2: Build and verify on the user page**
 
-Run: `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh`
+Run: `cd dev && ./build-local.sh`
 Expected: build succeeds.
 
 Manual checks on the user config page (link "Open User Config Page" at top of admin page):
@@ -258,7 +258,7 @@ In `config-init.js`, add as the LAST line inside `SmartLists.applyFormDefaults` 
 
 - [ ] **Step 3: Build and verify**
 
-Run: `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh`
+Run: `cd dev && ./build-local.sh`
 
 Manual checks:
 1. Admin create tab, fold collapsed: header right side reads e.g. `500 items max · refresh on library changes` (matches Settings-tab defaults).
@@ -380,7 +380,7 @@ In `SmartLists.clonePlaylist`, directly after the metadata tags population (line
 
 - [ ] **Step 5: Build and verify**
 
-Run: `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh`
+Run: `cd dev && ./build-local.sh`
 
 Manual checks (admin page; create test lists first if needed):
 1. Edit a list with bumpers + a refresh schedule → form opens with fold EXPANDED, header reads `Bumpers · 1 schedule`.
@@ -441,7 +441,7 @@ In the `pageshow` handler, inside the `if (page._pageInitialized) {` block (line
 
 - [ ] **Step 3: Build and verify**
 
-Run: `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh`
+Run: `cd dev && ./build-local.sh`
 
 Manual checks:
 1. Temporarily add `required` to `#playlistMaxItems` via devtools, clear its value, fold collapsed, hit Create → fold expands and browser focuses the field (no console error "not focusable"). Remove the attribute after.
@@ -504,6 +504,6 @@ git commit -m "Document Advanced options fold and future-field rules"
 
 ## Final verification sweep (after all tasks)
 
-1. `cd /Users/johan.yourstone/Git/jellyfin-smartplaylist-plugin/dev && ./build-local.sh` — clean build.
+1. `cd dev && ./build-local.sh` — clean build.
 2. Full spec checklist (spec §Verification), both pages: simple create untouched fold; edit configured list auto-expands with chips; images-only edit expands late; clone matches; cancel/update re-collapse; Playlist↔Collection gating inside open fold; back-nav icon sync; keyboard toggle.
 3. `git log --oneline main..` — 6 commits, one per task.

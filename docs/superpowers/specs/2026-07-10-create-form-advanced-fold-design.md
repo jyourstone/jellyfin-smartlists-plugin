@@ -41,7 +41,7 @@ In today's order, with one move (Users block moves up, from after Random Group S
 - **Bumpers** — the whole `#bumper-section` (keeps playlist-only gating and two-stage detail visibility)
 - **Automation** — Enable list, Auto-refresh mode, Refresh Schedules, Visibility Schedules
 - **Sharing** — Make playlist public (keeps `updatePublicCheckboxVisibility` gating)
-- **Presentation** — Custom Images; existing **Metadata** `h3` survives beneath it (Sort Title, Overview, Tags, Favorite)
+- **Presentation** — Custom Images; the existing **Metadata** `h3` is demoted to an `inputLabel` beneath it (Sort Title, Overview, Tags, Favorite) so it doesn't compete with the fold's sub-headings
 
 All three required inputs (`#playlistName`, `#listType`, conditional collection `#playlistUser`) live **outside** the fold — display:none never swallows native validation.
 
@@ -65,16 +65,16 @@ A real `<button class="emby-button">` (main-bundle safe) preserves keyboard/game
 
 ### Summary chips (create AND edit mode)
 
-`#advanced-summary` on the collapsed header always shows a truthful summary, so hidden-but-applied config is never a mystery:
+`#advanced-summary` on the collapsed header always shows the applied value chips (Max Items, auto-refresh — read from the populated form via `getAdvancedValueChips`), so hidden-but-applied configuration stays visible in every mode:
 
-- **Create mode:** effective defaults, e.g. `500 items max · refresh on library changes` (rendered after `applyFormDefaults`/`applyFallbackDefaults` resolves; tolerates defaults arriving a tick after form reset).
-- **Edit mode:** signals from the loaded list, counts over booleans — `Bumpers · 2 schedules · 3 images · Metadata · Disabled · Playtime limit · Random groups`.
+- **Create mode:** value chips only, i.e. the effective defaults, e.g. `500 items max · refresh on library changes` (rendered after `applyFormDefaults`/`applyFallbackDefaults` resolves; tolerates defaults arriving a tick after form reset).
+- **Edit/clone mode:** feature signals first (counts over booleans), then the value chips — `Bumpers · 2 schedules · 3 images · Metadata · Disabled · Playtime limit · Random groups · 100 items max · refresh on library changes`. `IsPublic` is the one applied setting without a chip (its visibility already depends on user selection).
 
 ### Expand/collapse behavior
 
 - Create: always starts collapsed. `clearForm` re-collapses and re-renders default chips.
 - Edit: `SmartLists.syncAdvancedSection(page, playlist)` is appended at the very END of `editPlaylist` (population sequence untouched — it is order-fragile). It renders chips and **auto-expands** the fold if any unambiguous signal fires: bumper media type set, any refresh/visibility schedule, random group enabled, `MaxPlayTimeMinutes > 0`, `Enabled === false`, any metadata field set, any custom image.
-- Fields whose non-defaultness is ambiguous (defaults load async: `AutoRefreshMode`, `MaxItems`, `IsPublic`) never trigger auto-expand; their values round-trip on save regardless of visibility.
+- Fields whose non-defaultness is ambiguous (defaults load async: `AutoRefreshMode`, `MaxItems`, `IsPublic`) never trigger auto-expand — but `AutoRefreshMode` and `MaxItems` remain visible as value chips on the collapsed header, and all values round-trip on save regardless of visibility.
 - Custom images arrive from a separate async endpoint: `loadExistingImages`' success path re-invokes `syncAdvancedSection`, so an images-only list still expands when the response lands.
 - `clonePlaylist` calls the same sync after populating. Update-failure re-invokes `editPlaylist` (sync re-runs). `cancelEdit`/update-success flow through `clearForm` (re-collapse).
 
@@ -103,7 +103,7 @@ Before submit: if `#advanced-options-body` contains an `:invalid` control while 
 
 - Open fold is still a long column (mitigated by sub-headings).
 - Max Items / Make public / Enable list / Auto-refresh land in Advanced — defensible since all have Settings-page defaults; habitual per-list tweakers pay one extra click.
-- Edit of a list whose only non-default value is an async-default field (e.g. MaxItems) opens with the fold closed — value safe and round-trips; visible in create-mode chips as effective value.
+- Edit of a list whose only non-default value is an async-default field (e.g. MaxItems) opens with the fold closed — the value stays visible as a chip on the collapsed header and round-trips on save.
 - Users block moves above Bumpers — small muscle-memory cost for a contiguous fold.
 - No animation, text ▶/▼ icon — consistent with Manage tab.
 
