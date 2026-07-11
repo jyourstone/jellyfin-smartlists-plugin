@@ -10,7 +10,15 @@
     SmartLists.initializeSortSystem = function(page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
-        
+
+        // Abort event listeners of any existing sort boxes before clearing
+        sortsContainer.querySelectorAll('.sort-box').forEach(function(box) {
+            if (box._abortController) {
+                box._abortController.abort();
+                box._abortController = null;
+            }
+        });
+
         // Clear any existing content
         sortsContainer.innerHTML = '';
         
@@ -206,6 +214,39 @@
         });
     };
 
+    // Populate a Sort By select with <optgroup> sections based on each option's group.
+    // Options must be ordered by group (SORT_OPTIONS is, and filtering preserves order);
+    // a new optgroup opens when the group changes, so empty groups are never emitted.
+    SmartLists.populateSortBySelect = function(selectElement, options, selectedValue) {
+        selectElement.innerHTML = '';
+
+        let currentGroup = null;
+        let currentGroupElement = null;
+
+        options.forEach(function(opt) {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (opt.value === selectedValue) {
+                option.selected = true;
+            }
+
+            if (opt.group) {
+                if (opt.group !== currentGroup) {
+                    currentGroup = opt.group;
+                    currentGroupElement = document.createElement('optgroup');
+                    currentGroupElement.label = opt.group;
+                    selectElement.appendChild(currentGroupElement);
+                }
+                currentGroupElement.appendChild(option);
+            } else {
+                currentGroup = null;
+                currentGroupElement = null;
+                selectElement.appendChild(option);
+            }
+        });
+    };
+
     // Get Round Robin group-by fields filtered by current media types
     SmartLists.getFilteredRoundRobinFields = function(page) {
         var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
@@ -241,6 +282,11 @@
         const box = SmartLists.createStyledElement('div', 'sort-box paperList', SmartLists.STYLES.sortBox);
         box.setAttribute('data-sort-id', sortId);
 
+        // Create AbortController for this box's overlay event listeners (mirrors rule rows)
+        const abortController = SmartLists.createAbortController();
+        const signal = abortController.signal;
+        box._abortController = abortController;
+
         // Create fields container
         const fieldsContainer = SmartLists.createStyledElement('div', 'sort-fields', SmartLists.STYLES.sortFields);
 
@@ -251,16 +297,16 @@
         sortByField.container.style.maxWidth = '280px';
         // Get filtered options based on current context
         const filteredOptions = SmartLists.getFilteredSortOptions(page);
-        // Mark the selected option (default to 'Name' if no sortData provided)
-        const sortByOptions = filteredOptions.map(function(opt) {
-            return {
-                value: opt.value,
-                label: opt.label,
-                selected: opt.value === actualSortBy
-            };
-        });
-        SmartLists.populateSelectElement(sortByField.input, sortByOptions);
+        // Populate with optgroups, selecting the current value (default 'Name' if no sortData provided)
+        SmartLists.populateSortBySelect(sortByField.input, filteredOptions, actualSortBy);
         fieldsContainer.appendChild(sortByField.container);
+        // Enhance with the searchable dropdown overlay
+        SmartLists.initSearchableSelect(sortByField.input, {
+            signal: signal,
+            searchPlaceholder: 'Search sort options...',
+            placeholder: '-- Sort By --',
+            noResultsText: 'No matching sort options'
+        });
 
         // Sort Order field
         const sortOrderField = SmartLists.createSortField('Sort Order', 'sort-order-' + sortId, 'select');
@@ -391,7 +437,11 @@
         if (prevSibling && prevSibling.classList.contains('sort-separator')) {
             prevSibling.remove();
         }
-        
+
+        if (box._abortController) {
+            box._abortController.abort();
+            box._abortController = null;
+        }
         box.remove();
         
         // Update button state
@@ -468,29 +518,23 @@
 
             const currentValue = sortBySelect.value;
 
-            // Rebuild the options
-            const sortByOptions = filteredOptions.map(function(opt) {
-                return {
-                    value: opt.value,
-                    label: opt.label,
-                    selected: opt.value === currentValue
-                };
-            });
-
             // Check if current value is still valid
             const isCurrentValueValid = filteredOptions.some(function(opt) {
                 return opt.value === currentValue;
             });
 
-            // Repopulate the dropdown
-            SmartLists.populateSelectElement(sortBySelect, sortByOptions);
+            // Repopulate the dropdown (grouped into optgroups)
+            SmartLists.populateSortBySelect(sortBySelect, filteredOptions, currentValue);
 
             // Determine the effective sort value (new or current)
             var effectiveSortValue = currentValue;
-            if (!isCurrentValueValid && currentValue && sortByOptions.length > 0) {
-                sortBySelect.value = sortByOptions[0].value;
-                effectiveSortValue = sortByOptions[0].value;
+            if (!isCurrentValueValid && currentValue && filteredOptions.length > 0) {
+                sortBySelect.value = filteredOptions[0].value;
+                effectiveSortValue = filteredOptions[0].value;
             }
+
+            // Sync the searchable overlay with the rebuilt options and value
+            SmartLists.refreshSearchableSelect(sortBySelect);
 
             // Sync Sort Order UI for the effective value
             var groupByContainer = box.querySelector('[id^="sort-groupby-"]');
@@ -553,6 +597,7 @@
 
         if (newSort) {
             sortBySelect.value = newSort;
+            SmartLists.refreshSearchableSelect(sortBySelect);
             if (sortOrderSelect) {
                 sortOrderSelect.value = newOrder;
             }
@@ -602,6 +647,10 @@
         // Clear existing sort boxes and separators
         const existingBoxes = sortsContainer.querySelectorAll('.sort-box');
         existingBoxes.forEach(function(box) {
+            if (box._abortController) {
+                box._abortController.abort();
+                box._abortController = null;
+            }
             box.remove();
         });
         const existingSeparators = sortsContainer.querySelectorAll('.sort-separator');
