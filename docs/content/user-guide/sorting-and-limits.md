@@ -128,6 +128,7 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 | Field | Available when |
 |-------|---------------|
 | Series Name | Episode media type |
+| Collection | Episode or Movie media type |
 | Album Name | Audio or Music Video media type |
 | Artist | Audio or Music Video media type |
 | Genre (first) | All media types |
@@ -138,6 +139,18 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 
 !!! note "Multi-value fields"
     For Genre and Studio, items are grouped by their **first** value. For example, a movie tagged "Action, Comedy" would be placed in the "Action" group.
+
+!!! note "Grouping by Collection"
+    Collections are Jellyfin's regular collections — manually created ones, auto-created movie collections, and SmartLists smart collections all work. Episodes belong to a collection through their **series** (TV collections contain series). If an item is in several collections, it's grouped under the alphabetically-first one. Items that aren't in any collection fall back to grouping by Series Name (episodes) or their own name. Only direct collection members count — nested collections are not flattened.
+
+**Order Within Group**:
+
+All round robin variants except Shuffled Round Robin (where shuffling always wins) let you choose how items are ordered inside each group:
+
+- **Season/Episode (default)**: Natural order — episodes by season/episode number, audio by disc/track number, other items by name.
+- **Air Date**: Premiere date order (day precision). Items airing on the same day keep their episode order, and items with no date come first.
+
+Air Date is made for franchise viewing: combine **Group By: Collection** with **Order Within Group: Air Date** and crossover episodes that span multiple shows play in airing order, while a spinoff only enters the rotation once the timeline reaches its premiere.
 
 !!! warning "NextUnwatched vs Playback Status"
     If you want to interleave **all** unwatched episodes, use `Playback Status = Unplayed`. The `Next Unwatched = Yes` filter only returns 1 episode per series (the very next one to watch), which limits Round Robin to at most one item per show.
@@ -150,7 +163,7 @@ Works exactly like Round Robin, but **shuffles the group order randomly** on eac
 - **Round Robin**: Groups are always in alphabetical order (A→Z or Z→A). Show A always comes first.
 - **Random Round Robin**: Group order is randomized each refresh. One time Show C might come first, the next time Show B.
 
-Within each group, items always stay in natural order (episodes by season/episode number).
+Within each group, items stay in natural order (episodes by season/episode number), or air-date order if you set **Order Within Group** to Air Date.
 
 **Example** — Same 3 shows, different refreshes:
 
@@ -241,6 +254,8 @@ Unlike Random Round Robin, the rotation is not shuffled — it is derived entire
 5. Set [Auto Refresh](auto-refresh.md) to **On All Changes** so the rotation advances right after you finish watching something
 
 With other auto-refresh modes the rotation still advances, but only at the next refresh (scheduled or on library changes).
+
+With **Group By: Collection**, the whole franchise carries one recency — watching any member sends the entire collection group to the back of the rotation.
 
 !!! note "Per-user rotation"
     For playlists shared with multiple users, each user gets their own rotation based on their own watch history. Collections use the [reference user's](user-selection.md#collections-reference-user) watch history, so all users see the same rotation.
