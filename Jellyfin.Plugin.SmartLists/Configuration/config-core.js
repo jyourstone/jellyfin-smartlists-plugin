@@ -112,6 +112,7 @@
     // Fields available for Round Robin grouping, filtered by media type in the UI
     SmartLists.ROUND_ROBIN_GROUP_FIELDS = [
         { value: 'SeriesName', label: 'Series Name', mediaTypes: ['Episode'] },
+        { value: 'Collections', label: 'Collection', mediaTypes: ['Episode', 'Movie'] },
         { value: 'AlbumName', label: 'Album Name', mediaTypes: ['Audio', 'MusicVideo'] },
         { value: 'Artist', label: 'Artist', mediaTypes: ['Audio', 'MusicVideo'] },
         { value: 'Genres', label: 'Genre (first)', mediaTypes: null },

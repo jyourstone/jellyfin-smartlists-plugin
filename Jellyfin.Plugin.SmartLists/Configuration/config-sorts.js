@@ -123,7 +123,7 @@
     };
 
     // Helper function to sync Sort Order UI based on Sort By value
-    SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer) {
+    SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer, withinGroupContainer) {
         if (!sortOrderContainer || !sortOrderSelect) return;
         
         // Hide Sort Order for Random, Random Round Robin, and Default (they don't use ordering)
@@ -141,6 +141,12 @@
         // Show/hide GroupBy dropdown for Round Robin and Random Round Robin
         if (groupByContainer) {
             groupByContainer.style.display = SmartLists.isRoundRobinSort(sortByValue) ? '' : 'none';
+        }
+
+        // Show/hide Order Within Group for round robin sorts (not Shuffled - shuffle wins)
+        if (withinGroupContainer) {
+            var showWithinGroup = SmartLists.isRoundRobinSort(sortByValue) && sortByValue !== 'Shuffled Round Robin';
+            withinGroupContainer.style.display = showWithinGroup ? '' : 'none';
         }
     };
     
@@ -339,6 +345,18 @@
         groupByField.container.style.display = SmartLists.isRoundRobinSort(actualSortBy) ? '' : 'none';
         fieldsContainer.appendChild(groupByField.container);
 
+        // Order Within Group field (round robin sorts except Shuffled)
+        const withinGroupField = SmartLists.createSortField('Order Within Group', 'sort-withingroup-' + sortId, 'select');
+        withinGroupField.container.style.minWidth = '200px';
+        withinGroupField.container.style.maxWidth = '200px';
+        var savedWithinGroup = (sortData && sortData.WithinGroupOrder) ? sortData.WithinGroupOrder : 'Natural';
+        SmartLists.populateSelectElement(withinGroupField.input, [
+            { value: 'Natural', label: 'Season/Episode (default)', selected: savedWithinGroup !== 'AirDate' },
+            { value: 'AirDate', label: 'Air Date', selected: savedWithinGroup === 'AirDate' }
+        ]);
+        withinGroupField.container.style.display = (SmartLists.isRoundRobinSort(actualSortBy) && actualSortBy !== 'Shuffled Round Robin') ? '' : 'none';
+        fieldsContainer.appendChild(withinGroupField.container);
+
         box.appendChild(fieldsContainer);
 
         // Remove button (positioned absolutely within box)
@@ -353,7 +371,7 @@
 
         // Add event listener to sync Sort Order UI and checkbox visibility when Sort By changes
         sortByField.input.addEventListener('change', function() {
-            SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input, groupByField.container);
+            SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input, groupByField.container, withinGroupField.container);
             // Show/hide ignore articles checkbox based on Sort By value
             const showIgnoreArticles = (this.value === 'Name' || this.value === 'SeriesName');
             ignoreArticlesField.container.style.display = showIgnoreArticles ? '' : 'none';
@@ -364,7 +382,7 @@
         });
 
         // Initialize Sort Order UI based on current Sort By value
-        SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input, groupByField.container);
+        SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input, groupByField.container, withinGroupField.container);
 
         return box;
     };
@@ -493,6 +511,10 @@
                 if (groupBySelect && groupBySelect.value) {
                     sortEntry.GroupByField = groupBySelect.value;
                 }
+                var withinGroupSelect = box.querySelector('[id^="sort-withingroup-"]');
+                if (withinGroupSelect && withinGroupSelect.value === 'AirDate' && sortBy !== 'Shuffled Round Robin') {
+                    sortEntry.WithinGroupOrder = 'AirDate';
+                }
             }
 
             sorts.push(sortEntry);
@@ -539,7 +561,9 @@
             // Sync Sort Order UI for the effective value
             var groupByContainer = box.querySelector('[id^="sort-groupby-"]');
             groupByContainer = groupByContainer ? groupByContainer.closest('.sort-field-container') : null;
-            SmartLists.syncSortOrderUI(effectiveSortValue, sortOrderContainer, sortOrderSelect, groupByContainer);
+            var withinGroupContainer = box.querySelector('[id^="sort-withingroup-"]');
+            withinGroupContainer = withinGroupContainer ? withinGroupContainer.closest('.sort-field-container') : null;
+            SmartLists.syncSortOrderUI(effectiveSortValue, sortOrderContainer, sortOrderSelect, groupByContainer, withinGroupContainer);
 
             // Update Round Robin Group By dropdown options
             if (groupByContainer) {
