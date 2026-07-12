@@ -17,6 +17,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? GroupByField { get; set; }
+
+        /// <summary>
+        /// How items are ordered inside each Round Robin group.
+        /// "Natural" (default, also when null/unknown): season/episode, disc/track, or name.
+        /// "AirDate": premiere date (day precision), tie-broken by season/episode.
+        /// Ignored by Shuffled Round Robin (shuffle wins).
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? WithinGroupOrder { get; set; }
     }
 }
 

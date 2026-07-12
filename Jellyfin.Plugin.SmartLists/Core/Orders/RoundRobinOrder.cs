@@ -27,6 +27,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public string? GroupByField { get; set; }
 
         /// <summary>
+        /// Item id → collection name, for GroupByField "Collections". Built by SmartList from the
+        /// unfiltered media pool (episodes resolve membership through their parent series) and set
+        /// before <see cref="PreComputePositions"/>. Items absent from the map fall back to
+        /// series-name/own-name grouping in <see cref="ExtractGroupKey"/>.
+        /// </summary>
+        public Dictionary<Guid, string>? CollectionGroupKeys { get; set; }
+
+        /// <summary>
+        /// When true, items within each group are ordered by air date (premiere date, day precision)
+        /// instead of natural season/episode order. Set from SortOption.WithinGroupOrder.
+        /// Ignored when <see cref="ShuffleWithinGroups"/> is true.
+        /// </summary>
+        public bool OrderWithinGroupsByAirDate { get; set; }
+
+        /// <summary>
         /// When true, items within each group are shuffled instead of sorted in natural order.
         /// </summary>
         protected virtual bool ShuffleWithinGroups => false;
@@ -50,7 +65,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups);
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups, CollectionGroupKeys, OrderWithinGroupsByAirDate);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -96,7 +111,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             Func<IEnumerable<string>, List<string>> orderGroupKeys,
             string logPrefix,
             ILogger? logger,
-            bool shuffleWithinGroups = false)
+            bool shuffleWithinGroups = false,
+            Dictionary<Guid, string>? collectionGroupKeys = null,
+            bool airDateWithinGroups = false)
         {
             var positions = new ConcurrentDictionary<Guid, int>();
 
@@ -114,7 +131,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in itemsList)
             {
-                var key = ExtractGroupKey(item, groupByField);
+                var key = ExtractGroupKey(item, groupByField, collectionGroupKeys);
                 if (!groups.TryGetValue(key, out var group))
                 {
                     group = new List<BaseItem>();
@@ -132,6 +149,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 if (shuffleWithinGroups)
                 {
                     Shuffle(kvp.Value, Random.Shared);
+                }
+                else if (airDateWithinGroups)
+                {
+                    kvp.Value.Sort((a, b) => CompareWithinGroupByAirDate(a, b));
                 }
                 else
                 {
@@ -165,7 +186,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Extracts the group key from an item based on the configured GroupByField.
         /// </summary>
-        internal static string ExtractGroupKey(BaseItem item, string? groupByField)
+        internal static string ExtractGroupKey(BaseItem item, string? groupByField, Dictionary<Guid, string>? collectionGroupKeys = null)
         {
             if (string.IsNullOrEmpty(groupByField))
             {
@@ -209,6 +230,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
                     return string.Empty;
 
+                case "Collections":
+                    if (collectionGroupKeys != null && collectionGroupKeys.TryGetValue(item.Id, out var collectionName))
+                    {
+                        return collectionName;
+                    }
+
+                    // Not in any collection: fall back to per-show grouping
+                    if (item is Episode collectionEpisode)
+                    {
+                        return collectionEpisode.SeriesName ?? string.Empty;
+                    }
+
+                    return item.Name ?? string.Empty;
+
                 default:
                     return item.Name ?? string.Empty;
             }
@@ -237,6 +272,29 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             return OrderUtilities.SharedNaturalComparer.Compare(
                 a.SortName ?? a.Name ?? string.Empty,
                 b.SortName ?? b.Name ?? string.Empty);
+        }
+
+        /// <summary>
+        /// Compares two items within the same group by air date (premiere date, day precision).
+        /// Missing dates are DateTime.MinValue and sort first (Release Date sort convention).
+        /// Same-day ties put episodes before non-episodes, then fall back to natural order,
+        /// so multi-part crossovers airing the same day keep their episode order.
+        /// </summary>
+        internal static int CompareWithinGroupByAirDate(BaseItem a, BaseItem b)
+        {
+            var dateCompare = OrderUtilities.GetReleaseDate(a).Date.CompareTo(OrderUtilities.GetReleaseDate(b).Date);
+            if (dateCompare != 0)
+            {
+                return dateCompare;
+            }
+
+            var episodeCompare = OrderUtilities.IsEpisode(b).CompareTo(OrderUtilities.IsEpisode(a));
+            if (episodeCompare != 0)
+            {
+                return episodeCompare;
+            }
+
+            return CompareWithinGroup(a, b);
         }
 
         /// <summary>
@@ -348,7 +406,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             User user,
             IUserDataManager? userDataManager,
             RefreshQueueService.RefreshCache? refreshCache,
-            ILogger? logger)
+            ILogger? logger,
+            Dictionary<Guid, string>? collectionGroupKeys = null)
         {
             var recency = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrEmpty(groupByField) || userDataManager == null || user == null)
@@ -361,7 +420,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             {
                 try
                 {
-                    var key = ExtractGroupKey(item, groupByField);
+                    var key = ExtractGroupKey(item, groupByField, collectionGroupKeys);
 
                     var lastPlayed = LastPlayedOrderBase.GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache)
                         ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(

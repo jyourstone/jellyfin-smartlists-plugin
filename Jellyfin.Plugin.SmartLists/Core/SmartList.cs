@@ -126,6 +126,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         if (order is RoundRobinBase rr)
                         {
                             rr.GroupByField = so.GroupByField;
+                            rr.OrderWithinGroupsByAirDate = string.Equals(so.WithinGroupOrder, "AirDate", StringComparison.OrdinalIgnoreCase);
                         }
 
                         return order;
