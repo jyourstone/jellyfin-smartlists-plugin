@@ -74,16 +74,42 @@ jobs:
             cd ../..
           done
 
-      - name: Create Release (auto notes from PRs)
+      - name: Read tag message
+        id: tag_message
+        run: |
+          # actions/checkout replaces the annotated tag with a lightweight ref
+          # pointing at the commit (actions/checkout#290) — re-fetch to get the
+          # real tag object back before reading its message.
+          git fetch --tags --force
+          BODY=""
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" = "tag" ]; then
+            BODY=$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")
+          fi
+          if [ -n "$BODY" ]; then
+            echo "has_message=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_message=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo 'body<<EOM'
+            echo "$BODY"
+            echo 'EOM'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ github.ref_name }}
+          # Changelog from the annotated tag message (written by the /release
+          # skill). Falls back to GitHub auto-generated notes (PR titles +
+          # labels) when the tag has no annotated message.
+          body: ${{ steps.tag_message.outputs.body }}
           files: ./Jellyfin.Plugin.SmartLists_${{ github.ref_name }}_*.zip
           draft: false
           # Use the dynamically determined prerelease status
           prerelease: ${{ steps.check_preview.outputs.is_preview }}
-          generate_release_notes: true
+          generate_release_notes: ${{ steps.tag_message.outputs.has_message != 'true' }}
           token: ${{ secrets.PAT }}
 
       - name: Read Release Body
