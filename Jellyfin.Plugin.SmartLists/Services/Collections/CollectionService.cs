@@ -458,9 +458,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 foreach (var orphan in orphans)
                 {
-                    _logger.LogWarning("Deleting orphaned duplicate collection '{CollectionName}' ({CollectionId}) tethered to smart collection {SmartListId}",
-                        orphan.Name, orphan.Id, dto.Id);
-                    _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                    try
+                    {
+                        _logger.LogWarning("Deleting orphaned duplicate collection '{CollectionName}' ({CollectionId}) tethered to smart collection {SmartListId}",
+                            orphan.Name, orphan.Id, dto.Id);
+                        _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        // Per-orphan catch so one failed deletion doesn't strand the rest
+                        _logger.LogWarning(deleteEx, "Failed to delete orphaned duplicate collection '{CollectionName}' ({CollectionId}), continuing with remaining orphans",
+                            orphan.Name, orphan.Id);
+                    }
                 }
             }
             catch (Exception ex)

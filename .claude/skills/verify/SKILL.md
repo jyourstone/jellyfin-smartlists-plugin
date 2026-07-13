@@ -7,6 +7,14 @@ description: Drive the SmartLists plugin against the local dev Jellyfin containe
 
 ## Build + deploy (from repo root; works from worktrees too)
 
+Before deploying, compile-check BOTH target frameworks (the container only runs net10.0, but the project must also build for net9.0 / Jellyfin 10.11):
+
+```bash
+dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj -c Release --no-incremental
+```
+
+Then build + deploy the container framework:
+
 ```bash
 # ALWAYS --no-incremental: incremental deploy builds have served stale DLLs
 dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj \
@@ -21,12 +29,13 @@ After a code change, confirm the deployed DLL actually contains it — .NET stri
 
 ```js
 const buf = require('fs').readFileSync('.../build_output/Jellyfin.Plugin.SmartLists.dll');
-buf.toString('utf16le').includes('some new log message')  // check odd offset too: buf.slice(1)
+buf.toString('utf16le').includes('some new log message')
+  || buf.slice(1).toString('utf16le').includes('some new log message')  // odd byte offset
 ```
 
 ## Drive the API
 
-- Wait ready: `until curl -s -o /dev/null -w "%{http_code}" http://localhost:8096/health | grep -q 200; do sleep 2; done`
+- Wait ready (bounded): `timeout 120 bash -c 'until curl -s -o /dev/null -w "%{http_code}" http://localhost:8096/health | grep -q 200; do sleep 2; done'` — on timeout, check `docker logs jellyfin` for startup errors
 - API key: `sqlite3 "file:<MAIN>/dev/jellyfin-data/config/data/jellyfin.db?mode=ro" "SELECT AccessToken FROM ApiKeys"` (dev-only key)
 - Auth header (query-param api_key returns 401): `Authorization: MediaBrowser Token="<key>"`
 - Endpoints: `GET /Plugins/SmartLists` (list), `POST /Plugins/SmartLists/{id}/refresh|enable|disable`

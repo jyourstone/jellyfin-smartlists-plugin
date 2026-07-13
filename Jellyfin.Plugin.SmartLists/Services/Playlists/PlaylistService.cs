@@ -1428,9 +1428,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 foreach (var orphan in orphans)
                 {
-                    _logger.LogWarning("Deleting orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}) tethered to smart playlist {SmartListId} for user {UserId}",
-                        orphan.Name, orphan.Id, dto.Id, user.Id);
-                    _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                    try
+                    {
+                        _logger.LogWarning("Deleting orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}) tethered to smart playlist {SmartListId} for user {UserId}",
+                            orphan.Name, orphan.Id, dto.Id, user.Id);
+                        _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        // Per-orphan catch so one failed deletion doesn't strand the rest
+                        _logger.LogWarning(deleteEx, "Failed to delete orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}), continuing with remaining orphans",
+                            orphan.Name, orphan.Id);
+                    }
                 }
             }
             catch (Exception ex)
