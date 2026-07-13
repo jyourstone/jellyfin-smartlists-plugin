@@ -230,7 +230,7 @@ Both the show rotation and the episode order within each show are random, and re
 4. No Sort Order is needed — both group order and item order are always randomized
 
 ### Least Recently Watched Round Robin (Interleave)
-Rotates through your shows starting with the one you watched **least** recently — shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A today, and on the next refresh Show A moves to the end of the rotation while the other shows shift forward. Within each group, items stay in natural order (episodes by season/episode number).
+Rotates through your shows starting with the one you watched **least** recently — shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A today, and on the next refresh Show A moves to the end of the rotation while the other shows shift forward. Within each group, items stay in natural order (episodes by season/episode number), or air-date order if you set **Order Within Group** to Air Date.
 
 Unlike Random Round Robin, the rotation is not shuffled — it is derived entirely from your watch history, so it "continues where you left off" across refreshes, and refreshing without watching anything produces the same order.
 
