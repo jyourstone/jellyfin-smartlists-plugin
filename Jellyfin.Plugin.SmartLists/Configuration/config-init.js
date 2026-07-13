@@ -424,6 +424,7 @@
         // Set default public/enabled/extras checkboxes
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', false);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
@@ -474,6 +475,7 @@
         SmartLists.setElementValue(page, '#autoRefreshMode', 'OnLibraryChanges');
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', false);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
