@@ -258,6 +258,33 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 // Note: Legacy name-based fallback removed - all playlists should now have JellyfinPlaylistId
 
+                // Recovery: if the stored Jellyfin playlist ID is stale (e.g. lost after a DB
+                // migration or restore), re-find the playlist via the SmartLists provider ID
+                // stamped on it at creation. Never match by name - duplicate names are legal.
+                var recoveredViaProviderId = false;
+                if (existingPlaylist == null && !string.IsNullOrEmpty(dto.Id))
+                {
+                    // Note: IPlaylistManager.GetPlaylists hydrates items without provider IDs
+                    // (DtoOptions(false)), so query the library directly instead
+                    var tetherQuery = new InternalItemsQuery(user)
+                    {
+                        IncludeItemTypes = [BaseItemKind.Playlist],
+                        Recursive = true,
+                    };
+
+                    existingPlaylist = _libraryManager.GetItemsResult(tetherQuery).Items
+                        .OfType<Playlist>()
+                        .FirstOrDefault(p => p.OwnerUserId == user.Id
+                            && string.Equals(p.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                    if (existingPlaylist != null)
+                    {
+                        recoveredViaProviderId = true;
+                        logger.LogInformation("Recovered playlist '{PlaylistName}' ({PlaylistId}) for user {UserId} via SmartLists provider ID; stored Jellyfin playlist ID was stale",
+                            existingPlaylist.Name, existingPlaylist.Id, user.Id);
+                    }
+                }
+
                 // Now that we've found the existing playlist (or not), apply the new naming format
                 var smartPlaylistName = NameFormatter.FormatPlaylistName(dto.Name);
 
@@ -304,8 +331,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         logger.LogDebug("Playlist public status changing from {OldPublic} to {NewPublic}", isCurrentlyPublic, dto.Public);
                     }
 
+                    // Retro-stamp the tether on playlists created before this mechanism existed
+                    var providerIdChanged = false;
+                    if (!string.IsNullOrEmpty(dto.Id)
+                        && !string.Equals(existingPlaylist.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        providerIdChanged = true;
+                        existingPlaylist.SetProviderId(ProviderKeys.SmartLists, dto.Id);
+                    }
+
                     // Update the playlist if any changes are needed
-                    if (nameChanged || ownershipChanged || publicStatusChanged)
+                    if (nameChanged || ownershipChanged || publicStatusChanged || providerIdChanged)
                     {
                         await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken);
                         logger.LogDebug("Updated existing playlist: {PlaylistName}", existingPlaylist.Name);
@@ -316,6 +352,47 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     logger.LogDebug("Successfully updated existing playlist: {PlaylistName} with {ItemCount} items",
                         existingPlaylist.Name, newLinkedChildren.Length);
+
+                    if (recoveredViaProviderId)
+                    {
+                        var recoveredPlaylistId = existingPlaylist.Id.ToString("N");
+                        if (dto.UserPlaylists != null && dto.UserPlaylists.Count > 0)
+                        {
+                            var recoveredMapping = dto.UserPlaylists.FirstOrDefault(m => string.Equals(m.UserId, user.Id.ToString("N"), StringComparison.OrdinalIgnoreCase));
+                            if (recoveredMapping != null)
+                            {
+                                recoveredMapping.JellyfinPlaylistId = recoveredPlaylistId;
+                            }
+                            else
+                            {
+                                dto.UserPlaylists.Add(new SmartPlaylistDto.UserPlaylistMapping
+                                {
+                                    UserId = user.Id.ToString("N"),
+                                    JellyfinPlaylistId = recoveredPlaylistId
+                                });
+                            }
+
+                            dto.JellyfinPlaylistId = dto.UserPlaylists[0].JellyfinPlaylistId;
+                        }
+                        else
+                        {
+                            dto.JellyfinPlaylistId = recoveredPlaylistId;
+                        }
+
+                        if (saveCallback != null)
+                        {
+                            try
+                            {
+                                await saveCallback(dto);
+                            }
+                            catch (Exception saveEx)
+                            {
+                                logger.LogWarning(saveEx, "Failed to save recovered Jellyfin playlist ID for {PlaylistName}, but continuing with operation", dto.Name);
+                            }
+                        }
+                    }
+
+                    DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id);
 
                     return (true, $"Updated playlist '{existingPlaylist.Name}' with {newLinkedChildren.Length} items", existingPlaylist.Id.ToString("N"));
                 }
@@ -331,6 +408,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         logger.LogError("Failed to create playlist '{PlaylistName}' - no valid playlist ID returned", smartPlaylistName);
                         return (false, $"Failed to create playlist '{smartPlaylistName}' - the playlist could not be retrieved after creation", string.Empty);
+                    }
+
+                    if (Guid.TryParse(newPlaylistId, out var createdPlaylistGuid))
+                    {
+                        DeleteOrphanedTetheredPlaylists(dto, user, createdPlaylistGuid);
                     }
 
                     // Update the DTO with the new Jellyfin playlist ID
@@ -556,6 +638,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         // Remove the smart playlist naming and keep just the base name
                         existingPlaylist.Name = dto.Name;
 
+                        // Playlist is being handed back to the user - remove the smart list tether
+                        existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
+
                         // Save the changes
                         await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
@@ -579,6 +664,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             if (oldName == expectedName)
                             {
                                 existingPlaylist.Name = baseName;
+
+                                // Playlist is being handed back to the user - remove the smart list tether
+                                existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
 
                                 // Save the changes
                                 await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -710,6 +798,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 newPlaylist.LinkedChildren = linkedChildren;
 
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    newPlaylist.SetProviderId(ProviderKeys.SmartLists, dto.Id);
+                }
+
                 // Set MediaType before persisting to avoid a second write
                 var mediaType = DeterminePlaylistMediaType(dto);
                 SetPlaylistMediaType(newPlaylist, mediaType);
@@ -733,6 +826,16 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 // Apply custom metadata after metadata refresh to prevent providers from overwriting
                 await ApplyCustomMetadataAsync(newPlaylist, dto, user, cancellationToken).ConfigureAwait(false);
+
+                // Re-assert the tether: the cover-art refresh above runs with ReplaceAllMetadata,
+                // which rebuilds provider IDs from playlist.xml and can drop the stamp set before
+                // the first save. Persisting it last also writes it into playlist.xml.
+                if (!string.IsNullOrEmpty(dto.Id)
+                    && !string.Equals(newPlaylist.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    newPlaylist.SetProviderId(ProviderKeys.SmartLists, dto.Id);
+                    await newPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                }
 
                 return newPlaylist.Id.ToString("N");
             }
@@ -1297,9 +1400,52 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         /// <summary>
+        /// Deletes duplicate Jellyfin playlists that carry this smart playlist's provider-ID
+        /// tether for this user but are not the tracked playlist. The tether proves the plugin
+        /// created them, so deletion cannot hit user-created playlists.
+        /// </summary>
+        private void DeleteOrphanedTetheredPlaylists(SmartPlaylistDto dto, User user, Guid canonicalPlaylistId)
+        {
+            if (string.IsNullOrEmpty(dto.Id))
+            {
+                return;
+            }
+
+            try
+            {
+                var query = new InternalItemsQuery(user)
+                {
+                    IncludeItemTypes = [BaseItemKind.Playlist],
+                    Recursive = true,
+                };
+
+                var orphans = _libraryManager.GetItemsResult(query).Items
+                    .OfType<Playlist>()
+                    .Where(p => p.Id != canonicalPlaylistId
+                        && p.OwnerUserId == user.Id
+                        && string.Equals(p.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var orphan in orphans)
+                {
+                    _logger.LogWarning("Deleting orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}) tethered to smart playlist {SmartListId} for user {UserId}",
+                        orphan.Name, orphan.Id, dto.Id, user.Id);
+                    _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clean up orphaned duplicate playlists for '{PlaylistName}', continuing", dto.Name);
+            }
+        }
+
+        /// <summary>
         /// Helper method to delete all Jellyfin playlists for a smart playlist across all users.
         /// Handles both multi-user playlists (UserPlaylists array) and legacy single-user playlists.
         /// This centralizes the deletion logic used by disable, delete, and visibility schedule operations.
+        /// Successfully deleted playlists have their stored Jellyfin playlist IDs cleared on the DTO;
+        /// failed deletions keep their IDs so deletion can be retried later. Callers are responsible
+        /// for persisting the DTO.
         /// </summary>
         /// <param name="playlistDto">The smart playlist DTO containing Jellyfin playlist IDs to delete</param>
         /// <param name="cancellationToken">Cancellation token</param>
@@ -1330,6 +1476,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             await DeleteAsync(tempDto, cancellationToken).ConfigureAwait(false);
                             _logger.LogDebug("Deleted Jellyfin playlist {JellyfinPlaylistId} for user {UserId}",
                                 userMapping.JellyfinPlaylistId, userMapping.UserId);
+                            // Clear the mapping only on successful deletion; a failed delete keeps
+                            // its ID so the playlist can be found and deleted on a later attempt
+                            userMapping.JellyfinPlaylistId = null;
                         }
                         catch (Exception ex)
                         {
@@ -1338,6 +1487,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         }
                     }
                 }
+
+                // Keep the backwards-compatibility field in sync (first user's playlist)
+                playlistDto.JellyfinPlaylistId = playlistDto.UserPlaylists[0].JellyfinPlaylistId;
             }
             else if (!string.IsNullOrEmpty(playlistDto.JellyfinPlaylistId))
             {
@@ -1347,6 +1499,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 try
                 {
                     await DeleteAsync(playlistDto, cancellationToken).ConfigureAwait(false);
+                    playlistDto.JellyfinPlaylistId = null;
                 }
                 catch (Exception ex)
                 {
