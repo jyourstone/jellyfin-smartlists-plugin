@@ -113,6 +113,16 @@ Like the TV Channel playlist above, but the show rotation follows your watch his
 
 Result: Shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A, and on the next refresh Show A moves to the end while the other shows shift forward — the rotation "continues where you left off".
 
+### Franchise TV Channel (crossovers in air-date order)
+Have franchise collections like NCIS or One Chicago where crossover episodes span several shows? Group the rotation by collection and play each franchise in airing order:
+
+- **Media Types**: Episode
+- **Playback Status** = Unplayed
+- **Sort by**: Least Recently Watched Round Robin (Interleave), **Group By**: Collection, **Order Within Group**: Air Date
+- **Auto Refresh**: On All Changes
+
+Result: Each collection becomes one slot in the rotation and plays chronologically across its shows — crossovers stay in order, and a spinoff only starts appearing once the timeline reaches its premiere. Shows not in any collection rotate as themselves. Watch anything in a franchise and the whole franchise moves to the back of the rotation.
+
 ### TV Channel with Commercials (Bumpers)
 Take any of the TV Channel playlists above and weave "commercial break" clips between the episodes:
 

@@ -126,6 +126,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         if (order is RoundRobinBase rr)
                         {
                             rr.GroupByField = so.GroupByField;
+                            rr.OrderWithinGroupsByAirDate = string.Equals(so.WithinGroupOrder, "AirDate", StringComparison.OrdinalIgnoreCase);
                         }
 
                         return order;
@@ -758,14 +759,30 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     return [];
                 }
 
-                // Least Recently Watched Round Robin needs per-group watch recency computed from the
-                // UNFILTERED pool: rules like "Playback Status is Unwatched" remove watched items from
-                // the results, so recency derived from filtered items would see every group as unwatched.
-                // Same injection pattern as SimilarityOrder.Scores / RuleBlockOrder.GroupMappings.
+                // Round Robin sorts may need maps computed from the UNFILTERED pool before filtering
+                // (same injection pattern as SimilarityOrder.Scores / RuleBlockOrder.GroupMappings):
+                // - "Collections" grouping: item id -> collection name (episodes resolve via their series).
+                // - Least Recently Watched: per-group watch recency. Rules like "Playback Status is
+                //   Unwatched" remove watched items from the results, so recency derived from filtered
+                //   items would see every group as unwatched.
+                Dictionary<Guid, string>? collectionGroupKeys = null;
+                if (Orders.OfType<RoundRobinBase>().Any(o => o.GroupByField == "Collections"))
+                {
+                    collectionGroupKeys = BuildCollectionGroupKeyMap(itemsArray, user, libraryManager, refreshCache, logger);
+                    foreach (var rrOrder in Orders.OfType<RoundRobinBase>())
+                    {
+                        if (rrOrder.GroupByField == "Collections")
+                        {
+                            rrOrder.CollectionGroupKeys = collectionGroupKeys;
+                        }
+                    }
+                }
+
                 foreach (var lrwOrder in Orders.OfType<RoundRobinLeastRecentlyWatchedOrder>())
                 {
                     lrwOrder.GroupRecency = RoundRobinLeastRecentlyWatchedOrder.BuildGroupRecency(
-                        itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger);
+                        itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger,
+                        lrwOrder.GroupByField == "Collections" ? collectionGroupKeys : null);
                 }
 
                 // Media type filtering is now handled at the API level in PlaylistService.GetAllUserMedia()
@@ -1648,6 +1665,92 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
 
             return [];
+        }
+
+        /// <summary>
+        /// Builds an item id → collection name map for Round Robin "Collections" grouping.
+        /// TV collections contain Series items, so episodes resolve membership through their
+        /// parent series; movies (and any direct members) resolve by their own id.
+        /// When an item belongs to multiple collections, the alphabetically-first collection
+        /// name wins (consistent with the Genres/Studios "first value" convention).
+        /// Direct members only — nested collections are not flattened.
+        /// </summary>
+        private static Dictionary<Guid, string> BuildCollectionGroupKeyMap(
+            IReadOnlyList<BaseItem> pool,
+            User user,
+            ILibraryManager libraryManager,
+            RefreshQueueService.RefreshCache? refreshCache,
+            ILogger? logger)
+        {
+            var map = new Dictionary<Guid, string>();
+
+            try
+            {
+                BaseItem[] allCollections;
+                if (refreshCache?.AllCollections != null)
+                {
+                    allCollections = refreshCache.AllCollections;
+                }
+                else
+                {
+                    var query = new InternalItemsQuery(user)
+                    {
+                        IncludeItemTypes = [BaseItemKind.BoxSet],
+                        Recursive = true,
+                    };
+                    allCollections = [.. libraryManager.GetItemsResult(query).Items];
+                    if (refreshCache != null)
+                    {
+                        refreshCache.AllCollections = allCollections;
+                    }
+                }
+
+                // memberId -> collection name; alphabetically-first collection wins
+                var memberToCollection = new Dictionary<Guid, string>();
+                foreach (var collection in allCollections.OrderBy(c => c.Name ?? string.Empty, OrderUtilities.SharedNaturalComparer))
+                {
+                    BaseItem[] children;
+                    if (refreshCache != null && refreshCache.CollectionDirectChildren.TryGetValue(collection.Id, out var cachedChildren))
+                    {
+                        children = cachedChildren;
+                    }
+                    else
+                    {
+                        children = GetCollectionChildren(collection, user, logger);
+                        refreshCache?.CollectionDirectChildren.TryAdd(collection.Id, children);
+                    }
+
+                    foreach (var child in children)
+                    {
+                        if (!memberToCollection.ContainsKey(child.Id))
+                        {
+                            memberToCollection[child.Id] = collection.Name ?? string.Empty;
+                        }
+                    }
+                }
+
+                foreach (var item in pool)
+                {
+                    if (memberToCollection.TryGetValue(item.Id, out var directName))
+                    {
+                        map[item.Id] = directName;
+                    }
+                    else if (item is Episode episode && episode.SeriesId != Guid.Empty &&
+                             memberToCollection.TryGetValue(episode.SeriesId, out var seriesCollectionName))
+                    {
+                        map[item.Id] = seriesCollectionName;
+                    }
+                }
+
+                logger?.LogDebug("Collection group map: {MappedCount} of {PoolCount} items belong to a collection ({CollectionCount} collections checked)",
+                    map.Count, pool.Count, allCollections.Length);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Error building collection group map - items will fall back to series/name grouping");
+            }
+
+            return map;
         }
 
         /// <summary>
