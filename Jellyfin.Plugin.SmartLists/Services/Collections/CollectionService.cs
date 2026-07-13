@@ -327,6 +327,30 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     }
                 }
 
+                // Recovery: if the stored Jellyfin collection ID is stale (e.g. lost after a DB
+                // migration or restore), re-find the collection via the SmartLists provider ID
+                // stamped on it at creation. Never match by name - duplicate names are legal.
+                // Runs before the hide-when-empty check so that an empty refresh deletes the
+                // recovered collection instead of leaving it orphaned.
+                if (existingCollectionItem == null && !string.IsNullOrEmpty(dto.Id))
+                {
+                    var tetherQuery = new InternalItemsQuery
+                    {
+                        IncludeItemTypes = [BaseItemKind.BoxSet],
+                        Recursive = true,
+                    };
+
+                    existingCollectionItem = _libraryManager.GetItemsResult(tetherQuery).Items
+                        .FirstOrDefault(b => string.Equals(b.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                    if (existingCollectionItem != null)
+                    {
+                        _logger.LogInformation("Recovered collection '{CollectionName}' ({CollectionId}) via SmartLists provider ID; stored Jellyfin collection ID was stale",
+                            existingCollectionItem.Name, existingCollectionItem.Id);
+                        dto.JellyfinCollectionId = existingCollectionItem.Id.ToString("N");
+                    }
+                }
+
                 // Hide when empty: don't keep a Jellyfin collection around while no items match
                 if (dto.HideWhenEmpty && newLinkedChildren.Length == 0)
                 {
@@ -361,8 +385,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         existingCollection.Name = expectedName;
                     }
 
+                    // Retro-stamp the tether on collections created before this mechanism existed
+                    var providerIdChanged = false;
+                    if (!string.IsNullOrEmpty(dto.Id)
+                        && !string.Equals(existingCollection.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        providerIdChanged = true;
+                        existingCollection.SetProviderId(ProviderKeys.SmartLists, dto.Id);
+                    }
+
                     // Update the collection if any changes are needed
-                    if (nameChanged)
+                    if (nameChanged || providerIdChanged)
                     {
                         await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken);
                         _logger.LogDebug("Updated existing collection: {CollectionName}", existingCollection.Name);
@@ -377,6 +410,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Update LastRefreshed timestamp for successful refresh
                     dto.LastRefreshed = DateTime.UtcNow;
                     _logger.LogDebug("Updated LastRefreshed timestamp for collection: {CollectionName}", dto.Name);
+
+                    DeleteOrphanedTetheredCollections(dto, existingCollection.Id);
 
                     return (true, $"Updated collection '{existingCollection.Name}' with {newLinkedChildren.Length} items", existingCollection.Id.ToString("N"));
                 }
@@ -397,6 +432,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Update the DTO with the new Jellyfin collection ID
                     dto.JellyfinCollectionId = newCollectionId;
 
+                    if (Guid.TryParse(newCollectionId, out var createdCollectionGuid))
+                    {
+                        DeleteOrphanedTetheredCollections(dto, createdCollectionGuid);
+                    }
+
                     // Update LastRefreshed timestamp for successful refresh
                     dto.LastRefreshed = DateTime.UtcNow;
                     _logger.LogDebug("Updated LastRefreshed timestamp for collection: {CollectionName}", dto.Name);
@@ -409,7 +449,55 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         }
 
         /// <summary>
+        /// Deletes duplicate Jellyfin collections that carry this smart collection's provider-ID
+        /// tether but are not the tracked collection. The tether proves the plugin created them,
+        /// so deletion cannot hit user-created collections.
+        /// </summary>
+        private void DeleteOrphanedTetheredCollections(SmartCollectionDto dto, Guid canonicalCollectionId)
+        {
+            if (string.IsNullOrEmpty(dto.Id))
+            {
+                return;
+            }
+
+            try
+            {
+                var query = new InternalItemsQuery
+                {
+                    IncludeItemTypes = [BaseItemKind.BoxSet],
+                    Recursive = true,
+                };
+
+                var orphans = _libraryManager.GetItemsResult(query).Items
+                    .Where(b => b.Id != canonicalCollectionId
+                        && string.Equals(b.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var orphan in orphans)
+                {
+                    try
+                    {
+                        _logger.LogWarning("Deleting orphaned duplicate collection '{CollectionName}' ({CollectionId}) tethered to smart collection {SmartListId}",
+                            orphan.Name, orphan.Id, dto.Id);
+                        _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        // Per-orphan catch so one failed deletion doesn't strand the rest
+                        _logger.LogWarning(deleteEx, "Failed to delete orphaned duplicate collection '{CollectionName}' ({CollectionId}), continuing with remaining orphans",
+                            orphan.Name, orphan.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clean up orphaned duplicate collections for '{CollectionName}', continuing", dto.Name);
+            }
+        }
+
+        /// <summary>
         /// Deletes a Jellyfin collection associated with the smart collection.
+        /// Clears the stored Jellyfin collection ID when the collection is deleted or already absent, so callers should persist the DTO afterward.
         /// </summary>
         /// <param name="dto">The smart collection DTO.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -434,6 +522,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     else
                     {
                         _logger.LogWarning("No Jellyfin collection found by ID '{JellyfinCollectionId}' for deletion. Collection may have been manually deleted.", dto.JellyfinCollectionId);
+                        dto.JellyfinCollectionId = null;
                     }
                 }
                 else
@@ -447,6 +536,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         existingCollection.Name, existingCollection.Id);
                     // DeleteFileLocation = true to properly delete the BoxSet entity and its metadata
                     _libraryManager.DeleteItem(existingCollection, new DeleteOptions { DeleteFileLocation = true }, true);
+                    dto.JellyfinCollectionId = null;
                 }
 
                 return Task.CompletedTask;
@@ -501,6 +591,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         // Remove the smart collection naming and keep just the base name
                         existingCollection.Name = dto.Name;
 
+                        // Collection is being handed back to the user - remove the smart list tether
+                        existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
+
                         // Save the changes
                         await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
@@ -524,6 +617,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             if (oldName == expectedName)
                             {
                                 existingCollection.Name = baseName;
+
+                                // Collection is being handed back to the user - remove the smart list tether
+                                existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
 
                                 // Save the changes
                                 await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -908,6 +1004,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
                     await FinalizeCollectionMetadataAsync(retrievedItem, formattedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Stamp the tether so the collection can be recovered if the stored ID goes stale.
+                // Done after finalization so no later metadata write can drop it.
+                if (!string.IsNullOrEmpty(dto.Id) && retrievedItem != null
+                    && !string.Equals(retrievedItem.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    retrievedItem.SetProviderId(ProviderKeys.SmartLists, dto.Id);
+                    await retrievedItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 }
 
                 return collectionId.ToString("N");

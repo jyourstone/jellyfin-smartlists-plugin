@@ -2320,7 +2320,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 {
                     _logger.LogInformation("Visibility schedule: Disabling playlist '{Name}'", playlist.Name);
                     
-                    // Delete all Jellyfin playlists for all users using service method
+                    // Delete all Jellyfin playlists for all users using service method.
+                    // It clears the IDs of successfully deleted playlists on the DTO; failed
+                    // deletions keep their ID so deletion can be retried later.
                     // Cast to PlaylistService to access the helper method
                     if (_playlistService is Jellyfin.Plugin.SmartLists.Services.Playlists.PlaylistService playlistServiceImpl)
                     {
@@ -2330,18 +2332,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     {
                         _logger.LogWarning("Unable to cast playlist service to PlaylistService implementation");
                     }
-                    
-                    // Clear Jellyfin IDs and disable (same as manual disable)
+
+                    // Disable (same as manual disable)
                     playlist.Enabled = false;
-                    playlist.JellyfinPlaylistId = null;
-                    if (playlist.UserPlaylists != null)
-                    {
-                        foreach (var userMapping in playlist.UserPlaylists)
-                        {
-                            userMapping.JellyfinPlaylistId = null;
-                        }
-                    }
-                    
+
                     await _playlistStore.SaveAsync(playlist).ConfigureAwait(false);
                 }
             }
@@ -2412,23 +2406,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 {
                     _logger.LogInformation("Visibility schedule: Disabling collection '{Name}'", collection.Name);
                     
-                    // Delete Jellyfin collection before disabling
+                    // Delete Jellyfin collection before disabling.
+                    // DeleteAsync clears the ID if the Jellyfin collection is gone; a failed
+                    // deletion keeps it so deletion can be retried later.
                     if (!string.IsNullOrEmpty(collection.JellyfinCollectionId))
                     {
                         try
                         {
                             await _collectionService.DeleteAsync(collection).ConfigureAwait(false);
-                            _logger.LogDebug("Deleted Jellyfin collection {JellyfinCollectionId} for collection '{Name}' via visibility schedule", collection.JellyfinCollectionId, collection.Name);
+                            _logger.LogDebug("Deleted Jellyfin collection for collection '{Name}' via visibility schedule", collection.Name);
                         }
                         catch (Exception deleteEx)
                         {
                             _logger.LogWarning(deleteEx, "Failed to delete Jellyfin collection for '{Name}'", collection.Name);
                         }
                     }
-                    
-                    // Clear Jellyfin ID and disable (same as manual disable)
+
+                    // Disable (same as manual disable)
                     collection.Enabled = false;
-                    collection.JellyfinCollectionId = null;
                     await _collectionStore.SaveAsync(collection).ConfigureAwait(false);
                 }
             }

@@ -1576,16 +1576,27 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             logger.LogWarning(ex, "Failed to delete Jellyfin playlists when disabling playlist '{PlaylistName}', continuing", existingPlaylist.Name);
                         }
                         
-                        // Always clear the Jellyfin playlist IDs regardless of deletion success
-                        // This ensures consistency: disabled playlists should not have Jellyfin IDs
-                        playlist.JellyfinPlaylistId = null;
+                        // DeleteAllJellyfinPlaylistsForUsersAsync cleared the IDs of successfully
+                        // deleted playlists on existingPlaylist; failed deletions keep their ID so
+                        // the playlist can be deleted later. Sync the post-delete IDs onto the
+                        // incoming DTO without touching its user membership.
                         if (playlist.UserPlaylists != null)
                         {
-                            foreach (var userMapping in playlist.UserPlaylists)
+                            foreach (var newMapping in playlist.UserPlaylists)
                             {
-                                userMapping.JellyfinPlaylistId = null;
+                                var existingMapping = existingPlaylist.UserPlaylists?.FirstOrDefault(m =>
+                                {
+                                    var normalizedExisting = Guid.TryParse(m.UserId, out var existingGuid)
+                                        ? existingGuid.ToString("N") : m.UserId;
+                                    var normalizedNew = Guid.TryParse(newMapping.UserId, out var newGuid)
+                                        ? newGuid.ToString("N") : newMapping.UserId;
+                                    return string.Equals(normalizedExisting, normalizedNew, StringComparison.OrdinalIgnoreCase);
+                                });
+                                newMapping.JellyfinPlaylistId = existingMapping?.JellyfinPlaylistId;
                             }
                         }
+
+                        playlist.JellyfinPlaylistId = existingPlaylist.JellyfinPlaylistId;
                     }
                 }
 
@@ -1846,9 +1857,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             logger.LogWarning(ex, "Failed to delete Jellyfin collection when disabling collection '{CollectionName}', continuing", existingCollection.Name);
                         }
                         
-                        // Always clear the Jellyfin collection ID regardless of deletion success
-                        // This ensures consistency: disabled collections should not have Jellyfin IDs
-                        collection.JellyfinCollectionId = null;
+                        // DeleteAsync cleared the ID on existingCollection if the Jellyfin collection
+                        // is gone; a failed deletion keeps it so deletion can be retried later
+                        collection.JellyfinCollectionId = existingCollection.JellyfinCollectionId;
                     }
                 }
 
@@ -2283,19 +2294,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     try
                     {
-                        // Remove all Jellyfin playlists FIRST using service method
+                        // Remove all Jellyfin playlists FIRST using service method.
+                        // It clears the IDs of successfully deleted playlists on the DTO;
+                        // failed deletions keep their ID so deletion can be retried later.
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
-
-                        // Clear the Jellyfin playlist IDs since the playlists no longer exist
-                        playlist.JellyfinPlaylistId = null;
-                        if (playlist.UserPlaylists != null)
-                        {
-                            foreach (var userMapping in playlist.UserPlaylists)
-                            {
-                                userMapping.JellyfinPlaylistId = null;
-                            }
-                        }
 
                         // Only save the configuration if the Jellyfin operation succeeds
                         await playlistStore.SaveAsync(playlist);
@@ -2324,10 +2327,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     try
                     {
+                        // DisableAsync (via DeleteAsync) clears the ID if the Jellyfin collection
+                        // is gone; a failed deletion keeps it so deletion can be retried later
                         var collectionService = GetCollectionService();
                         await collectionService.DisableAsync(collection);
 
-                        collection.JellyfinCollectionId = null;
                         await collectionStore.SaveAsync(collection);
                         AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
 

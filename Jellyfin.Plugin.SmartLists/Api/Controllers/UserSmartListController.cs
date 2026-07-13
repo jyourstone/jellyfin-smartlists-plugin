@@ -1023,16 +1023,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         try
                         {
                             var playlistService = _playlistService;
+                            // The service clears the IDs of successfully deleted playlists on the
+                            // DTO; failed deletions keep their ID so deletion can be retried later
                             await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
-
-                            playlist.JellyfinPlaylistId = null;
-                            if (playlist.UserPlaylists != null)
-                            {
-                                foreach (var userMapping in playlist.UserPlaylists)
-                                {
-                                    userMapping.JellyfinPlaylistId = null;
-                                }
-                            }
 
                             await playlistStore.SaveAsync(playlist);
                             Services.Shared.AutoRefreshService.Instance?.UpdatePlaylistInCache(playlist);
@@ -1055,10 +1048,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                         try
                         {
+                            // DisableAsync (via DeleteAsync) clears the ID if the Jellyfin collection
+                            // is gone; a failed deletion keeps it so deletion can be retried later
                             var collectionService = _collectionService;
                             await collectionService.DisableAsync(collection);
 
-                            collection.JellyfinCollectionId = null;
                             await collectionStore.SaveAsync(collection);
                             Services.Shared.AutoRefreshService.Instance?.UpdateCollectionInCache(collection);
 
