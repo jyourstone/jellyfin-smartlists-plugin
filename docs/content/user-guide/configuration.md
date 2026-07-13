@@ -174,6 +174,7 @@ The remaining fields live inside the collapsed **More options** section, grouped
   - Decide if the list should be public or private (playlists only - collections are always server-wide)
 - **Presentation**
   - Upload custom images and set metadata such as sort title, overview, tags and favorite (see [Custom Images](#custom-images) and [Metadata](#metadata) above)
+  - Hide the Jellyfin playlist/collection while the list matches no items (see [Hide When Empty](#hide-when-empty))
 
 !!! info "User Page Differences"
     On the **User Page**, you can only select yourself for playlists and must use your own account as the reference user for collections. Admins can select any user(s) from the dropdown.
@@ -277,6 +278,16 @@ Disabling lists can be useful for:
 
 !!! tip "Use Visibility Scheduling Instead"
     For seasonal or time-based list visibility, consider using [Visibility Scheduling](auto-refresh.md#visibility-scheduling) instead of manually enabling/disabling lists. This automates the process and ensures lists appear and disappear exactly when you want them to.
+
+## Hide When Empty
+
+By default, a smart list's Jellyfin playlist or collection exists even when its rules match no items. Enable **Hide when empty** (in the **Presentation** group under **More options** when creating or editing a list) to change that:
+
+- If a refresh finds **no matching items**, the Jellyfin playlist/collection is removed (or never created in the first place).
+- As soon as a later refresh finds matching items again, it is recreated automatically — including any custom images and metadata you configured.
+- The smart list configuration itself is never deleted; it stays visible in the Smart Lists interface.
+
+This is useful for seasonal or rotating lists (e.g. "Halloween movies" driven by a schedule or an external list) that would otherwise linger as empty entries in your library. For multi-user playlists, hiding applies per user: a user with no matching items has their playlist hidden while other users keep theirs.
 
 ## Custom List Naming
 
