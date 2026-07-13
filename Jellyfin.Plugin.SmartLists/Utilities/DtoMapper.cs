@@ -42,6 +42,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
                 IncludeExtras = source.IncludeExtras,
+                HideWhenEmpty = source.HideWhenEmpty,
                 
                 // State and limits
                 Enabled = source.Enabled,
@@ -116,6 +117,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
                 IncludeExtras = source.IncludeExtras,
+                HideWhenEmpty = source.HideWhenEmpty,
                 
                 // State and limits
                 Enabled = source.Enabled,
