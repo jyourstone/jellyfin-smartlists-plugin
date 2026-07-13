@@ -332,6 +332,7 @@
 
             const isPublic = SmartLists.getElementChecked(page, '#playlistIsPublic', false);
             const includeExtras = SmartLists.getElementChecked(page, '#playlistIncludeExtras', false);
+            const hideWhenEmpty = SmartLists.getElementChecked(page, '#playlistHideWhenEmpty', false);
             const isEnabled = SmartLists.getElementChecked(page, '#playlistIsEnabled', true); // Default to true
             const autoRefreshMode = SmartLists.getElementValue(page, '#autoRefreshMode', 'Never');
 
@@ -427,6 +428,7 @@
                 Bumpers: bumperConfig,
                 Enabled: isEnabled,
                 IncludeExtras: includeExtras,
+                HideWhenEmpty: hideWhenEmpty,
                 MediaTypes: selectedMediaTypes,
                 MaxItems: maxItems,
                 MaxPlayTimeMinutes: maxPlayTimeMinutes,
@@ -733,6 +735,9 @@
         if (playlist.Enabled === false) {
             chips.push('Disabled');
         }
+        if (playlist.HideWhenEmpty) {
+            chips.push('Hide when empty');
+        }
         if (playlist.SortTitle || playlist.Overview || playlist.Favorite === true || playlist.Favorite === false ||
             (playlist.Tags && playlist.Tags.length > 0)) {
             chips.push('Metadata');
@@ -901,6 +906,7 @@
 
                 SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
                 SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
+                SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
 
                 // Handle AutoRefresh with backward compatibility
                 const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
@@ -1158,6 +1164,7 @@
 
                 SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false);
                 SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
+                SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
 
                 // Handle AutoRefresh
                 const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
@@ -2125,6 +2132,13 @@
             (playlist.IncludeExtras ?
                 '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Include Extras</td>' +
+                '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
+                '</tr>' :
+                ''
+            ) +
+            (playlist.HideWhenEmpty ?
+                '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Hide When Empty</td>' +
                 '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
                 '</tr>' :
                 ''

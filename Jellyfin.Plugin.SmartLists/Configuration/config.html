@@ -409,6 +409,21 @@
                         </div>
 
                             <h3 class="sectionTitle" style="margin-top: 1.5em;">Presentation</h3>
+                        <div class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 0.5em;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="playlistHideWhenEmpty"
+                                    data-embycheckbox="true" class="emby-checkbox">
+                                <span class="checkboxLabel">Hide when empty</span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">Don't create the playlist or collection while it has no matching items. If a refresh finds no items, the existing Jellyfin playlist/collection is removed and recreated automatically once items match again.</div>
+                        </div>
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" style="display: flex; align-items: center;">
                                 Custom Images

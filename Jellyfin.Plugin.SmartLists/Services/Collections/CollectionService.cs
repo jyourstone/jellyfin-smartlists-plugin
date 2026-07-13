@@ -330,6 +330,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // Recovery: if the stored Jellyfin collection ID is stale (e.g. lost after a DB
                 // migration or restore), re-find the collection via the SmartLists provider ID
                 // stamped on it at creation. Never match by name - duplicate names are legal.
+                // Runs before the hide-when-empty check so that an empty refresh deletes the
+                // recovered collection instead of leaving it orphaned.
                 if (existingCollectionItem == null && !string.IsNullOrEmpty(dto.Id))
                 {
                     var tetherQuery = new InternalItemsQuery
@@ -347,6 +349,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             existingCollectionItem.Name, existingCollectionItem.Id);
                         dto.JellyfinCollectionId = existingCollectionItem.Id.ToString("N");
                     }
+                }
+
+                // Hide when empty: don't keep a Jellyfin collection around while no items match
+                if (dto.HideWhenEmpty && newLinkedChildren.Length == 0)
+                {
+                    if (existingCollectionItem != null)
+                    {
+                        _logger.LogInformation("Smart collection '{CollectionName}' matched no items - deleting Jellyfin collection (hide when empty)", dto.Name);
+                        _libraryManager.DeleteItem(existingCollectionItem, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+
+                    // Clear the stored Jellyfin collection ID so a later refresh with items recreates it
+                    dto.JellyfinCollectionId = null;
+
+                    return (true, $"Collection '{NameFormatter.FormatPlaylistName(dto.Name)}' has no items - hidden (hide when empty)", string.Empty);
                 }
 
                 var collectionName = dto.Name;

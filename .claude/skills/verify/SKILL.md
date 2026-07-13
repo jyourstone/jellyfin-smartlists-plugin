@@ -35,7 +35,7 @@ buf.toString('utf16le').includes('some new log message')
 
 ## Drive the API
 
-- Wait ready (bounded): `timeout 120 bash -c 'until curl -s -o /dev/null -w "%{http_code}" http://localhost:8096/health | grep -q 200; do sleep 2; done'` — on timeout, check `docker logs jellyfin` for startup errors
+- Wait ready (bounded; plain `timeout` is not available on macOS): `for i in $(seq 1 60); do curl -s -o /dev/null -w "%{http_code}" http://localhost:8096/health | grep -q 200 && break; sleep 2; done` — if it never turns healthy, check `docker logs jellyfin` for startup errors
 - API key: `sqlite3 "file:<MAIN>/dev/jellyfin-data/config/data/jellyfin.db?mode=ro" "SELECT AccessToken FROM ApiKeys"` (dev-only key)
 - Auth header (query-param api_key returns 401): `Authorization: MediaBrowser Token="<key>"`
 - Endpoints: `GET /Plugins/SmartLists` (list), `POST /Plugins/SmartLists/{id}/refresh|enable|disable`
