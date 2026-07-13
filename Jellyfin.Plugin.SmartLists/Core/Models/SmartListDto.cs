@@ -74,6 +74,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         /// </summary>
         public bool IncludeExtras { get; set; } = false;
 
+        /// <summary>
+        /// When true, the Jellyfin playlist/collection is not created (and an existing one is
+        /// removed) while the list's rules match zero items. It is recreated automatically
+        /// once items match again. The smart list configuration itself is never deleted.
+        /// </summary>
+        public bool HideWhenEmpty { get; set; } = false;
+
         // State and limits
         public bool Enabled { get; set; } = true; // Default to enabled
         public int? MaxItems { get; set; } // Nullable to support backwards compatibility
