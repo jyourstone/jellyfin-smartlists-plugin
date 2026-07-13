@@ -261,6 +261,40 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Now that we've found the existing playlist (or not), apply the new naming format
                 var smartPlaylistName = NameFormatter.FormatPlaylistName(dto.Name);
 
+                // Hide when empty: don't keep a Jellyfin playlist around while no items match
+                if (dto.HideWhenEmpty && newLinkedChildren.Length == 0)
+                {
+                    if (existingPlaylist != null)
+                    {
+                        logger.LogInformation("Smart playlist '{PlaylistName}' matched no items - deleting Jellyfin playlist (hide when empty)", dto.Name);
+                        _libraryManager.DeleteItem(existingPlaylist, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+
+                    // Clear the stored Jellyfin playlist ID so a later refresh with items recreates it
+                    if (dto.UserPlaylists != null && dto.UserPlaylists.Count > 0)
+                    {
+                        var emptyUserMapping = dto.UserPlaylists.FirstOrDefault(m => string.Equals(m.UserId, user.Id.ToString("N"), StringComparison.OrdinalIgnoreCase));
+                        if (emptyUserMapping != null)
+                        {
+                            emptyUserMapping.JellyfinPlaylistId = null;
+                        }
+
+                        // Update backwards compatibility field (first user's playlist)
+                        dto.JellyfinPlaylistId = dto.UserPlaylists[0].JellyfinPlaylistId;
+                    }
+                    else
+                    {
+                        dto.JellyfinPlaylistId = null;
+                    }
+
+                    if (saveCallback != null)
+                    {
+                        await saveCallback(dto);
+                    }
+
+                    return (true, $"Playlist '{smartPlaylistName}' has no items - hidden (hide when empty)", string.Empty);
+                }
+
                 if (existingPlaylist != null)
                 {
                     logger.LogDebug("Processing existing playlist: {PlaylistName} (ID: {PlaylistId})", existingPlaylist.Name, existingPlaylist.Id);
