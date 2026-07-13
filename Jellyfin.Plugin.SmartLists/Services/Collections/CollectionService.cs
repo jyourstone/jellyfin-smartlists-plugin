@@ -339,7 +339,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Clear the stored Jellyfin collection ID so a later refresh with items recreates it
                     dto.JellyfinCollectionId = null;
 
-                    return (true, $"Collection '{dto.Name}' has no items - hidden (hide when empty)", string.Empty);
+                    return (true, $"Collection '{NameFormatter.FormatPlaylistName(dto.Name)}' has no items - hidden (hide when empty)", string.Empty);
                 }
 
                 var collectionName = dto.Name;

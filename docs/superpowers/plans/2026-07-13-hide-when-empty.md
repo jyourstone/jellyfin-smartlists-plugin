@@ -17,7 +17,7 @@
 - Line numbers below were captured on branch `feature/hide-when-empty` at commit `24a2297`. Treat them as anchors: locate the quoted code, don't trust raw numbers blindly.
 - Work on branch `feature/hide-when-empty`. Commit after each task; commit messages end with:
 
-```
+```text
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01RBFLcyWKuktDSu9acy68zg
 ```

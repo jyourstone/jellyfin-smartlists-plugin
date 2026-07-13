@@ -289,7 +289,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     if (saveCallback != null)
                     {
-                        await saveCallback(dto);
+                        try
+                        {
+                            await saveCallback(dto);
+                        }
+                        catch (Exception saveEx)
+                        {
+                            logger.LogWarning(saveEx, "Failed to save playlist DTO for {PlaylistName}, but continuing with operation", dto.Name);
+                        }
                     }
 
                     return (true, $"Playlist '{smartPlaylistName}' has no items - hidden (hide when empty)", string.Empty);
