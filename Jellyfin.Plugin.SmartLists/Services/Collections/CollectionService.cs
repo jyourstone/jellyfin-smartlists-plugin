@@ -327,6 +327,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     }
                 }
 
+                // Hide when empty: don't keep a Jellyfin collection around while no items match
+                if (dto.HideWhenEmpty && newLinkedChildren.Length == 0)
+                {
+                    if (existingCollectionItem != null)
+                    {
+                        _logger.LogInformation("Smart collection '{CollectionName}' matched no items - deleting Jellyfin collection (hide when empty)", dto.Name);
+                        _libraryManager.DeleteItem(existingCollectionItem, new DeleteOptions { DeleteFileLocation = true }, true);
+                    }
+
+                    // Clear the stored Jellyfin collection ID so a later refresh with items recreates it
+                    dto.JellyfinCollectionId = null;
+
+                    return (true, $"Collection '{dto.Name}' has no items - hidden (hide when empty)", string.Empty);
+                }
+
                 var collectionName = dto.Name;
 
                 if (existingCollectionItem != null && existingCollectionItem.GetBaseItemKind() == BaseItemKind.BoxSet)
