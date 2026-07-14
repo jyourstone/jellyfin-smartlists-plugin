@@ -798,7 +798,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     
                     var parameters = createMethod.GetParameters();
                     object? taskResult = null;
-                    var itemsAddedViaOptions = false;
+                    var itemsAddedAtCreation = false;
 
                     if (parameters.Length == 1 && parameters[0].ParameterType.Name == "CollectionCreationOptions")
                     {
@@ -838,7 +838,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         if (itemIdListProperty != null && itemIds.Count > 0)
                         {
                             itemIdListProperty.SetValue(options, itemIds.Select(id => id.ToString("N")).ToArray());
-                            itemsAddedViaOptions = true;
+                            itemsAddedAtCreation = true;
                             _logger.LogDebug("Set ItemIdList with {Count} items", itemIds.Count);
                         }
 
@@ -863,9 +863,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                         // Items are passed positionally here, so the AddToCollectionAsync
                         // fallback below must not re-add them.
-                        itemsAddedViaOptions = true;
+                        itemsAddedAtCreation = true;
                     }
-                    
+
                     if (taskResult != null)
                     {
                         // Await the task and extract the result
@@ -884,7 +884,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             // Fallback only: items are normally passed via ItemIdList at creation.
                             // Calling AddToCollectionAsync separately queues a second core refresh
                             // that races the first one's collection.xml writes (#433).
-                            if (!itemsAddedViaOptions && itemIds.Count > 0)
+                            if (!itemsAddedAtCreation && itemIds.Count > 0)
                             {
                                 _logger.LogDebug("Adding {Count} items to collection {CollectionId} using AddToCollectionAsync", itemIds.Count, collectionId);
                                 var addMethod = _collectionManager.GetType().GetMethod("AddToCollectionAsync");
@@ -924,38 +924,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     
                     if (boxSetType != null)
                     {
-                        var boxSet = Activator.CreateInstance(boxSetType);
-                        if (boxSet != null)
-                        {
-                            var baseItem = (BaseItem)boxSet;
-                            
-                            // Set ID first - must be set before persisting
-                            var newCollectionId = Guid.NewGuid();
-                            boxSetType.GetProperty("Id")?.SetValue(boxSet, newCollectionId);
-                            _logger.LogDebug("Generated new collection ID: {CollectionId}", newCollectionId);
-                            
-                            boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
-                            boxSetType.GetProperty("LinkedChildren")?.SetValue(boxSet, linkedChildren);
-                            boxSetType.GetProperty("IsLocked")?.SetValue(boxSet, true);
-
-                            // Add to library manager - use CreateItemAsync if available, otherwise try UpdateToRepositoryAsync
-                            var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
-                            if (createItemMethod != null)
-                            {
-                                await ((Task)createItemMethod.Invoke(_libraryManager, new object[] { baseItem, cancellationToken })!).ConfigureAwait(false);
-                            }
-                            else
-                            {
-                                // Fallback: try UpdateToRepositoryAsync
-                                await baseItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                            }
-                            collectionId = baseItem.Id;
-                            _logger.LogDebug("BoxSet created with ID: {CollectionId}", collectionId);
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException("Failed to create BoxSet instance via reflection");
-                        }
+                        collectionId = await CreateBoxSetViaReflectionAsync(boxSetType, formattedName, linkedChildren, cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {
@@ -967,45 +936,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 _logger.LogWarning(ex, "Failed to create collection via ICollectionManager, trying reflection-based BoxSet creation");
                 // Fallback: Create BoxSet using reflection
-                var boxSetType = typeof(BaseItem).Assembly.GetType("MediaBrowser.Controller.Entities.BoxSet") 
+                var boxSetType = typeof(BaseItem).Assembly.GetType("MediaBrowser.Controller.Entities.BoxSet")
                     ?? AppDomain.CurrentDomain.GetAssemblies()
                         .SelectMany(a => a.GetTypes())
                         .FirstOrDefault(t => t.Name == "BoxSet" && t.IsSubclassOf(typeof(BaseItem)));
-                
+
                 if (boxSetType != null)
                 {
-                    var boxSet = Activator.CreateInstance(boxSetType);
-                    if (boxSet != null)
-                    {
-                        var baseItem = (BaseItem)boxSet;
-                        
-                        // Set ID first - must be set before persisting
-                        var newCollectionId = Guid.NewGuid();
-                        boxSetType.GetProperty("Id")?.SetValue(boxSet, newCollectionId);
-                        _logger.LogDebug("Generated new collection ID: {CollectionId}", newCollectionId);
-                        
-                        boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
-                        boxSetType.GetProperty("LinkedChildren")?.SetValue(boxSet, linkedChildren);
-                        boxSetType.GetProperty("IsLocked")?.SetValue(boxSet, true);
-
-                        // Add to library manager - use CreateItemAsync if available, otherwise try UpdateToRepositoryAsync
-                        var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
-                        if (createItemMethod != null)
-                        {
-                            await ((Task)createItemMethod.Invoke(_libraryManager, new object[] { baseItem, cancellationToken })!).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            // Fallback: try UpdateToRepositoryAsync
-                            await baseItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                        }
-                        collectionId = baseItem.Id;
-                        _logger.LogDebug("BoxSet created with ID: {CollectionId}", collectionId);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException("Failed to create BoxSet instance via reflection");
-                    }
+                    collectionId = await CreateBoxSetViaReflectionAsync(boxSetType, formattedName, linkedChildren, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -1054,6 +992,41 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 _logger.LogWarning("Failed to retrieve newly created collection with ID {CollectionId}", collectionId);
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// Creates a BoxSet directly via reflection - fallback when ICollectionManager.CreateCollectionAsync
+        /// is unavailable or failed. The BoxSet is created locked so metadata fetchers can't stamp a TMDB ID on it (#433).
+        /// </summary>
+        private async Task<Guid> CreateBoxSetViaReflectionAsync(Type boxSetType, string formattedName, LinkedChild[] linkedChildren, CancellationToken cancellationToken)
+        {
+            var boxSet = Activator.CreateInstance(boxSetType)
+                ?? throw new InvalidOperationException("Failed to create BoxSet instance via reflection");
+            var baseItem = (BaseItem)boxSet;
+
+            // Set ID first - must be set before persisting
+            var newCollectionId = Guid.NewGuid();
+            boxSetType.GetProperty("Id")?.SetValue(boxSet, newCollectionId);
+            _logger.LogDebug("Generated new collection ID: {CollectionId}", newCollectionId);
+
+            boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
+            boxSetType.GetProperty("LinkedChildren")?.SetValue(boxSet, linkedChildren);
+            boxSetType.GetProperty("IsLocked")?.SetValue(boxSet, true);
+
+            // Add to library manager - use CreateItemAsync if available, otherwise try UpdateToRepositoryAsync
+            var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
+            if (createItemMethod != null)
+            {
+                await ((Task)createItemMethod.Invoke(_libraryManager, new object[] { baseItem, cancellationToken })!).ConfigureAwait(false);
+            }
+            else
+            {
+                // Fallback: try UpdateToRepositoryAsync
+                await baseItem.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+            }
+
+            _logger.LogDebug("BoxSet created with ID: {CollectionId}", baseItem.Id);
+            return baseItem.Id;
         }
 
         private Task ApplyCustomMetadataAsync(BaseItem item, SmartListDto dto, User ownerUser, CancellationToken cancellationToken)
