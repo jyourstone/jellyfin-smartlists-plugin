@@ -21,7 +21,6 @@ using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Playlists;
@@ -40,7 +39,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         private readonly IPlaylistManager _playlistManager;
         private readonly IUserDataManager _userDataManager;
         private readonly ILogger<PlaylistService> _logger;
-        private readonly IProviderManager _providerManager;
         private readonly SmartListImageService? _imageService;
         private readonly ExternalListService? _externalListService;
 
@@ -50,7 +48,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             IPlaylistManager playlistManager,
             IUserDataManager userDataManager,
             ILogger<PlaylistService> logger,
-            IProviderManager providerManager,
             SmartListImageService? imageService = null,
             ExternalListService? externalListService = null)
         {
@@ -59,7 +56,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             _playlistManager = playlistManager;
             _userDataManager = userDataManager;
             _logger = logger;
-            _providerManager = providerManager;
             _imageService = imageService;
             _externalListService = externalListService;
         }
@@ -811,7 +807,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             // Auto-generate Primary cover only if NO custom PRIMARY image exists
             if (!hasCustomPrimaryImage)
             {
-                await RefreshPlaylistMetadataAsync(playlist, cancellationToken).ConfigureAwait(false);
+                await GeneratePlaylistCoverAsync(playlist, cancellationToken).ConfigureAwait(false);
             }
 
             // Apply custom metadata after metadata refresh to prevent providers from overwriting
@@ -862,15 +858,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Auto-generate Primary cover only if NO custom PRIMARY image exists
                 if (!hasCustomPrimaryImage)
                 {
-                    await RefreshPlaylistMetadataAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
+                    await GeneratePlaylistCoverAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Apply custom metadata after metadata refresh to prevent providers from overwriting
                 await ApplyCustomMetadataAsync(newPlaylist, dto, user, cancellationToken).ConfigureAwait(false);
 
-                // Re-assert the tether: the cover-art refresh above runs with ReplaceAllMetadata,
-                // which rebuilds provider IDs from playlist.xml and can drop the stamp set before
-                // the first save. Persisting it last also writes it into playlist.xml.
+                // Re-assert the tether: guard against anything having rebuilt provider IDs from
+                // playlist.xml before the first save (historically the cover-art metadata refresh
+                // did exactly that). Persisting it last also writes it into playlist.xml.
                 if (!string.IsNullOrEmpty(dto.Id)
                     && !string.Equals(newPlaylist.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase))
                 {
@@ -946,12 +942,34 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         var destFileName = GetImageFileName(imageType, extension);
                         var destPath = Path.Combine(itemPath, destFileName);
 
-                        // Copy the image to the playlist folder
-                        File.Copy(sourcePath, destPath, overwrite: true);
+                        // Copy the image to the playlist folder. With the badge enabled, covers
+                        // are center-cropped to Jellyfin's tile proportions at native resolution
+                        // and stamped, keeping the badge visible in every view (documented
+                        // trade-off: detail pages show the crop instead of the original
+                        // proportions). With the badge disabled, uploads are copied untouched.
+                        // Raw copy fallback for formats ImageSharp cannot decode, e.g. SVG.
+                        var stamped = false;
+                        if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
+                        {
+                            var (aspectWidth, aspectHeight) = CollageBuilder.GetTileAspect(imageType, forPlaylist: true);
+                            stamped = await CollageBuilder.TryCreateCroppedCoverAsync(sourcePath, destPath, aspectWidth, aspectHeight, 0, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        if (!stamped)
+                        {
+                            File.Copy(sourcePath, destPath, overwrite: true);
+                        }
+
                         _logger.LogDebug("Copied custom {ImageType} image to playlist: {DestPath}", imageTypeName, destPath);
 
                         // Remove same-slot files after replacement so folder.jpg and folder.jpeg cannot compete.
                         _imageService.DeleteJellyfinImageFilesForType(itemPath, imageType, destPath, cancellationToken);
+
+                        // A custom Primary replaces our auto-generated collage; remove the leftover file.
+                        if (imageType == ImageType.Primary)
+                        {
+                            TryDeleteCoverFile(Path.Combine(itemPath, CollageBuilder.CollageFileName), dto.Name);
+                        }
 
                         // Remove existing images of the same type
                         imageInfos.RemoveAll(i => i.Type == imageType);
@@ -1287,36 +1305,219 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         /// <summary>
-        /// Refreshes playlist metadata to trigger Jellyfin's auto-generation of cover images.
-        /// This is only called when no custom Primary image is uploaded via Smart List.
-        /// Jellyfin will automatically generate a collage from playlist items.
+        /// Generates the playlist's Primary cover image from its items: a single item's poster
+        /// (badged copy when the badge is enabled) or a square 2x2 collage for 2+ items.
+        /// The plugin always generates playlist covers itself (instead of triggering Jellyfin's
+        /// refresh-based generation) so covers are consistent with collections and can carry
+        /// the smart list badge. Only called when no custom Primary image is uploaded via Smart List.
         /// </summary>
-        private async Task RefreshPlaylistMetadataAsync(Playlist playlist, CancellationToken cancellationToken)
+        private async Task GeneratePlaylistCoverAsync(Playlist playlist, CancellationToken cancellationToken)
         {
-            var stopwatch = Stopwatch.StartNew();
             try
             {
-                var directoryService = new Services.Shared.BasicDirectoryService();
-
-                _logger.LogDebug("Triggering metadata refresh for playlist {PlaylistName} to generate cover image", playlist.Name);
-
-                var refreshOptions = new MetadataRefreshOptions(directoryService)
+                var itemPath = playlist.ContainingFolderPath;
+                if (string.IsNullOrEmpty(itemPath) || !Directory.Exists(itemPath))
                 {
-                    MetadataRefreshMode = MetadataRefreshMode.Default,
-                    ImageRefreshMode = MetadataRefreshMode.Default,
-                    ReplaceAllMetadata = true, // Force regeneration of playlist metadata
-                    ReplaceAllImages = true   // Don't replace existing images - preserves user-uploaded images in Jellyfin
-                };
+                    _logger.LogWarning("Cannot generate cover: playlist path is invalid: {Path}", itemPath);
+                    return;
+                }
 
-                await _providerManager.RefreshSingleItem(playlist, refreshOptions, cancellationToken).ConfigureAwait(false);
+                var collagePath = Path.Combine(itemPath, CollageBuilder.CollageFileName);
 
-                stopwatch.Stop();
-                _logger.LogDebug("Cover image generation completed for playlist {PlaylistName} in {ElapsedTime}ms", playlist.Name, stopwatch.ElapsedMilliseconds);
+                // Respect covers uploaded directly through Jellyfin's UI: those are saved as
+                // folder.<ext> inside the playlist folder (core's own generated covers live in
+                // the internal metadata dir, and the SmartLists custom-image flow is guarded
+                // upstream), so any file in the playlist folder that isn't our generated
+                // collage is a manual upload - leave it completely untouched.
+                var currentPrimary = playlist.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Primary);
+                if (IsManuallyUploadedPlaylistCover(currentPrimary, itemPath))
+                {
+                    _logger.LogDebug("Playlist {PlaylistName} has a manually uploaded cover, skipping cover generation", playlist.Name);
+                    return;
+                }
+
+                // Resolve linked children to items and collect the first four distinct Primary
+                // image paths (falling back to the parent's image, e.g. album art for audio tracks).
+                var imagePaths = new List<string>();
+                var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var linkedChild in playlist.LinkedChildren ?? [])
+                {
+                    if (!linkedChild.ItemId.HasValue)
+                    {
+                        continue;
+                    }
+
+                    var item = _libraryManager.GetItemById(linkedChild.ItemId.Value);
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    var imagePath = GetPrimaryImagePath(item, seenPaths);
+                    if (imagePath != null && seenPaths.Add(imagePath))
+                    {
+                        imagePaths.Add(imagePath);
+                    }
+
+                    if (imagePaths.Count >= 4)
+                    {
+                        break;
+                    }
+                }
+
+                if (imagePaths.Count == 0)
+                {
+                    // No usable item images - clear the cover the plugin set previously, so the
+                    // playlist doesn't keep showing an item it no longer contains. The manual-
+                    // upload guard above already returned for user-uploaded covers, so the
+                    // current Primary is either our generated collage or a direct item-image
+                    // reference; only our own collage file is ever deleted from disk.
+                    TryDeleteCoverFile(collagePath, playlist.Name);
+
+                    var primary = playlist.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Primary);
+                    if (primary != null)
+                    {
+                        playlist.ImageInfos = playlist.ImageInfos!.Where(i => i != primary).ToArray();
+                        await playlist.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                        _logger.LogDebug("Cleared cover for playlist {PlaylistName} (no item images available)", playlist.Name);
+                    }
+
+                    return;
+                }
+
+                string coverPath;
+                if (imagePaths.Count == 1)
+                {
+                    // Single image: with the badge enabled, a square center-cropped badged copy
+                    // (Jellyfin's square playlist tiles would hide a corner badge on a poster-
+                    // ratio cover); with it disabled, or when the source can't be decoded,
+                    // reference the item's image untouched (native Jellyfin behavior). Never
+                    // modifies the item's own file.
+                    coverPath = CoverBadgeHelper.IsEnabled
+                        && await CollageBuilder.TryCreateCroppedCoverAsync(imagePaths[0], collagePath, 1, 1, 600, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false)
+                        ? collagePath
+                        : imagePaths[0];
+                }
+                else
+                {
+                    // Square 2x2 collage, matching the covers Jellyfin generates for playlists.
+                    // Cycle the available images to fill all four quadrants (like collections do).
+                    var collageSources = new List<string>(4);
+                    for (int i = 0; i < 4; i++)
+                    {
+                        collageSources.Add(imagePaths[i % imagePaths.Count]);
+                    }
+
+                    await CollageBuilder.CreateGridCollageAsync(
+                        collageSources,
+                        collagePath,
+                        600,
+                        600,
+                        CoverBadgeHelper.IsEnabled,
+                        _logger,
+                        cancellationToken).ConfigureAwait(false);
+                    coverPath = collagePath;
+                }
+
+                // Remove a stale collage file when the cover now references an item's image directly.
+                if (!string.Equals(coverPath, collagePath, StringComparison.OrdinalIgnoreCase) && File.Exists(collagePath))
+                {
+                    TryDeleteCoverFile(collagePath, playlist.Name);
+                }
+
+                playlist.SetImage(new ItemImageInfo
+                {
+                    Path = coverPath,
+                    Type = ImageType.Primary
+                }, 0);
+
+                await playlist.UpdateToRepositoryAsync(ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                _logger.LogDebug("Generated cover for playlist {PlaylistName} from {ImageCount} image(s)", playlist.Name, imagePaths.Count);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to generate cover image for playlist {PlaylistName}", playlist.Name);
+            }
+        }
+
+        /// <summary>
+        /// Gets an item's Primary image path, falling back to its parent's Primary image
+        /// (e.g. album art for audio tracks). Episodes are represented by their series
+        /// poster instead of the episode screenshot, matching Jellyfin's native playlist
+        /// covers. Paths already in <paramref name="seenPaths"/> are returned without a
+        /// filesystem check - large playlists hit the same series/album image over and
+        /// over, and the caller dedupes anyway. Returns null when no image exists on disk.
+        /// </summary>
+        private static string? GetPrimaryImagePath(BaseItem item, HashSet<string> seenPaths)
+        {
+            if (item is MediaBrowser.Controller.Entities.TV.Episode episode && episode.Series != null)
+            {
+                var seriesPath = episode.Series.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Primary)?.Path;
+                if (!string.IsNullOrEmpty(seriesPath) && (seenPaths.Contains(seriesPath) || File.Exists(seriesPath)))
+                {
+                    return seriesPath;
+                }
+            }
+
+            var path = item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Primary)?.Path;
+            if (!string.IsNullOrEmpty(path) && (seenPaths.Contains(path) || File.Exists(path)))
+            {
+                return path;
+            }
+
+            path = item.GetParent()?.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Primary)?.Path;
+            return !string.IsNullOrEmpty(path) && (seenPaths.Contains(path) || File.Exists(path)) ? path : null;
+        }
+
+        /// <summary>
+        /// Determines whether the playlist's current Primary image is a cover uploaded
+        /// manually (e.g. through Jellyfin's own Edit Images UI). Manual covers live inside
+        /// the playlist folder under a name other than the plugin's generated collage.
+        /// A dangling path (file deleted by hand) is not treated as manual, so generation
+        /// can recover the cover.
+        /// </summary>
+        private static bool IsManuallyUploadedPlaylistCover(ItemImageInfo? primary, string itemPath)
+        {
+            if (primary == null || string.IsNullOrEmpty(primary.Path) || !File.Exists(primary.Path))
+            {
+                return false;
+            }
+
+            // Trailing separator prevents sibling-folder prefix collisions
+            // (e.g. "Foo [Smart]" vs "Foo [Smart]1").
+            var normalizedFolder = Path.GetFullPath(itemPath);
+            if (!normalizedFolder.EndsWith(Path.DirectorySeparatorChar))
+            {
+                normalizedFolder += Path.DirectorySeparatorChar;
+            }
+
+            var normalizedImage = Path.GetFullPath(primary.Path);
+            if (!normalizedImage.StartsWith(normalizedFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                // Outside the playlist folder: an item's image we referenced ourselves, or a
+                // core-generated cover in the internal metadata dir - safe to regenerate.
+                return false;
+            }
+
+            return !string.Equals(Path.GetFileName(normalizedImage), CollageBuilder.CollageFileName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Safely attempts to delete an auto-generated cover file, logging any errors.
+        /// </summary>
+        private void TryDeleteCoverFile(string filePath, string playlistName)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                    _logger.LogDebug("Deleted auto-generated cover file for playlist {PlaylistName}", playlistName);
+                }
             }
             catch (Exception ex)
             {
-                stopwatch.Stop();
-                _logger.LogWarning(ex, "Failed to refresh metadata for playlist {PlaylistName} after {ElapsedTime}ms. Cover image may not be generated.", playlist.Name, stopwatch.ElapsedMilliseconds);
+                _logger.LogWarning(ex, "Failed to delete auto-generated cover file for playlist {PlaylistName}", playlistName);
             }
         }
 

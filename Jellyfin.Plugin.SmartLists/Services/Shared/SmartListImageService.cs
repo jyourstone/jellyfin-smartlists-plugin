@@ -425,6 +425,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
+        /// Checks whether a file path lies inside a folder. The trailing separator prevents
+        /// sibling-folder prefix collisions (e.g. "Foo [Smart]" vs "Foo [Smart]1").
+        /// </summary>
+        private static bool IsPathInsideFolder(string filePath, string? folderPath)
+        {
+            if (string.IsNullOrEmpty(folderPath))
+            {
+                return false;
+            }
+
+            var normalizedFolder = Path.GetFullPath(folderPath);
+            if (!normalizedFolder.EndsWith(Path.DirectorySeparatorChar))
+            {
+                normalizedFolder += Path.DirectorySeparatorChar;
+            }
+
+            return Path.GetFullPath(filePath).StartsWith(normalizedFolder, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Gets the directory path for a smart list (unified location for config and images).
         /// Validates that the smartListId is a valid GUID to prevent path traversal attacks.
         /// </summary>
@@ -596,8 +616,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     {
                         actualImagePath = existingImage.Path;
 
-                        // Delete the actual file
-                        if (File.Exists(actualImagePath))
+                        // Only delete files that live inside the item's own folder. The image
+                        // info can reference a library item's actual poster (smart list covers
+                        // may point at an item's image directly) - deleting that would destroy
+                        // media library artwork.
+                        if (File.Exists(actualImagePath) && IsPathInsideFolder(actualImagePath, jellyfinItem.ContainingFolderPath))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             try

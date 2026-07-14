@@ -30,6 +30,12 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public bool DefaultMakePublic { get; set; } = false;
 
         /// <summary>
+        /// Gets or sets whether to stamp a small smart list badge onto auto-generated
+        /// and uploaded cover images so smart lists are recognizable at a glance.
+        /// </summary>
+        public bool ShowSmartListBadge { get; set; } = true;
+
+        /// <summary>
         /// Gets or sets the default maximum number of items for new playlists.
         /// </summary>
         public int DefaultMaxItems { get; set; } = 500;

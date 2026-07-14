@@ -672,7 +672,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _playlistManager,
                 _userDataManager,
                 playlistServiceLogger,
-                _providerManager,
                 _imageService,
                 _externalListService);
         }
