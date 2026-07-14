@@ -56,6 +56,8 @@
     <EmbeddedResource Include="Configuration\config-api.js" />
     <!-- Initialization (must load last) -->
     <EmbeddedResource Include="Configuration\config-init.js" />
+    <!-- Smart list badge overlay for cover images -->
+    <EmbeddedResource Include="Resources\badge.png" />
   </ItemGroup>
 
   <ItemGroup>

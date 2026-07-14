@@ -91,7 +91,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 // Use a generic wrapper logger that implements ILogger<PlaylistService>
                 var playlistServiceLogger = new ServiceLoggerAdapter<Services.Playlists.PlaylistService>(logger);
-                return new Services.Playlists.PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _providerManager, _imageService);
+                return new Services.Playlists.PlaylistService(_userManager, _libraryManager, _playlistManager, _userDataManager, playlistServiceLogger, _imageService);
             }
             catch (Exception ex)
             {

@@ -1896,6 +1896,10 @@
 
             if (defaultListTypeEl) defaultListTypeEl.value = config.DefaultListType || 'Playlist';
             if (defaultMakePublicEl) defaultMakePublicEl.checked = config.DefaultMakePublic || false;
+
+            // Smart list badge defaults to enabled, so only an explicit false unchecks it
+            const showSmartListBadgeEl = page.querySelector('#showSmartListBadge');
+            if (showSmartListBadgeEl) showSmartListBadgeEl.checked = config.ShowSmartListBadge !== false;
             if (defaultMaxItemsEl) defaultMaxItemsEl.value = config.DefaultMaxItems !== undefined && config.DefaultMaxItems !== null ? config.DefaultMaxItems : 500;
             if (defaultMaxPlayTimeMinutesEl) defaultMaxPlayTimeMinutesEl.value = config.DefaultMaxPlayTimeMinutes !== undefined && config.DefaultMaxPlayTimeMinutes !== null ? config.DefaultMaxPlayTimeMinutes : 0;
 
@@ -2021,6 +2025,7 @@
             config.DefaultSortOrder = page.querySelector('#defaultSortOrder').value;
             config.DefaultListType = page.querySelector('#defaultListType').value;
             config.DefaultMakePublic = page.querySelector('#defaultMakePublic').checked;
+            config.ShowSmartListBadge = page.querySelector('#showSmartListBadge').checked;
             const defaultMaxItemsInput = page.querySelector('#defaultMaxItems').value;
             if (defaultMaxItemsInput === '') {
                 config.DefaultMaxItems = 500;

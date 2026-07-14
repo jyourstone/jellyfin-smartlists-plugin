@@ -208,7 +208,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _playlistManager,
                 _userDataManager,
                 playlistServiceLogger,
-                _providerManager,
                 externalListService: _externalListService);
         }
 

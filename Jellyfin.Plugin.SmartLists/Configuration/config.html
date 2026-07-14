@@ -842,6 +842,40 @@
                         </div>
 
                         <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
+                            Cover Images
+                            <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#smart-list-badge"
+                                target="_blank" rel="noopener noreferrer" title="Documentation"
+                                style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                <span class="material-icons" aria-hidden="true"
+                                    style="font-size: 1em; line-height: 0;">info_outline</span>
+                            </a>
+                        </h2>
+
+                        <div class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 1em;">
+                            <div class="sectioncheckbox">
+                                <label class="emby-checkbox-label">
+                                    <input type="checkbox" is="emby-checkbox" id="showSmartListBadge"
+                                        data-embycheckbox="true" class="emby-checkbox">
+                                    <span class="checkboxLabel">Show smart list badge on covers</span>
+                                    <span class="checkboxOutline">
+                                        <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                            aria-hidden="true"></span>
+                                        <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                            aria-hidden="true"></span>
+                                    </span>
+                                </label>
+                                <div class="fieldDescription">Stamps a small badge in the corner of auto-generated and
+                                    uploaded cover images so smart playlists and collections are easy to spot. Note:
+                                    when enabled, covers (including uploaded ones) are cropped to Jellyfin's tile
+                                    proportions (square for playlists, poster/thumb for collections) so the badge
+                                    stays visible and overview grids stay uniform. When disabled, covers keep their
+                                    original proportions and uploads are used untouched. Changes are applied on the
+                                    next refresh of each list.</div>
+                            </div>
+                        </div>
+
+                        <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
                             External Lists
                             <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/external-lists/"
                                 target="_blank" rel="noopener noreferrer" title="Documentation"

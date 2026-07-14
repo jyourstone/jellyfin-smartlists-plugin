@@ -28,10 +28,6 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Formats.Jpeg;
 
 namespace Jellyfin.Plugin.SmartLists.Services.Collections
 {
@@ -1133,8 +1129,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         var destFileName = GetImageFileName(imageType, extension);
                         var destPath = Path.Combine(itemPath, destFileName);
 
-                        // Copy the image to the collection folder
-                        File.Copy(sourcePath, destPath, overwrite: true);
+                        // Copy the image to the collection folder. With the badge enabled,
+                        // covers are center-cropped to Jellyfin's tile proportions at native
+                        // resolution (Primary 2:3 poster, Thumb 16:9) and stamped - off-ratio
+                        // uploads would otherwise distort the collections overview grid and
+                        // could hide the corner badge. With the badge disabled, uploads are
+                        // copied untouched. Raw copy fallback for formats ImageSharp cannot
+                        // decode, e.g. SVG.
+                        var stamped = false;
+                        if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
+                        {
+                            stamped = await CollageBuilder.TryCreateBadgedTileCoverAsync(sourcePath, destPath, imageType, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        if (!stamped)
+                        {
+                            File.Copy(sourcePath, destPath, overwrite: true);
+                        }
+
                         _logger.LogDebug("Copied custom {ImageType} image to collection: {DestPath}", imageTypeName, destPath);
 
                         // Remove same-slot files after replacement so folder.jpg and folder.jpeg cannot compete.
@@ -1193,7 +1205,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // If user has custom Primary via SmartLists, clean up auto-generated collage
             if (customImageTypes.Contains(ImageType.Primary))
             {
-                var collagePath = Path.Combine(itemPath, "smartlist-collage.jpg");
+                var collagePath = Path.Combine(itemPath, CollageBuilder.CollageFileName);
                 if (File.Exists(collagePath))
                 {
                     try
@@ -1212,7 +1224,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // If user has custom Thumb via SmartLists, clean up auto-generated thumb collage
             if (customImageTypes.Contains(ImageType.Thumb))
             {
-                var thumbCollagePath = Path.Combine(itemPath, "smartlist-thumb-collage.jpg");
+                var thumbCollagePath = Path.Combine(itemPath, CollageBuilder.ThumbCollageFileName);
                 if (File.Exists(thumbCollagePath))
                 {
                     try
@@ -1501,7 +1513,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     if (!string.IsNullOrEmpty(primaryImage.Path))
                     {
                         var fileName = System.IO.Path.GetFileName(primaryImage.Path);
-                        if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(fileName, CollageBuilder.CollageFileName, StringComparison.OrdinalIgnoreCase))
                         {
                             TryDeleteFile(primaryImage.Path, "auto-generated Primary collage", collection.Name);
                         }
@@ -1524,7 +1536,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     if (!string.IsNullOrEmpty(thumbImage.Path))
                     {
                         var fileName = System.IO.Path.GetFileName(thumbImage.Path);
-                        if (string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(fileName, CollageBuilder.ThumbCollageFileName, StringComparison.OrdinalIgnoreCase))
                         {
                             TryDeleteFile(thumbImage.Path, "auto-generated Thumb collage", collection.Name);
                         }
@@ -1630,7 +1642,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var normalizedImagePath = System.IO.Path.GetFullPath(imageInfo.Path);
 
             // Check if image is in the collection's metadata directory
-            if (!normalizedImagePath.StartsWith(normalizedCollectionPath, StringComparison.OrdinalIgnoreCase))
+            if (!FileSystemHelper.IsPathInsideFolder(normalizedImagePath, normalizedCollectionPath))
             {
                 // Image is not in collection's directory, so it's from an item (auto-generated or referenced)
                 // This is safe to overwrite
@@ -1640,8 +1652,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Image is in collection's metadata directory
             // Check if it's our auto-generated collage
             var fileName = System.IO.Path.GetFileName(normalizedImagePath);
-            if (string.Equals(fileName, "smartlist-collage.jpg", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(fileName, "smartlist-thumb-collage.jpg", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(fileName, CollageBuilder.CollageFileName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(fileName, CollageBuilder.ThumbCollageFileName, StringComparison.OrdinalIgnoreCase))
             {
                 // This is our auto-generated collage - safe to overwrite (will regenerate to match current items)
                 return false;
@@ -1969,7 +1981,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 var collectionPath = collection.Path;
                 if (!string.IsNullOrEmpty(collectionPath))
                 {
-                    var oldCollagePath = System.IO.Path.Combine(collectionPath, "smartlist-collage.jpg");
+                    var oldCollagePath = System.IO.Path.Combine(collectionPath, CollageBuilder.CollageFileName);
                     if (System.IO.File.Exists(oldCollagePath))
                     {
                         try
@@ -1989,9 +2001,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 if (!string.IsNullOrEmpty(imageInfo.Path))
                 {
+                    var imagePath = imageInfo.Path;
+
+                    // With the badge enabled, don't reference the item's own image file
+                    // (stamping it would deface the item's poster) - stamp a 2:3 cropped copy
+                    // instead, matching Jellyfin's poster tiles.
+                    // The smartlist-collage.jpg name keeps it classified as auto-generated.
+                    if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
+                    {
+                        var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.CollageFileName);
+                        if (await CollageBuilder.TryCreateBadgedTileCoverAsync(imageInfo.Path, badgedPath, ImageType.Primary, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
+                        {
+                            imagePath = badgedPath;
+                        }
+                    }
+
                     collection.SetImage(new ItemImageInfo
                     {
-                        Path = imageInfo.Path,
+                        Path = imagePath,
                         Type = ImageType.Primary
                     }, 0);
 
@@ -2029,7 +2056,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 var collectionPath = collection.Path;
                 if (!string.IsNullOrEmpty(collectionPath))
                 {
-                    var oldThumbCollagePath = System.IO.Path.Combine(collectionPath, "smartlist-thumb-collage.jpg");
+                    var oldThumbCollagePath = System.IO.Path.Combine(collectionPath, CollageBuilder.ThumbCollageFileName);
                     if (System.IO.File.Exists(oldThumbCollagePath))
                     {
                         try
@@ -2049,9 +2076,22 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 if (thumbImageInfo != null && !string.IsNullOrEmpty(thumbImageInfo.Path))
                 {
+                    var thumbPath = thumbImageInfo.Path;
+
+                    // Same as Primary: stamp a 16:9 cropped copy rather than referencing the
+                    // item's own file.
+                    if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
+                    {
+                        var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.ThumbCollageFileName);
+                        if (await CollageBuilder.TryCreateBadgedTileCoverAsync(thumbImageInfo.Path, badgedPath, ImageType.Thumb, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
+                        {
+                            thumbPath = badgedPath;
+                        }
+                    }
+
                     collection.SetImage(new ItemImageInfo
                     {
-                        Path = thumbImageInfo.Path,
+                        Path = thumbPath,
                         Type = ImageType.Thumb
                     }, 0);
 
@@ -2116,66 +2156,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 }
 
                 // Use a specific filename for our auto-generated collage to avoid conflicts with user-uploaded poster.jpg
-                var metadataPath = System.IO.Path.Combine(collectionPath, "smartlist-collage.jpg");
+                var metadataPath = System.IO.Path.Combine(collectionPath, CollageBuilder.CollageFileName);
                 var metadataDir = System.IO.Path.GetDirectoryName(metadataPath);
                 if (metadataDir != null && !System.IO.Directory.Exists(metadataDir))
                 {
                     System.IO.Directory.CreateDirectory(metadataDir);
                 }
 
-                // Create collage: 2x2 grid
-                // Standard Jellyfin poster size is typically 300x450 (2:3 aspect ratio)
-                // For 2x2 grid, we'll use 600x900 (each quadrant is 300x450)
-                const int collageWidth = 600;
-                const int collageHeight = 900;
-                const int quadrantWidth = 300;
-                const int quadrantHeight = 450;
-
-                using (var collage = new Image<Rgba32>(collageWidth, collageHeight))
-                {
-                    // Fill background with black
-                    collage.Mutate(x => x.BackgroundColor(Color.Black));
-
-                    // Position images in 2x2 grid
-                    var positions = new[]
-                    {
-                        new { X = 0, Y = 0 },           // Top-left
-                        new { X = quadrantWidth, Y = 0 }, // Top-right
-                        new { X = 0, Y = quadrantHeight }, // Bottom-left
-                        new { X = quadrantWidth, Y = quadrantHeight } // Bottom-right
-                    };
-
-                    for (int i = 0; i < 4 && i < imagePaths.Count; i++)
-                    {
-                        try
-                        {
-                            using (var sourceImage = await Image.LoadAsync(imagePaths[i], cancellationToken).ConfigureAwait(false))
-                            {
-                                // Resize image to fit quadrant while maintaining aspect ratio
-                                var resizeOptions = new ResizeOptions
-                                {
-                                    Size = new Size(quadrantWidth, quadrantHeight),
-                                    Mode = ResizeMode.Crop,
-                                    Position = AnchorPositionMode.Center
-                                };
-
-                                sourceImage.Mutate(x => x.Resize(resizeOptions));
-
-                                // Draw image at position
-                                var point = new Point(positions[i].X, positions[i].Y);
-                                collage.Mutate(ctx => ctx.DrawImage(sourceImage, point, 1.0f));
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to load image {ImagePath} for collage, skipping", imagePaths[i]);
-                        }
-                    }
-
-                    // Save collage
-                    await collage.SaveAsync(metadataPath, new JpegEncoder { Quality = 90 }, cancellationToken).ConfigureAwait(false);
-                    _logger.LogDebug("Created collage image at {ImagePath}", metadataPath);
-                }
+                // Create 2x2 collage at standard 2:3 poster proportions
+                await CollageBuilder.CreateGridCollageAsync(
+                    imagePaths,
+                    metadataPath,
+                    600,
+                    900,
+                    CoverBadgeHelper.IsEnabled,
+                    _logger,
+                    cancellationToken).ConfigureAwait(false);
+                _logger.LogDebug("Created collage image at {ImagePath}", metadataPath);
 
                 // Set the collage as the collection's primary image
                 collection.SetImage(new ItemImageInfo
@@ -2243,66 +2240,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 }
 
                 // Use a specific filename for our auto-generated thumb collage
-                var metadataPath = System.IO.Path.Combine(collectionPath, "smartlist-thumb-collage.jpg");
+                var metadataPath = System.IO.Path.Combine(collectionPath, CollageBuilder.ThumbCollageFileName);
                 var metadataDir = System.IO.Path.GetDirectoryName(metadataPath);
                 if (metadataDir != null && !System.IO.Directory.Exists(metadataDir))
                 {
                     System.IO.Directory.CreateDirectory(metadataDir);
                 }
 
-                // Create thumb collage: 2x2 grid in 16:9 aspect ratio
-                // Standard 1080p resolution: 1920x1080 (each quadrant is 960x540)
-                const int collageWidth = 1920;
-                const int collageHeight = 1080;
-                const int quadrantWidth = 960;
-                const int quadrantHeight = 540;
-
-                using (var collage = new Image<Rgba32>(collageWidth, collageHeight))
-                {
-                    // Fill background with black
-                    collage.Mutate(x => x.BackgroundColor(Color.Black));
-
-                    // Position images in 2x2 grid
-                    var positions = new[]
-                    {
-                        new { X = 0, Y = 0 },           // Top-left
-                        new { X = quadrantWidth, Y = 0 }, // Top-right
-                        new { X = 0, Y = quadrantHeight }, // Bottom-left
-                        new { X = quadrantWidth, Y = quadrantHeight } // Bottom-right
-                    };
-
-                    for (int i = 0; i < 4 && i < imagePaths.Count; i++)
-                    {
-                        try
-                        {
-                            using (var sourceImage = await Image.LoadAsync(imagePaths[i], cancellationToken).ConfigureAwait(false))
-                            {
-                                // Resize image to fit quadrant while maintaining aspect ratio
-                                // Crop to 16:9 aspect ratio for consistency
-                                var resizeOptions = new ResizeOptions
-                                {
-                                    Size = new Size(quadrantWidth, quadrantHeight),
-                                    Mode = ResizeMode.Crop,
-                                    Position = AnchorPositionMode.Center
-                                };
-
-                                sourceImage.Mutate(x => x.Resize(resizeOptions));
-
-                                // Draw image at position
-                                var point = new Point(positions[i].X, positions[i].Y);
-                                collage.Mutate(ctx => ctx.DrawImage(sourceImage, point, 1.0f));
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to load image {ImagePath} for thumb collage, skipping", imagePaths[i]);
-                        }
-                    }
-
-                    // Save collage
-                    await collage.SaveAsync(metadataPath, new JpegEncoder { Quality = 90 }, cancellationToken).ConfigureAwait(false);
-                    _logger.LogDebug("Created thumb collage image at {ImagePath}", metadataPath);
-                }
+                // Create 2x2 thumb collage at 16:9 proportions
+                await CollageBuilder.CreateGridCollageAsync(
+                    imagePaths,
+                    metadataPath,
+                    1920,
+                    1080,
+                    CoverBadgeHelper.IsEnabled,
+                    _logger,
+                    cancellationToken).ConfigureAwait(false);
+                _logger.LogDebug("Created thumb collage image at {ImagePath}", metadataPath);
 
                 // Set the collage as the collection's thumb image
                 collection.SetImage(new ItemImageInfo

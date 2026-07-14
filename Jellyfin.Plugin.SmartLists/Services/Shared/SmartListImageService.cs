@@ -596,8 +596,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     {
                         actualImagePath = existingImage.Path;
 
-                        // Delete the actual file
-                        if (File.Exists(actualImagePath))
+                        // Only delete files that live inside the item's own folder. The image
+                        // info can reference a library item's actual poster (smart list covers
+                        // may point at an item's image directly) - deleting that would destroy
+                        // media library artwork.
+                        if (File.Exists(actualImagePath) && Utilities.FileSystemHelper.IsPathInsideFolder(actualImagePath, jellyfinItem.ContainingFolderPath))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             try

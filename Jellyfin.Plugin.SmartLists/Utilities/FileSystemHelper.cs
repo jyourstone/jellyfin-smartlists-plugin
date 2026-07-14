@@ -22,6 +22,29 @@ public static class FileSystemHelper
     };
 
     /// <summary>
+    /// Checks whether a file path lies inside a folder. The trailing separator prevents
+    /// sibling-folder prefix collisions (e.g. "Foo [Smart]" vs "Foo [Smart]1").
+    /// </summary>
+    /// <param name="filePath">The file path to test.</param>
+    /// <param name="folderPath">The folder that should contain the file.</param>
+    /// <returns>True when the file path lies inside the folder.</returns>
+    public static bool IsPathInsideFolder(string? filePath, string? folderPath)
+    {
+        if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(folderPath))
+        {
+            return false;
+        }
+
+        var normalizedFolder = Path.GetFullPath(folderPath);
+        if (!normalizedFolder.EndsWith(Path.DirectorySeparatorChar))
+        {
+            normalizedFolder += Path.DirectorySeparatorChar;
+        }
+
+        return Path.GetFullPath(filePath).StartsWith(normalizedFolder, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Checks if a directory is effectively empty (contains no files except system files like .DS_Store).
     /// </summary>
     /// <param name="directoryPath">The directory path to check.</param>
