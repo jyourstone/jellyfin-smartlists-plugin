@@ -40,6 +40,9 @@ Before creating your first list, it's important to understand the differences be
 - **Can Contain Collections**: Unlike playlists, collections can contain other collection objects (creating "meta-collections") when using the "Include collections only" option with the Collection name field
 - **Use cases**: Organizing related content for browsing (e.g., "Action Movies", "Holiday Collection", "Director's Collection")
 
+!!! info "Smart collections are metadata-locked"
+    SmartLists creates its collections with Jellyfin's **"Lock this item"** flag enabled, and re-applies it on every refresh. This prevents Jellyfin's metadata fetchers from matching the collection against online databases by name and stamping a foreign TMDB ID on it — a mismatch that causes the TMDbBoxSets plugin to delete the collection as "orphaned". The lock does not affect cover image generation or any metadata set through SmartLists. If you untick the lock manually, it will be re-enabled on the next refresh.
+
 #### Automatic Image Generation
 
 SmartLists automatically generates cover images for collections when no custom images have been provided. Auto-generation occurs only if:

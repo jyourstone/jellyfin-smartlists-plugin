@@ -592,7 +592,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         existingCollection.Name = dto.Name;
 
                         // Collection is being handed back to the user - remove the smart list tether
+                        // and unlock it so Jellyfin's metadata fetchers work again for the user
                         existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        existingCollection.IsLocked = false;
 
                         // Save the changes
                         await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -619,7 +621,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                                 existingCollection.Name = baseName;
 
                                 // Collection is being handed back to the user - remove the smart list tether
+                                // and unlock it so Jellyfin's metadata fetchers work again for the user
                                 existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                                existingCollection.IsLocked = false;
 
                                 // Save the changes
                                 await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -794,7 +798,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     
                     var parameters = createMethod.GetParameters();
                     object? taskResult = null;
-                    
+                    var itemsAddedViaOptions = false;
+
                     if (parameters.Length == 1 && parameters[0].ParameterType.Name == "CollectionCreationOptions")
                     {
                         // Use CollectionCreationOptions
@@ -814,10 +819,39 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             nameProperty.SetValue(options, formattedName);
                             _logger.LogDebug("Set Name to: {Name}", formattedName);
                         }
-                        
-                        // Note: We'll add items using AddToCollectionAsync after creation instead of setting ItemIdList
-                        _logger.LogDebug("Collection will be created empty, items will be added via AddToCollectionAsync");
-                        
+
+                        // Lock the collection at creation: CollectionManager queues a metadata
+                        // refresh on create/add, and the TMDB boxset fetcher would stamp a TMDB ID
+                        // on it by name match. TMDbBoxSets deletes boxsets with unmatched TMDB IDs (#433).
+                        var isLockedProperty = optType.GetProperty("IsLocked");
+                        if (isLockedProperty != null)
+                        {
+                            isLockedProperty.SetValue(options, true);
+                            _logger.LogDebug("Set IsLocked to true");
+                        }
+
+                        // Pass the items at creation: CollectionManager then adds them internally and
+                        // queues a single metadata refresh, instead of the two queued refreshes that an
+                        // empty create followed by a separate AddToCollectionAsync call would produce.
+                        // Fewer concurrent refreshes = no colliding collection.xml saver writes (#433).
+                        var itemIdListProperty = optType.GetProperty("ItemIdList");
+                        if (itemIdListProperty != null && itemIds.Count > 0)
+                        {
+                            itemIdListProperty.SetValue(options, itemIds.Select(id => id.ToString("N")).ToArray());
+                            itemsAddedViaOptions = true;
+                            _logger.LogDebug("Set ItemIdList with {Count} items", itemIds.Count);
+                        }
+
+                        // Stamp the SmartLists tether at creation so no separate save is needed for it
+                        var providerIdsProperty = optType.GetProperty("ProviderIds");
+                        if (providerIdsProperty != null && !string.IsNullOrEmpty(dto.Id))
+                        {
+                            // OrdinalIgnoreCase matches BaseItem.ProviderIds' contract — CollectionManager
+                            // assigns this dictionary to the new BoxSet by reference
+                            providerIdsProperty.SetValue(options, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [ProviderKeys.SmartLists] = dto.Id });
+                            _logger.LogDebug("Set SmartLists tether provider ID at creation");
+                        }
+
                         _logger.LogDebug("Invoking CreateCollectionAsync with CollectionCreationOptions");
                         taskResult = createMethod.Invoke(_collectionManager, new object[] { options });
                     }
@@ -826,6 +860,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         // Use direct parameters
                         _logger.LogDebug("Invoking CreateCollectionAsync with direct parameters");
                         taskResult = createMethod.Invoke(_collectionManager, new object[] { formattedName, itemIds.ToArray() });
+
+                        // Items are passed positionally here, so the AddToCollectionAsync
+                        // fallback below must not re-add them.
+                        itemsAddedViaOptions = true;
                     }
                     
                     if (taskResult != null)
@@ -843,8 +881,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             collectionId = baseItem.Id;
                             _logger.LogDebug("Collection created via ICollectionManager with ID: {CollectionId}", collectionId);
                             
-                            // Add items to the collection using AddToCollectionAsync
-                            if (itemIds.Count > 0)
+                            // Fallback only: items are normally passed via ItemIdList at creation.
+                            // Calling AddToCollectionAsync separately queues a second core refresh
+                            // that races the first one's collection.xml writes (#433).
+                            if (!itemsAddedViaOptions && itemIds.Count > 0)
                             {
                                 _logger.LogDebug("Adding {Count} items to collection {CollectionId} using AddToCollectionAsync", itemIds.Count, collectionId);
                                 var addMethod = _collectionManager.GetType().GetMethod("AddToCollectionAsync");
@@ -896,7 +936,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             
                             boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
                             boxSetType.GetProperty("LinkedChildren")?.SetValue(boxSet, linkedChildren);
-                            
+                            boxSetType.GetProperty("IsLocked")?.SetValue(boxSet, true);
+
                             // Add to library manager - use CreateItemAsync if available, otherwise try UpdateToRepositoryAsync
                             var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
                             if (createItemMethod != null)
@@ -945,7 +986,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         
                         boxSetType.GetProperty("Name")?.SetValue(boxSet, formattedName);
                         boxSetType.GetProperty("LinkedChildren")?.SetValue(boxSet, linkedChildren);
-                        
+                        boxSetType.GetProperty("IsLocked")?.SetValue(boxSet, true);
+
                         // Add to library manager - use CreateItemAsync if available, otherwise try UpdateToRepositoryAsync
                         var createItemMethod = _libraryManager.GetType().GetMethod("CreateItemAsync", new[] { typeof(BaseItem), typeof(CancellationToken) });
                         if (createItemMethod != null)
@@ -978,28 +1020,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 _logger.LogDebug("Retrieved new collection: Name = {Name}", retrievedItem.Name);
 
-                // Handle custom images and auto-generation
-                // Logic: Custom images uploaded via SmartLists take precedence over auto-generation
-                // Auto-generation only happens for Primary/Thumb if no custom versions exist
-                var hasCustomPrimary = dto.CustomImages?.ContainsKey("Primary") == true;
-                var hasCustomThumb = dto.CustomImages?.ContainsKey("Thumb") == true;
-
                 // Always call ApplyCustomImagesToCollectionAsync - it handles both:
                 // 1. Applying custom images if any exist
                 // 2. Cleaning up orphaned images when custom images are deleted
                 await ApplyCustomImagesToCollectionAsync(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
 
-                // Only trigger auto-generation if no custom Primary AND no custom Thumb uploaded
-                // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
-                if (!hasCustomPrimary && !hasCustomThumb)
-                {
-                    // Pass linkedChildren to avoid stale cache issues - the collection object may not have
-                    // updated LinkedChildren yet after AddToCollectionAsync, especially for large libraries
-                    await RefreshCollectionMetadataAsync(retrievedItem, linkedChildren, cancellationToken).ConfigureAwait(false);
-                }
+                // No direct metadata refresh here: CollectionManager already queued one for the new
+                // collection, and a second refresh running in parallel is what produced concurrent
+                // collection.xml saver IOExceptions (#433). Cover images are generated by
+                // SetPhotoForCollection inside FinalizeCollectionMetadataAsync below.
 
-                // Always set the name after metadata refresh to ensure it's correct
-                // This prevents metadata providers from overwriting our intended name
+                // Re-fetch and finalize: sets the intended name, generates cover images, and
+                // enforces the metadata lock (core's queued create-refresh runs in the background)
                 retrievedItem = _libraryManager.GetItemById(collectionId);
                 if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
@@ -1046,6 +1078,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks).
             await SetPhotoForCollection(collection, linkedChildren, cancellationToken).ConfigureAwait(false);
+
+            // Every create/refresh path funnels through here, so this is the one place that
+            // guarantees smart collections stay locked and carry no stray TMDB ID. A stray
+            // TMDB ID (stamped by Jellyfin's name-matching boxset fetcher) makes the
+            // TMDbBoxSets plugin delete the collection as "orphaned" (#433).
+            metadataChanged |= collection.ProviderIds?.Remove(MetadataProvider.Tmdb.ToString()) == true;
+            if (!collection.IsLocked)
+            {
+                collection.IsLocked = true;
+                metadataChanged = true;
+            }
 
             metadataChanged |= SetCollectionDisplayOrder(collection);
             if (metadataChanged)
