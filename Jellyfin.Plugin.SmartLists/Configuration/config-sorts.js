@@ -619,6 +619,8 @@
                         return { value: f.value, label: f.label, selected: f.value === currentGroupBy };
                     });
                     SmartLists.populateSelectElement(groupBySelect, groupByOptions);
+                    // Repopulating doesn't fire 'change'; nudge listeners (Air Window visibility) manually
+                    groupBySelect.dispatchEvent(new Event('change'));
                 }
             }
 
