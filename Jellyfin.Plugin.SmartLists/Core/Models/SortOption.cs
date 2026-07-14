@@ -26,6 +26,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? WithinGroupOrder { get; set; }
+
+        /// <summary>
+        /// Window in days for chaining episodes of different shows into one round-robin
+        /// interleave block. Only used with GroupByField "Collections" and WithinGroupOrder
+        /// "AirDate". Null = default (3). 0 = same-day only. Clamped to [0, 30] at use.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? AirBlockWindowDays { get; set; }
     }
 }
 

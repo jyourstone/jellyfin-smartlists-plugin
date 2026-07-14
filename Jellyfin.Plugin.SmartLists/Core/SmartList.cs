@@ -127,6 +127,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         {
                             rr.GroupByField = so.GroupByField;
                             rr.OrderWithinGroupsByAirDate = string.Equals(so.WithinGroupOrder, "AirDate", StringComparison.OrdinalIgnoreCase);
+                            rr.AirBlockWindowDays = so.AirBlockWindowDays ?? RoundRobinBase.DefaultAirBlockWindowDays;
                         }
 
                         return order;
