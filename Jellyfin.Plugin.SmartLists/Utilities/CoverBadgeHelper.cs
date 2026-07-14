@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -41,11 +42,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// failure degrades to an unbadged cover instead of aborting cover generation.
         /// </summary>
         /// <param name="image">The image to stamp. Mutated in place.</param>
-        public static void ApplyBadge(Image image)
+        /// <param name="logger">Logger for badge failures.</param>
+        public static void ApplyBadge(Image image, ILogger logger)
         {
             var badgeBytes = BadgeBytes.Value;
             if (badgeBytes == null)
             {
+                logger.LogWarning("Smart list badge resource unavailable; cover saved without badge");
                 return;
             }
 
@@ -59,9 +62,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 badge.Mutate(ctx => ctx.Resize(size, size));
                 image.Mutate(ctx => ctx.DrawImage(badge, new Point(inset, inset), 1.0f));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // An unbadged cover beats no cover; the caller's pipeline continues.
+                logger.LogWarning(ex, "Failed to stamp smart list badge; cover saved without badge");
             }
         }
 

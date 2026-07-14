@@ -1139,8 +1139,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         var stamped = false;
                         if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {
-                            var (aspectWidth, aspectHeight) = CollageBuilder.GetTileAspect(imageType, forPlaylist: false);
-                            stamped = await CollageBuilder.TryCreateCroppedCoverAsync(sourcePath, destPath, aspectWidth, aspectHeight, 0, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false);
+                            stamped = await CollageBuilder.TryCreateBadgedTileCoverAsync(sourcePath, destPath, imageType, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false);
                         }
 
                         if (!stamped)
@@ -1642,14 +1641,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         {
             var normalizedImagePath = System.IO.Path.GetFullPath(imageInfo.Path);
 
-            // Trailing separator prevents sibling-folder prefix collisions
-            // (e.g. "Foo [Smart]" vs "Foo [Smart]1").
-            var folderPrefix = normalizedCollectionPath.EndsWith(System.IO.Path.DirectorySeparatorChar)
-                ? normalizedCollectionPath
-                : normalizedCollectionPath + System.IO.Path.DirectorySeparatorChar;
-
             // Check if image is in the collection's metadata directory
-            if (!normalizedImagePath.StartsWith(folderPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!FileSystemHelper.IsPathInsideFolder(imageInfo.Path, normalizedCollectionPath))
             {
                 // Image is not in collection's directory, so it's from an item (auto-generated or referenced)
                 // This is safe to overwrite
@@ -2016,9 +2009,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // The smartlist-collage.jpg name keeps it classified as auto-generated.
                     if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
                     {
-                        var (aspectWidth, aspectHeight) = CollageBuilder.GetTileAspect(ImageType.Primary, forPlaylist: false);
                         var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.CollageFileName);
-                        if (await CollageBuilder.TryCreateCroppedCoverAsync(imageInfo.Path, badgedPath, aspectWidth, aspectHeight, 0, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false))
+                        if (await CollageBuilder.TryCreateBadgedTileCoverAsync(imageInfo.Path, badgedPath, ImageType.Primary, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
                         {
                             imagePath = badgedPath;
                         }
@@ -2090,9 +2082,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // item's own file.
                     if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
                     {
-                        var (aspectWidth, aspectHeight) = CollageBuilder.GetTileAspect(ImageType.Thumb, forPlaylist: false);
                         var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.ThumbCollageFileName);
-                        if (await CollageBuilder.TryCreateCroppedCoverAsync(thumbImageInfo.Path, badgedPath, aspectWidth, aspectHeight, 0, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false))
+                        if (await CollageBuilder.TryCreateBadgedTileCoverAsync(thumbImageInfo.Path, badgedPath, ImageType.Thumb, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
                         {
                             thumbPath = badgedPath;
                         }

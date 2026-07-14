@@ -951,8 +951,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         var stamped = false;
                         if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {
-                            var (aspectWidth, aspectHeight) = CollageBuilder.GetTileAspect(imageType, forPlaylist: true);
-                            stamped = await CollageBuilder.TryCreateCroppedCoverAsync(sourcePath, destPath, aspectWidth, aspectHeight, 0, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false);
+                            stamped = await CollageBuilder.TryCreateBadgedTileCoverAsync(sourcePath, destPath, imageType, forPlaylist: true, 0, _logger, cancellationToken).ConfigureAwait(false);
                         }
 
                         if (!stamped)
@@ -1394,7 +1393,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // reference the item's image untouched (native Jellyfin behavior). Never
                     // modifies the item's own file.
                     coverPath = CoverBadgeHelper.IsEnabled
-                        && await CollageBuilder.TryCreateCroppedCoverAsync(imagePaths[0], collagePath, 1, 1, 600, applyBadge: true, _logger, cancellationToken).ConfigureAwait(false)
+                        && await CollageBuilder.TryCreateBadgedTileCoverAsync(imagePaths[0], collagePath, ImageType.Primary, forPlaylist: true, 600, _logger, cancellationToken).ConfigureAwait(false)
                         ? collagePath
                         : imagePaths[0];
                 }
@@ -1483,23 +1482,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 return false;
             }
 
-            // Trailing separator prevents sibling-folder prefix collisions
-            // (e.g. "Foo [Smart]" vs "Foo [Smart]1").
-            var normalizedFolder = Path.GetFullPath(itemPath);
-            if (!normalizedFolder.EndsWith(Path.DirectorySeparatorChar))
-            {
-                normalizedFolder += Path.DirectorySeparatorChar;
-            }
-
-            var normalizedImage = Path.GetFullPath(primary.Path);
-            if (!normalizedImage.StartsWith(normalizedFolder, StringComparison.OrdinalIgnoreCase))
+            if (!FileSystemHelper.IsPathInsideFolder(primary.Path, itemPath))
             {
                 // Outside the playlist folder: an item's image we referenced ourselves, or a
                 // core-generated cover in the internal metadata dir - safe to regenerate.
                 return false;
             }
 
-            return !string.Equals(Path.GetFileName(normalizedImage), CollageBuilder.CollageFileName, StringComparison.OrdinalIgnoreCase);
+            return !string.Equals(Path.GetFileName(primary.Path), CollageBuilder.CollageFileName, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

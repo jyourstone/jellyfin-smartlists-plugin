@@ -38,8 +38,35 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// are 16:9 for both. Single policy point - the upload paths and the generated-cover
         /// paths must stay in lockstep.
         /// </summary>
-        public static (int Width, int Height) GetTileAspect(MediaBrowser.Model.Entities.ImageType imageType, bool forPlaylist)
+        private static (int Width, int Height) GetTileAspect(MediaBrowser.Model.Entities.ImageType imageType, bool forPlaylist)
             => imageType == MediaBrowser.Model.Entities.ImageType.Thumb ? (16, 9) : forPlaylist ? (1, 1) : (2, 3);
+
+        /// <summary>
+        /// Creates a badged, center-cropped copy of a cover at the Jellyfin tile aspect ratio
+        /// for the given image type. Shared by the upload and generated-cover paths of both
+        /// playlists and collections so the crop policy stays in one place.
+        /// </summary>
+        /// <param name="sourcePath">The source image path.</param>
+        /// <param name="outputPath">The destination path.</param>
+        /// <param name="imageType">The Jellyfin image type (drives the tile aspect ratio).</param>
+        /// <param name="forPlaylist">True for playlist covers (square Primary tiles), false for collections (2:3).</param>
+        /// <param name="targetWidth">Output width in pixels, or 0 to crop at native resolution.</param>
+        /// <param name="logger">Logger for failures.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>False when the source cannot be decoded or the copy cannot be saved -
+        /// the caller should fall back to the unmodified source.</returns>
+        public static Task<bool> TryCreateBadgedTileCoverAsync(
+            string sourcePath,
+            string outputPath,
+            MediaBrowser.Model.Entities.ImageType imageType,
+            bool forPlaylist,
+            int targetWidth,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
+            var (aspectWidth, aspectHeight) = GetTileAspect(imageType, forPlaylist);
+            return TryCreateCroppedCoverAsync(sourcePath, outputPath, aspectWidth, aspectHeight, targetWidth, applyBadge: true, logger, cancellationToken);
+        }
 
         /// <summary>
         /// Creates a 2x2 collage from up to four source images and saves it as a JPEG.
@@ -105,7 +132,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
             if (applyBadge)
             {
-                CoverBadgeHelper.ApplyBadge(collage);
+                CoverBadgeHelper.ApplyBadge(collage, logger);
             }
 
             await SaveCoverAsync(collage, outputPath, cancellationToken).ConfigureAwait(false);
@@ -182,7 +209,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
                 if (applyBadge)
                 {
-                    CoverBadgeHelper.ApplyBadge(image);
+                    CoverBadgeHelper.ApplyBadge(image, logger);
                 }
 
                 await SaveCoverAsync(image, outputPath, cancellationToken).ConfigureAwait(false);
