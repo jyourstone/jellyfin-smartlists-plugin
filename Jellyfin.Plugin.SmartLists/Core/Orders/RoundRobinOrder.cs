@@ -74,6 +74,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// Groups items by the configured field, orders items within each group by natural order
         /// (or shuffles them when <see cref="ShuffleWithinGroups"/> is true),
         /// orders groups via <see cref="OrderGroupKeys"/>, then assigns positions via round-robin interleaving.
+        /// With Collections grouping and air-date order, each cycle emits one air block
+        /// (episodes that aired within <see cref="AirBlockWindowDays"/> days of each other) instead of one item.
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
@@ -115,7 +117,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Shared algorithm for all round-robin variants: groups items, orders items within each
         /// group by natural order (or shuffles them when <paramref name="shuffleWithinGroups"/> is true),
-        /// orders groups via the supplied strategy, then interleaves round-robin.
+        /// orders groups via the supplied strategy, then interleaves round-robin — one item per group
+        /// per cycle, or one air block per cycle when collection grouping uses air-date order
+        /// (see <see cref="ChunkIntoAirBlocks"/>).
         /// </summary>
         internal static ConcurrentDictionary<Guid, int> BuildInterleavedPositions(
             IEnumerable<BaseItem> items,
@@ -175,31 +179,49 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             var orderedKeys = orderGroupKeys(groups.Keys);
 
-            // Chunk each group into "air blocks" when collection grouping uses air-date order;
-            // otherwise every item is its own block, which reproduces the plain per-item interleave.
-            bool useAirBlocks = collectionGroupKeys != null && airDateWithinGroups && !shuffleWithinGroups;
-            int windowDays = Math.Clamp(airBlockWindowDays, 0, 30);
-            var groupBlocks = new Dictionary<string, List<List<BaseItem>>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kvp in groups)
-            {
-                groupBlocks[kvp.Key] = useAirBlocks
-                    ? ChunkIntoAirBlocks(kvp.Value, windowDays)
-                    : kvp.Value.Select(i => new List<BaseItem> { i }).ToList();
-            }
-
             int position = 0;
-            int maxBlockCount = groupBlocks.Values.Max(b => b.Count);
 
-            for (int level = 0; level < maxBlockCount; level++)
+            // Air blocks apply only to collection grouping with air-date order; the plain
+            // per-item interleave stays allocation-free for every other round-robin variant.
+            bool useAirBlocks = collectionGroupKeys != null && airDateWithinGroups && !shuffleWithinGroups;
+            if (!useAirBlocks)
             {
-                foreach (var groupKey in orderedKeys)
+                int maxGroupSize = groups.Values.Max(g => g.Count);
+
+                for (int level = 0; level < maxGroupSize; level++)
                 {
-                    var blocks = groupBlocks[groupKey];
-                    if (level < blocks.Count)
+                    foreach (var groupKey in orderedKeys)
                     {
-                        foreach (var item in blocks[level])
+                        var group = groups[groupKey];
+                        if (level < group.Count)
                         {
-                            positions[item.Id] = position++;
+                            positions[group[level].Id] = position++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                int windowDays = Math.Clamp(airBlockWindowDays, 0, 30);
+                var groupBlocks = new Dictionary<string, List<List<BaseItem>>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in groups)
+                {
+                    groupBlocks[kvp.Key] = ChunkIntoAirBlocks(kvp.Value, windowDays);
+                }
+
+                int maxBlockCount = groupBlocks.Values.Max(b => b.Count);
+
+                for (int level = 0; level < maxBlockCount; level++)
+                {
+                    foreach (var groupKey in orderedKeys)
+                    {
+                        var blocks = groupBlocks[groupKey];
+                        if (level < blocks.Count)
+                        {
+                            foreach (var item in blocks[level])
+                            {
+                                positions[item.Id] = position++;
+                            }
                         }
                     }
                 }
@@ -227,9 +249,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             foreach (var item in group)
             {
                 var date = OrderUtilities.GetReleaseDate(item).Date;
-                var show = item is Episode blockEpisode
-                    ? blockEpisode.SeriesName ?? string.Empty
-                    : item.Name ?? string.Empty;
+                var show = ExtractGroupKey(item, "SeriesName");
 
                 var chains = current != null
                     && date > DateTime.MinValue

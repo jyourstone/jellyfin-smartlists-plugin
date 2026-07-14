@@ -51,8 +51,12 @@
             if (options) {
                 SmartLists.populateSelectElement(input, options);
             }
+        } else if (fieldType === 'number') {
+            input = document.createElement('input');
+            input.type = 'number';
+            input.className = 'emby-input';
         }
-        
+
         input.id = fieldId;
         container.appendChild(input);
         
@@ -358,17 +362,10 @@
         fieldsContainer.appendChild(withinGroupField.container);
 
         // Air window field (Collections grouping with Air Date order only)
-        const airWindowContainer = SmartLists.createStyledElement('div', 'sort-field-container', SmartLists.STYLES.sortField);
-        airWindowContainer.style.minWidth = '140px';
-        airWindowContainer.style.maxWidth = '140px';
-        const airWindowLabel = SmartLists.createStyledElement('label', '', SmartLists.STYLES.sortFieldLabel);
-        airWindowLabel.textContent = 'Air Window (days)';
-        airWindowLabel.setAttribute('for', 'sort-airwindow-' + sortId);
-        airWindowContainer.appendChild(airWindowLabel);
-        const airWindowInput = document.createElement('input');
-        airWindowInput.type = 'number';
-        airWindowInput.className = 'emby-input';
-        airWindowInput.id = 'sort-airwindow-' + sortId;
+        const airWindowField = SmartLists.createSortField('Air Window (days)', 'sort-airwindow-' + sortId, 'number');
+        airWindowField.container.style.minWidth = '140px';
+        airWindowField.container.style.maxWidth = '140px';
+        const airWindowInput = airWindowField.input;
         airWindowInput.min = '0';
         airWindowInput.max = '30';
         airWindowInput.step = '1';
@@ -377,15 +374,14 @@
         if (sortData && sortData.AirBlockWindowDays !== undefined && sortData.AirBlockWindowDays !== null) {
             airWindowInput.value = sortData.AirBlockWindowDays;
         }
-        airWindowContainer.appendChild(airWindowInput);
-        fieldsContainer.appendChild(airWindowContainer);
+        fieldsContainer.appendChild(airWindowField.container);
 
         function updateAirWindowVisibility() {
             var showAirWindow = SmartLists.isRoundRobinSort(sortByField.input.value)
                 && sortByField.input.value !== 'Shuffled Round Robin'
                 && groupByField.input.value === 'Collections'
                 && withinGroupField.input.value === 'AirDate';
-            airWindowContainer.style.display = showAirWindow ? '' : 'none';
+            airWindowField.container.style.display = showAirWindow ? '' : 'none';
         }
 
         groupByField.input.addEventListener('change', updateAirWindowVisibility);
@@ -553,7 +549,8 @@
 
                     var airWindowInput = box.querySelector('[id^="sort-airwindow-"]');
                     if (sortEntry.GroupByField === 'Collections' && airWindowInput && airWindowInput.value !== '') {
-                        var airWindowDays = parseInt(airWindowInput.value, 10);
+                        // Number() (not parseInt) so exponent notation like "1e2" isn't truncated to 1
+                        var airWindowDays = Math.round(Number(airWindowInput.value));
                         if (!isNaN(airWindowDays)) {
                             sortEntry.AirBlockWindowDays = Math.min(30, Math.max(0, airWindowDays));
                         }
