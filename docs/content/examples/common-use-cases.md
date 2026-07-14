@@ -121,7 +121,7 @@ Have franchise collections like NCIS or One Chicago where crossover episodes spa
 - **Sort by**: Least Recently Watched Round Robin (Interleave), **Group By**: Collection, **Order Within Group**: Air Date
 - **Auto Refresh**: On All Changes
 
-Result: Each collection becomes one slot in the rotation and plays chronologically across its shows — crossovers stay in order, and a spinoff only starts appearing once the timeline reaches its premiere. Shows not in any collection rotate as themselves. Watch anything in a franchise and the whole franchise moves to the back of the rotation.
+Result: Each collection becomes one slot in the rotation and plays chronologically across its shows — crossovers stay in order, and a spinoff only starts appearing once the timeline reaches its premiere. Episodes from different shows that aired within the **Air Window** (default 3 days) play back-to-back, so a crossover night comes as one run instead of being spread across rotation cycles. Shows not in any collection rotate as themselves. Watch anything in a franchise and the whole franchise moves to the back of the rotation.
 
 ### TV Channel with Commercials (Bumpers)
 Take any of the TV Channel playlists above and weave "commercial break" clips between the episodes:

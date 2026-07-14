@@ -152,6 +152,8 @@ All round robin variants except Shuffled Round Robin (where shuffling always win
 
 Air Date is made for franchise viewing: combine **Group By: Collection** with **Order Within Group: Air Date** and crossover episodes that span multiple shows play in airing order, while a spinoff only enters the rotation once the timeline reaches its premiere.
 
+When grouping by Collection with Air Date order, episodes that aired close together are also pulled into the rotation **as one block**: episodes from *different* shows in the collection that aired within the **Air Window** (default 3 days, 0 = same day only) play back-to-back instead of a full rotation cycle apart. Same-night crossovers stay together, and franchise weeks (one show Tuesday, the next Wednesday, the third Thursday) come as one run. Episodes of the same show never chain, so solo-era episodes still rotate one per cycle, and a block never contains more episodes than the collection has shows.
+
 !!! warning "NextUnwatched vs Playback Status"
     If you want to interleave **all** unwatched episodes, use `Playback Status = Unplayed`. The `Next Unwatched = Yes` filter only returns 1 episode per series (the very next one to watch), which limits Round Robin to at most one item per show.
 
