@@ -42,6 +42,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public bool OrderWithinGroupsByAirDate { get; set; }
 
         /// <summary>
+        /// Default window (days) for chaining episodes into air blocks.
+        /// </summary>
+        public const int DefaultAirBlockWindowDays = 3;
+
+        /// <summary>
+        /// Window in days for chaining episodes of different shows into one interleave block,
+        /// active only when grouping by Collections with air-date within-group order.
+        /// 0 means same-day only. Set from SortOption.AirBlockWindowDays (null = default).
+        /// </summary>
+        public int AirBlockWindowDays { get; set; } = DefaultAirBlockWindowDays;
+
+        /// <summary>
         /// When true, items within each group are shuffled instead of sorted in natural order.
         /// </summary>
         protected virtual bool ShuffleWithinGroups => false;
@@ -62,10 +74,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// Groups items by the configured field, orders items within each group by natural order
         /// (or shuffles them when <see cref="ShuffleWithinGroups"/> is true),
         /// orders groups via <see cref="OrderGroupKeys"/>, then assigns positions via round-robin interleaving.
+        /// With Collections grouping and air-date order, each cycle emits one air block
+        /// (episodes that aired within <see cref="AirBlockWindowDays"/> days of each other) instead of one item.
         /// </summary>
         public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups, CollectionGroupKeys, OrderWithinGroupsByAirDate);
+            ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups, CollectionGroupKeys, OrderWithinGroupsByAirDate, AirBlockWindowDays);
         }
 
         public override IEnumerable<BaseItem> OrderBy(IEnumerable<BaseItem> items)
@@ -103,7 +117,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Shared algorithm for all round-robin variants: groups items, orders items within each
         /// group by natural order (or shuffles them when <paramref name="shuffleWithinGroups"/> is true),
-        /// orders groups via the supplied strategy, then interleaves round-robin.
+        /// orders groups via the supplied strategy, then interleaves round-robin — one item per group
+        /// per cycle, or one air block per cycle when collection grouping uses air-date order
+        /// (see <see cref="ChunkIntoAirBlocks"/>).
         /// </summary>
         internal static ConcurrentDictionary<Guid, int> BuildInterleavedPositions(
             IEnumerable<BaseItem> items,
@@ -113,7 +129,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             ILogger? logger,
             bool shuffleWithinGroups = false,
             Dictionary<Guid, string>? collectionGroupKeys = null,
-            bool airDateWithinGroups = false)
+            bool airDateWithinGroups = false,
+            int airBlockWindowDays = DefaultAirBlockWindowDays)
         {
             var positions = new ConcurrentDictionary<Guid, int>();
 
@@ -163,16 +180,49 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             var orderedKeys = orderGroupKeys(groups.Keys);
 
             int position = 0;
-            int maxGroupSize = groups.Values.Max(g => g.Count);
 
-            for (int level = 0; level < maxGroupSize; level++)
+            // Air blocks apply only to collection grouping with air-date order; the plain
+            // per-item interleave stays allocation-free for every other round-robin variant.
+            bool useAirBlocks = collectionGroupKeys != null && airDateWithinGroups && !shuffleWithinGroups;
+            if (!useAirBlocks)
             {
-                foreach (var groupKey in orderedKeys)
+                int maxGroupSize = groups.Values.Max(g => g.Count);
+
+                for (int level = 0; level < maxGroupSize; level++)
                 {
-                    var group = groups[groupKey];
-                    if (level < group.Count)
+                    foreach (var groupKey in orderedKeys)
                     {
-                        positions[group[level].Id] = position++;
+                        var group = groups[groupKey];
+                        if (level < group.Count)
+                        {
+                            positions[group[level].Id] = position++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                int windowDays = Math.Clamp(airBlockWindowDays, 0, 30);
+                var groupBlocks = new Dictionary<string, List<List<BaseItem>>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in groups)
+                {
+                    groupBlocks[kvp.Key] = ChunkIntoAirBlocks(kvp.Value, windowDays);
+                }
+
+                int maxBlockCount = groupBlocks.Values.Max(b => b.Count);
+
+                for (int level = 0; level < maxBlockCount; level++)
+                {
+                    foreach (var groupKey in orderedKeys)
+                    {
+                        var blocks = groupBlocks[groupKey];
+                        if (level < blocks.Count)
+                        {
+                            foreach (var item in blocks[level])
+                            {
+                                positions[item.Id] = position++;
+                            }
+                        }
                     }
                 }
             }
@@ -181,6 +231,45 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logPrefix, positions.Count, groups.Count);
 
             return positions;
+        }
+
+        /// <summary>
+        /// Chunks an air-date-sorted group into "air blocks": a block extends while the next
+        /// item aired within <paramref name="windowDays"/> days of the previous one AND belongs
+        /// to a show not already in the block. Same-night crossovers and franchise weeks stay
+        /// together; solo-era episodes and items with no air date form blocks of one.
+        /// </summary>
+        internal static List<List<BaseItem>> ChunkIntoAirBlocks(List<BaseItem> group, int windowDays)
+        {
+            var blocks = new List<List<BaseItem>>();
+            List<BaseItem>? current = null;
+            HashSet<string>? currentShows = null;
+            var prevDate = DateTime.MinValue;
+
+            foreach (var item in group)
+            {
+                var date = OrderUtilities.GetReleaseDate(item).Date;
+                var show = ExtractGroupKey(item, "SeriesName");
+
+                var chains = current != null
+                    && date > DateTime.MinValue
+                    && prevDate > DateTime.MinValue
+                    && (date - prevDate).TotalDays <= windowDays
+                    && !currentShows!.Contains(show);
+
+                if (!chains)
+                {
+                    current = new List<BaseItem>();
+                    currentShows = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    blocks.Add(current);
+                }
+
+                current!.Add(item);
+                currentShows!.Add(show);
+                prevDate = date;
+            }
+
+            return blocks;
         }
 
         /// <summary>

@@ -51,8 +51,12 @@
             if (options) {
                 SmartLists.populateSelectElement(input, options);
             }
+        } else if (fieldType === 'number') {
+            input = document.createElement('input');
+            input.type = 'number';
+            input.className = 'emby-input';
         }
-        
+
         input.id = fieldId;
         container.appendChild(input);
         
@@ -357,6 +361,32 @@
         withinGroupField.container.style.display = (SmartLists.isRoundRobinSort(actualSortBy) && actualSortBy !== 'Shuffled Round Robin') ? '' : 'none';
         fieldsContainer.appendChild(withinGroupField.container);
 
+        // Air window field (Collections grouping with Air Date order only)
+        const airWindowField = SmartLists.createSortField('Air Window (days)', 'sort-airwindow-' + sortId, 'number');
+        airWindowField.container.style.minWidth = '140px';
+        airWindowField.container.style.maxWidth = '140px';
+        const airWindowInput = airWindowField.input;
+        airWindowInput.min = '0';
+        airWindowInput.max = '30';
+        airWindowInput.step = '1';
+        airWindowInput.placeholder = '3';
+        airWindowInput.title = 'Episodes from different shows in the same collection that aired within this many days of each other play back-to-back. 0 = same day only.';
+        if (sortData && sortData.AirBlockWindowDays !== undefined && sortData.AirBlockWindowDays !== null) {
+            airWindowInput.value = sortData.AirBlockWindowDays;
+        }
+        fieldsContainer.appendChild(airWindowField.container);
+
+        function updateAirWindowVisibility() {
+            var showAirWindow = SmartLists.isRoundRobinSort(sortByField.input.value)
+                && sortByField.input.value !== 'Shuffled Round Robin'
+                && groupByField.input.value === 'Collections'
+                && withinGroupField.input.value === 'AirDate';
+            airWindowField.container.style.display = showAirWindow ? '' : 'none';
+        }
+
+        groupByField.input.addEventListener('change', updateAirWindowVisibility);
+        withinGroupField.input.addEventListener('change', updateAirWindowVisibility);
+
         box.appendChild(fieldsContainer);
 
         // Remove button (positioned absolutely within box)
@@ -379,10 +409,12 @@
             if (!showIgnoreArticles) {
                 ignoreArticlesField.checkbox.checked = false;
             }
+            updateAirWindowVisibility();
         });
 
         // Initialize Sort Order UI based on current Sort By value
         SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input, groupByField.container, withinGroupField.container);
+        updateAirWindowVisibility();
 
         return box;
     };
@@ -514,6 +546,15 @@
                 var withinGroupSelect = box.querySelector('[id^="sort-withingroup-"]');
                 if (withinGroupSelect && withinGroupSelect.value === 'AirDate' && sortBy !== 'Shuffled Round Robin') {
                     sortEntry.WithinGroupOrder = 'AirDate';
+
+                    var airWindowInput = box.querySelector('[id^="sort-airwindow-"]');
+                    if (sortEntry.GroupByField === 'Collections' && airWindowInput && airWindowInput.value !== '') {
+                        // Number() (not parseInt) so exponent notation like "1e2" isn't truncated to 1
+                        var airWindowDays = Math.round(Number(airWindowInput.value));
+                        if (!isNaN(airWindowDays)) {
+                            sortEntry.AirBlockWindowDays = Math.min(30, Math.max(0, airWindowDays));
+                        }
+                    }
                 }
             }
 
@@ -575,6 +616,8 @@
                         return { value: f.value, label: f.label, selected: f.value === currentGroupBy };
                     });
                     SmartLists.populateSelectElement(groupBySelect, groupByOptions);
+                    // Repopulating doesn't fire 'change'; nudge listeners (Air Window visibility) manually
+                    groupBySelect.dispatchEvent(new Event('change'));
                 }
             }
 
