@@ -357,6 +357,40 @@
         withinGroupField.container.style.display = (SmartLists.isRoundRobinSort(actualSortBy) && actualSortBy !== 'Shuffled Round Robin') ? '' : 'none';
         fieldsContainer.appendChild(withinGroupField.container);
 
+        // Air window field (Collections grouping with Air Date order only)
+        const airWindowContainer = SmartLists.createStyledElement('div', 'sort-field-container', SmartLists.STYLES.sortField);
+        airWindowContainer.style.minWidth = '140px';
+        airWindowContainer.style.maxWidth = '140px';
+        const airWindowLabel = SmartLists.createStyledElement('label', '', SmartLists.STYLES.sortFieldLabel);
+        airWindowLabel.textContent = 'Air Window (days)';
+        airWindowLabel.setAttribute('for', 'sort-airwindow-' + sortId);
+        airWindowContainer.appendChild(airWindowLabel);
+        const airWindowInput = document.createElement('input');
+        airWindowInput.type = 'number';
+        airWindowInput.className = 'emby-input';
+        airWindowInput.id = 'sort-airwindow-' + sortId;
+        airWindowInput.min = '0';
+        airWindowInput.max = '30';
+        airWindowInput.step = '1';
+        airWindowInput.placeholder = '3';
+        airWindowInput.title = 'Episodes from different shows in the same collection that aired within this many days of each other play back-to-back. 0 = same day only.';
+        if (sortData && sortData.AirBlockWindowDays !== undefined && sortData.AirBlockWindowDays !== null) {
+            airWindowInput.value = sortData.AirBlockWindowDays;
+        }
+        airWindowContainer.appendChild(airWindowInput);
+        fieldsContainer.appendChild(airWindowContainer);
+
+        function updateAirWindowVisibility() {
+            var showAirWindow = SmartLists.isRoundRobinSort(sortByField.input.value)
+                && sortByField.input.value !== 'Shuffled Round Robin'
+                && groupByField.input.value === 'Collections'
+                && withinGroupField.input.value === 'AirDate';
+            airWindowContainer.style.display = showAirWindow ? '' : 'none';
+        }
+
+        groupByField.input.addEventListener('change', updateAirWindowVisibility);
+        withinGroupField.input.addEventListener('change', updateAirWindowVisibility);
+
         box.appendChild(fieldsContainer);
 
         // Remove button (positioned absolutely within box)
@@ -379,10 +413,12 @@
             if (!showIgnoreArticles) {
                 ignoreArticlesField.checkbox.checked = false;
             }
+            updateAirWindowVisibility();
         });
 
         // Initialize Sort Order UI based on current Sort By value
         SmartLists.syncSortOrderUI(actualSortBy, sortOrderField.container, sortOrderField.input, groupByField.container, withinGroupField.container);
+        updateAirWindowVisibility();
 
         return box;
     };
@@ -514,6 +550,14 @@
                 var withinGroupSelect = box.querySelector('[id^="sort-withingroup-"]');
                 if (withinGroupSelect && withinGroupSelect.value === 'AirDate' && sortBy !== 'Shuffled Round Robin') {
                     sortEntry.WithinGroupOrder = 'AirDate';
+
+                    var airWindowInput = box.querySelector('[id^="sort-airwindow-"]');
+                    if (sortEntry.GroupByField === 'Collections' && airWindowInput && airWindowInput.value !== '') {
+                        var airWindowDays = parseInt(airWindowInput.value, 10);
+                        if (!isNaN(airWindowDays)) {
+                            sortEntry.AirBlockWindowDays = Math.min(30, Math.max(0, airWindowDays));
+                        }
+                    }
                 }
             }
 
