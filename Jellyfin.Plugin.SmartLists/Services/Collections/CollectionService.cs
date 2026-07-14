@@ -1642,7 +1642,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var normalizedImagePath = System.IO.Path.GetFullPath(imageInfo.Path);
 
             // Check if image is in the collection's metadata directory
-            if (!FileSystemHelper.IsPathInsideFolder(imageInfo.Path, normalizedCollectionPath))
+            if (!FileSystemHelper.IsPathInsideFolder(normalizedImagePath, normalizedCollectionPath))
             {
                 // Image is not in collection's directory, so it's from an item (auto-generated or referenced)
                 // This is safe to overwrite

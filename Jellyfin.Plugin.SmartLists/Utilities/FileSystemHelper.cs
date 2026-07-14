@@ -28,9 +28,9 @@ public static class FileSystemHelper
     /// <param name="filePath">The file path to test.</param>
     /// <param name="folderPath">The folder that should contain the file.</param>
     /// <returns>True when the file path lies inside the folder.</returns>
-    public static bool IsPathInsideFolder(string filePath, string? folderPath)
+    public static bool IsPathInsideFolder(string? filePath, string? folderPath)
     {
-        if (string.IsNullOrEmpty(folderPath))
+        if (string.IsNullOrEmpty(filePath) || string.IsNullOrEmpty(folderPath))
         {
             return false;
         }
