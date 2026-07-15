@@ -496,10 +496,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         protected override List<string> OrderGroupKeys(IEnumerable<string> keys)
         {
             return keys
-                .OrderBy(k => GroupRecency.TryGetValue(k, out var d) ? d : DateTime.MinValue)
+                .OrderBy(k => HeldGroups.Contains(k) || !GroupRecency.TryGetValue(k, out var d) ? DateTime.MinValue : d)
                 .ThenBy(k => k, OrderUtilities.SharedNaturalComparer)
                 .ToList();
         }
+
+        /// <summary>
+        /// Groups currently held mid-block: they sort as never watched (front of the rotation)
+        /// regardless of their recency. Recomputed from scratch on every
+        /// <see cref="PreComputePositions"/> call, so intermediate passes (e.g. per-group limits
+        /// sorting rule-group subsets) never leave a stale hold behind — the final pass over the
+        /// playlist's real item set wins.
+        /// </summary>
+        internal HashSet<string> HeldGroups { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Per-group collection items the user has interacted with (Played flag set or a
@@ -511,9 +520,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         internal Dictionary<string, List<(BaseItem Item, DateTime LastPlayed, DateTime Air)>>? WatchedByGroup { get; private set; }
 
         /// <summary>
-        /// Ids of collection-member items whose Played flag is unset, from the UNFILTERED pool.
-        /// Matches the "Playback Status" rule semantics: imported watch states without a
-        /// timestamp count as watched, started-but-unfinished items count as unwatched.
+        /// Ids of collection-member items that count as unwatched for the hold, from the
+        /// UNFILTERED pool. For regular items this matches the "Playback Status" rule semantics:
+        /// Played flag unset is unwatched, so imported watch states without a timestamp count as
+        /// watched and started-but-unfinished items count as unwatched. Folder items (Series and
+        /// other containers) with any aggregate watch activity count as watched instead — Jellyfin
+        /// does not reliably persist the Played flag on folder user-data rows, so a fully-watched
+        /// Series would otherwise hold its group forever.
         /// </summary>
         internal HashSet<Guid>? UnwatchedCollectionItemIds { get; private set; }
 
@@ -582,7 +595,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                             list.Add((item, lastPlayed, OrderUtilities.GetReleaseDate(item).Date));
                         }
 
-                        if (userData?.Played != true)
+                        if (userData?.Played != true && !(item.IsFolder && lastPlayed > DateTime.MinValue))
                         {
                             UnwatchedCollectionItemIds!.Add(item.Id);
                         }
@@ -609,11 +622,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Removes groups that are mid-way through an air block from <see cref="GroupRecency"/>
-        /// so they sort with the never-watched groups at the front until the block is finished.
-        /// Block topology is the union of the playlist's FILTERED items and the user's watched
-        /// items (watched items anchor a block even when a "Playback Status" rule hides them),
-        /// rebuilt with the interleave's own pipeline (air-date sort +
+        /// Recomputes <see cref="HeldGroups"/>: groups mid-way through an air block sort with the
+        /// never-watched groups at the front until the block is finished. Block topology is the
+        /// union of the playlist's FILTERED items and the user's watched items (watched items
+        /// anchor a block even when a "Playback Status" rule hides them), rebuilt with the
+        /// interleave's own pipeline (air-date sort +
         /// <see cref="RoundRobinBase.ChunkIntoAirBlocks"/>). A hold fires only when the anchor's
         /// block still has an unwatched item the playlist can actually show — items excluded by
         /// other rules never pin a group. The anchor is the most recently played item, with ties
@@ -621,6 +634,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         internal void ApplyMidBlockHold(List<BaseItem> filteredItems, ILogger? logger)
         {
+            HeldGroups.Clear();
+
             if (WatchedByGroup == null || WatchedByGroup.Count == 0 || UnwatchedCollectionItemIds == null || CollectionGroupKeys == null)
             {
                 return;
@@ -707,7 +722,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
                     if (block.Exists(i => visibleIds.Contains(i.Id) && UnwatchedCollectionItemIds.Contains(i.Id)))
                     {
-                        GroupRecency.Remove(kvp.Key);
+                        HeldGroups.Add(kvp.Key);
                         logger?.LogDebug(
                             "Least Recently Watched Round Robin: holding group '{GroupKey}' at the front - its current air block still has unwatched item(s) in the playlist (window {Window})",
                             kvp.Key, windowDays);

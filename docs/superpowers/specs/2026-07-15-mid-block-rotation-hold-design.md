@@ -39,15 +39,21 @@ recency map already uses):
    `MaxAirBlockWindowDays` clamp). Locate the block containing the anchor.
 3. **Hold** iff that block still has an item that is both **visible in the
    playlist** and **unwatched** (Played flag unset — imported watch states
-   without timestamps count as watched, in-progress items count as unwatched):
-   omit the group from the recency map so it sorts with the never-watched
-   groups at the front (alphabetical tie-break). Items excluded by the
-   playlist's other rules never keep a hold alive.
+   without timestamps count as watched, in-progress items count as unwatched;
+   folder items like Series count as watched once they have any aggregate
+   watch activity, since Jellyfin does not reliably persist the folder Played
+   flag): add the group to `HeldGroups`, which `OrderGroupKeys` sorts with the
+   never-watched groups at the front (alphabetical tie-break). Items excluded
+   by the playlist's other rules never keep a hold alive.
 4. Otherwise the group keeps its normal recency and rotates as today.
 
 The hold runs in `PreComputePositions` (which every sort path calls with the
-filtered items); `BuildGroupRecencyAndHoldState` collects the per-group watch
-state from the unfiltered pool beforehand, for collection members only.
+filtered items) and **recomputes `HeldGroups` from scratch on every call** —
+intermediate passes (per-group limits sort rule-group subsets before the
+global sort) never leave a stale hold behind; the final pass over the real
+item set wins. `BuildGroupRecencyAndHoldState` collects the per-group watch
+state from the unfiltered pool beforehand, for collection members only, and
+`GroupRecency` itself is never mutated by the hold.
 
 > **Revision history:** v1 was an air-date-distance rule — it permanently
 > front-pinned any group whose air cadence fit inside the window. v2 used
