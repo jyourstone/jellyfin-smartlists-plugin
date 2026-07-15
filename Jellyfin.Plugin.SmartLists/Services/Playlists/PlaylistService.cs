@@ -636,6 +636,71 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 if (user == null)
                 {
                     _logger.LogWarning("No user found for playlist '{PlaylistName}'. Cannot remove smart suffix.", dto.Name);
+
+                    // Multi-user playlists have no single owner (UserId is legacy/empty). Still strip the
+                    // tether from every stored Jellyfin playlist so the weekly cleanup sweep doesn't delete
+                    // items the user chose to keep.
+                    var idsToClear = new List<string>();
+                    if (!string.IsNullOrEmpty(dto.JellyfinPlaylistId))
+                    {
+                        idsToClear.Add(dto.JellyfinPlaylistId);
+                    }
+
+                    if (dto.UserPlaylists != null)
+                    {
+                        foreach (var mapping in dto.UserPlaylists)
+                        {
+                            if (!string.IsNullOrEmpty(mapping.JellyfinPlaylistId))
+                            {
+                                idsToClear.Add(mapping.JellyfinPlaylistId);
+                            }
+                        }
+                    }
+
+                    var handledPlaylistIds = new HashSet<Guid>();
+                    foreach (var id in idsToClear)
+                    {
+                        if (Guid.TryParse(id, out var guid) && _libraryManager.GetItemById(guid) is Playlist playlistToClear)
+                        {
+                            var tether = playlistToClear.GetProviderId(ProviderKeys.SmartLists);
+                            if (!string.IsNullOrEmpty(tether) && !string.Equals(tether, dto.Id, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _logger.LogWarning("Stored ID '{JellyfinPlaylistId}' points at an item tethered to a different smart list ('{PlaylistName}'). Skipping.",
+                                    id, playlistToClear.Name);
+                                continue;
+                            }
+
+                            playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            handledPlaylistIds.Add(guid);
+                        }
+                    }
+
+                    // Fallback sweep: find any remaining playlists still tethered to this dto (e.g. the
+                    // real kept item under a stale or mismatched stored ID) and strip them too, so the
+                    // weekly cleanup sweep doesn't delete an item the user chose to keep.
+                    if (!string.IsNullOrEmpty(dto.Id))
+                    {
+                        var tetherQuery = new InternalItemsQuery
+                        {
+                            IncludeItemTypes = [BaseItemKind.Playlist],
+                            Recursive = true,
+                        };
+
+                        var remainingTethered = _libraryManager.GetItemsResult(tetherQuery).Items
+                            .OfType<Playlist>()
+                            .Where(p => !handledPlaylistIds.Contains(p.Id)
+                                && string.Equals(p.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                        foreach (var playlistToClear in remainingTethered)
+                        {
+                            playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
+                                playlistToClear.Name, playlistToClear.Id);
+                        }
+                    }
+
                     return;
                 }
 
@@ -662,9 +727,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 if (existingPlaylist != null)
                 {
+                    var tether = existingPlaylist.GetProviderId(ProviderKeys.SmartLists);
+                    if (!string.IsNullOrEmpty(tether) && !string.Equals(tether, dto.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Stored ID '{JellyfinPlaylistId}' points at an item tethered to a different smart list ('{PlaylistName}'). Skipping.",
+                            dto.JellyfinPlaylistId, existingPlaylist.Name);
+                        existingPlaylist = null;
+                    }
+                }
+
+                if (existingPlaylist != null)
+                {
                     var oldName = existingPlaylist.Name;
                     _logger.LogInformation("Removing smart playlist '{PlaylistName}' (ID: {PlaylistId}) for user '{UserName}'",
                         oldName, existingPlaylist.Id, user.Username);
+
+                    // Playlist is being handed back to the user - always remove the smart list tether,
+                    // regardless of whether the name still matches an expected smart format, so the
+                    // weekly cleanup sweep doesn't delete an item the user chose to keep.
+                    existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
 
                     // Get the current smart playlist name format to see what needs to be removed
                     var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
@@ -674,12 +755,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         // Remove the smart playlist naming and keep just the base name
                         existingPlaylist.Name = dto.Name;
-
-                        // Playlist is being handed back to the user - remove the smart list tether
-                        existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
-
-                        // Save the changes
-                        await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                         _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}'",
                             oldName, dto.Name, user.Username);
@@ -702,12 +777,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             {
                                 existingPlaylist.Name = baseName;
 
-                                // Playlist is being handed back to the user - remove the smart list tether
-                                existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
-
-                                // Save the changes
-                                await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
                                 _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}' (removed prefix/suffix)",
                                     oldName, baseName, user.Username);
                             }
@@ -722,6 +791,35 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
                                 oldName, currentSmartName);
                         }
+                    }
+
+                    // Save the changes (tether removal always applies; name change applies only when matched above)
+                    await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Fallback sweep: find any remaining playlists still tethered to this dto (e.g. the
+                // real kept item under a stale or mismatched stored ID) and strip them too, so the
+                // weekly cleanup sweep doesn't delete an item the user chose to keep.
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    var tetherQuery = new InternalItemsQuery(user)
+                    {
+                        IncludeItemTypes = [BaseItemKind.Playlist],
+                        Recursive = true,
+                    };
+
+                    var remainingTethered = _libraryManager.GetItemsResult(tetherQuery).Items
+                        .OfType<Playlist>()
+                        .Where(p => p.OwnerUserId == user.Id
+                            && (existingPlaylist == null || p.Id != existingPlaylist.Id)
+                            && string.Equals(p.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                    foreach (var playlistToClear in remainingTethered)
+                    {
+                        playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
+                            playlistToClear.Name, playlistToClear.Id);
                     }
                 }
             }

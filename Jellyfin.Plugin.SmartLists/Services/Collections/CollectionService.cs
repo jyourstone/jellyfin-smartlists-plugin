@@ -574,9 +574,27 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 if (existingCollection != null)
                 {
+                    var tether = existingCollection.GetProviderId(ProviderKeys.SmartLists);
+                    if (!string.IsNullOrEmpty(tether) && !string.Equals(tether, dto.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Stored ID '{JellyfinCollectionId}' points at an item tethered to a different smart list ('{CollectionName}'). Skipping.",
+                            dto.JellyfinCollectionId, existingCollection.Name);
+                        existingCollection = null;
+                    }
+                }
+
+                if (existingCollection != null)
+                {
                     var oldName = existingCollection.Name;
                     _logger.LogInformation("Removing smart collection suffix from '{CollectionName}' (ID: {CollectionId})",
                         oldName, existingCollection.Id);
+
+                    // Collection is being handed back to the user - always remove the smart list tether
+                    // and unlock it so Jellyfin's metadata fetchers work again, regardless of whether the
+                    // name still matches an expected smart format, so the weekly cleanup sweep doesn't
+                    // delete an item the user chose to keep.
+                    existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                    existingCollection.IsLocked = false;
 
                     // Get the current smart collection name format to see what needs to be removed
                     var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
@@ -586,14 +604,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     {
                         // Remove the smart collection naming and keep just the base name
                         existingCollection.Name = dto.Name;
-
-                        // Collection is being handed back to the user - remove the smart list tether
-                        // and unlock it so Jellyfin's metadata fetchers work again for the user
-                        existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
-                        existingCollection.IsLocked = false;
-
-                        // Save the changes
-                        await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                         _logger.LogDebug("Successfully renamed collection from '{OldName}' to '{NewName}'",
                             oldName, dto.Name);
@@ -616,14 +626,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             {
                                 existingCollection.Name = baseName;
 
-                                // Collection is being handed back to the user - remove the smart list tether
-                                // and unlock it so Jellyfin's metadata fetchers work again for the user
-                                existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
-                                existingCollection.IsLocked = false;
-
-                                // Save the changes
-                                await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
                                 _logger.LogDebug("Successfully renamed collection from '{OldName}' to '{NewName}' (removed prefix/suffix)",
                                     oldName, baseName);
                             }
@@ -638,6 +640,34 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             _logger.LogWarning("Collection name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
                                 oldName, currentSmartName);
                         }
+                    }
+
+                    // Save the changes (tether removal/unlock always applies; name change applies only when matched above)
+                    await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Fallback sweep: find any remaining collections still tethered to this dto (e.g. the
+                // real kept item under a stale or mismatched stored ID) and strip them too, so the
+                // weekly cleanup sweep doesn't delete an item the user chose to keep.
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    var tetherQuery = new InternalItemsQuery
+                    {
+                        IncludeItemTypes = [BaseItemKind.BoxSet],
+                        Recursive = true,
+                    };
+
+                    var remainingTethered = _libraryManager.GetItemsResult(tetherQuery).Items
+                        .Where(b => (existingCollection == null || b.Id != existingCollection.Id)
+                            && string.Equals(b.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                    foreach (var collectionToClear in remainingTethered)
+                    {
+                        collectionToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        collectionToClear.IsLocked = false;
+                        await collectionToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        _logger.LogInformation("Stripped smart list tether from collection '{CollectionName}' (ID: {CollectionId}) via fallback sweep; stored ID was stale or mismatched.",
+                            collectionToClear.Name, collectionToClear.Id);
                     }
                 }
             }

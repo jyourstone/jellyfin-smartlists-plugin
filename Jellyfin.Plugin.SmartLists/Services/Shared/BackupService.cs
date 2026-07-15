@@ -418,7 +418,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private async Task<int> CreateBackupZipAsync(string backupFilePath, CancellationToken cancellationToken)
         {
-            var (playlists, collections) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            var (playlists, collections, skippedFiles) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            if (skippedFiles > 0)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture, $"Cannot create a complete backup: {skippedFiles} smart list file(s) failed to load."));
+            }
+
             var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
 
             if (allLists.Count == 0)
@@ -443,8 +449,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     continue;
                 }
 
-                await AddSmartListToArchiveAsync(archive, list.Id, cancellationToken).ConfigureAwait(false);
-                archivedCount++;
+                if (await AddSmartListToArchiveAsync(archive, list.Id, cancellationToken).ConfigureAwait(false))
+                {
+                    archivedCount++;
+                }
+                else
+                {
+                    _logger.LogWarning("Smart list {ListId} ('{ListName}') vanished during backup; not counted as archived", list.Id, list.Name);
+                }
             }
 
             _logger.LogDebug("Backed up {ListCount} smart lists to {BackupFile}", archivedCount, backupFilePath);
@@ -452,20 +464,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Adds a smart list and its images to the archive.
+        /// Adds a smart list and its images to the archive. Returns false when the list's
+        /// config vanished between enumeration and archiving (e.g. deleted mid-backup) so
+        /// the caller doesn't count it as archived.
         /// </summary>
-        private async Task AddSmartListToArchiveAsync(ZipArchive archive, string listId, CancellationToken cancellationToken)
+        private async Task<bool> AddSmartListToArchiveAsync(ZipArchive archive, string listId, CancellationToken cancellationToken)
         {
             var folderPath = _fileSystem.GetSmartListFolderPath(listId);
 
             // Add config.json
             var configPath = _fileSystem.GetSmartListConfigPath(listId);
-            if (File.Exists(configPath))
+            if (!File.Exists(configPath))
             {
-                var entryName = $"{listId}/config.json";
-                var entry = archive.CreateEntry(entryName);
-                using var entryStream = entry.Open();
-                using var fileStream = File.OpenRead(configPath);
+                return false;
+            }
+
+            var entryName = $"{listId}/config.json";
+            var entry = archive.CreateEntry(entryName);
+            using (var entryStream = entry.Open())
+            using (var fileStream = File.OpenRead(configPath))
+            {
                 await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
             }
 
@@ -490,6 +508,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     await imageFileStream.CopyToAsync(imageEntryStream, cancellationToken).ConfigureAwait(false);
                 }
             }
+
+            return true;
         }
 
         private static bool IsWindowsStylePath(string path)

@@ -411,6 +411,15 @@ To transfer your smart lists to another Jellyfin server:
 2. Copy the ZIP file to the destination server
 3. On the destination server, use **Restore from File** to import the lists
 
+## Cleanup Task
+
+SmartLists includes a maintenance task that removes orphaned data. It runs weekly (Sunday at 4:00 AM by default) and can also be run manually from Jellyfin Dashboard → Scheduled Tasks → "SmartLists cleanup task".
+
+The task cleans up:
+
+- **Orphaned plugin data**: leftover configuration folders and legacy image folders from deleted lists
+- **Leftover Jellyfin playlists and collections**: items created by SmartLists whose smart list has since been deleted or disabled. This can happen if a deletion failed (for example, due to a locked file) when the list was deleted or disabled. Only items carrying SmartLists' hidden ownership marker are ever touched — playlists and collections you created yourself are never affected, including Jellyfin lists you chose to keep when deleting a smart list.
+
 ## Performance Settings
 
 ### Processing Batch Size

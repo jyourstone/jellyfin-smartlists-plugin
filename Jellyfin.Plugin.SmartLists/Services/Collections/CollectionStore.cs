@@ -67,7 +67,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         public async Task<SmartCollectionDto[]> GetAllAsync()
         {
             // Use shared helper to read files once
-            var (_, collections) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            var (_, collections, _) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
             return collections;
         }
 
