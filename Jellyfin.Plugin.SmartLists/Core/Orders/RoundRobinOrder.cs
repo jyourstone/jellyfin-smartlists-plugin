@@ -47,6 +47,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         public const int DefaultAirBlockWindowDays = 3;
 
         /// <summary>
+        /// Maximum allowed air-block window in days. The interleave and the mid-block hold both
+        /// clamp to the same bounds so they always agree on block boundaries.
+        /// </summary>
+        public const int MaxAirBlockWindowDays = 30;
+
+        /// <summary>
         /// Window in days for chaining episodes of different shows into one interleave block,
         /// active only when grouping by Collections with air-date within-group order.
         /// 0 means same-day only. Set from SortOption.AirBlockWindowDays (null = default).
@@ -57,6 +63,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// When true, items within each group are shuffled instead of sorted in natural order.
         /// </summary>
         protected virtual bool ShuffleWithinGroups => false;
+
+        /// <summary>
+        /// True when this order interleaves air blocks: Collections grouping with air-date
+        /// within-group order (shuffle wins over air-date order, so shuffled variants never
+        /// use blocks). Single source of the gate shared by SmartList and the interleave.
+        /// </summary>
+        internal bool UsesAirBlocks => GroupByField == "Collections" && OrderWithinGroupsByAirDate && !ShuffleWithinGroups;
 
         /// <summary>
         /// Pre-computed interleave positions for each item.
@@ -77,7 +90,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// With Collections grouping and air-date order, each cycle emits one air block
         /// (episodes that aired within <see cref="AirBlockWindowDays"/> days of each other) instead of one item.
         /// </summary>
-        public void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
+        public virtual void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
             ItemPositions = BuildInterleavedPositions(items, GroupByField, OrderGroupKeys, Name, logger, ShuffleWithinGroups, CollectionGroupKeys, OrderWithinGroupsByAirDate, AirBlockWindowDays);
         }
@@ -202,7 +215,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             }
             else
             {
-                int windowDays = Math.Clamp(airBlockWindowDays, 0, 30);
+                int windowDays = Math.Clamp(airBlockWindowDays, 0, MaxAirBlockWindowDays);
                 var groupBlocks = new Dictionary<string, List<List<BaseItem>>>(StringComparer.OrdinalIgnoreCase);
                 foreach (var kvp in groups)
                 {
@@ -489,47 +502,66 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Builds the group key → most recent LastPlayedDate map for one user across the given items.
-        /// Container items (Series/Season/MusicAlbum) use the aggregate-over-children date when the
-        /// refresh cache has their children, mirroring LastPlayedOrderBase.
-        /// When <paramref name="airBlockWindowDays"/> is set (Collections grouping with air-date
-        /// order), groups that are mid-way through an air block — the block containing the most
-        /// recently watched item still has unwatched items — are omitted from the map so they hold
-        /// their spot at the front of the rotation until the block is finished.
+        /// Per-group collection items the user has interacted with (Played flag set or a
+        /// LastPlayedDate), with their per-user LastPlayedDate and air date. Collected from the
+        /// UNFILTERED pool by <see cref="BuildGroupRecencyAndHoldState"/> when air blocks are
+        /// active; anchors the mid-block hold. In-progress items (a LastPlayedDate but no Played
+        /// flag) appear here AND in <see cref="UnwatchedCollectionItemIds"/>.
         /// </summary>
-        internal static Dictionary<string, DateTime> BuildGroupRecency(
+        internal Dictionary<string, List<(BaseItem Item, DateTime LastPlayed, DateTime Air)>>? WatchedByGroup { get; private set; }
+
+        /// <summary>
+        /// Ids of collection-member items whose Played flag is unset, from the UNFILTERED pool.
+        /// Matches the "Playback Status" rule semantics: imported watch states without a
+        /// timestamp count as watched, started-but-unfinished items count as unwatched.
+        /// </summary>
+        internal HashSet<Guid>? UnwatchedCollectionItemIds { get; private set; }
+
+        /// <summary>
+        /// Builds <see cref="GroupRecency"/> (group key → most recent per-user LastPlayedDate)
+        /// for one user across the given items. Container items (Series/Season/MusicAlbum) use
+        /// the aggregate-over-children date when the refresh cache has their children, mirroring
+        /// LastPlayedOrderBase. When air blocks are active (<see cref="RoundRobinBase.UsesAirBlocks"/>),
+        /// also collects the per-group watch state the mid-block hold needs; the hold itself runs
+        /// later, in <see cref="PreComputePositions"/>, once the playlist's filtered items are known.
+        /// </summary>
+        internal void BuildGroupRecencyAndHoldState(
             IEnumerable<BaseItem> items,
-            string? groupByField,
             User user,
             IUserDataManager? userDataManager,
             RefreshQueueService.RefreshCache? refreshCache,
-            ILogger? logger,
-            Dictionary<Guid, string>? collectionGroupKeys = null,
-            int? airBlockWindowDays = null)
+            ILogger? logger)
         {
             var recency = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrEmpty(groupByField) || userDataManager == null || user == null)
+            GroupRecency = recency;
+            WatchedByGroup = null;
+            UnwatchedCollectionItemIds = null;
+
+            if (string.IsNullOrEmpty(GroupByField) || userDataManager == null || user == null)
             {
                 logger?.LogWarning("Least Recently Watched Round Robin: missing GroupByField or user context - groups fall back to alphabetical order");
-                return recency;
+                return;
             }
 
-            // Per-group items with their per-user last played dates, collected only when the mid-block hold is active
-            var groupItems = airBlockWindowDays.HasValue
-                ? new Dictionary<string, List<(BaseItem Item, DateTime LastPlayed)>>(StringComparer.OrdinalIgnoreCase)
-                : null;
+            var collectHoldState = UsesAirBlocks && CollectionGroupKeys != null;
+            if (collectHoldState)
+            {
+                WatchedByGroup = new Dictionary<string, List<(BaseItem Item, DateTime LastPlayed, DateTime Air)>>(StringComparer.OrdinalIgnoreCase);
+                UnwatchedCollectionItemIds = new HashSet<Guid>();
+            }
 
             foreach (var item in items)
             {
                 try
                 {
-                    var key = ExtractGroupKey(item, groupByField, collectionGroupKeys);
+                    var key = ExtractGroupKey(item, GroupByField, CollectionGroupKeys);
+
+                    var userData = refreshCache != null
+                        ? UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager)
+                        : userDataManager.GetUserData(user, item);
 
                     var lastPlayed = LastPlayedOrderBase.GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache)
-                        ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(
-                            refreshCache != null
-                                ? UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager)
-                                : userDataManager.GetUserData(user, item));
+                        ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(userData);
 
                     if (lastPlayed > DateTime.MinValue &&
                         (!recency.TryGetValue(key, out var existing) || lastPlayed > existing))
@@ -537,15 +569,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         recency[key] = lastPlayed;
                     }
 
-                    if (groupItems != null)
+                    if (collectHoldState && CollectionGroupKeys!.ContainsKey(item.Id))
                     {
-                        if (!groupItems.TryGetValue(key, out var list))
+                        if (userData?.Played == true || lastPlayed > DateTime.MinValue)
                         {
-                            list = new List<(BaseItem Item, DateTime LastPlayed)>();
-                            groupItems[key] = list;
+                            if (!WatchedByGroup!.TryGetValue(key, out var list))
+                            {
+                                list = new List<(BaseItem Item, DateTime LastPlayed, DateTime Air)>();
+                                WatchedByGroup[key] = list;
+                            }
+
+                            list.Add((item, lastPlayed, OrderUtilities.GetReleaseDate(item).Date));
                         }
 
-                        list.Add((item, lastPlayed));
+                        if (userData?.Played != true)
+                        {
+                            UnwatchedCollectionItemIds!.Add(item.Id);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -553,96 +593,124 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     logger?.LogWarning(ex, "Error reading last played date for item {ItemName}", item.Name);
                 }
             }
-
-            if (groupItems != null && airBlockWindowDays.HasValue)
-            {
-                ApplyMidBlockHold(recency, groupItems, Math.Clamp(airBlockWindowDays.Value, 0, 30), logger);
-            }
-
-            return recency;
         }
 
         /// <summary>
-        /// Removes groups that are mid-way through an air block from the recency map: the group's
-        /// air blocks are rebuilt exactly as the interleave builds them (air-date order +
-        /// <see cref="RoundRobinBase.ChunkIntoAirBlocks"/>, so blocks only chain across different
-        /// shows), and a group whose most recently watched item sits in a block that still has an
-        /// unwatched item airing at or after it sorts with the never-watched groups at the front,
-        /// so the rest of the block plays before the group rotates to the back. Single-show groups
-        /// always form blocks of one and rotate normally, and a finished block rotates even when
-        /// the next block aired within the window.
-        /// Groups with no watch data, or without air dates on the relevant items, are left untouched.
+        /// Applies the mid-block hold against the playlist's filtered items, then computes
+        /// interleave positions as usual. A collection group mid-way through an air block keeps
+        /// its front-of-rotation spot only while the playlist can still play something from that
+        /// block.
         /// </summary>
-        internal static void ApplyMidBlockHold(
-            Dictionary<string, DateTime> recency,
-            Dictionary<string, List<(BaseItem Item, DateTime LastPlayed)>> groupItems,
-            int windowDays,
-            ILogger? logger)
+        public override void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
-            foreach (var kvp in groupItems)
+            var itemsList = items as List<BaseItem> ?? items.ToList();
+            ApplyMidBlockHold(itemsList, logger);
+            base.PreComputePositions(itemsList, logger);
+        }
+
+        /// <summary>
+        /// Removes groups that are mid-way through an air block from <see cref="GroupRecency"/>
+        /// so they sort with the never-watched groups at the front until the block is finished.
+        /// Block topology is the union of the playlist's FILTERED items and the user's watched
+        /// items (watched items anchor a block even when a "Playback Status" rule hides them),
+        /// rebuilt with the interleave's own pipeline (air-date sort +
+        /// <see cref="RoundRobinBase.ChunkIntoAirBlocks"/>). A hold fires only when the anchor's
+        /// block still has an unwatched item the playlist can actually show — items excluded by
+        /// other rules never pin a group. The anchor is the most recently played item, with ties
+        /// broken by latest air date so bulk-marked histories resolve deterministically.
+        /// </summary>
+        internal void ApplyMidBlockHold(List<BaseItem> filteredItems, ILogger? logger)
+        {
+            if (WatchedByGroup == null || WatchedByGroup.Count == 0 || UnwatchedCollectionItemIds == null || CollectionGroupKeys == null)
             {
-                if (!recency.ContainsKey(kvp.Key))
+                return;
+            }
+
+            // Visible items per group with watch data (single pass over the playlist items)
+            var visibleByGroup = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in filteredItems)
+            {
+                if (CollectionGroupKeys.TryGetValue(item.Id, out var key) && WatchedByGroup.ContainsKey(key))
                 {
-                    continue; // never watched - already at the front
+                    if (!visibleByGroup.TryGetValue(key, out var list))
+                    {
+                        list = new List<BaseItem>();
+                        visibleByGroup[key] = list;
+                    }
+
+                    list.Add(item);
+                }
+            }
+
+            var windowDays = Math.Clamp(AirBlockWindowDays, 0, MaxAirBlockWindowDays);
+
+            foreach (var kvp in WatchedByGroup)
+            {
+                if (!GroupRecency.ContainsKey(kvp.Key) || !visibleByGroup.TryGetValue(kvp.Key, out var visible))
+                {
+                    continue; // no recency to override, or nothing this playlist can play
                 }
 
-                // Most recently watched item in the group
-                BaseItem? watched = null;
+                // Anchor: most recently played item, ties broken by latest air date
+                BaseItem? anchor = null;
                 var bestPlayed = DateTime.MinValue;
-                var lastPlayedById = new Dictionary<Guid, DateTime>();
-                foreach (var (item, played) in kvp.Value)
+                var bestAir = DateTime.MinValue;
+                foreach (var (item, lastPlayed, air) in kvp.Value)
                 {
-                    lastPlayedById[item.Id] = played;
-                    if (played > bestPlayed)
+                    if (lastPlayed > bestPlayed || (lastPlayed > DateTime.MinValue && lastPlayed == bestPlayed && air > bestAir))
                     {
-                        bestPlayed = played;
-                        watched = item;
+                        anchor = item;
+                        bestPlayed = lastPlayed;
+                        bestAir = air;
                     }
                 }
 
-                if (watched == null)
+                if (anchor == null || bestAir == DateTime.MinValue)
                 {
-                    continue; // no watch data - normal rotation
+                    continue; // no dated watch history - normal rotation
                 }
 
-                var watchedId = watched.Id;
-                var watchedAir = OrderUtilities.GetReleaseDate(watched).Date;
-                if (watchedAir == DateTime.MinValue)
+                // Block topology: filtered items plus watched items, deduped by id
+                var unionIds = new HashSet<Guid>();
+                var union = new List<BaseItem>(visible.Count + kvp.Value.Count);
+                foreach (var item in visible)
                 {
-                    continue; // watched item has no air date - normal rotation
+                    if (unionIds.Add(item.Id))
+                    {
+                        union.Add(item);
+                    }
                 }
 
-                // Rebuild this group's air blocks the same way the interleave does and find the
-                // block containing the watched item.
-                var sorted = new List<BaseItem>(kvp.Value.Count);
-                foreach (var (item, _) in kvp.Value)
+                foreach (var (item, _, _) in kvp.Value)
                 {
-                    sorted.Add(item);
+                    if (unionIds.Add(item.Id))
+                    {
+                        union.Add(item);
+                    }
                 }
 
-                sorted.Sort((a, b) => CompareWithinGroupByAirDate(a, b));
-
-                foreach (var block in ChunkIntoAirBlocks(sorted, windowDays))
+                var visibleIds = new HashSet<Guid>();
+                foreach (var item in visible)
                 {
-                    if (!block.Exists(i => i.Id == watchedId))
+                    visibleIds.Add(item.Id);
+                }
+
+                union.Sort((a, b) => CompareWithinGroupByAirDate(a, b));
+
+                var anchorId = anchor.Id;
+                foreach (var block in ChunkIntoAirBlocks(union, windowDays))
+                {
+                    if (!block.Exists(i => i.Id == anchorId))
                     {
                         continue;
                     }
 
-                    // Hold only while THAT block still has an unwatched item at or after the
-                    // watched air date.
-                    foreach (var item in block)
+                    if (block.Exists(i => visibleIds.Contains(i.Id) && UnwatchedCollectionItemIds.Contains(i.Id)))
                     {
-                        if (lastPlayedById.TryGetValue(item.Id, out var played)
-                            && played == DateTime.MinValue
-                            && OrderUtilities.GetReleaseDate(item).Date >= watchedAir)
-                        {
-                            recency.Remove(kvp.Key);
-                            logger?.LogDebug(
-                                "Least Recently Watched Round Robin: holding group '{GroupKey}' at the front - its current air block still has unwatched item(s) (window {Window})",
-                                kvp.Key, windowDays);
-                            break;
-                        }
+                        GroupRecency.Remove(kvp.Key);
+                        logger?.LogDebug(
+                            "Least Recently Watched Round Robin: holding group '{GroupKey}' at the front - its current air block still has unwatched item(s) in the playlist (window {Window})",
+                            kvp.Key, windowDays);
                     }
 
                     break;
