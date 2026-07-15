@@ -28,22 +28,34 @@ For each group, computed from the **unfiltered** media pool (same pool the
 recency map already uses):
 
 1. Find the most recently watched item (max per-user `LastPlayedDate`) and its
-   air date `wAir` (`OrderUtilities.GetReleaseDate(...).Date`).
-2. Find the earliest-airing **unwatched** item (per-user `LastPlayedDate`
-   missing/`MinValue`, from the same derivation the recency map uses) with a
-   known air date at or after `wAir`.
-3. If it aired **within the window** of `wAir` (`(nextAir - wAir).TotalDays <= window`),
-   the group is **mid-block**: omit it from the recency map, so it sorts with
-   the never-watched groups at the front (existing alphabetical tie-break).
-4. Otherwise (block finished, no unwatched left, or no air-date data): the
-   group gets its normal recency (max LastPlayedDate) and rotates as today.
+   air date `wAir` (`OrderUtilities.GetReleaseDate(...).Date`); no air date →
+   normal rotation.
+2. Rebuild the group's air blocks exactly as the interleave does
+   (`CompareWithinGroupByAirDate` sort + `ChunkIntoAirBlocks`, which chains
+   only across *different* shows) and locate the block containing the watched
+   item.
+3. If **that block** still has an unwatched item (per-user `LastPlayedDate`
+   missing/`MinValue`) with a known air date at or after `wAir`, the group is
+   **mid-block**: omit it from the recency map, so it sorts with the
+   never-watched groups at the front (existing alphabetical tie-break).
+4. Otherwise (block finished, no unwatched left in it, or no air-date data):
+   the group gets its normal recency (max LastPlayedDate) and rotates as today.
+
+> **Revised during review** from an air-date-distance rule
+> (`nextUnwatchedAir - wAir <= window`; block membership was originally out of
+> scope). The distance rule permanently front-pinned any group whose air
+> cadence fits inside the window: single-show fallback groups with daily
+> episodes, and whole collections whenever the window ≥ the shows' weekly
+> cadence. Block membership fixes both: single-show groups form blocks of one
+> and rotate after every watch, and a finished block rotates even when the
+> next block aired within the window.
 
 Consequences:
 
 - Watch part 1 of a same-night crossover → parts 2–3 stay at the top next
   refresh.
-- Watch the last part of the block → next unwatched episode aired > window
-  later → the group rotates to the back as before.
+- Watch the last part of the block → the group rotates to the back as before,
+  even when the next block aired within the window.
 - Never-watched groups and mid-block groups share the front (both absent from
   the recency map); alphabetical tie-break orders them.
 - Watched item with no air date, or no unwatched item with an air date →
@@ -51,10 +63,10 @@ Consequences:
 - Rewatching an old crossover part whose partner is unwatched pins the group
   to the front — acceptable: the rewatcher is being set up to continue.
 
-**Documented approximation:** the hold is air-date-distance based, not
-block-membership based. A same-show double-header (blocks split `{A1,B1}`,
-`{A2}`) still holds the group after watching A1 for same-day A2 — desirable
-in practice (the user is continuing that night's content).
+**Known trade-off:** because blocks split same-show double-headers
+(`{A1,B1}`, `{A2}`), finishing `{A1,B1}` does not hold the group for same-day
+`A2` — the group rotates, and `A2` plays when the rotation returns. Accepted
+in exchange for never front-pinning cadence-matched groups.
 
 ## Changes
 
