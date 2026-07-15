@@ -257,7 +257,7 @@ Unlike Random Round Robin, the rotation is not shuffled — it is derived entire
 
 With other auto-refresh modes the rotation still advances, but only at the next refresh (scheduled or on library changes).
 
-With **Group By: Collection**, the whole franchise carries one recency — watching any member sends the entire collection group to the back of the rotation. The exception is an unfinished air block: with **Order Within Group: Air Date**, a collection whose next unwatched episode aired within the **Air Window** of the one you just watched stays at the front until that block is finished, so watching part 1 of a crossover night never pushes parts 2 and 3 to the bottom.
+With **Group By: Collection**, the whole franchise carries one recency — watching any member sends the entire collection group to the back of the rotation. The exception is an unfinished air block: with **Order Within Group: Air Date**, a collection stays at the front while the air block you just watched from still has unwatched episodes, so watching part 1 of a crossover night never pushes parts 2 and 3 to the bottom. Once the block is finished, the collection rotates to the back as usual.
 
 !!! note "Per-user rotation"
     For playlists shared with multiple users, each user gets their own rotation based on their own watch history. Collections use the [reference user's](user-selection.md#collections-reference-user) watch history, so all users see the same rotation.
