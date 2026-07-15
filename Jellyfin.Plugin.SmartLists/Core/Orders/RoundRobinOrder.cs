@@ -569,11 +569,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 {
                     var key = ExtractGroupKey(item, GroupByField, CollectionGroupKeys);
 
-                    var userData = refreshCache != null
-                        ? UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager)
-                        : userDataManager.GetUserData(user, item);
+                    // Fetch user data lazily: only when the aggregate date can't answer recency,
+                    // or when the item feeds the mid-block hold (Played flag needed).
+                    var isHoldMember = collectHoldState && CollectionGroupKeys!.ContainsKey(item.Id);
+                    var aggregateLastPlayed = LastPlayedOrderBase.GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
+                    var userData = aggregateLastPlayed == null || isHoldMember
+                        ? (refreshCache != null
+                            ? UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager)
+                            : userDataManager.GetUserData(user, item))
+                        : null;
 
-                    var lastPlayed = LastPlayedOrderBase.GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache)
+                    var lastPlayed = aggregateLastPlayed
                         ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(userData);
 
                     if (lastPlayed > DateTime.MinValue &&
@@ -582,7 +588,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         recency[key] = lastPlayed;
                     }
 
-                    if (collectHoldState && CollectionGroupKeys!.ContainsKey(item.Id))
+                    if (isHoldMember)
                     {
                         if (userData?.Played == true || lastPlayed > DateTime.MinValue)
                         {
@@ -666,13 +672,30 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     continue; // no recency to override, or nothing this playlist can play
                 }
 
-                // Anchor: most recently played item, ties broken by latest air date
+                // Anchor: most recently played item, ties broken by latest air date, then by
+                // item id so equal timestamps AND air dates (bulk marks) stay deterministic.
                 BaseItem? anchor = null;
                 var bestPlayed = DateTime.MinValue;
                 var bestAir = DateTime.MinValue;
                 foreach (var (item, lastPlayed, air) in kvp.Value)
                 {
-                    if (lastPlayed > bestPlayed || (lastPlayed > DateTime.MinValue && lastPlayed == bestPlayed && air > bestAir))
+                    if (lastPlayed == DateTime.MinValue)
+                    {
+                        continue; // no timestamp - never anchors
+                    }
+
+                    var cmp = lastPlayed.CompareTo(bestPlayed);
+                    if (cmp == 0)
+                    {
+                        cmp = air.CompareTo(bestAir);
+                    }
+
+                    if (cmp == 0 && anchor != null)
+                    {
+                        cmp = item.Id.CompareTo(anchor.Id);
+                    }
+
+                    if (anchor == null || cmp > 0)
                     {
                         anchor = item;
                         bestPlayed = lastPlayed;

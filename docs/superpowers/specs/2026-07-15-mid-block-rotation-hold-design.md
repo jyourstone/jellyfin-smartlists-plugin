@@ -29,8 +29,8 @@ recency map already uses):
 
 1. **Anchor**: the group's most recently played item (max per-user
    `LastPlayedDate` from the unfiltered pool, collection members only), ties
-   broken by latest air date so bulk-marked histories resolve
-   deterministically. No dated watch history → normal rotation.
+   broken by latest air date, then by item id, so bulk-marked histories
+   resolve deterministically. No dated watch history → normal rotation.
 2. **Topology**: union of the playlist's FILTERED items in the group and the
    user's watched items (watched = Played flag set or a LastPlayedDate —
    watched items anchor a block even when a "Playback Status" rule hides
@@ -71,8 +71,9 @@ Consequences:
   refresh.
 - Watch the last part of the block → the group rotates to the back as before,
   even when the next block aired within the window.
-- Never-watched groups and mid-block groups share the front (both absent from
-  the recency map); alphabetical tie-break orders them.
+- Never-watched groups and mid-block groups share the front (held groups keep
+  their recency entry but sort with the never-watched key); alphabetical
+  tie-break orders them.
 - Watched item with no air date, or no unwatched item with an air date →
   normal rotation (hold never triggers on missing metadata).
 - Rewatching an old crossover part whose partner is unwatched pins the group
