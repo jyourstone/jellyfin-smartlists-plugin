@@ -418,7 +418,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private async Task<int> CreateBackupZipAsync(string backupFilePath, CancellationToken cancellationToken)
         {
-            var (playlists, collections) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            var (playlists, collections, _) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
             var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
 
             if (allLists.Count == 0)

@@ -578,6 +578,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     _logger.LogInformation("Removing smart collection suffix from '{CollectionName}' (ID: {CollectionId})",
                         oldName, existingCollection.Id);
 
+                    // Collection is being handed back to the user - always remove the smart list tether
+                    // and unlock it so Jellyfin's metadata fetchers work again, regardless of whether the
+                    // name still matches an expected smart format, so the weekly cleanup sweep doesn't
+                    // delete an item the user chose to keep.
+                    existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                    existingCollection.IsLocked = false;
+
                     // Get the current smart collection name format to see what needs to be removed
                     var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
 
@@ -586,14 +593,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     {
                         // Remove the smart collection naming and keep just the base name
                         existingCollection.Name = dto.Name;
-
-                        // Collection is being handed back to the user - remove the smart list tether
-                        // and unlock it so Jellyfin's metadata fetchers work again for the user
-                        existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
-                        existingCollection.IsLocked = false;
-
-                        // Save the changes
-                        await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
                         _logger.LogDebug("Successfully renamed collection from '{OldName}' to '{NewName}'",
                             oldName, dto.Name);
@@ -616,14 +615,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                             {
                                 existingCollection.Name = baseName;
 
-                                // Collection is being handed back to the user - remove the smart list tether
-                                // and unlock it so Jellyfin's metadata fetchers work again for the user
-                                existingCollection.ProviderIds?.Remove(ProviderKeys.SmartLists);
-                                existingCollection.IsLocked = false;
-
-                                // Save the changes
-                                await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-
                                 _logger.LogDebug("Successfully renamed collection from '{OldName}' to '{NewName}' (removed prefix/suffix)",
                                     oldName, baseName);
                             }
@@ -639,6 +630,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                                 oldName, currentSmartName);
                         }
                     }
+
+                    // Save the changes (tether removal/unlock always applies; name change applies only when matched above)
+                    await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)

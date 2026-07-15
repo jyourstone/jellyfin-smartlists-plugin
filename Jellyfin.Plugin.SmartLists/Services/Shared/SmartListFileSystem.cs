@@ -55,8 +55,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         /// <summary>
         /// Reads all smart list files and returns them grouped by type.
+        /// SkippedFiles counts files that were enumerated but failed to read/parse/deserialize;
+        /// callers performing destructive cleanup must treat SkippedFiles > 0 as
+        /// "the store read is incomplete - do not treat absent lists as deleted".
         /// </summary>
-        Task<(SmartPlaylistDto[] Playlists, SmartCollectionDto[] Collections)> GetAllSmartListsAsync();
+        Task<(SmartPlaylistDto[] Playlists, SmartCollectionDto[] Collections, int SkippedFiles)> GetAllSmartListsAsync();
     }
 
     /// <summary>
@@ -297,12 +300,16 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Reads all smart list files once and returns them grouped by type.
         /// This is more efficient than having each store read files separately.
+        /// SkippedFiles counts files that were enumerated but failed to read/parse/deserialize;
+        /// callers performing destructive cleanup must treat SkippedFiles > 0 as
+        /// "the store read is incomplete - do not treat absent lists as deleted".
         /// </summary>
-        public async Task<(SmartPlaylistDto[] Playlists, SmartCollectionDto[] Collections)> GetAllSmartListsAsync()
+        public async Task<(SmartPlaylistDto[] Playlists, SmartCollectionDto[] Collections, int SkippedFiles)> GetAllSmartListsAsync()
         {
             var filePaths = GetAllSmartListFilePaths();
             var playlists = new List<SmartPlaylistDto>();
             var collections = new List<SmartCollectionDto>();
+            var skippedFiles = 0;
 
             foreach (var filePath in filePaths)
             {
@@ -311,7 +318,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     // Read file content as JSON document to check Type field first
                     var jsonContent = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
                     using var jsonDoc = JsonDocument.Parse(jsonContent);
-                    
+
                     if (!jsonDoc.RootElement.TryGetProperty("Type", out var typeElement))
                     {
                         // Legacy file without Type field - default to Playlist
@@ -321,6 +328,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                             ApplyPostProcessing(playlist);
                             playlists.Add(playlist);
                         }
+                        else
+                        {
+                            skippedFiles++;
+                            _logger?.LogWarning("Skipping smart list file {FilePath}: deserialized to null", filePath);
+                        }
+
                         continue;
                     }
 
@@ -336,6 +349,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                             ApplyPostProcessing(playlist);
                             playlists.Add(playlist);
                         }
+                        else
+                        {
+                            skippedFiles++;
+                            _logger?.LogWarning("Skipping smart list file {FilePath}: deserialized to null", filePath);
+                        }
                     }
                     else if (listType == SmartListType.Collection)
                     {
@@ -345,16 +363,27 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                             ApplyPostProcessing(collection);
                             collections.Add(collection);
                         }
+                        else
+                        {
+                            skippedFiles++;
+                            _logger?.LogWarning("Skipping smart list file {FilePath}: deserialized to null", filePath);
+                        }
+                    }
+                    else
+                    {
+                        skippedFiles++;
+                        _logger?.LogWarning("Skipping smart list file {FilePath}: unrecognized list type", filePath);
                     }
                 }
                 catch (Exception ex)
                 {
                     // Skip invalid files and continue loading others, but log for diagnostics
+                    skippedFiles++;
                     _logger?.LogWarning(ex, "Skipping invalid smart list file {FilePath}", filePath);
                 }
             }
 
-            return (playlists.ToArray(), collections.ToArray());
+            return (playlists.ToArray(), collections.ToArray(), skippedFiles);
         }
     }
 }
