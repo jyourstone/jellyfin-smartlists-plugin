@@ -104,7 +104,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Clean up orphaned folders (folders without config.json). This phase owns
                 // progress 0-80; the tether sweep that follows is comparatively quick.
                 var folderProgress = new Progress<double>(p => progress.Report(p * 0.8));
-                await CleanupOrphanedFoldersAsync(playlists, collections, skippedFiles, folderProgress, cancellationToken).ConfigureAwait(false);
+                await CleanupOrphanedFoldersAsync(folderProgress, cancellationToken).ConfigureAwait(false);
 
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -131,11 +131,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         /// <summary>
         /// Cleans up orphaned folders in the smartlists directory.
-        /// A folder is orphaned if:
-        /// - It's a GUID folder without a config.json file
-        /// - It's a GUID folder whose ID is not in the active smart lists
+        /// A folder is orphaned only if it's a GUID folder without a config.json file. A folder
+        /// whose config.json exists but whose ID is absent from a store snapshot is never treated
+        /// as orphaned here: with a complete store read, that can only mean the list was created
+        /// after the snapshot was taken (deleting it would destroy a brand-new list) or a
+        /// folder-name/config-ID mismatch (deleting risks data loss) - neither is a safe deletion.
         /// </summary>
-        private Task CleanupOrphanedFoldersAsync(SmartPlaylistDto[] playlists, SmartCollectionDto[] collections, int skippedFiles, IProgress<double> progress, CancellationToken cancellationToken)
+        private Task CleanupOrphanedFoldersAsync(IProgress<double> progress, CancellationToken cancellationToken)
         {
             var basePath = _fileSystem.BasePath;
 
@@ -169,35 +171,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return Task.CompletedTask;
             }
 
-            // Get all existing smart list IDs from the snapshot handed down by ExecuteAsync
-            var existingSmartListIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var playlist in playlists)
-            {
-                if (!string.IsNullOrEmpty(playlist.Id))
-                {
-                    existingSmartListIds.Add(playlist.Id);
-                }
-            }
-
-            foreach (var collection in collections)
-            {
-                if (!string.IsNullOrEmpty(collection.Id))
-                {
-                    existingSmartListIds.Add(collection.Id);
-                }
-            }
-
-            // A partial store read must not classify unparsed lists' folders as deleted -
-            // only apply the ID-based criterion when every smart list file loaded cleanly.
-            var applyIdCriterion = skippedFiles == 0;
-            if (!applyIdCriterion)
-            {
-                _logger.LogWarning(
-                    "Skipped ID-based orphaned folder cleanup: {SkippedFiles} smart list file(s) failed to load",
-                    skippedFiles);
-            }
-
             // Find and delete orphaned folders
             var orphanedCount = 0;
             var processedCount = 0;
@@ -206,13 +179,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var smartListId = Path.GetFileName(folderPath);
                 var configPath = Path.Combine(folderPath, "config.json");
 
-                // Folder is orphaned if:
-                // 1. No config.json exists, OR
-                // 2. Smart list ID is not in active lists (only checked on a full store read)
-                var isOrphaned = !File.Exists(configPath) || (applyIdCriterion && !existingSmartListIds.Contains(smartListId));
+                var isOrphaned = !File.Exists(configPath);
 
                 if (isOrphaned)
                 {
@@ -254,9 +223,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             // Items created during (or shortly before) the sweep are skipped as likely
             // mid-creation by a concurrent refresh. Jellyfin persists DateCreated as local
-            // wall-clock time on some paths, so the threshold carries a 26-hour margin to be
-            // timezone-proof; young leftovers are simply reaped on a later run instead.
-            var recencyThreshold = DateTime.UtcNow.AddHours(-26);
+            // wall-clock time on some paths, so the raw value can sit anywhere from 12 hours
+            // behind to 14 hours ahead of UTC; a 40-hour margin keeps the guard effective across
+            // all offsets (26h base + 14h positive-offset worst case), and the mid-sweep race it
+            // defends against spans seconds, so the margin dwarfs it. Young leftovers are simply
+            // reaped on a later run instead.
+            var recencyThreshold = DateTime.UtcNow.AddHours(-40);
 
             if (skippedFiles > 0)
             {
@@ -439,14 +411,43 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Nulls any stored Jellyfin playlist/collection ID that references a just-deleted orphan,
-        /// then persists the mutated DTOs. Per-DTO save failures are logged and skipped so one
-        /// failure doesn't block clearing the rest.
+        /// Nulls any stored Jellyfin playlist/collection ID that references a just-deleted orphan.
+        /// The DTOs passed in are a snapshot taken before the delete loop, so they're used only to
+        /// identify which smart lists have a dangling stored ID; each candidate is reloaded fresh
+        /// from its store immediately before mutating and saving, so a concurrent edit made during
+        /// the delete loop isn't overwritten. A failed save is logged but not retried - the
+        /// dangling ID then persists until the list is next saved (accepted trade-off).
         /// </summary>
         private async Task ClearDanglingStoredIdsAsync(SmartPlaylistDto[] playlists, SmartCollectionDto[] collections, HashSet<Guid> deletedOrphanIds)
         {
-            foreach (var playlist in playlists)
+            foreach (var snapshotPlaylist in playlists)
             {
+                var hasDanglingId = (snapshotPlaylist.UserPlaylists?.Any(mapping =>
+                        !string.IsNullOrEmpty(mapping.JellyfinPlaylistId)
+                        && Guid.TryParse(mapping.JellyfinPlaylistId, out var mappedId)
+                        && deletedOrphanIds.Contains(mappedId)) ?? false)
+                    || (!string.IsNullOrEmpty(snapshotPlaylist.JellyfinPlaylistId)
+                        && Guid.TryParse(snapshotPlaylist.JellyfinPlaylistId, out var legacyMappedId)
+                        && deletedOrphanIds.Contains(legacyMappedId));
+
+                if (!hasDanglingId)
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(snapshotPlaylist.Id, out var playlistGuid))
+                {
+                    _logger.LogDebug("Skipping dangling ID clear: smart list {SmartListId} has an unparsable ID", snapshotPlaylist.Id);
+                    continue;
+                }
+
+                var playlist = await _playlistStore.GetByIdAsync(playlistGuid).ConfigureAwait(false);
+                if (playlist == null)
+                {
+                    _logger.LogDebug("Skipping dangling ID clear: smart list {SmartListId} was deleted meanwhile", snapshotPlaylist.Id);
+                    continue;
+                }
+
                 var mutated = false;
 
                 if (playlist.UserPlaylists != null)
@@ -467,8 +468,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
 
                 if (!string.IsNullOrEmpty(playlist.JellyfinPlaylistId)
-                    && Guid.TryParse(playlist.JellyfinPlaylistId, out var legacyMappedId)
-                    && deletedOrphanIds.Contains(legacyMappedId))
+                    && Guid.TryParse(playlist.JellyfinPlaylistId, out var legacyMappedIdReloaded)
+                    && deletedOrphanIds.Contains(legacyMappedIdReloaded))
                 {
                     _logger.LogDebug(
                         "Clearing dangling legacy JellyfinPlaylistId {JellyfinPlaylistId} on smart list {SmartListId}",
@@ -490,11 +491,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
             }
 
-            foreach (var collection in collections)
+            foreach (var snapshotCollection in collections)
             {
-                if (string.IsNullOrEmpty(collection.JellyfinCollectionId)
-                    || !Guid.TryParse(collection.JellyfinCollectionId, out var mappedCollectionId)
+                if (string.IsNullOrEmpty(snapshotCollection.JellyfinCollectionId)
+                    || !Guid.TryParse(snapshotCollection.JellyfinCollectionId, out var mappedCollectionId)
                     || !deletedOrphanIds.Contains(mappedCollectionId))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(snapshotCollection.Id, out var collectionGuid))
+                {
+                    _logger.LogDebug("Skipping dangling ID clear: smart list {SmartListId} has an unparsable ID", snapshotCollection.Id);
+                    continue;
+                }
+
+                var collection = await _collectionStore.GetByIdAsync(collectionGuid).ConfigureAwait(false);
+                if (collection == null)
+                {
+                    _logger.LogDebug("Skipping dangling ID clear: smart list {SmartListId} was deleted meanwhile", snapshotCollection.Id);
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(collection.JellyfinCollectionId)
+                    || !Guid.TryParse(collection.JellyfinCollectionId, out var reloadedMappedCollectionId)
+                    || !deletedOrphanIds.Contains(reloadedMappedCollectionId))
                 {
                     continue;
                 }

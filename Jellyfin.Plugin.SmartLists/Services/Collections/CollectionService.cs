@@ -574,6 +574,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 if (existingCollection != null)
                 {
+                    var tether = existingCollection.GetProviderId(ProviderKeys.SmartLists);
+                    if (!string.IsNullOrEmpty(tether) && !string.Equals(tether, dto.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Stored ID '{JellyfinCollectionId}' points at an item tethered to a different smart list ('{CollectionName}'). Skipping.",
+                            dto.JellyfinCollectionId, existingCollection.Name);
+                        existingCollection = null;
+                    }
+                }
+
+                if (existingCollection != null)
+                {
                     var oldName = existingCollection.Name;
                     _logger.LogInformation("Removing smart collection suffix from '{CollectionName}' (ID: {CollectionId})",
                         oldName, existingCollection.Id);
@@ -633,6 +644,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     // Save the changes (tether removal/unlock always applies; name change applies only when matched above)
                     await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Fallback sweep: find any remaining collections still tethered to this dto (e.g. the
+                // real kept item under a stale or mismatched stored ID) and strip them too, so the
+                // weekly cleanup sweep doesn't delete an item the user chose to keep.
+                if (!string.IsNullOrEmpty(dto.Id))
+                {
+                    var tetherQuery = new InternalItemsQuery
+                    {
+                        IncludeItemTypes = [BaseItemKind.BoxSet],
+                        Recursive = true,
+                    };
+
+                    var remainingTethered = _libraryManager.GetItemsResult(tetherQuery).Items
+                        .Where(b => (existingCollection == null || b.Id != existingCollection.Id)
+                            && string.Equals(b.GetProviderId(ProviderKeys.SmartLists), dto.Id, StringComparison.OrdinalIgnoreCase));
+
+                    foreach (var collectionToClear in remainingTethered)
+                    {
+                        collectionToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        collectionToClear.IsLocked = false;
+                        await collectionToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        _logger.LogInformation("Stripped smart list tether from collection '{CollectionName}' (ID: {CollectionId}) via fallback sweep; stored ID was stale or mismatched.",
+                            collectionToClear.Name, collectionToClear.Id);
+                    }
                 }
             }
             catch (Exception ex)

@@ -418,7 +418,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private async Task<int> CreateBackupZipAsync(string backupFilePath, CancellationToken cancellationToken)
         {
-            var (playlists, collections, _) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            var (playlists, collections, skippedFiles) = await _fileSystem.GetAllSmartListsAsync().ConfigureAwait(false);
+            if (skippedFiles > 0)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture, $"Cannot create a complete backup: {skippedFiles} smart list file(s) failed to load."));
+            }
+
             var allLists = playlists.Cast<SmartListDto>().Concat(collections.Cast<SmartListDto>()).ToList();
 
             if (allLists.Count == 0)
