@@ -582,7 +582,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     var lastPlayed = aggregateLastPlayed
                         ?? LastPlayedOrderBase.GetLastPlayedDateFromUserData(userData);
 
-                    if (lastPlayed > DateTime.MinValue &&
+                    // Only fully played items advance the rotation: Jellyfin stamps LastPlayedDate
+                    // on any playback, so a half-watched episode must not send its group to the
+                    // back. Folder items keep the aggregate date (their Played flag is unreliable).
+                    var countsForRecency = aggregateLastPlayed != null || userData?.Played == true;
+
+                    if (countsForRecency && lastPlayed > DateTime.MinValue &&
                         (!recency.TryGetValue(key, out var existing) || lastPlayed > existing))
                     {
                         recency[key] = lastPlayed;

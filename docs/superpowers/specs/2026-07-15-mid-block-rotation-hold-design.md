@@ -47,6 +47,14 @@ recency map already uses):
    by the playlist's other rules never keep a hold alive.
 4. Otherwise the group keeps its normal recency and rotates as today.
 
+**Recency itself counts only fully played items** (folded in from requester
+feedback, all LRW groupings): Jellyfin stamps `LastPlayedDate` on any playback,
+so a half-watched episode used to send its whole group to the back of the
+rotation. Non-folder items now contribute to `GroupRecency` only when their
+Played flag is set; folder items keep the aggregate-date behavior. In-progress
+items still anchor the mid-block hold (latest interaction) while counting as
+unwatched for block completion.
+
 The hold runs in `PreComputePositions` (which every sort path calls with the
 filtered items) and **recomputes `HeldGroups` from scratch on every call** —
 intermediate passes (per-group limits sort rule-group subsets before the
