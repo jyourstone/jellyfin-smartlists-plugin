@@ -781,9 +781,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 foreach (var lrwOrder in Orders.OfType<RoundRobinLeastRecentlyWatchedOrder>())
                 {
-                    lrwOrder.GroupRecency = RoundRobinLeastRecentlyWatchedOrder.BuildGroupRecency(
-                        itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger,
-                        lrwOrder.GroupByField == "Collections" ? collectionGroupKeys : null);
+                    // Reads the order's own GroupByField/CollectionGroupKeys (injected above) and,
+                    // when air blocks are active, collects the state for the mid-block hold that
+                    // runs later in PreComputePositions against the filtered items.
+                    lrwOrder.BuildGroupRecencyAndHoldState(itemsArray, user, userDataManager, refreshCache, logger);
                 }
 
                 // Media type filtering is now handled at the API level in PlaylistService.GetAllUserMedia()
