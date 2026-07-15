@@ -781,9 +781,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 foreach (var lrwOrder in Orders.OfType<RoundRobinLeastRecentlyWatchedOrder>())
                 {
+                    var airBlockWindowDays = lrwOrder.GroupByField == "Collections" && lrwOrder.OrderWithinGroupsByAirDate
+                        ? lrwOrder.AirBlockWindowDays
+                        : (int?)null;
                     lrwOrder.GroupRecency = RoundRobinLeastRecentlyWatchedOrder.BuildGroupRecency(
                         itemsArray, lrwOrder.GroupByField, user, userDataManager, refreshCache, logger,
-                        lrwOrder.GroupByField == "Collections" ? collectionGroupKeys : null);
+                        lrwOrder.GroupByField == "Collections" ? collectionGroupKeys : null,
+                        airBlockWindowDays);
                 }
 
                 // Media type filtering is now handled at the API level in PlaylistService.GetAllUserMedia()

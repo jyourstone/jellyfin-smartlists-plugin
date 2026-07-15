@@ -472,7 +472,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// pool (rules like "Playback Status is Unwatched" remove watched items from the results,
         /// so recency derived from filtered items would see every group as never watched).
         /// Set by SmartList before <see cref="RoundRobinBase.PreComputePositions"/>.
-        /// Groups absent from the map are treated as never watched and sort first.
+        /// Groups absent from the map are treated as never watched and sort first — including
+        /// groups held mid-block: with Collections grouping and air-date order, a group whose
+        /// next unwatched episode aired within <see cref="RoundRobinBase.AirBlockWindowDays"/>
+        /// days of its most recently watched one stays at the front until the block is finished.
         /// </summary>
         public Dictionary<string, DateTime> GroupRecency { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -488,6 +491,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// Builds the group key → most recent LastPlayedDate map for one user across the given items.
         /// Container items (Series/Season/MusicAlbum) use the aggregate-over-children date when the
         /// refresh cache has their children, mirroring LastPlayedOrderBase.
+        /// When <paramref name="airBlockWindowDays"/> is set (Collections grouping with air-date
+        /// order), groups that are mid-way through an air block — the earliest unwatched air date
+        /// lies within the window of the most recently watched item's air date — are omitted from
+        /// the map so they hold their spot at the front of the rotation until the block is finished.
         /// </summary>
         internal static Dictionary<string, DateTime> BuildGroupRecency(
             IEnumerable<BaseItem> items,
@@ -496,7 +503,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             IUserDataManager? userDataManager,
             RefreshQueueService.RefreshCache? refreshCache,
             ILogger? logger,
-            Dictionary<Guid, string>? collectionGroupKeys = null)
+            Dictionary<Guid, string>? collectionGroupKeys = null,
+            int? airBlockWindowDays = null)
         {
             var recency = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrEmpty(groupByField) || userDataManager == null || user == null)
@@ -504,6 +512,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 logger?.LogWarning("Least Recently Watched Round Robin: missing GroupByField or user context - groups fall back to alphabetical order");
                 return recency;
             }
+
+            // Per-group (airDate, lastPlayed) pairs, collected only when the mid-block hold is active
+            var groupItems = airBlockWindowDays.HasValue
+                ? new Dictionary<string, List<(DateTime Air, DateTime LastPlayed)>>(StringComparer.OrdinalIgnoreCase)
+                : null;
 
             foreach (var item in items)
             {
@@ -522,6 +535,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                     {
                         recency[key] = lastPlayed;
                     }
+
+                    if (groupItems != null)
+                    {
+                        if (!groupItems.TryGetValue(key, out var list))
+                        {
+                            list = new List<(DateTime Air, DateTime LastPlayed)>();
+                            groupItems[key] = list;
+                        }
+
+                        list.Add((OrderUtilities.GetReleaseDate(item).Date, lastPlayed));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -529,7 +553,69 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 }
             }
 
+            if (groupItems != null && airBlockWindowDays.HasValue)
+            {
+                ApplyMidBlockHold(recency, groupItems, Math.Clamp(airBlockWindowDays.Value, 0, 30), logger);
+            }
+
             return recency;
+        }
+
+        /// <summary>
+        /// Removes groups that are mid-way through an air block from the recency map: a group whose
+        /// earliest unwatched air date is at or after — and within <paramref name="windowDays"/> days
+        /// of — the air date of its most recently watched item sorts with the never-watched groups
+        /// at the front, so the rest of the block plays before the group rotates to the back.
+        /// Groups with no watch data, or without air dates on the relevant items, are left untouched.
+        /// </summary>
+        internal static void ApplyMidBlockHold(
+            Dictionary<string, DateTime> recency,
+            Dictionary<string, List<(DateTime Air, DateTime LastPlayed)>> groupItems,
+            int windowDays,
+            ILogger? logger)
+        {
+            foreach (var kvp in groupItems)
+            {
+                if (!recency.ContainsKey(kvp.Key))
+                {
+                    continue; // never watched - already at the front
+                }
+
+                // Air date of the most recently watched item in the group
+                var watchedAir = DateTime.MinValue;
+                var bestPlayed = DateTime.MinValue;
+                foreach (var (air, played) in kvp.Value)
+                {
+                    if (played > bestPlayed)
+                    {
+                        bestPlayed = played;
+                        watchedAir = air;
+                    }
+                }
+
+                if (watchedAir == DateTime.MinValue)
+                {
+                    continue; // watched item has no air date - normal rotation
+                }
+
+                // Earliest unwatched air date at or after the watched one
+                var nextUnwatchedAir = DateTime.MaxValue;
+                foreach (var (air, played) in kvp.Value)
+                {
+                    if (played == DateTime.MinValue && air > DateTime.MinValue && air >= watchedAir && air < nextUnwatchedAir)
+                    {
+                        nextUnwatchedAir = air;
+                    }
+                }
+
+                if (nextUnwatchedAir != DateTime.MaxValue && (nextUnwatchedAir - watchedAir).TotalDays <= windowDays)
+                {
+                    recency.Remove(kvp.Key);
+                    logger?.LogDebug(
+                        "Least Recently Watched Round Robin: holding group '{GroupKey}' at the front - next unwatched episode aired {Days} day(s) after the last watched one (window {Window})",
+                        kvp.Key, (nextUnwatchedAir - watchedAir).TotalDays, windowDays);
+                }
+            }
         }
     }
 }
