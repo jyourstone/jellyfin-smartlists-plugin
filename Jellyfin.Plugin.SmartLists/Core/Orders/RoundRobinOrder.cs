@@ -379,8 +379,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Compares two items within the same group by air date (premiere date, day precision).
         /// Missing dates are DateTime.MinValue and sort first (Release Date sort convention).
-        /// Same-day ties put episodes before non-episodes, then fall back to natural order,
-        /// so multi-part crossovers airing the same day keep their episode order.
+        /// Same-day ties put episodes before non-episodes, then episodes of different series
+        /// compare by series Sort Title (so users can order a crossover night), then fall back
+        /// to natural order.
         /// </summary>
         internal static int CompareWithinGroupByAirDate(BaseItem a, BaseItem b)
         {
@@ -396,7 +397,29 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 return episodeCompare;
             }
 
+            // Same-day tie between episodes of different series: the series Sort Title decides.
+            // Air time is not in Jellyfin metadata (provider dates are day-precision), so users
+            // order a crossover night by editing the series' Sort Title.
+            if (a is Episode epA && b is Episode epB && epA.SeriesId != epB.SeriesId)
+            {
+                var seriesCompare = OrderUtilities.SharedNaturalComparer.Compare(GetSeriesSortName(epA), GetSeriesSortName(epB));
+                if (seriesCompare != 0)
+                {
+                    return seriesCompare;
+                }
+            }
+
             return CompareWithinGroup(a, b);
+        }
+
+        /// <summary>
+        /// Gets the sort name of an episode's series (custom Sort Title when set, otherwise the
+        /// series' computed sort name), falling back to the denormalized series name.
+        /// </summary>
+        private static string GetSeriesSortName(Episode episode)
+        {
+            var sortName = episode.Series?.SortName;
+            return string.IsNullOrEmpty(sortName) ? episode.SeriesName ?? string.Empty : sortName;
         }
 
         /// <summary>

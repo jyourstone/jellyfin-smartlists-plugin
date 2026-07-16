@@ -148,7 +148,7 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 All round robin variants except Shuffled Round Robin (where shuffling always wins) let you choose how items are ordered inside each group:
 
 - **Season/Episode (default)**: Natural order — episodes by season/episode number, audio by disc/track number, other items by name.
-- **Air Date**: Premiere date order (day precision). Items airing on the same day keep their episode order, and items with no date come first.
+- **Air Date**: Premiere date order (day precision). Items airing on the same day keep their episode order, and items with no date come first. When episodes of *different* shows share an air date (a crossover night), the shows' **Sort Title** decides who goes first — air *time* isn't part of Jellyfin metadata, so edit the Sort Title on the series to control the order.
 
 Air Date is made for franchise viewing: combine **Group By: Collection** with **Order Within Group: Air Date** and crossover episodes that span multiple shows play in airing order, while a spinoff only enters the rotation once the timeline reaches its premiere.
 
