@@ -407,6 +407,11 @@
     // ===== FORM DEFAULTS POPULATION (DRY) =====
     // Helper function to apply all form defaults from config
     SmartLists.applyFormDefaults = function (page, config) {
+        // clearForm's async config fetch can resolve after a subsequent edit/clone
+        // populate - never clobber a form that is no longer blank
+        if (SmartLists.getElementValue(page, '#playlistName', '')) {
+            return;
+        }
         // Set default list type
         SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
         SmartLists.handleListTypeChange(page);
@@ -467,6 +472,10 @@
 
     // Fallback defaults when config fails to load
     SmartLists.applyFallbackDefaults = function (page) {
+        // Same stale-async-resolve protection as applyFormDefaults
+        if (SmartLists.getElementValue(page, '#playlistName', '')) {
+            return;
+        }
         SmartLists.setElementValue(page, '#listType', 'Playlist');
         SmartLists.handleListTypeChange(page);
         SmartLists.setElementValue(page, '#playlistMaxItems', 500);
@@ -559,6 +568,10 @@
                         SmartLists.setUserIdValueWithRetry(page, page._pendingCollectionUserId);
                         page._pendingCollectionUserId = null; // Clear after use
                     } else {
+                        // Repopulating the options auto-selects the first user; clear it so
+                        // setCurrentUserAsDefault's edit-mode guard doesn't mistake it for
+                        // an intentional selection (e.g. Clear Form while editing)
+                        userSelect.value = '';
                         // Set current user as default for new collections
                         SmartLists.setCurrentUserAsDefault(page);
                     }
@@ -2674,10 +2687,12 @@
             // When switching types during edit mode, transfer the user selection.
             // Priority: current UI state (most accurate) > pending IDs (may be stale from earlier toggles)
             var currentEditState = SmartLists.getPageEditState(page);
+            if (isCollection && SmartLists.setAllUsersSelected) {
+                // Collections have no All Users concept - always clear the hidden
+                // checkbox so stale checked state can't survive collection mode
+                SmartLists.setAllUsersSelected(page, false);
+            }
             if (isCollection && (currentEditState.editMode || currentEditState.cloneMode)) {
-                if (SmartLists.setAllUsersSelected) {
-                    SmartLists.setAllUsersSelected(page, false);
-                }
                 // Switching to Collection: check current checkbox selection first (highest priority)
                 var selectedCheckboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox:checked');
                 if (selectedCheckboxes.length > 0) {

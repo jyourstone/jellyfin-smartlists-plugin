@@ -305,6 +305,12 @@
      * @param {string} placeholderText - Optional placeholder text when nothing is selected
      */
     SmartLists.setSelectedItems = function (page, containerId, values, checkboxClass, placeholderText) {
+        // All Users mode owns the user multi-select: async late writers (deferred
+        // selection restores, current-user defaults) must not re-check user boxes
+        // or overwrite the "All users" display after an all-users populate
+        if (containerId === 'playlistUserMultiSelect' && SmartLists.isAllUsersSelected && SmartLists.isAllUsersSelected(page)) {
+            return;
+        }
         if (!values || !Array.isArray(values)) {
             values = [];
         }

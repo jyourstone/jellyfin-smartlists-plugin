@@ -753,6 +753,61 @@
         }
     };
 
+    // Shared by editPlaylist and clonePlaylist: stash the list's user selection
+    // for the async loadUsers to apply, keeping All Users state authoritative
+    SmartLists.stagePendingUserSelection = function (page, playlist, isCollection) {
+        if (!isCollection) {
+            page._pendingAllUsers = playlist.AllUsers === true;
+            // A stale single-select value from a previous collection edit must not
+            // leak into handleListTypeChange's edit-mode user transfer
+            const userSelect = page.querySelector('#playlistUser');
+            if (userSelect) {
+                userSelect.value = '';
+            }
+            if (page._pendingAllUsers) {
+                // All-users playlists: don't repopulate individual checkboxes from the
+                // expanded UserPlaylists snapshot - it would contradict the All Users state
+                page._pendingUserIds = null;
+            } else {
+                // Playlists can have multiple users
+                let userIds = [];
+                if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
+                    userIds = playlist.UserPlaylists.map(function (up) { return up.UserId; });
+                } else if (playlist.UserId) {
+                    userIds = [String(playlist.UserId)];
+                }
+                // Store userIds to set after users are loaded (loadUsers is async)
+                page._pendingUserIds = userIds;
+            }
+        } else {
+            page._pendingAllUsers = false;
+            // Collections: store the user ID to prevent setCurrentUserAsDefault from overwriting
+            if (playlist.UserId) {
+                page._pendingCollectionUserId = String(playlist.UserId);
+            }
+        }
+    };
+
+    // Shared by editPlaylist and clonePlaylist: apply the staged selection to the
+    // form now if users are already loaded; loadUsers finishes the job otherwise
+    SmartLists.applyPendingUserSelection = function (page) {
+        const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox');
+        // Sync the All Users checkbox from server truth unconditionally so a stale
+        // checked box from a previously viewed all-users playlist can't survive
+        if (SmartLists.setAllUsersSelected) {
+            SmartLists.setAllUsersSelected(page, page._pendingAllUsers === true);
+        }
+        if (page._pendingAllUsers) {
+            page._pendingAllUsers = false;
+        } else if (checkboxes.length > 0 && page._pendingUserIds) {
+            // Users already loaded, set immediately
+            if (SmartLists.setSelectedUserIds) {
+                SmartLists.setSelectedUserIds(page, page._pendingUserIds);
+            }
+            page._pendingUserIds = null; // Clear since we set it
+        }
+    };
+
     SmartLists.clearForm = function (page) {
         // Only handle form clearing - edit mode management should be done by caller
 
@@ -760,6 +815,7 @@
         delete page._editingPlaylistCreatedByUserId;
         delete page._pendingAllUsers;
         delete page._pendingUserIds;
+        delete page._pendingCollectionUserId;
         delete page._metadataTagsWasManaged;
 
         SmartLists.setElementValue(page, '#playlistName', '');
@@ -866,24 +922,7 @@
 
                 // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
                 // This ensures pendingUserIds is set before loadUsers checks for it
-                let userIds = [];
-                if (!isCollection) {
-                    page._pendingAllUsers = playlist.AllUsers === true;
-                    // Playlists can have multiple users
-                    if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
-                        userIds = playlist.UserPlaylists.map(function (up) { return up.UserId; });
-                    } else if (playlist.UserId) {
-                        userIds = [String(playlist.UserId)];
-                    }
-                    // Store userIds to set after users are loaded (loadUsers is async)
-                    page._pendingUserIds = userIds;
-                } else {
-                    page._pendingAllUsers = false;
-                    // Collections: store the user ID to prevent setCurrentUserAsDefault from overwriting
-                    if (playlist.UserId) {
-                        page._pendingCollectionUserId = String(playlist.UserId);
-                    }
-                }
+                SmartLists.stagePendingUserSelection(page, playlist, isCollection);
 
                 // Set list type
                 SmartLists.setElementValue(page, '#listType', listType);
@@ -965,25 +1004,9 @@
                         SmartLists.setUserIdValueWithRetry(page, userIdString);
                     }
                 } else {
-                    // Playlists can have multiple users
-                    // userIds were already extracted and stored in page._pendingUserIds above
-                    // Try to set immediately if users are already loaded, otherwise wait for loadUsers
-                    const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox');
-                    if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
-                        SmartLists.setAllUsersSelected(page, true);
-                        page._pendingAllUsers = false;
-                    } else if (checkboxes.length > 0 && page._pendingUserIds) {
-                        // Users already loaded, set immediately
-                        if (SmartLists.setSelectedUserIds) {
-                            SmartLists.setSelectedUserIds(page, page._pendingUserIds);
-                        }
-                        page._pendingUserIds = null; // Clear since we set it
-                    }
+                    // Playlists can have multiple users; selection was staged above
+                    SmartLists.applyPendingUserSelection(page);
                     // If checkboxes don't exist yet, loadUsers will set them when it finishes
-
-                    if (SmartLists.updatePublicCheckboxVisibility) {
-                        SmartLists.updatePublicCheckboxVisibility(page);
-                    }
                 }
 
                 // Clear existing rules (applies to both playlists and collections)
@@ -1113,24 +1136,7 @@
 
                 // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
                 // This ensures pendingUserIds is set before loadUsers checks for it
-                let userIds = [];
-                if (!isCollection) {
-                    page._pendingAllUsers = playlist.AllUsers === true;
-                    // Playlists can have multiple users
-                    if (playlist.UserPlaylists && playlist.UserPlaylists.length > 0) {
-                        userIds = playlist.UserPlaylists.map(function (up) { return up.UserId; });
-                    } else if (playlist.UserId) {
-                        userIds = [String(playlist.UserId)];
-                    }
-                    // Store userIds to set after users are loaded (loadUsers is async)
-                    page._pendingUserIds = userIds;
-                } else {
-                    page._pendingAllUsers = false;
-                    // Collections: store the source user ID to prevent setCurrentUserAsDefault from overwriting
-                    if (playlist.UserId) {
-                        page._pendingCollectionUserId = String(playlist.UserId);
-                    }
-                }
+                SmartLists.stagePendingUserSelection(page, playlist, isCollection);
 
                 // Set playlist name FIRST (before switchToTab) to prevent populateFormDefaults from being called
                 // switchToTab checks if name is empty and calls populateFormDefaults if so, which would regenerate checkboxes
@@ -1211,25 +1217,9 @@
                         SmartLists.setUserIdValueWithRetry(page, userIdString);
                     }
                 } else {
-                    // Playlists can have multiple users
-                    // userIds were already extracted and stored in page._pendingUserIds above
-                    // Try to set immediately if users are already loaded, otherwise wait for loadUsers
-                    const checkboxes = page.querySelectorAll('#userMultiSelectOptions .user-multi-select-checkbox');
-                    if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
-                        SmartLists.setAllUsersSelected(page, true);
-                        page._pendingAllUsers = false;
-                    } else if (checkboxes.length > 0 && page._pendingUserIds) {
-                        // Users already loaded, set immediately
-                        if (SmartLists.setSelectedUserIds) {
-                            SmartLists.setSelectedUserIds(page, page._pendingUserIds);
-                        }
-                        page._pendingUserIds = null; // Clear since we set it
-                    }
+                    // Playlists can have multiple users; selection was staged above
+                    SmartLists.applyPendingUserSelection(page);
                     // If checkboxes don't exist yet, loadUsers will set them when it finishes
-
-                    if (SmartLists.updatePublicCheckboxVisibility) {
-                        SmartLists.updatePublicCheckboxVisibility(page);
-                    }
                 }
 
                 // Clear existing rules and populate with cloned rules (applies to both playlists and collections)
