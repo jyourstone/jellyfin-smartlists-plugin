@@ -588,6 +588,7 @@
                     // Check if there are pending userIds to set (from edit/clone mode)
                     if (page._pendingAllUsers && SmartLists.setAllUsersSelected) {
                         SmartLists.setAllUsersSelected(page, true);
+                        delete page._pendingAllUsers; // Consumed - the checkbox now carries the state
                     } else if (page._pendingUserIds && Array.isArray(page._pendingUserIds) && page._pendingUserIds.length > 0) {
                         // Use setTimeout to ensure checkboxes are fully rendered
                         setTimeout(function () {

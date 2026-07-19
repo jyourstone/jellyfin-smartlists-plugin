@@ -798,7 +798,7 @@
             SmartLists.setAllUsersSelected(page, page._pendingAllUsers === true);
         }
         if (page._pendingAllUsers) {
-            page._pendingAllUsers = false;
+            delete page._pendingAllUsers; // Consumed - the checkbox now carries the state
         } else if (checkboxes.length > 0 && page._pendingUserIds) {
             // Users already loaded, set immediately
             if (SmartLists.setSelectedUserIds) {
