@@ -30,12 +30,12 @@ SmartLists creates rule-based playlists and collections that refresh automatical
 - Refreshes lists automatically when library content or playback state changes
 - Supports movies, shows, episodes, music, photos, books, and more
 - Lets administrators and regular users manage lists through the Jellyfin web UI
-- Supports external sources such as IMDb, TMDB, Trakt, MDBList, and Letterboxd
+- Supports external sources such as IMDb, TMDB, Trakt, MDBList, Letterboxd, and ListenBrainz
 
 ## Features
 
 - **Modern Web Interface** - A full-featured UI to create, manage and view status for smart playlists and collections
-- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Trakt](https://trakt.tv), and [TMDB](https://www.themoviedb.org)
+- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), and [ListenBrainz](https://listenbrainz.org)
 - **User Selection** - Choose which users should own a playlist or collection with an intuitive dropdown
 - **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - **Automatic Updates** - Playlists and collections refresh automatically on library updates, playback status changes, or via scheduled tasks
