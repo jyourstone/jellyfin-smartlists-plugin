@@ -1954,6 +1954,10 @@
             if (tmdbApiKeyEl) {
                 tmdbApiKeyEl.value = config.TmdbApiKey || '';
             }
+            var listenBrainzUserTokenEl = page.querySelector('#listenBrainzUserToken');
+            if (listenBrainzUserTokenEl) {
+                listenBrainzUserTokenEl.value = config.ListenBrainzUserToken || '';
+            }
 
             // Load backup settings
             var backupEnabledEl = page.querySelector('#backupEnabled');
@@ -2152,6 +2156,8 @@
             config.TraktClientId = traktClientIdInput ? (traktClientIdInput.value.trim() || null) : null;
             var tmdbApiKeyInput = page.querySelector('#tmdbApiKey');
             config.TmdbApiKey = tmdbApiKeyInput ? (tmdbApiKeyInput.value.trim() || null) : null;
+            var listenBrainzUserTokenInput = page.querySelector('#listenBrainzUserToken');
+            config.ListenBrainzUserToken = listenBrainzUserTokenInput ? (listenBrainzUserTokenInput.value.trim() || null) : null;
 
             // Save backup settings
             var backupEnabledCheckbox = page.querySelector('#backupEnabled');

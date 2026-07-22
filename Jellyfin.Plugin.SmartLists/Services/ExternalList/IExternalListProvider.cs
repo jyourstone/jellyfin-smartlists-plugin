@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
@@ -28,7 +29,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <summary>
         /// A TV episode item.
         /// </summary>
-        Episode
+        Episode,
+
+        /// <summary>
+        /// A music track (audio) item.
+        /// </summary>
+        Music
     }
 
     /// <summary>
@@ -112,6 +118,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public Dictionary<string, int> EpisodeTvdbIds { get; init; } = [];
 
         /// <summary>
+        /// Gets the lowercased MusicBrainz recording MBIDs mapped to their 0-based position in the list.
+        /// </summary>
+        public Dictionary<string, int> MusicRecordingIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Gets the normalized "title|artist" keys (see <see cref="MusicMatchKey.TitleArtistKey"/>)
+        /// mapped to their 0-based position in the list.
+        /// </summary>
+        public Dictionary<string, int> MusicTitleArtistIds { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>
         /// Gets or sets the total number of items in the external list.
         /// </summary>
         public int TotalItems { get; set; }
@@ -187,6 +204,90 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             return TryGetPosition(UnknownImdbIds, UnknownTmdbIds, UnknownTvdbIds, imdbId, tmdbId, tvdbId, out position);
+        }
+
+        /// <summary>
+        /// Adds a music track to the recording-MBID and normalized title|artist buckets.
+        /// </summary>
+        /// <param name="recordingMbid">The MusicBrainz recording MBID, if available.</param>
+        /// <param name="title">The track title, if available.</param>
+        /// <param name="artistNames">The artist credit names, if available.</param>
+        /// <param name="position">The 0-based position in the external list.</param>
+        public void AddMusicTrack(string? recordingMbid, string? title, IEnumerable<string>? artistNames, int position)
+        {
+            if (!string.IsNullOrEmpty(recordingMbid))
+            {
+                AddKeepingLowestPosition(MusicRecordingIds, recordingMbid.ToLowerInvariant(), position);
+            }
+
+            if (artistNames == null || MusicMatchKey.NormalizeTitle(title).Length == 0)
+            {
+                return;
+            }
+
+            foreach (var artist in artistNames)
+            {
+                // Skip artists that normalize to empty (e.g. "!!!") — a "title|" key would
+                // cross-match unrelated artists sharing the same title.
+                if (MusicMatchKey.NormalizeArtist(artist).Length == 0)
+                {
+                    continue;
+                }
+
+                AddKeepingLowestPosition(MusicTitleArtistIds, MusicMatchKey.TitleArtistKey(title, artist), position);
+            }
+        }
+
+        /// <summary>
+        /// Tries to find the position for a music track by recording MBID first, then by every
+        /// normalized title|artist key. Returns the minimum position across all matches.
+        /// </summary>
+        /// <param name="recordingMbid">The MusicBrainz recording MBID, if available.</param>
+        /// <param name="title">The track title, if available.</param>
+        /// <param name="artistNames">The artist credit names, if available.</param>
+        /// <param name="position">The matched position, when found.</param>
+        /// <returns>True if the recording MBID or any title|artist key matched.</returns>
+        public bool TryGetMusicPosition(string? recordingMbid, string? title, IEnumerable<string>? artistNames, out int position)
+        {
+            var found = false;
+            position = -1;
+
+            if (!string.IsNullOrEmpty(recordingMbid) && MusicRecordingIds.TryGetValue(recordingMbid, out var recordingPosition))
+            {
+                position = recordingPosition;
+                found = true;
+            }
+
+            if (artistNames == null || MusicMatchKey.NormalizeTitle(title).Length == 0)
+            {
+                return found;
+            }
+
+            foreach (var artist in artistNames)
+            {
+                // Mirror AddMusicTrack: artists that normalize to empty never have keys stored.
+                if (MusicMatchKey.NormalizeArtist(artist).Length == 0)
+                {
+                    continue;
+                }
+
+                if (MusicTitleArtistIds.TryGetValue(MusicMatchKey.TitleArtistKey(title, artist), out var keyPosition) &&
+                    (!found || keyPosition < position))
+                {
+                    position = keyPosition;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        private static void AddKeepingLowestPosition(Dictionary<string, int> ids, string key, int position)
+        {
+            if (!ids.TryAdd(key, position) && position < ids[key])
+            {
+                ids[key] = position;
+            }
         }
 
         private (Dictionary<string, int> ImdbIds, Dictionary<string, int> TmdbIds, Dictionary<string, int> TvdbIds) GetDictionaries(ExternalListItemKind kind)

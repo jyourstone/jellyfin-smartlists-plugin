@@ -1,6 +1,6 @@
 # External Lists
 
-External Lists let you populate smart lists from external services like MDBList, IMDb, Letterboxd, Trakt, and TMDB. Use them to create collections based on trending lists, watchlists, top charts, and curated lists from these services.
+External Lists let you populate smart lists from external services like MDBList, IMDb, Letterboxd, Trakt, TMDB, and ListenBrainz. Use them to create collections based on trending lists, watchlists, top charts, curated lists, and music playlists from these services.
 
 ## How It Works
 
@@ -8,7 +8,7 @@ External Lists let you populate smart lists from external services like MDBList,
 2. Create a rule with the `External List` field, `equals` operator, and the list URL as the value
 3. On refresh, the plugin fetches the external list and matches items by provider IDs (IMDb, TMDB, TVDB) against your Jellyfin library
 
-Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the episode's own provider IDs are checked first. Parent series IDs are only used as a fallback when the external list entry represents a show/series, which lets show lists produce episode playlists without letting episode-level IDs match unrelated shows.
+Items are matched by comparing provider IDs between the external list and your library metadata. For episodes, the episode's own provider IDs are checked first. Parent series IDs are only used as a fallback when the external list entry represents a show/series, which lets show lists produce episode playlists without letting episode-level IDs match unrelated shows. Music lists (ListenBrainz) are matched by MusicBrainz recording IDs instead, with a title + artist fallback for tracks that lack MusicBrainz tags.
 
 ## Supported Providers
 
@@ -17,6 +17,7 @@ Items are matched by comparing provider IDs between the external list and your l
 | **MDBList** | Yes | IMDb, TMDB, TVDB |
 | **IMDb** | No | IMDb |
 | **Letterboxd** | No | TMDB |
+| **ListenBrainz** | No (optional user token) | MusicBrainz recording ID (title + artist fallback) |
 | **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
 | **TMDB** | Yes | TMDB |
 
@@ -127,6 +128,44 @@ External List / equals / https://letterboxd.com/official/list/letterboxds-top-50
 
 !!! warning "Letterboxd is Slow for Large Lists"
     Letterboxd list pages do not include TMDB IDs directly. The plugin must fetch each film's individual page to resolve its TMDB ID. This means a 250-film list requires ~250 additional HTTP requests, which can take several minutes. Resolved IDs are cached in memory for faster subsequent refreshes (until Jellyfin restarts). To minimize fetch time, use **External List Order Ascending** sort with a **Max Items** limit — the plugin will only fetch the first N items instead of the entire list.
+
+---
+
+### ListenBrainz
+
+[ListenBrainz](https://listenbrainz.org) is an open music listening tracker from the MusicBrainz project. It hosts user-created playlists and generates personalized playlists like Weekly Jams, Weekly Exploration, and Daily Jams. ListenBrainz lists contain music tracks, so use them with the **Audio** media type.
+
+**Setup:**
+
+No API key required for public playlists. To access your private playlists, add a user token:
+
+1. Go to [listenbrainz.org/settings](https://listenbrainz.org/settings/)
+2. Copy your **User token**
+3. Enter it in the plugin **Settings** tab under **External Lists > ListenBrainz User Token**
+
+**Supported URLs:**
+
+| Type | URL format |
+|------|-----------|
+| Playlist | `https://listenbrainz.org/playlist/{id}` |
+| Syndication feed | `https://listenbrainz.org/syndication-feed/user/{user}/recommendations?recommendation_type={type}` |
+
+A **playlist URL** points to one specific playlist — its current contents are fetched on every refresh.
+
+A **syndication feed URL** points to a *type* of generated playlist (e.g., `weekly-jams`, `weekly-exploration`, `daily-jams`) rather than one specific playlist. On every refresh, the plugin looks up the latest generated playlist of that type for the user, so your smart list automatically follows each new edition — ideal for Weekly Jams, which ListenBrainz regenerates every week. You can copy the syndication feed URL from the feed icon on a generated playlist on your ListenBrainz **Created for you** page.
+
+**Examples:**
+
+```
+External List / equals / https://listenbrainz.org/playlist/07e984e3-1e63-44e3-b53c-7c3f9502cd28
+External List / equals / https://listenbrainz.org/syndication-feed/user/rob/recommendations?recommendation_type=weekly-jams
+```
+
+!!! note "How Music Matching Works"
+    Tracks are matched by MusicBrainz recording IDs, which Jellyfin reads from your music files' embedded tags (e.g., files tagged with [MusicBrainz Picard](https://picard.musicbrainz.org)). Tracks without a MusicBrainz recording ID fall back to title + artist matching, so untagged libraries work too — though tagged libraries will match more reliably.
+
+!!! note "Private Playlists"
+    Public playlists work without any configuration. To use your own private playlists, configure a ListenBrainz user token in the plugin settings (see Setup above).
 
 ---
 

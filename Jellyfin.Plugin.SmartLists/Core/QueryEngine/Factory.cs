@@ -4308,6 +4308,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return matchingLists;
             }
 
+            // Music items match by MusicBrainz recording MBID with title/artist fallback
+            // instead of imdb/tmdb/tvdb provider IDs, so they bypass the hasAnyId check below.
+            if (GetExternalListItemKind(baseItem) == ExternalListItemKind.Music)
+            {
+                var recordingMbid = baseItem.GetProviderId("MusicBrainzRecording");
+                var artistNames = (baseItem as Audio)?.Artists;
+
+                foreach (var kvp in cache.ExternalListData)
+                {
+                    if (kvp.Value.TryGetMusicPosition(recordingMbid, baseItem.Name, artistNames, out var trackPosition))
+                    {
+                        matchingLists.Add(kvp.Key);
+                        // Cache the best (lowest) position across all matched external lists for sorting
+                        cache.ExternalListPositions.AddOrUpdate(baseItem.Id, trackPosition, (_, existing) => Math.Min(existing, trackPosition));
+                        logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, kvp.Key, trackPosition);
+                    }
+                }
+
+                cache.ItemExternalLists[baseItem.Id] = matchingLists;
+                return matchingLists;
+            }
+
             // Get this item's provider IDs
             var imdbId = baseItem.GetProviderId(MetadataProvider.Imdb);
             var tmdbId = baseItem.GetProviderId(MetadataProvider.Tmdb);
@@ -4375,6 +4397,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 Movie => ExternalListItemKind.Movie,
                 Episode => ExternalListItemKind.Episode,
                 Series => ExternalListItemKind.Show,
+                // AudioBook derives from Audio, so guard on the item kind to match plain music tracks only
+                Audio when baseItem.GetBaseItemKind() == BaseItemKind.Audio => ExternalListItemKind.Music,
                 _ => ExternalListItemKind.Unknown
             };
         }

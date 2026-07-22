@@ -152,6 +152,12 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         /// </summary>
         public string? TmdbApiKey { get; set; } = null;
 
+        /// <summary>
+        /// Gets or sets the ListenBrainz user token for fetching external lists.
+        /// Optional — only needed for private playlists. Find it at https://listenbrainz.org/settings/
+        /// </summary>
+        public string? ListenBrainzUserToken { get; set; } = null;
+
         // ===== Backup Settings =====
 
         /// <summary>
