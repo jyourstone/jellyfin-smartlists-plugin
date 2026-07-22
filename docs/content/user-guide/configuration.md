@@ -179,6 +179,10 @@ Some templates need one value from you (for example a title for *Because You
 Watched…* or your ListenBrainz feed URL for *Weekly Jams*) — a notification tells
 you which rule to fill in, and the form won't save until you do.
 
+On the [user configuration page](user-selection.md), collection templates (such
+as *Trending Now (Trakt)*) are only shown to users who are allowed to create
+collections, so regular users may see fewer templates than an administrator.
+
 !!! note "More options"
     Fields beyond List Type, Name, Media Types (with its Include Extras option), Rules,
     Sort Options, and Users live in a collapsed **More options** section on the create/edit form. The collapsed

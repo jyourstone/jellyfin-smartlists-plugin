@@ -7,6 +7,8 @@ const vm = require('vm');
 
 const cfgDir = path.join(__dirname, '..', 'Jellyfin.Plugin.SmartLists', 'Configuration');
 const coreSrc = fs.readFileSync(path.join(cfgDir, 'config-core.js'), 'utf8');
+// rulesSrc is intentionally never executed in the vm - it is only text-searched
+// (indexOf) for quoted field names; running it would need far heavier DOM stubs
 const rulesSrc = fs.readFileSync(path.join(cfgDir, 'config-rules.js'), 'utf8');
 const templatesSrc = fs.readFileSync(path.join(cfgDir, 'config-templates.js'), 'utf8');
 

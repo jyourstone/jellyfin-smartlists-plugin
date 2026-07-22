@@ -1121,6 +1121,12 @@
             if (editIndicator) {
                 editIndicator.style.display = 'flex';
             }
+            // Templates create new lists - hide the picker while editing so
+            // "Use" can't silently abandon the in-progress edit
+            const templatePickerEdit = page.querySelector('#templatePickerContainer');
+            if (templatePickerEdit) {
+                templatePickerEdit.style.display = 'none';
+            }
             const submitBtn = page.querySelector('#submitBtn');
             if (submitBtn) {
                 const currentListType = SmartLists.getElementValue(page, '#listType', 'Playlist');
@@ -1146,6 +1152,11 @@
             const createTabButton = page.querySelector('a[data-tab="create"]');
             if (createTabButton) {
                 createTabButton.textContent = 'Create List';
+            }
+            // Restore the template picker hidden by a previous edit session
+            const templatePicker = page.querySelector('#templatePickerContainer');
+            if (templatePicker) {
+                templatePicker.style.display = '';
             }
             // Drop image rows and pending image ops from an abandoned edit
             // session so they can't be applied to the newly created list

@@ -253,9 +253,14 @@
         return null;
     }
 
-    // Clear selection, description, and Use-button state. Called from
+    // Clear selection, description, and Use-button state, and re-show the
+    // picker (populateFormFromDto hides it in edit mode). Called from
     // initTemplatePicker after rebuilding the options and from clearForm.
     SmartLists.resetTemplatePicker = function (page) {
+        const container = page.querySelector('#templatePickerContainer');
+        if (container) {
+            container.style.display = '';
+        }
         const select = page.querySelector('#templateSelect');
         if (select) {
             select.value = '';

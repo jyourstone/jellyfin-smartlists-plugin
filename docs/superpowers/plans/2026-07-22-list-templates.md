@@ -501,6 +501,8 @@ git commit -m "refactor: extract shared populateFormFromDto from edit/clone dupl
                 },
                 VisibilitySchedules: [
                     { Action: 'Enable', Trigger: 'Weekly', DayOfWeek: 6, Time: '06:00:00' },
+                    { Action: 'Disable', Trigger: 'Weekly', DayOfWeek: 6, Time: '12:00:00' },
+                    { Action: 'Enable', Trigger: 'Weekly', DayOfWeek: 0, Time: '06:00:00' },
                     { Action: 'Disable', Trigger: 'Weekly', DayOfWeek: 0, Time: '12:00:00' }
                 ]
             }
@@ -1144,7 +1146,7 @@ Use the project's `/verify` skill flow. CRITICAL (from prior-session incident): 
 2. Select **TV Channel** → Use → form fills: type Playlist, name "TV Channel", media type Episode, one rule PlaybackStatus = Unplayed, sort Round Robin grouped by Series Name, auto-refresh On library changes; success notification shown; More-options fold state consistent (auto-expands only when the template sets advanced chips — e.g. schedules/bumpers templates).
 3. Click Create → list is created and materializes (Manage tab shows it; Jellyfin playlist appears).
 4. Select **Because You Watched…** → Use → notification with the hint; SimilarTo rule value empty and focused; click Create without filling → blocked with notification + focus; fill a title → Create succeeds.
-5. Select **Saturday Morning Cartoons** → Use → bumper section populated (interval 2, Random), bumper Tags rule empty; Create blocked by the existing bumper-incomplete message until filled; visibility schedules present (Enable Sat 06:00, Disable Sun 12:00) and Advanced fold auto-expanded.
+5. Select **Saturday Morning Cartoons** → Use → bumper section populated (interval 2, Random), bumper Tags rule empty; Create blocked by the existing bumper-incomplete message until filled; visibility schedules present (all four transitions: Enable Sat 06:00, Disable Sat 12:00, Enable Sun 06:00, Disable Sun 12:00) and Advanced fold auto-expanded.
 6. **Franchise TV Channel** → Use → sort shows Least Recently Watched Round Robin, group by Collections, within-group Air Date, air-block window 3.
 7. **Album Roulette** → Use → no rules (single empty rule row), Random Group Selection enabled/Album/min 5, two sorts (Album Name, Track Number), max playtime 180 — creating works (empty rule row is allowed for non-placeholder templates).
 8. Regression: edit an existing list → form populates correctly, Update works; clone an existing list → " (Copy)" name, create works; cancel edit resets.

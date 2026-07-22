@@ -123,8 +123,12 @@ UserPagesController).
 
 External-list templates get `adminOnly: true` if the ExternalList field turns
 out to be unavailable on the user page (verify during implementation).
-"Fresh & Unseen": admin page sets AllUsers; on the user page the server
-force-overrides ownership anyway, so it degrades to per-user cleanly.
+"Fresh & Unseen" ships **per-user** (final decision, changed during
+implementation): staging an `AllUsers: true` dto through the shared user
+selection was unverified and defaulting to the creating user is the safer v1 —
+enabling All Users stays a one-checkbox manual step after applying the
+template. (The ExternalList field turned out to be available on the user page,
+so no template carries `adminOnly` in v1.)
 
 ## Docs impact
 
@@ -132,7 +136,9 @@ force-overrides ownership anyway, so it degrades to per-user cleanly.
 - getting-started/quick-start.md — "or start from a template" in the
   first-list flow.
 - index.md + README.md — feature bullet.
-- Examples pages — mark entries that ship as built-in templates.
+- Examples pages are NOT cross-marked with "ships as template" tags (final
+  decision, changed during implementation): the markings add churn without
+  user value; discovery is covered by the pages above.
 
 ## Verification
 
