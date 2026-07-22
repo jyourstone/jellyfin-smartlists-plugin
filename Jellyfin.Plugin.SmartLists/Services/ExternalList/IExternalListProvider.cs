@@ -227,7 +227,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             foreach (var artist in artistNames)
             {
-                if (string.IsNullOrEmpty(artist))
+                // Skip artists that normalize to empty (e.g. "!!!") — a "title|" key would
+                // cross-match unrelated artists sharing the same title.
+                if (MusicMatchKey.NormalizeArtist(artist).Length == 0)
                 {
                     continue;
                 }
@@ -263,7 +265,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             foreach (var artist in artistNames)
             {
-                if (string.IsNullOrEmpty(artist))
+                // Mirror AddMusicTrack: artists that normalize to empty never have keys stored.
+                if (MusicMatchKey.NormalizeArtist(artist).Length == 0)
                 {
                     continue;
                 }

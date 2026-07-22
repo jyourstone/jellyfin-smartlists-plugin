@@ -64,9 +64,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             // suffixes). Leading/mid groups stay — "(I Can't Get No) Satisfaction" keeps its prefix.
             if (stripTrailingGroups)
             {
-                while (TrailingGroupPattern().IsMatch(value))
+                string stripped;
+                while ((stripped = TrailingGroupPattern().Replace(value, string.Empty)) != value)
                 {
-                    value = TrailingGroupPattern().Replace(value, string.Empty);
+                    value = stripped;
                 }
             }
 

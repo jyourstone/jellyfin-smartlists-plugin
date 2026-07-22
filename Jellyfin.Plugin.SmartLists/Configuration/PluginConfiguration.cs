@@ -156,7 +156,7 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         /// Gets or sets the ListenBrainz user token for fetching external lists.
         /// Optional — only needed for private playlists. Find it at https://listenbrainz.org/settings/
         /// </summary>
-        public string ListenBrainzUserToken { get; set; } = string.Empty;
+        public string? ListenBrainzUserToken { get; set; } = null;
 
         // ===== Backup Settings =====
 
