@@ -146,6 +146,12 @@ namespace Jellyfin.Plugin.SmartLists
                     Name = "config-lists.js",
                     EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-lists.js",
                 },
+                // Template catalog and picker
+                new PluginPageInfo
+                {
+                    Name = "config-templates.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.config-templates.js",
+                },
                 // Filtering and search
                 new PluginPageInfo
                 {
