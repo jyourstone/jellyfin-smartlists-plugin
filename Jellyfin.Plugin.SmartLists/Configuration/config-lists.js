@@ -324,6 +324,26 @@
                 return;
             }
 
+            // Guard for template placeholders: collectRulesFromForm silently drops
+            // rules with empty values, so an unfilled template rule would otherwise
+            // create a much broader list than the user expects.
+            if (page._templatePlaceholderPending) {
+                const ruleValueInputs = page.querySelectorAll('#rules-container .rule-value-input');
+                let firstEmptyInput = null;
+                for (let i = 0; i < ruleValueInputs.length; i++) {
+                    if (!ruleValueInputs[i].value) {
+                        firstEmptyInput = ruleValueInputs[i];
+                        break;
+                    }
+                }
+                if (firstEmptyInput) {
+                    SmartLists.showNotification('This template needs a value - fill in the empty rule value first.');
+                    firstEmptyInput.focus();
+                    return;
+                }
+                page._templatePlaceholderPending = false;
+            }
+
             // Collect rules from form using helper function
             const expressionSets = SmartLists.collectRulesFromForm(page);
 
@@ -822,6 +842,21 @@
         delete page._pendingUserIds;
         delete page._pendingCollectionUserId;
         delete page._metadataTagsWasManaged;
+        page._templatePlaceholderPending = false;
+
+        // Reset the template picker so a cleared form doesn't keep a stale selection
+        const templateSelect = page.querySelector('#templateSelect');
+        if (templateSelect) {
+            templateSelect.value = '';
+            const templateDescription = page.querySelector('#templateDescription');
+            if (templateDescription) {
+                templateDescription.style.display = 'none';
+            }
+            const useTemplateBtn = page.querySelector('#useTemplateBtn');
+            if (useTemplateBtn) {
+                useTemplateBtn.disabled = true;
+            }
+        }
 
         SmartLists.setElementValue(page, '#playlistName', '');
         if (SmartLists.setAllUsersSelected) {

@@ -86,6 +86,10 @@
                 SmartLists.reinitializeExistingRules(page);
             }
 
+            if (SmartLists.initTemplatePicker) {
+                SmartLists.initTemplatePicker(page);
+            }
+
             // Enable form submission
             const editState = SmartLists.getPageEditState(page);
             const submitBtn = page.querySelector('#submitBtn');
@@ -1132,6 +1136,12 @@
                 const button = target.closest('.clone-playlist-btn');
                 if (SmartLists.clonePlaylist) {
                     SmartLists.clonePlaylist(page, button.getAttribute('data-playlist-id'), button.getAttribute('data-playlist-name'));
+                }
+            }
+            if (target.closest('#useTemplateBtn')) {
+                const templateSelect = page.querySelector('#templateSelect');
+                if (templateSelect && templateSelect.value && SmartLists.useTemplate) {
+                    SmartLists.useTemplate(page, templateSelect.value);
                 }
             }
             if (target.closest('.refresh-playlist-btn')) {

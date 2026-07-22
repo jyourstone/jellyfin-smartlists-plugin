@@ -226,4 +226,103 @@
             }
         }
     ];
+
+    function visibleTemplates(page) {
+        const isUserPage = SmartLists.isUserPage(page);
+        const caps = SmartLists.userCapabilities || {};
+        return SmartLists.TEMPLATES.filter(function (t) {
+            if (isUserPage && t.adminOnly) {
+                return false;
+            }
+            // Hide collection templates from users who cannot create collections
+            if (isUserPage && t.dto.Type === 'Collection' && !caps.CanCreateCollections) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    function findTemplate(templateId) {
+        for (let i = 0; i < SmartLists.TEMPLATES.length; i++) {
+            if (SmartLists.TEMPLATES[i].id === templateId) {
+                return SmartLists.TEMPLATES[i];
+            }
+        }
+        return null;
+    }
+
+    SmartLists.initTemplatePicker = function (page) {
+        const select = page.querySelector('#templateSelect');
+        if (!select) {
+            return;
+        }
+
+        const templates = visibleTemplates(page);
+        let html = '<option value="">Select a template...</option>';
+        let currentCategory = null;
+        templates.forEach(function (t) {
+            if (t.category !== currentCategory) {
+                if (currentCategory !== null) {
+                    html += '</optgroup>';
+                }
+                html += '<optgroup label="' + SmartLists.escapeHtml(t.category) + '">';
+                currentCategory = t.category;
+            }
+            html += '<option value="' + SmartLists.escapeHtml(t.id) + '">' + SmartLists.escapeHtml(t.name) + '</option>';
+        });
+        if (currentCategory !== null) {
+            html += '</optgroup>';
+        }
+        select.innerHTML = html;
+
+        if (!select._templatePickerBound) {
+            select._templatePickerBound = true;
+            select.addEventListener('change', function () {
+                const template = findTemplate(select.value);
+                const descriptionDiv = page.querySelector('#templateDescription');
+                const useBtn = page.querySelector('#useTemplateBtn');
+                if (descriptionDiv) {
+                    descriptionDiv.textContent = template ? template.description : '';
+                    descriptionDiv.style.display = template ? 'block' : 'none';
+                }
+                if (useBtn) {
+                    useBtn.disabled = !template;
+                }
+            });
+        }
+    };
+
+    SmartLists.useTemplate = function (page, templateId) {
+        const template = findTemplate(templateId);
+        if (!template) {
+            return;
+        }
+
+        // Deep-copy so form population can never mutate the catalog
+        const dto = JSON.parse(JSON.stringify(template.dto));
+
+        try {
+            SmartLists.populateFormFromDto(page, dto, { name: template.name });
+        } catch (formError) {
+            console.error('Error applying template:', formError);
+            SmartLists.showNotification('Error applying template: ' + formError.message);
+            return;
+        }
+
+        page._templatePlaceholderPending = !!template.inputHint;
+
+        if (template.inputHint) {
+            SmartLists.showNotification(template.inputHint);
+            // Focus the first empty rule value so the user sees what to fill in
+            const inputs = page.querySelectorAll('#rules-container .rule-value-input');
+            for (let i = 0; i < inputs.length; i++) {
+                if (!inputs[i].value) {
+                    inputs[i].focus();
+                    break;
+                }
+            }
+        } else {
+            SmartLists.showNotification('Template applied - review the settings and click Create.', 'success');
+        }
+    };
 })(window.SmartLists = window.SmartLists || {});
