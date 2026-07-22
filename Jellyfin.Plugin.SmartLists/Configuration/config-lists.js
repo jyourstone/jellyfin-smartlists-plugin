@@ -328,7 +328,7 @@
             // rules with empty values, so an unfilled template rule would otherwise
             // create a much broader list than the user expects.
             if (page._templatePlaceholderPending) {
-                const ruleValueInputs = page.querySelectorAll('#rules-container .rule-value-input');
+                const ruleValueInputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
                 let firstEmptyInput = null;
                 for (let i = 0; i < ruleValueInputs.length; i++) {
                     if (!ruleValueInputs[i].value) {
@@ -934,6 +934,10 @@
         const listType = playlist.Type || 'Playlist';
         const isCollection = listType === 'Collection';
 
+        // Any repopulation invalidates a pending template placeholder hint
+        // (useTemplate re-sets the flag after calling this)
+        page._templatePlaceholderPending = false;
+
         if (editMode && playlist.CreatedByUserId) {
             // Store CreatedByUserId to preserve it during updates
             page._editingPlaylistCreatedByUserId = playlist.CreatedByUserId;
@@ -1106,6 +1110,21 @@
             const createTabButton = page.querySelector('a[data-tab="create"]');
             if (createTabButton) {
                 createTabButton.textContent = 'Edit List';
+            }
+        } else {
+            // Reset any stale edit-mode UI (e.g. a template applied, or a list
+            // cloned, while the form was in edit mode)
+            const editIndicator = page.querySelector('#edit-mode-indicator');
+            if (editIndicator) {
+                editIndicator.style.display = 'none';
+            }
+            const submitBtn = page.querySelector('#submitBtn');
+            if (submitBtn) {
+                submitBtn.textContent = 'Create List';
+            }
+            const createTabButton = page.querySelector('a[data-tab="create"]');
+            if (createTabButton) {
+                createTabButton.textContent = 'Create List';
             }
         }
 
