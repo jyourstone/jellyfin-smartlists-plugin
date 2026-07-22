@@ -312,7 +312,7 @@
         page._templatePlaceholderPending = !!template.inputHint;
 
         if (template.inputHint) {
-            SmartLists.showNotification(template.inputHint);
+            SmartLists.showNotification(template.inputHint, 'info');
             // Focus the first empty rule value so the user sees what to fill in
             const inputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
             for (let i = 0; i < inputs.length; i++) {
