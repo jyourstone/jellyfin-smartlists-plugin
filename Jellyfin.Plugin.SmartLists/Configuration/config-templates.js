@@ -102,6 +102,8 @@
                 },
                 VisibilitySchedules: [
                     { Action: 'Enable', Trigger: 'Weekly', DayOfWeek: 6, Time: '06:00:00' },
+                    { Action: 'Disable', Trigger: 'Weekly', DayOfWeek: 6, Time: '12:00:00' },
+                    { Action: 'Enable', Trigger: 'Weekly', DayOfWeek: 0, Time: '06:00:00' },
                     { Action: 'Disable', Trigger: 'Weekly', DayOfWeek: 0, Time: '12:00:00' }
                 ]
             }
@@ -251,6 +253,24 @@
         return null;
     }
 
+    // Clear selection, description, and Use-button state. Called from
+    // initTemplatePicker after rebuilding the options and from clearForm.
+    SmartLists.resetTemplatePicker = function (page) {
+        const select = page.querySelector('#templateSelect');
+        if (select) {
+            select.value = '';
+        }
+        const descriptionDiv = page.querySelector('#templateDescription');
+        if (descriptionDiv) {
+            descriptionDiv.textContent = '';
+            descriptionDiv.style.display = 'none';
+        }
+        const useBtn = page.querySelector('#useTemplateBtn');
+        if (useBtn) {
+            useBtn.disabled = true;
+        }
+    };
+
     SmartLists.initTemplatePicker = function (page) {
         const select = page.querySelector('#templateSelect');
         if (!select) {
@@ -274,6 +294,11 @@
             html += '</optgroup>';
         }
         select.innerHTML = html;
+
+        // Rebuilding options silently resets the value to '' without a change
+        // event - sync the description and Use button so an SPA page revisit
+        // doesn't keep a stale description and an enabled Use button
+        SmartLists.resetTemplatePicker(page);
 
         if (!select._templatePickerBound) {
             select._templatePickerBound = true;
@@ -306,6 +331,9 @@
         } catch (formError) {
             console.error('Error applying template:', formError);
             SmartLists.showNotification('Error applying template: ' + formError.message);
+            // Re-arm the guard: a partial population may have left the
+            // template's empty placeholder rule in the form
+            page._templatePlaceholderPending = !!template.inputHint;
             return;
         }
 
@@ -313,13 +341,17 @@
 
         if (template.inputHint) {
             SmartLists.showNotification(template.inputHint, 'info');
+            // Notifications auto-dismiss - keep the hint (which may contain a
+            // URL pattern to copy) readable in the picker description too
+            const descriptionDiv = page.querySelector('#templateDescription');
+            if (descriptionDiv) {
+                descriptionDiv.textContent = template.description + ' — ' + template.inputHint;
+                descriptionDiv.style.display = 'block';
+            }
             // Focus the first empty rule value so the user sees what to fill in
-            const inputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
-            for (let i = 0; i < inputs.length; i++) {
-                if (!inputs[i].value) {
-                    inputs[i].focus();
-                    break;
-                }
+            const emptyInput = SmartLists.findFirstEmptyRuleValueInput(page);
+            if (emptyInput) {
+                emptyInput.focus();
             }
         } else {
             SmartLists.showNotification('Template applied - review the settings and click Create.', 'success');

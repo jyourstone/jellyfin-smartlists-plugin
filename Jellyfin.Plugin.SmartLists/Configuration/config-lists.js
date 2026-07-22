@@ -328,14 +328,7 @@
             // rules with empty values, so an unfilled template rule would otherwise
             // create a much broader list than the user expects.
             if (page._templatePlaceholderPending) {
-                const ruleValueInputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
-                let firstEmptyInput = null;
-                for (let i = 0; i < ruleValueInputs.length; i++) {
-                    if (!ruleValueInputs[i].value) {
-                        firstEmptyInput = ruleValueInputs[i];
-                        break;
-                    }
-                }
+                const firstEmptyInput = SmartLists.findFirstEmptyRuleValueInput(page);
                 if (firstEmptyInput) {
                     SmartLists.showNotification('This template needs a value - fill in the empty rule value first.');
                     firstEmptyInput.focus();
@@ -845,17 +838,8 @@
         page._templatePlaceholderPending = false;
 
         // Reset the template picker so a cleared form doesn't keep a stale selection
-        const templateSelect = page.querySelector('#templateSelect');
-        if (templateSelect) {
-            templateSelect.value = '';
-            const templateDescription = page.querySelector('#templateDescription');
-            if (templateDescription) {
-                templateDescription.style.display = 'none';
-            }
-            const useTemplateBtn = page.querySelector('#useTemplateBtn');
-            if (useTemplateBtn) {
-                useTemplateBtn.disabled = true;
-            }
+        if (SmartLists.resetTemplatePicker) {
+            SmartLists.resetTemplatePicker(page);
         }
 
         SmartLists.setElementValue(page, '#playlistName', '');
@@ -926,6 +910,20 @@
         }
     };
 
+    // Shared by the createPlaylist placeholder guard and useTemplate's focus
+    // step: first VISIBLE empty rule value input (rules + bumper rules).
+    // Hidden inputs (collapsed bumper section, tag-editor internals) are
+    // skipped - an invisible empty value must not block saving or take focus.
+    SmartLists.findFirstEmptyRuleValueInput = function (page) {
+        const inputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
+        for (let i = 0; i < inputs.length; i++) {
+            if (!inputs[i].value && inputs[i].offsetParent !== null) {
+                return inputs[i];
+            }
+        }
+        return null;
+    };
+
     // Shared DTO -> create-form population engine used by edit, clone, and
     // template flows. opts: { editMode, playlistId, name }.
     SmartLists.populateFormFromDto = function (page, playlist, opts) {
@@ -944,8 +942,17 @@
         }
 
         // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
-        // This ensures pendingUserIds is set before loadUsers checks for it
-        SmartLists.stagePendingUserSelection(page, playlist, isCollection);
+        // This ensures pendingUserIds is set before loadUsers checks for it.
+        // Template dtos carry no user fields: leave the current owner selection
+        // alone instead of staging an empty one (which would wipe it).
+        const hasUserInfo = playlist.AllUsers !== undefined || playlist.UserPlaylists !== undefined || playlist.UserId !== undefined;
+        if (hasUserInfo) {
+            SmartLists.stagePendingUserSelection(page, playlist, isCollection);
+        } else {
+            delete page._pendingAllUsers;
+            delete page._pendingUserIds;
+            delete page._pendingCollectionUserId;
+        }
 
         // Set playlist name FIRST (before switchToTab) to prevent populateFormDefaults from being called
         // switchToTab checks if name is empty and calls populateFormDefaults if so, which would regenerate checkboxes
@@ -965,6 +972,10 @@
 
         // Trigger type change handler to show/hide fields
         SmartLists.handleListTypeChange(page);
+
+        // handleListTypeChange clears the flag when it regenerates the media
+        // type checkboxes - re-assert it for the rest of the population
+        page._skipMediaTypeChangeHandlers = true;
 
         // Only set public for playlists
         if (!isCollection) {
@@ -1022,17 +1033,20 @@
         }
         SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
 
-        // Set the list owner (for both playlists and collections)
-        if (isCollection) {
-            // Collections always have single user
-            const userIdString = playlist.UserId ? String(playlist.UserId) : null;
-            if (userIdString) {
-                SmartLists.setUserIdValueWithRetry(page, userIdString);
+        // Set the list owner (for both playlists and collections); skipped when
+        // the dto carries no user info (templates) so the existing selection stays
+        if (hasUserInfo) {
+            if (isCollection) {
+                // Collections always have single user
+                const userIdString = playlist.UserId ? String(playlist.UserId) : null;
+                if (userIdString) {
+                    SmartLists.setUserIdValueWithRetry(page, userIdString);
+                }
+            } else {
+                // Playlists can have multiple users; selection was staged above
+                SmartLists.applyPendingUserSelection(page);
+                // If checkboxes don't exist yet, loadUsers will set them when it finishes
             }
-        } else {
-            // Playlists can have multiple users; selection was staged above
-            SmartLists.applyPendingUserSelection(page);
-            // If checkboxes don't exist yet, loadUsers will set them when it finishes
         }
 
         // Clear existing rules (applies to both playlists and collections)
@@ -1051,8 +1065,15 @@
             playlist.ExpressionSets.forEach(function (expressionSet, groupIndex) {
                 const logicGroup = groupIndex === 0 ? SmartLists.createInitialLogicGroup(page) : SmartLists.addNewLogicGroup(page);
 
-                // Store similarity comparison fields on page for populateRuleRow to access
-                page._editingPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
+                // Store similarity comparison fields on the mode-specific page key
+                // so cloneRule's freshly staged _cloningPlaylistSimilarityFields is
+                // not shadowed in clone/template flows (populateRuleRow reads the
+                // editing key first, config-rules.js)
+                if (editMode) {
+                    page._editingPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
+                } else {
+                    page._cloningPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
+                }
 
                 // Populate rules and per-group MaxItems into this logic group
                 SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
@@ -1120,11 +1141,16 @@
             }
             const submitBtn = page.querySelector('#submitBtn');
             if (submitBtn) {
-                submitBtn.textContent = 'Create List';
+                submitBtn.textContent = 'Create ' + listType;
             }
             const createTabButton = page.querySelector('a[data-tab="create"]');
             if (createTabButton) {
                 createTabButton.textContent = 'Create List';
+            }
+            // Drop image rows and pending image ops from an abandoned edit
+            // session so they can't be applied to the newly created list
+            if (SmartLists.initCustomImagesContainer) {
+                SmartLists.initCustomImagesContainer(page);
             }
         }
 
