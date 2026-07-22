@@ -263,8 +263,15 @@
 
         // Restore previously selected values after recreating checkboxes
         if (currentlySelected && currentlySelected.length > 0) {
-            // Use setTimeout to ensure checkboxes are fully rendered
+            // Use setTimeout to ensure checkboxes are fully rendered. Guard with a
+            // selection generation so an explicit setSelectedItems call that lands
+            // between scheduling and firing (e.g. edit/clone/template population
+            // right after handleListTypeChange) is not reverted by this restore.
+            const generationAtSchedule = options._selectionGeneration || 0;
             setTimeout(function () {
+                if ((options._selectionGeneration || 0) !== generationAtSchedule) {
+                    return;
+                }
                 SmartLists.setSelectedItems(page, containerId, currentlySelected, checkboxClass, undefined);
             }, 0);
         }
@@ -321,6 +328,9 @@
             console.warn('SmartLists.setSelectedItems: Options container not found for', containerId);
             return;
         }
+
+        // Invalidate any pending deferred selection restore (see loadItemsIntoMultiSelect)
+        options._selectionGeneration = (options._selectionGeneration || 0) + 1;
 
         const selector = checkboxClass ? '.' + checkboxClass : 'input[type="checkbox"]';
         const checkboxes = options.querySelectorAll(selector);
