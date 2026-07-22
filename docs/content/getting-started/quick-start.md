@@ -30,6 +30,11 @@ SmartLists can be accessed in two ways depending on your user permissions:
 
 ## Creating Your First List
 
+!!! tip "Shortcut: start from a template"
+    The quickest first list: pick a built-in template from **Start from a template**
+    at the top of the Create tab and click **Use** — the form is filled in for you,
+    ready to review and create. The steps below build the same thing by hand.
+
 1. **Access SmartLists**: Use one of the methods above
 2. **Navigate to Create List Tab**: Click on the "Create List" tab
 3. **Configure Your List**:

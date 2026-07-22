@@ -261,12 +261,14 @@
             options.appendChild(option);
         });
 
-        // Restore previously selected values after recreating checkboxes
+        // Restore previously selected values after recreating checkboxes.
+        // Synchronous on purpose: a deferred (setTimeout) restore raced any
+        // explicit setSelectedItems that ran right after the rebuild (e.g.
+        // edit/clone/template population after handleListTypeChange) and
+        // reverted it - and loadUsers' empty-selection fallback must see the
+        // restored checkboxes to know not to apply the current-user default.
         if (currentlySelected && currentlySelected.length > 0) {
-            // Use setTimeout to ensure checkboxes are fully rendered
-            setTimeout(function () {
-                SmartLists.setSelectedItems(page, containerId, currentlySelected, checkboxClass, undefined);
-            }, 0);
+            SmartLists.setSelectedItems(page, containerId, currentlySelected, checkboxClass, undefined);
         }
     };
 

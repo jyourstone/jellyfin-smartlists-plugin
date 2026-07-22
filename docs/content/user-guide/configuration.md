@@ -166,6 +166,23 @@ The web interface is organized into tabs. The available tabs and features depend
 
 This is where you build new playlists and collections:
 
+#### Start from a Template
+
+At the top of the Create tab you can pick one of the built-in templates — ready-made
+configurations like **TV Channel** (round-robin episode interleaving), **Continue
+Watching**, **Weekly Jams (ListenBrainz)**, or **Album Roulette**. Selecting a
+template and clicking **Use** fills the whole create form with a working setup.
+Nothing is created yet: review the settings, adjust them to taste, and click
+**Create** as usual.
+
+Some templates need one value from you (for example a title for *Because You
+Watched…* or your ListenBrainz feed URL for *Weekly Jams*) — a notification tells
+you which rule to fill in, and the form won't save until you do.
+
+On the [user configuration page](user-selection.md), collection templates (such
+as *Trending Now (Trakt)*) are only shown to users who are allowed to create
+collections, so regular users may see fewer templates than an administrator.
+
 !!! note "More options"
     Fields beyond List Type, Name, Media Types (with its Include Extras option), Rules,
     Sort Options, and Users live in a collapsed **More options** section on the create/edit form. The collapsed

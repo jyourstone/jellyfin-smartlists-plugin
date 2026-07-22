@@ -324,6 +324,19 @@
                 return;
             }
 
+            // Guard for template placeholders: collectRulesFromForm silently drops
+            // rules with empty values, so an unfilled template rule would otherwise
+            // create a much broader list than the user expects.
+            if (page._templatePlaceholderPending) {
+                const firstEmptyInput = SmartLists.findFirstEmptyRuleValueInput(page);
+                if (firstEmptyInput) {
+                    SmartLists.showNotification('This template needs a value - fill in the empty rule value first.');
+                    firstEmptyInput.focus();
+                    return;
+                }
+                page._templatePlaceholderPending = false;
+            }
+
             // Collect rules from form using helper function
             const expressionSets = SmartLists.collectRulesFromForm(page);
 
@@ -822,6 +835,12 @@
         delete page._pendingUserIds;
         delete page._pendingCollectionUserId;
         delete page._metadataTagsWasManaged;
+        page._templatePlaceholderPending = false;
+
+        // Reset the template picker so a cleared form doesn't keep a stale selection
+        if (SmartLists.resetTemplatePicker) {
+            SmartLists.resetTemplatePicker(page);
+        }
 
         SmartLists.setElementValue(page, '#playlistName', '');
         if (SmartLists.setAllUsersSelected) {
@@ -891,6 +910,284 @@
         }
     };
 
+    // Shared by the createPlaylist placeholder guard and useTemplate's focus
+    // step: first VISIBLE empty rule value input (rules + bumper rules).
+    // Hidden inputs (collapsed bumper section, tag-editor internals) are
+    // skipped - an invisible empty value must not block saving or take focus.
+    SmartLists.findFirstEmptyRuleValueInput = function (page) {
+        const inputs = page.querySelectorAll('#rules-container .rule-value-input, #bumper-rules-container .rule-value-input');
+        for (let i = 0; i < inputs.length; i++) {
+            if (!inputs[i].value && inputs[i].offsetParent !== null) {
+                return inputs[i];
+            }
+        }
+        return null;
+    };
+
+    // Shared DTO -> create-form population engine used by edit, clone, and
+    // template flows. opts: { editMode, playlistId, name }.
+    SmartLists.populateFormFromDto = function (page, playlist, opts) {
+        opts = opts || {};
+        const editMode = opts.editMode === true;
+        const listType = playlist.Type || 'Playlist';
+        const isCollection = listType === 'Collection';
+
+        // Any repopulation invalidates a pending template placeholder hint
+        // (useTemplate re-sets the flag after calling this)
+        page._templatePlaceholderPending = false;
+
+        if (editMode && playlist.CreatedByUserId) {
+            // Store CreatedByUserId to preserve it during updates
+            page._editingPlaylistCreatedByUserId = playlist.CreatedByUserId;
+        }
+
+        // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
+        // This ensures pendingUserIds is set before loadUsers checks for it.
+        // Template dtos carry no user fields: leave the current owner selection
+        // alone instead of staging an empty one (which would wipe it).
+        const hasUserInfo = playlist.AllUsers !== undefined || playlist.UserPlaylists !== undefined || playlist.UserId !== undefined;
+        if (hasUserInfo) {
+            SmartLists.stagePendingUserSelection(page, playlist, isCollection);
+        } else {
+            delete page._pendingAllUsers;
+            delete page._pendingUserIds;
+            delete page._pendingCollectionUserId;
+        }
+
+        // Set playlist name FIRST (before switchToTab) to prevent populateFormDefaults from being called
+        // switchToTab checks if name is empty and calls populateFormDefaults if so, which would regenerate checkboxes
+        SmartLists.setElementValue(page, '#playlistName', opts.name !== undefined ? opts.name : (playlist.Name || ''));
+
+        // Switch to Create tab
+        SmartLists.switchToTab(page, 'create');
+
+        // Clear any existing edit state (edit mode is set after population below)
+        SmartLists.setPageEditState(page, false, null);
+
+        // Set list type
+        SmartLists.setElementValue(page, '#listType', listType);
+
+        // Set flag to prevent media type change handlers from interfering during population
+        page._skipMediaTypeChangeHandlers = true;
+
+        // Trigger type change handler to show/hide fields
+        SmartLists.handleListTypeChange(page);
+
+        // handleListTypeChange clears the flag when it regenerates the media
+        // type checkboxes - re-assert it for the rest of the population
+        page._skipMediaTypeChangeHandlers = true;
+
+        // Only set public for playlists
+        if (!isCollection) {
+            SmartLists.setElementChecked(page, '#playlistIsPublic', playlist.Public || false);
+        }
+
+        SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
+        SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
+
+        // Handle AutoRefresh with backward compatibility
+        const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
+        const autoRefreshElement = page.querySelector('#autoRefreshMode');
+        if (autoRefreshElement) {
+            autoRefreshElement.value = autoRefreshValue;
+        }
+
+        // Handle schedule settings with backward compatibility
+        SmartLists.loadSchedulesIntoUI(page, playlist);
+
+        // Handle visibility schedule settings
+        SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
+
+        SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
+
+        // Handle MaxItems with backward compatibility
+        // Default to 0 (unlimited) for lists that didn't have this setting
+        const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
+        const maxItemsElement = page.querySelector('#playlistMaxItems');
+        if (maxItemsElement) {
+            maxItemsElement.value = maxItemsValue;
+        } else {
+            console.warn('Max Items element not found when trying to populate form');
+        }
+
+        // Handle MaxPlayTimeMinutes with backward compatibility
+        const maxPlayTimeMinutesValue = (playlist.MaxPlayTimeMinutes !== undefined && playlist.MaxPlayTimeMinutes !== null) ? playlist.MaxPlayTimeMinutes : 0;
+        const maxPlayTimeMinutesElement = page.querySelector('#playlistMaxPlayTimeMinutes');
+        if (maxPlayTimeMinutesElement) {
+            maxPlayTimeMinutesElement.value = maxPlayTimeMinutesValue;
+        } else {
+            console.warn('Max Playtime Minutes element not found when trying to populate form');
+        }
+
+        // Set media types
+        if (playlist.MediaTypes && playlist.MediaTypes.length > 0) {
+            SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', playlist.MediaTypes, 'media-type-multi-select-checkbox', 'Select media types...');
+        } else {
+            SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
+        }
+
+        // Update Include Extras visibility based on loaded media types
+        if (SmartLists.updateIncludeExtrasVisibility) {
+            SmartLists.updateIncludeExtrasVisibility(page);
+        }
+        SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
+
+        // Set the list owner (for both playlists and collections); skipped when
+        // the dto carries no user info (templates) so the existing selection stays
+        if (hasUserInfo) {
+            if (isCollection) {
+                // Collections always have single user
+                const userIdString = playlist.UserId ? String(playlist.UserId) : null;
+                if (userIdString) {
+                    SmartLists.setUserIdValueWithRetry(page, userIdString);
+                }
+            } else {
+                // Playlists can have multiple users; selection was staged above
+                SmartLists.applyPendingUserSelection(page);
+                // If checkboxes don't exist yet, loadUsers will set them when it finishes
+            }
+        }
+
+        // Clear existing rules (applies to both playlists and collections)
+        const rulesContainer = page.querySelector('#rules-container');
+        if (rulesContainer) {
+            rulesContainer.innerHTML = '';
+        }
+
+        // Clear stale similarity-field context from any previous population
+        page._editingPlaylistSimilarityFields = null;
+        page._cloningPlaylistSimilarityFields = null;
+
+        // Populate logic groups and rules
+        if (playlist.ExpressionSets && playlist.ExpressionSets.length > 0 &&
+            playlist.ExpressionSets.some(function (es) { return es.Expressions && es.Expressions.length > 0; })) {
+            playlist.ExpressionSets.forEach(function (expressionSet, groupIndex) {
+                const logicGroup = groupIndex === 0 ? SmartLists.createInitialLogicGroup(page) : SmartLists.addNewLogicGroup(page);
+
+                // Store similarity comparison fields on the mode-specific page key
+                // so cloneRule's freshly staged _cloningPlaylistSimilarityFields is
+                // not shadowed in clone/template flows (populateRuleRow reads the
+                // editing key first, config-rules.js)
+                if (editMode) {
+                    page._editingPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
+                } else {
+                    page._cloningPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
+                }
+
+                // Populate rules and per-group MaxItems into this logic group
+                SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
+            });
+        } else {
+            // No rules exist - create an initial logic group with a placeholder rule
+            SmartLists.createInitialLogicGroup(page);
+        }
+
+        // Clear and populate bumper rules
+        SmartLists.populateBumperConfigIntoForm(page, playlist);
+
+        // Set sort options AFTER rules are populated so hasSimilarToRuleInForm() can detect them
+        SmartLists.loadSortOptionsIntoUI(page, playlist);
+        // Update sort options visibility based on populated rules
+        SmartLists.updateAllSortOptionsVisibility(page);
+
+        // Update field selects first, then per-field options visibility based on selected media types
+        SmartLists.updateAllFieldSelects(page);
+        SmartLists.updateAllTagsOptionsVisibility(page);
+        SmartLists.updateAllStudiosOptionsVisibility(page);
+        SmartLists.updateAllGenresOptionsVisibility(page);
+        SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
+        SmartLists.updateAllCollectionsOptionsVisibility(page);
+        SmartLists.updateAllNextUnwatchedOptionsVisibility(page);
+
+        // Update button visibility
+        SmartLists.updateRuleButtonVisibility(page);
+
+        // Clear flag to re-enable change event handlers
+        page._skipMediaTypeChangeHandlers = false;
+
+        // Clear any pending media type update timers just in case
+        if (page._mediaTypeUpdateTimer) {
+            clearTimeout(page._mediaTypeUpdateTimer);
+            page._mediaTypeUpdateTimer = null;
+        }
+
+        if (editMode) {
+            // Set edit mode state
+            SmartLists.setPageEditState(page, true, opts.playlistId);
+
+            // Update UI to show edit mode
+            const editIndicator = page.querySelector('#edit-mode-indicator');
+            if (editIndicator) {
+                editIndicator.style.display = 'flex';
+            }
+            // Templates create new lists - hide the picker while editing so
+            // "Use" can't silently abandon the in-progress edit
+            const templatePickerEdit = page.querySelector('#templatePickerContainer');
+            if (templatePickerEdit) {
+                templatePickerEdit.style.display = 'none';
+            }
+            const submitBtn = page.querySelector('#submitBtn');
+            if (submitBtn) {
+                const currentListType = SmartLists.getElementValue(page, '#listType', 'Playlist');
+                submitBtn.textContent = 'Update ' + currentListType;
+            }
+
+            // Update tab button text
+            const createTabButton = page.querySelector('a[data-tab="create"]');
+            if (createTabButton) {
+                createTabButton.textContent = 'Edit List';
+            }
+        } else {
+            // Reset any stale edit-mode UI (e.g. a template applied, or a list
+            // cloned, while the form was in edit mode)
+            const editIndicator = page.querySelector('#edit-mode-indicator');
+            if (editIndicator) {
+                editIndicator.style.display = 'none';
+            }
+            const submitBtn = page.querySelector('#submitBtn');
+            if (submitBtn) {
+                submitBtn.textContent = 'Create ' + listType;
+            }
+            const createTabButton = page.querySelector('a[data-tab="create"]');
+            if (createTabButton) {
+                createTabButton.textContent = 'Create List';
+            }
+            // Restore the template picker hidden by a previous edit session
+            const templatePicker = page.querySelector('#templatePickerContainer');
+            if (templatePicker) {
+                templatePicker.style.display = '';
+            }
+            // Drop image rows and pending image ops from an abandoned edit
+            // session so they can't be applied to the newly created list
+            if (SmartLists.initCustomImagesContainer) {
+                SmartLists.initCustomImagesContainer(page);
+            }
+        }
+
+        // Populate metadata fields
+        SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
+        SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
+        SmartLists.setElementValue(page, '#metadataFavorite', playlist.Favorite === true ? 'true' : (playlist.Favorite === false ? 'false' : ''));
+        page._metadataTagsWasManaged = playlist.Tags !== undefined && playlist.Tags !== null;
+        if (SmartLists.initMetadataTagsInput) {
+            SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
+        }
+
+        if (editMode) {
+            // Load existing images for this list, then re-sync the
+            // Advanced fold so an images-only list still expands.
+            if (SmartLists.loadExistingImages) {
+                SmartLists.loadExistingImages(page, opts.playlistId).then(function () {
+                    SmartLists.syncAdvancedSection(page, playlist);
+                });
+            }
+        }
+
+        // Chips + auto-expand from the populated config (images re-sync above in edit mode)
+        SmartLists.syncAdvancedSection(page, playlist);
+    };
+
     SmartLists.editPlaylist = function (page, playlistId) {
         const apiClient = SmartLists.getApiClient();
         Dashboard.showLoadingMsg();
@@ -916,190 +1213,7 @@
             }
 
             try {
-                // Store CreatedByUserId to preserve it during updates
-                if (playlist.CreatedByUserId) {
-                    page._editingPlaylistCreatedByUserId = playlist.CreatedByUserId;
-                }
-
-                // Determine list type
-                const listType = playlist.Type || 'Playlist';
-                const isCollection = listType === 'Collection';
-
-                // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
-                // This ensures pendingUserIds is set before loadUsers checks for it
-                SmartLists.stagePendingUserSelection(page, playlist, isCollection);
-
-                // Set list type
-                SmartLists.setElementValue(page, '#listType', listType);
-
-                // Trigger type change handler to show/hide fields
-                SmartLists.handleListTypeChange(page);
-
-                // Populate form with playlist data using helper functions
-                SmartLists.setElementValue(page, '#playlistName', playlist.Name || '');
-
-                // Only set public for playlists
-                if (!isCollection) {
-                    SmartLists.setElementChecked(page, '#playlistIsPublic', playlist.Public || false);
-                }
-
-                SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
-                SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
-                SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
-
-                // Handle AutoRefresh with backward compatibility
-                const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
-                const autoRefreshElement = page.querySelector('#autoRefreshMode');
-                if (autoRefreshElement) {
-                    autoRefreshElement.value = autoRefreshValue;
-                }
-
-                // Handle schedule settings with backward compatibility
-                SmartLists.loadSchedulesIntoUI(page, playlist);
-
-                // Handle visibility schedule settings
-                SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
-
-                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
-
-                // Handle MaxItems with backward compatibility for existing playlists
-                // Default to 0 (unlimited) for old playlists that didn't have this setting
-                const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
-                const maxItemsElement = page.querySelector('#playlistMaxItems');
-                if (maxItemsElement) {
-                    maxItemsElement.value = maxItemsValue;
-                } else {
-                    console.warn('Max Items element not found when trying to populate edit form');
-                }
-
-                // Handle MaxPlayTimeMinutes with backward compatibility for existing playlists
-                // Default to 0 (unlimited) for old playlists that didn't have this setting
-                const maxPlayTimeMinutesValue = (playlist.MaxPlayTimeMinutes !== undefined && playlist.MaxPlayTimeMinutes !== null) ? playlist.MaxPlayTimeMinutes : 0;
-                const maxPlayTimeMinutesElement = page.querySelector('#playlistMaxPlayTimeMinutes');
-                if (maxPlayTimeMinutesElement) {
-                    maxPlayTimeMinutesElement.value = maxPlayTimeMinutesValue;
-                } else {
-                    console.warn('Max Playtime Minutes element not found when trying to populate edit form');
-                }
-
-                // Set media types
-                // Set flag to skip change event handlers while we programmatically set checkbox states
-                page._skipMediaTypeChangeHandlers = true;
-
-                if (playlist.MediaTypes && playlist.MediaTypes.length > 0) {
-                    SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', playlist.MediaTypes, 'media-type-multi-select-checkbox', 'Select media types...');
-                } else {
-                    SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', [], 'media-type-multi-select-checkbox', 'Select media types...');
-                }
-
-                // Clear flag to re-enable change event handlers
-                page._skipMediaTypeChangeHandlers = false;
-
-                // Update Include Extras visibility based on loaded media types
-                if (SmartLists.updateIncludeExtrasVisibility) {
-                    SmartLists.updateIncludeExtrasVisibility(page);
-                }
-                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
-
-                // Set the list owner (for both playlists and collections)
-                // isCollection is already declared above on line 425
-                if (isCollection) {
-                    // Collections always have single user
-                    const userIdString = playlist.UserId ? String(playlist.UserId) : null;
-                    if (userIdString) {
-                        SmartLists.setUserIdValueWithRetry(page, userIdString);
-                    }
-                } else {
-                    // Playlists can have multiple users; selection was staged above
-                    SmartLists.applyPendingUserSelection(page);
-                    // If checkboxes don't exist yet, loadUsers will set them when it finishes
-                }
-
-                // Clear existing rules (applies to both playlists and collections)
-                const rulesContainer = page.querySelector('#rules-container');
-                rulesContainer.innerHTML = '';
-
-                // Populate logic groups and rules
-                if (playlist.ExpressionSets && playlist.ExpressionSets.length > 0 &&
-                    playlist.ExpressionSets.some(function (es) { return es.Expressions && es.Expressions.length > 0; })) {
-                    playlist.ExpressionSets.forEach(function (expressionSet, groupIndex) {
-                        const logicGroup = groupIndex === 0 ? SmartLists.createInitialLogicGroup(page) : SmartLists.addNewLogicGroup(page);
-
-                        // Store similarity comparison fields on page for populateRuleRow to access
-                        page._editingPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
-
-                        // Populate rules and per-group MaxItems into this logic group
-                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
-                    });
-                } else {
-                    // No rules exist - create an initial logic group with a placeholder rule
-                    // This matches the behavior when creating a new playlist
-                    SmartLists.createInitialLogicGroup(page);
-                }
-
-                // Clear and populate bumper rules
-                SmartLists.populateBumperConfigIntoForm(page, playlist);
-
-                // Set sort options AFTER rules are populated so hasSimilarToRuleInForm() can detect them
-                SmartLists.loadSortOptionsIntoUI(page, playlist);
-                // Update sort options visibility based on populated rules
-                SmartLists.updateAllSortOptionsVisibility(page);
-
-                // Update field selects first, then per-field options visibility based on selected media types
-                SmartLists.updateAllFieldSelects(page);
-                SmartLists.updateAllTagsOptionsVisibility(page);
-                SmartLists.updateAllStudiosOptionsVisibility(page);
-                SmartLists.updateAllGenresOptionsVisibility(page);
-                SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
-                SmartLists.updateAllCollectionsOptionsVisibility(page);
-                SmartLists.updateAllNextUnwatchedOptionsVisibility(page);
-
-                // Update button visibility
-                SmartLists.updateRuleButtonVisibility(page);
-
-                // Set edit mode state
-                SmartLists.setPageEditState(page, true, playlistId);
-
-                // Update UI to show edit mode
-                const editIndicator = page.querySelector('#edit-mode-indicator');
-                if (editIndicator) {
-                    editIndicator.style.display = 'flex';
-                }
-                const submitBtn = page.querySelector('#submitBtn');
-                if (submitBtn) {
-                    const currentListType = SmartLists.getElementValue(page, '#listType', 'Playlist');
-                    submitBtn.textContent = 'Update ' + currentListType;
-                }
-
-                // Update tab button text
-                const createTabButton = page.querySelector('a[data-tab="create"]');
-                if (createTabButton) {
-                    createTabButton.textContent = 'Edit List';
-                }
-
-                // Switch to Create tab to show edit form
-                SmartLists.switchToTab(page, 'create');
-
-                // Populate metadata fields
-                SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
-                SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
-                SmartLists.setElementValue(page, '#metadataFavorite', playlist.Favorite === true ? 'true' : (playlist.Favorite === false ? 'false' : ''));
-                page._metadataTagsWasManaged = playlist.Tags !== undefined && playlist.Tags !== null;
-                if (SmartLists.initMetadataTagsInput) {
-                    SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
-                }
-
-                // Load existing images for this playlist, then re-sync the
-                // Advanced fold so an images-only list still expands.
-                if (SmartLists.loadExistingImages) {
-                    SmartLists.loadExistingImages(page, playlistId).then(function () {
-                        SmartLists.syncAdvancedSection(page, playlist);
-                    });
-                }
-
-                // Chips + auto-expand from the loaded list (images re-sync above)
-                SmartLists.syncAdvancedSection(page, playlist);
-
+                SmartLists.populateFormFromDto(page, playlist, { editMode: true, playlistId: playlistId });
             } catch (formError) {
                 console.error('Error populating form for edit:', formError);
                 SmartLists.showNotification('Error loading playlist data for editing: ' + formError.message);
@@ -1136,167 +1250,10 @@
             }
 
             try {
-                // Determine list type
-                const listType = playlist.Type || 'Playlist';
-                const isCollection = listType === 'Collection';
-
-                // Extract userIds BEFORE calling handleListTypeChange (which triggers loadUsers)
-                // This ensures pendingUserIds is set before loadUsers checks for it
-                SmartLists.stagePendingUserSelection(page, playlist, isCollection);
-
-                // Set playlist name FIRST (before switchToTab) to prevent populateFormDefaults from being called
-                // switchToTab checks if name is empty and calls populateFormDefaults if so, which would regenerate checkboxes
-                SmartLists.setElementValue(page, '#playlistName', (playlist.Name || '') + ' (Copy)');
-
-                // Switch to Create tab
-                SmartLists.switchToTab(page, 'create');
-
-                // Clear any existing edit state
-                SmartLists.setPageEditState(page, false, null);
-
-                // Set list type
-                SmartLists.setElementValue(page, '#listType', listType);
-
-                // Set flag to prevent media type change handlers from interfering during cloning setup
-                page._skipMediaTypeChangeHandlers = true;
-
-                // Trigger type change handler to show/hide fields
-                SmartLists.handleListTypeChange(page);
-
-                // Only set public for playlists
-                if (!isCollection) {
-                    SmartLists.setElementChecked(page, '#playlistIsPublic', playlist.Public || false);
-                }
-
-                SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false);
-                SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
-                SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
-
-                // Handle AutoRefresh
-                const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
-                const autoRefreshElement = page.querySelector('#autoRefreshMode');
-                if (autoRefreshElement) {
-                    autoRefreshElement.value = autoRefreshValue;
-                }
-
-                // Handle schedule settings with backward compatibility (same as editPlaylist)
-                SmartLists.loadSchedulesIntoUI(page, playlist);
-
-                // Handle visibility schedule settings (same as editPlaylist)
-                SmartLists.loadVisibilitySchedulesIntoUI(page, playlist);
-
-                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
-
-                // Handle MaxItems
-                const maxItemsValue = (playlist.MaxItems !== undefined && playlist.MaxItems !== null) ? playlist.MaxItems : 0;
-                const maxItemsElement = page.querySelector('#playlistMaxItems');
-                if (maxItemsElement) {
-                    maxItemsElement.value = maxItemsValue;
-                }
-
-                // Handle MaxPlayTimeMinutes
-                const maxPlayTimeMinutesValue = (playlist.MaxPlayTimeMinutes !== undefined && playlist.MaxPlayTimeMinutes !== null) ? playlist.MaxPlayTimeMinutes : 0;
-                const maxPlayTimeMinutesElement = page.querySelector('#playlistMaxPlayTimeMinutes');
-                if (maxPlayTimeMinutesElement) {
-                    maxPlayTimeMinutesElement.value = maxPlayTimeMinutesValue;
-                }
-
-                // Store media types to set later (after all updates are complete)
-                const clonedMediaTypes = playlist.MediaTypes && playlist.MediaTypes.length > 0 ? playlist.MediaTypes : [];
-
-                // Set media types BEFORE populating rules so that rule population can check selected media types
-                // Flag was already set at the beginning of clone process to prevent interference
-                // Set the media types from the cloned playlist
-                SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', clonedMediaTypes, 'media-type-multi-select-checkbox', 'Select media types...');
-
-                // Update Include Extras visibility based on cloned media types
-                if (SmartLists.updateIncludeExtrasVisibility) {
-                    SmartLists.updateIncludeExtrasVisibility(page);
-                }
-                SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
-
-                // Set the list owner (for both playlists and collections)
-                // isCollection is already declared above on line 650
-                if (isCollection) {
-                    // Collections always have single user
-                    const userIdString = playlist.UserId ? String(playlist.UserId) : null;
-                    if (userIdString) {
-                        SmartLists.setUserIdValueWithRetry(page, userIdString);
-                    }
-                } else {
-                    // Playlists can have multiple users; selection was staged above
-                    SmartLists.applyPendingUserSelection(page);
-                    // If checkboxes don't exist yet, loadUsers will set them when it finishes
-                }
-
-                // Clear existing rules and populate with cloned rules (applies to both playlists and collections)
-                const rulesContainer = page.querySelector('#rules-container');
-                if (rulesContainer) {
-                    rulesContainer.innerHTML = '';
-                }
-
-                // Populate rules from cloned playlist
-                if (playlist.ExpressionSets && playlist.ExpressionSets.length > 0) {
-                    playlist.ExpressionSets.forEach(function (expressionSet, setIndex) {
-                        const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page) : SmartLists.addNewLogicGroup(page);
-
-                        // Store similarity comparison fields on page for populateRuleRow to access
-                        page._cloningPlaylistSimilarityFields = playlist.SimilarityComparisonFields;
-
-                        // Populate rules and per-group MaxItems into this logic group
-                        SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
-                    });
-                } else {
-                    // If no rules, create initial empty group
-                    SmartLists.createInitialLogicGroup(page);
-                }
-
-                // Clear and populate bumper rules
-                SmartLists.populateBumperConfigIntoForm(page, playlist);
-
-                // Update button visibility
-                SmartLists.updateRuleButtonVisibility(page);
-
-                // Update field selects first, then per-field options visibility based on selected media types
-                SmartLists.updateAllFieldSelects(page);
-                SmartLists.updateAllTagsOptionsVisibility(page);
-                SmartLists.updateAllStudiosOptionsVisibility(page);
-                SmartLists.updateAllGenresOptionsVisibility(page);
-                SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
-                SmartLists.updateAllCollectionsOptionsVisibility(page);
-                SmartLists.updateAllNextUnwatchedOptionsVisibility(page);
-
-                // Set sort options AFTER rules are populated so hasSimilarToRuleInForm() can detect them
-                SmartLists.loadSortOptionsIntoUI(page, playlist);
-                // Update sort options visibility based on populated rules
-                SmartLists.updateAllSortOptionsVisibility(page);
-
-
-
-                // Clear flag to re-enable change event handlers
-                page._skipMediaTypeChangeHandlers = false;
-
-                // Clear any pending media type update timers just in case
-                if (page._mediaTypeUpdateTimer) {
-                    clearTimeout(page._mediaTypeUpdateTimer);
-                    page._mediaTypeUpdateTimer = null;
-                }
-
-                // Populate metadata fields
-                SmartLists.setElementValue(page, '#metadataSortTitle', playlist.SortTitle || '');
-                SmartLists.setElementValue(page, '#metadataOverview', playlist.Overview || '');
-                SmartLists.setElementValue(page, '#metadataFavorite', playlist.Favorite === true ? 'true' : (playlist.Favorite === false ? 'false' : ''));
-                page._metadataTagsWasManaged = playlist.Tags !== undefined && playlist.Tags !== null;
-                if (SmartLists.initMetadataTagsInput) {
-                    SmartLists.initMetadataTagsInput(page, playlist.Tags || []);
-                }
-
-                // Chips + auto-expand for cloned advanced config
-                SmartLists.syncAdvancedSection(page, playlist);
+                SmartLists.populateFormFromDto(page, playlist, { name: (playlist.Name || '') + ' (Copy)' });
 
                 // Show success message
                 SmartLists.showNotification('List "' + playlistName + '" cloned successfully! You can now modify and create the new list.', 'success');
-
             } catch (formError) {
                 console.error('Error populating form for clone:', formError);
                 SmartLists.showNotification('Error loading list data for cloning: ' + formError.message);

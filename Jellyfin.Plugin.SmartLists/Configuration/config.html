@@ -50,6 +50,23 @@
                             <span style="color: var(--jf-palette-Alert-warningColor); font-weight: 500;">✏️ Editing Mode - Modifying existing list</span>
                             <button type="button" id="cancelEditBtn" class="emby-button raised">Cancel Edit</button>
                         </div>
+                        <div class="inputContainer" id="templatePickerContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="templateSelect" style="display: flex; align-items: center;">
+                                Start from a template (optional)
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#start-from-a-template"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
+                            <div style="display: flex; gap: 0.5em; align-items: center;">
+                                <select is="emby-select" id="templateSelect" class="emby-select" style="flex: 1;">
+                                </select>
+                                <button type="button" id="useTemplateBtn" class="emby-button raised" disabled>Use</button>
+                            </div>
+                            <div id="templateDescription" class="fieldDescription" style="display: none; margin-top: 0.4em;"></div>
+                        </div>
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" for="listType" style="display: flex; align-items: center;">
                                 List Type
@@ -1258,6 +1275,8 @@
         <script src="configurationpage?name=config-rules.js"></script>
         <!-- List CRUD operations -->
         <script src="configurationpage?name=config-lists.js"></script>
+        <!-- Template catalog and picker -->
+        <script src="configurationpage?name=config-templates.js"></script>
         <!-- Filtering and search -->
         <script src="configurationpage?name=config-filters.js"></script>
         <!-- Bulk actions -->
