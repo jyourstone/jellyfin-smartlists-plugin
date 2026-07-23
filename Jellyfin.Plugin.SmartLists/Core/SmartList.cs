@@ -1452,11 +1452,31 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// the same song (album + compilation + live versions) can match one list entry; only the
         /// best match survives — exact MusicBrainz recording ID first, then title matches that
         /// needed no trailing "(...)" group stripping, then the rest. Items that did not match a
-        /// music external list are never dropped.
+        /// music external list are never dropped. Only this list's own ExternalList rule URLs are
+        /// considered: the refresh cache retains fetched data for other lists (shared, additive),
+        /// and matches against those must not affect this list's results.
         /// </summary>
-        private static List<BaseItem> DedupExternalMusicListMatches(List<BaseItem> items, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+        private List<BaseItem> DedupExternalMusicListMatches(List<BaseItem> items, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             if (refreshCache.MusicListPositionsByUrl.IsEmpty)
+            {
+                return items;
+            }
+
+            // URLs referenced by this list's own ExternalList rules
+            var activeListUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var set in ExpressionSets ?? [])
+            {
+                foreach (var expr in set?.Expressions ?? [])
+                {
+                    if (expr?.MemberName == "ExternalList" && !string.IsNullOrWhiteSpace(expr.TargetValue))
+                    {
+                        activeListUrls.Add(expr.TargetValue);
+                    }
+                }
+            }
+
+            if (activeListUrls.Count == 0)
             {
                 return items;
             }
@@ -1472,6 +1492,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 foreach (var entry in positionsByUrl)
                 {
+                    if (!activeListUrls.Contains(entry.Key))
+                    {
+                        continue;
+                    }
+
                     var key = (entry.Key, entry.Value);
                     if (!groups.TryGetValue(key, out var group))
                     {
