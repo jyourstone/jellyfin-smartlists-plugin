@@ -209,6 +209,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     .Select(itemId => LinkedChildFactory.Create(itemId, mediaLookup[itemId]))
                     .ToArray();
 
+                var resolvedItems = finalItemIds.Select(id => mediaLookup[id]).ToArray();
+
                 // Calculate playlist statistics from the same filtered list used for the actual playlist
                 dto.ItemCount = newLinkedChildren.Length;
                 dto.TotalRuntimeMinutes = RuntimeCalculator.CalculateTotalRuntimeMinutes(
@@ -385,7 +387,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     }
 
                     // Update the playlist items (includes metadata refresh)
-                    await UpdatePlaylistPublicStatusAsync(existingPlaylist, dto.Public, newLinkedChildren, dto, user, cancellationToken);
+                    await UpdatePlaylistPublicStatusAsync(existingPlaylist, dto.Public, newLinkedChildren, resolvedItems, dto, user, cancellationToken);
 
                     logger.LogDebug("Successfully updated existing playlist: {PlaylistName} with {ItemCount} items",
                         existingPlaylist.Name, newLinkedChildren.Length);
@@ -438,7 +440,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // Create new playlist
                     logger.LogDebug("Creating new playlist: {PlaylistName}", smartPlaylistName);
 
-                    var newPlaylistId = await CreateNewPlaylistAsync(smartPlaylistName, user, dto.Public, newLinkedChildren, dto, cancellationToken);
+                    var newPlaylistId = await CreateNewPlaylistAsync(smartPlaylistName, user, dto.Public, newLinkedChildren, resolvedItems, dto, cancellationToken);
 
                     // Check if playlist creation actually succeeded
                     if (string.IsNullOrEmpty(newPlaylistId))
@@ -849,7 +851,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
         }
 
-        private async Task UpdatePlaylistPublicStatusAsync(Playlist playlist, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, User user, CancellationToken cancellationToken)
+        private async Task UpdatePlaylistPublicStatusAsync(Playlist playlist, bool isPublic, LinkedChild[] linkedChildren, IReadOnlyList<BaseItem> resolvedChildren, SmartPlaylistDto dto, User user, CancellationToken cancellationToken)
         {
             _logger.LogDebug("Updating playlist {PlaylistName} public status to {PublicStatus} and items to {ItemCount}",
     playlist.Name, isPublic ? "public" : "private", linkedChildren.Length);
@@ -889,6 +891,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             var mediaType = DeterminePlaylistMediaType(dto);
             SetPlaylistMediaType(playlist, mediaType);
 
+            UpdateAggregateMetadata(playlist, resolvedChildren);
+
             // Save the changes after updating PlaylistMediaType
             await playlist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
 
@@ -912,7 +916,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             await ApplyCustomMetadataAsync(playlist, dto, user, cancellationToken).ConfigureAwait(false);
         }
 
-        private async Task<string> CreateNewPlaylistAsync(string playlistName, User user, bool isPublic, LinkedChild[] linkedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
+        private async Task<string> CreateNewPlaylistAsync(string playlistName, User user, bool isPublic, LinkedChild[] linkedChildren, IReadOnlyList<BaseItem> resolvedChildren, SmartPlaylistDto dto, CancellationToken cancellationToken)
         {
             _logger.LogDebug("Creating new smart playlist {PlaylistName} with {ItemCount} items and {PublicStatus} status",
                 playlistName, linkedChildren.Length, isPublic ? "public" : "private");
@@ -941,6 +945,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Set MediaType before persisting to avoid a second write
                 var mediaType = DeterminePlaylistMediaType(dto);
                 SetPlaylistMediaType(newPlaylist, mediaType);
+
+                UpdateAggregateMetadata(newPlaylist, resolvedChildren);
 
                 // Persist once with items + media type
                 await newPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -1726,6 +1732,47 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error setting playlist {PlaylistName} MediaType to {MediaType}", playlist.Name, mediaType);
+            }
+        }
+
+        /// <summary>
+        /// Mirrors the child aggregation Jellyfin's provider refresh normally performs
+        /// (MetadataService.UpdateMetadataFromChildren): cumulative runtime, genres, studios, and official rating.
+        /// Required because the plugin saves playlists via UpdateToRepositoryAsync,
+        /// which bypasses the provider pipeline that computes these fields.
+        /// </summary>
+        /// <param name="playlist">The playlist whose aggregate metadata to update.</param>
+        /// <param name="children">The resolved playlist items to aggregate from.</param>
+        private static void UpdateAggregateMetadata(Playlist playlist, IReadOnlyList<BaseItem> children)
+        {
+            long ticks = 0;
+            foreach (var child in children)
+            {
+                if (!child.IsFolder)
+                {
+                    ticks += child.RunTimeTicks ?? 0;
+                }
+            }
+
+            playlist.RunTimeTicks = ticks;
+
+            if (!playlist.IsLocked && !playlist.LockedFields.Contains(MetadataField.Genres))
+            {
+                playlist.Genres = children.SelectMany(c => c.Genres)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
+            if (!playlist.IsLocked && !playlist.LockedFields.Contains(MetadataField.Studios))
+            {
+                playlist.Studios = children.SelectMany(c => c.Studios)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
+            if (!playlist.IsLocked && !playlist.LockedFields.Contains(MetadataField.OfficialRating))
+            {
+                playlist.UpdateRatingToItems(children);
             }
         }
 
