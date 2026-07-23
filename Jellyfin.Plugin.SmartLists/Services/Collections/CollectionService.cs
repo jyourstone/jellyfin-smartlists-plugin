@@ -240,6 +240,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         // ExternalListData (the fetched list data) is kept since it's shared and additive across playlists.
                         refreshCache.ItemExternalLists.Clear();
                         refreshCache.ExternalListPositions.Clear();
+                        refreshCache.MusicListPositionsByUrl.Clear();
 
                         var fetchLimit = ExternalListService.ComputeFetchLimit();
                         _logger.LogDebug("Pre-fetching {Count} external list(s) for collection '{CollectionName}' (fetchLimit: {FetchLimit})", fieldReqs.ExternalListUrls.Count, dto.Name, fetchLimit);

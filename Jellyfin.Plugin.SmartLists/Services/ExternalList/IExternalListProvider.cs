@@ -239,8 +239,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <summary>
-        /// Tries to find the position for a music track by recording MBID first, then by every
-        /// normalized title|artist key. Returns the minimum position across all matches.
+        /// Tries to find the position for a music track. Items with a MusicBrainz recording MBID
+        /// match by MBID only — the tag is authoritative, so a tagged recording that is not in
+        /// the list (e.g. a live version with its own MBID) never falls back to title|artist
+        /// matching. Untagged items match by normalized title|artist keys, returning the minimum
+        /// position across all matches.
         /// </summary>
         /// <param name="recordingMbid">The MusicBrainz recording MBID, if available.</param>
         /// <param name="title">The track title, if available.</param>
@@ -249,20 +252,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <returns>True if the recording MBID or any title|artist key matched.</returns>
         public bool TryGetMusicPosition(string? recordingMbid, string? title, IEnumerable<string>? artistNames, out int position)
         {
-            var found = false;
             position = -1;
 
-            if (!string.IsNullOrEmpty(recordingMbid) && MusicRecordingIds.TryGetValue(recordingMbid, out var recordingPosition))
+            if (!string.IsNullOrEmpty(recordingMbid))
             {
-                position = recordingPosition;
-                found = true;
+                if (MusicRecordingIds.TryGetValue(recordingMbid, out var recordingPosition))
+                {
+                    position = recordingPosition;
+                    return true;
+                }
+
+                return false;
             }
 
             if (artistNames == null || MusicMatchKey.NormalizeTitle(title).Length == 0)
             {
-                return found;
+                return false;
             }
 
+            var found = false;
             foreach (var artist in artistNames)
             {
                 // Mirror AddMusicTrack: artists that normalize to empty never have keys stored.

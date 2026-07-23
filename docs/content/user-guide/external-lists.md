@@ -162,7 +162,7 @@ External List / equals / https://listenbrainz.org/syndication-feed/user/rob/reco
 ```
 
 !!! note "How Music Matching Works"
-    Tracks are matched by MusicBrainz recording IDs, which Jellyfin reads from your music files' embedded tags (e.g., files tagged with [MusicBrainz Picard](https://picard.musicbrainz.org)). Tracks without a MusicBrainz recording ID fall back to title + artist matching, so untagged libraries work too — though tagged libraries will match more reliably.
+    Tracks are matched by MusicBrainz recording IDs, which Jellyfin reads from your music files' embedded tags (e.g., files tagged with [MusicBrainz Picard](https://picard.musicbrainz.org)). Files tagged with a recording ID only match by that ID — they never fall back to title + artist matching. Untagged files fall back to title + artist matching, so untagged libraries work too — though tagged libraries will match more reliably. When several library items match the same track (e.g., the same song on an album, a compilation, and a live release), only the best match is added — an exact recording ID match is preferred, then a title match that didn't need a "(Live)"-style suffix stripped.
 
 !!! note "Private Playlists"
     Public playlists work without any configuration. To use your own private playlists, configure a ListenBrainz user token in the plugin settings (see Setup above).

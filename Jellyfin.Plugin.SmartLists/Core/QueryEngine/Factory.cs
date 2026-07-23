@@ -4314,16 +4314,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 var recordingMbid = baseItem.GetProviderId("MusicBrainzRecording");
                 var artistNames = (baseItem as Audio)?.Artists;
+                var positionsByUrl = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var kvp in cache.ExternalListData)
                 {
                     if (kvp.Value.TryGetMusicPosition(recordingMbid, baseItem.Name, artistNames, out var trackPosition))
                     {
                         matchingLists.Add(kvp.Key);
+                        positionsByUrl[kvp.Key] = trackPosition;
                         // Cache the best (lowest) position across all matched external lists for sorting
                         cache.ExternalListPositions.AddOrUpdate(baseItem.Id, trackPosition, (_, existing) => Math.Min(existing, trackPosition));
                         logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, kvp.Key, trackPosition);
                     }
+                }
+
+                if (positionsByUrl.Count > 0)
+                {
+                    cache.MusicListPositionsByUrl[baseItem.Id] = positionsByUrl;
                 }
 
                 cache.ItemExternalLists[baseItem.Id] = matchingLists;

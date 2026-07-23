@@ -9,11 +9,13 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.Orders;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SmartLists.Core
@@ -1097,6 +1099,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Playlist '{PlaylistName}' expanded from {OriginalCount} items to {ExpandedCount} items after Collections processing",
                     Name, results.Count, expandedResults.Count);
 
+                // Keep a single library item per matched external-list music track
+                expandedResults = DedupExternalMusicListMatches(expandedResults, refreshCache, logger);
+
                 expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
 
                 // Apply per-group limits if configured (before sorting and global limits)
@@ -1440,6 +1445,87 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogError(ex, "Error applying per-group limits for playlist '{PlaylistName}'. Returning all items.", Name);
                 return items;
             }
+        }
+
+        /// <summary>
+        /// Keeps a single library item per matched external-list music track. Multiple copies of
+        /// the same song (album + compilation + live versions) can match one list entry; only the
+        /// best match survives — exact MusicBrainz recording ID first, then title matches that
+        /// needed no trailing "(...)" group stripping, then the rest. Items that did not match a
+        /// music external list are never dropped.
+        /// </summary>
+        private static List<BaseItem> DedupExternalMusicListMatches(List<BaseItem> items, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+        {
+            if (refreshCache.MusicListPositionsByUrl.IsEmpty)
+            {
+                return items;
+            }
+
+            // Group candidate items by (list URL, track position)
+            var groups = new Dictionary<(string Url, int Position), List<BaseItem>>();
+            foreach (var item in items)
+            {
+                if (!refreshCache.MusicListPositionsByUrl.TryGetValue(item.Id, out var positionsByUrl))
+                {
+                    continue;
+                }
+
+                foreach (var entry in positionsByUrl)
+                {
+                    var key = (entry.Key, entry.Value);
+                    if (!groups.TryGetValue(key, out var group))
+                    {
+                        group = [];
+                        groups[key] = group;
+                    }
+
+                    group.Add(item);
+                }
+            }
+
+            // An item survives when it wins at least one of the tracks it matched
+            var winners = new HashSet<Guid>();
+            var losers = new HashSet<Guid>();
+            foreach (var group in groups.Values)
+            {
+                var winner = group
+                    .OrderBy(MusicListMatchRank)
+                    .ThenBy(i => i.Id)
+                    .First();
+                winners.Add(winner.Id);
+                foreach (var item in group)
+                {
+                    if (item.Id != winner.Id)
+                    {
+                        losers.Add(item.Id);
+                    }
+                }
+            }
+
+            losers.ExceptWith(winners);
+            if (losers.Count == 0)
+            {
+                return items;
+            }
+
+            logger?.LogDebug("External music list dedup removed {Count} duplicate track match(es)", losers.Count);
+            return items.Where(i => !losers.Contains(i.Id)).ToList();
+        }
+
+        /// <summary>
+        /// Ranks how strongly a library item matched an external music list entry. Lower is better:
+        /// 0 = exact recording MBID match (tagged items never match via fallback), 1 = title|artist
+        /// fallback with a clean title, 2 = fallback where a trailing "(Live)"-style group was
+        /// stripped to match.
+        /// </summary>
+        private static int MusicListMatchRank(BaseItem item)
+        {
+            if (!string.IsNullOrEmpty(item.GetProviderId("MusicBrainzRecording")))
+            {
+                return 0;
+            }
+
+            return MusicMatchKey.HasTrailingGroup(item.Name) ? 2 : 1;
         }
 
         /// <summary>
