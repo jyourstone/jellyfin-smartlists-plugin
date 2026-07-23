@@ -785,6 +785,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // Maps ItemId → best (lowest) position across all matched external lists (for External List Order sorting)
             public ConcurrentDictionary<Guid, int> ExternalListPositions { get; } = new();
 
+            // Maps ItemId → (external list URL → matched track position) for music items.
+            // Used by SmartList to keep a single library item per external-list track.
+            public ConcurrentDictionary<Guid, Dictionary<string, int>> MusicListPositionsByUrl { get; } = new();
+
             // Warnings collected during processing (e.g., missing API keys, fetch failures)
             public ConcurrentBag<string> Warnings { get; } = [];
         }

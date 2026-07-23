@@ -46,6 +46,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return Normalize(s, stripTrailingGroups: false);
         }
 
+        /// <summary>
+        /// Returns whether the title ends with a parenthetical/bracket group that
+        /// <see cref="NormalizeTitle"/> would strip, e.g. "Song (Live)".
+        /// </summary>
+        /// <param name="title">The raw title.</param>
+        /// <returns>True when a trailing group is present.</returns>
+        public static bool HasTrailingGroup(string? title)
+        {
+            return !string.IsNullOrEmpty(title) && TrailingGroupPattern().IsMatch(title);
+        }
+
         private static string Normalize(string? s, bool stripTrailingGroups)
         {
             if (string.IsNullOrWhiteSpace(s))
