@@ -415,6 +415,16 @@
         return false;
     };
 
+    /**
+     * Resolve the hide-when-empty default for new lists.
+     * Single JS source of truth — must stay in sync with the
+     * PluginConfiguration.DefaultHideWhenEmpty initializer (true) in C#.
+     * Pass null when no config is available (user page, config fetch failure).
+     */
+    SmartLists.getDefaultHideWhenEmpty = function (config) {
+        return !config || config.DefaultHideWhenEmpty !== false;
+    };
+
     SmartLists.getPluginId = function () {
         return SmartLists.PLUGIN_ID;
     };

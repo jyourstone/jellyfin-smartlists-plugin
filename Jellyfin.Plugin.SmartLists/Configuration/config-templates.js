@@ -331,6 +331,12 @@
         // Deep-copy so form population can never mutate the catalog
         const dto = JSON.parse(JSON.stringify(template.dto));
 
+        // Templates that don't specify HideWhenEmpty inherit the form's current
+        // state, which was prefilled from the configured default for new lists
+        if (dto.HideWhenEmpty === undefined) {
+            dto.HideWhenEmpty = SmartLists.getElementChecked(page, '#playlistHideWhenEmpty', SmartLists.getDefaultHideWhenEmpty(null));
+        }
+
         try {
             SmartLists.populateFormFromDto(page, dto, { name: template.name });
         } catch (formError) {

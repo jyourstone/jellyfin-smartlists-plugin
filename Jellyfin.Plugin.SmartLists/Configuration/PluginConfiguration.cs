@@ -30,6 +30,12 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public bool DefaultMakePublic { get; set; } = false;
 
         /// <summary>
+        /// Gets or sets whether new lists should hide when empty by default.
+        /// Keep the default in sync with SmartLists.getDefaultHideWhenEmpty in config-core.js.
+        /// </summary>
+        public bool DefaultHideWhenEmpty { get; set; } = true;
+
+        /// <summary>
         /// Gets or sets whether to stamp a small smart list badge onto auto-generated
         /// and uploaded cover images so smart lists are recognizable at a glance.
         /// </summary>
