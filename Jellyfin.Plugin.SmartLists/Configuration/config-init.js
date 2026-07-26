@@ -433,7 +433,10 @@
         // Set default public/enabled/extras checkboxes
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
-        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', SmartLists.getDefaultHideWhenEmpty(config));
+        // Cache the resolved default so template application can read it even
+        // after the checkbox has been toggled (e.g. by a previous template)
+        page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(config);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
@@ -488,7 +491,8 @@
         SmartLists.setElementValue(page, '#autoRefreshMode', 'OnLibraryChanges');
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
-        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', SmartLists.getDefaultHideWhenEmpty(null));
+        page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(null);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
