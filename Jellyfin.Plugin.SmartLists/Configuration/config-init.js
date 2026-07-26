@@ -433,7 +433,10 @@
         // Set default public/enabled/extras checkboxes
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
-        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', false);
+        // Cache the resolved default so template application can read it even
+        // after the checkbox has been toggled (e.g. by a previous template)
+        page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(config);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true); // Default to enabled
 
         // Reinitialize schedule system
@@ -488,7 +491,8 @@
         SmartLists.setElementValue(page, '#autoRefreshMode', 'OnLibraryChanges');
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
-        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', false);
+        page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(null);
+        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
 
         // Reinitialize schedule system with fallback defaults
@@ -1890,6 +1894,7 @@
             const defaultIgnoreArticlesContainer = page.querySelector('#defaultIgnoreArticlesContainer');
             const defaultListTypeEl = page.querySelector('#defaultListType');
             const defaultMakePublicEl = page.querySelector('#defaultMakePublic');
+            const defaultHideWhenEmptyEl = page.querySelector('#defaultHideWhenEmpty');
             const defaultMaxItemsEl = page.querySelector('#defaultMaxItems');
             const defaultMaxPlayTimeMinutesEl = page.querySelector('#defaultMaxPlayTimeMinutes');
             const defaultAutoRefreshEl = page.querySelector('#defaultAutoRefresh');
@@ -1920,6 +1925,8 @@
 
             if (defaultListTypeEl) defaultListTypeEl.value = config.DefaultListType || 'Playlist';
             if (defaultMakePublicEl) defaultMakePublicEl.checked = config.DefaultMakePublic || false;
+
+            if (defaultHideWhenEmptyEl) defaultHideWhenEmptyEl.checked = SmartLists.getDefaultHideWhenEmpty(config);
 
             // Smart list badge defaults to enabled, so only an explicit false unchecks it
             const showSmartListBadgeEl = page.querySelector('#showSmartListBadge');
@@ -2053,6 +2060,7 @@
             config.DefaultSortOrder = page.querySelector('#defaultSortOrder').value;
             config.DefaultListType = page.querySelector('#defaultListType').value;
             config.DefaultMakePublic = page.querySelector('#defaultMakePublic').checked;
+            config.DefaultHideWhenEmpty = SmartLists.getElementChecked(page, '#defaultHideWhenEmpty', SmartLists.getDefaultHideWhenEmpty(config));
             config.ShowSmartListBadge = page.querySelector('#showSmartListBadge').checked;
             const defaultMaxItemsInput = page.querySelector('#defaultMaxItems').value;
             if (defaultMaxItemsInput === '') {

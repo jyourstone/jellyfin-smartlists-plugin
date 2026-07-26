@@ -331,6 +331,15 @@
         // Deep-copy so form population can never mutate the catalog
         const dto = JSON.parse(JSON.stringify(template.dto));
 
+        // Templates that don't specify HideWhenEmpty inherit the configured
+        // default for new lists (cached by the form-defaults population; the
+        // live checkbox may have been toggled by a previously applied template)
+        if (dto.HideWhenEmpty === undefined) {
+            dto.HideWhenEmpty = page._defaultHideWhenEmpty !== undefined
+                ? page._defaultHideWhenEmpty
+                : SmartLists.getDefaultHideWhenEmpty(null);
+        }
+
         try {
             SmartLists.populateFormFromDto(page, dto, { name: template.name });
         } catch (formError) {
