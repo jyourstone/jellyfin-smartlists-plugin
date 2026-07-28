@@ -632,34 +632,46 @@
             </div>
         </div>
 
-        <!-- Core utilities and constants (must load first) -->
-        <script src="configurationpage?name=config-core.js"></script>
-        <!-- Formatters and option generators -->
-        <script src="configurationpage?name=config-formatters.js"></script>
-        <!-- Schedule management -->
-        <script src="configurationpage?name=config-schedules.js"></script>
-        <!-- Image management -->
-        <script src="configurationpage?name=config-images.js"></script>
-        <!-- Sort management -->
-        <script src="configurationpage?name=config-sorts.js"></script>
-        <!-- Generic multi-select component -->
-        <script src="configurationpage?name=config-multi-select.js"></script>
-        <!-- Searchable single-select component -->
-        <script src="configurationpage?name=config-searchable-select.js"></script>
-        <!-- Rule management -->
-        <script src="configurationpage?name=config-rules.js"></script>
-        <!-- List CRUD operations -->
-        <script src="configurationpage?name=config-lists.js"></script>
-        <!-- Template catalog and picker -->
-        <script src="configurationpage?name=config-templates.js"></script>
-        <!-- Filtering and search -->
-        <script src="configurationpage?name=config-filters.js"></script>
-        <!-- Bulk actions and playlist card interactions -->
-        <script src="configurationpage?name=config-bulk-actions.js"></script>
-        <!-- API calls -->
-        <script src="configurationpage?name=config-api.js"></script>
-        <!-- Initialization (must load last) -->
-        <script src="configurationpage?name=config-init.js"></script>
+        <!--
+            Module loader - kept identical in shape to config.html. Plain <script src>
+            tags are avoided here too so both pages load their modules the same way;
+            see the longer explanation in config.html and issue #471.
+        -->
+        <script>
+            (function () {
+                var modules = [
+                    'config-core.js',              // Core utilities and constants (must load first)
+                    'config-formatters.js',        // Formatters and option generators
+                    'config-schedules.js',         // Schedule management
+                    'config-images.js',            // Image management
+                    'config-sorts.js',             // Sort management
+                    'config-multi-select.js',      // Generic multi-select component
+                    'config-searchable-select.js', // Searchable single-select component
+                    'config-rules.js',             // Rule management
+                    'config-lists.js',             // List CRUD operations
+                    'config-templates.js',         // Template catalog and picker
+                    'config-filters.js',           // Filtering and search
+                    'config-bulk-actions.js',      // Bulk actions and playlist card interactions
+                    'config-api.js',               // API calls
+                    'config-init.js'               // Initialization (must load last)
+                ];
+
+                for (var i = 0; i < modules.length; i++) {
+                    var script = document.createElement('script');
+                    // Dynamically created scripts default to async; false keeps them
+                    // executing in the order above, which config-init.js depends on.
+                    script.async = false;
+                    script.src = 'configurationpage?name=' + modules[i];
+                    // The SPA re-runs this block on every visit to the page; drop the
+                    // element once it has settled so <head> does not grow unbounded.
+                    // onerror too, so a module that fails to load is not left behind.
+                    script.onload = script.onerror = function () {
+                        this.remove();
+                    };
+                    document.head.appendChild(script);
+                }
+            })();
+        </script>
     </div>
 </body>
 
