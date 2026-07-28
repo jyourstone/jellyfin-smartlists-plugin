@@ -663,8 +663,9 @@
                     script.async = false;
                     script.src = 'configurationpage?name=' + modules[i];
                     // The SPA re-runs this block on every visit to the page; drop the
-                    // element once it has executed so <head> does not grow unbounded.
-                    script.onload = function () {
+                    // element once it has settled so <head> does not grow unbounded.
+                    // onerror too, so a module that fails to load is not left behind.
+                    script.onload = script.onerror = function () {
                         this.remove();
                     };
                     document.head.appendChild(script);
