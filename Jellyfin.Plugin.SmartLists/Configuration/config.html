@@ -1275,38 +1275,55 @@
             </div>
         </div>
 
-        <!-- Core utilities and constants (must load first) -->
-        <script src="configurationpage?name=config-core.js"></script>
-        <!-- Formatters and option generators -->
-        <script src="configurationpage?name=config-formatters.js"></script>
-        <!-- Schedule management -->
-        <script src="configurationpage?name=config-schedules.js"></script>
-        <!-- Image management -->
-        <script src="configurationpage?name=config-images.js"></script>
-        <!-- Sort management -->
-        <script src="configurationpage?name=config-sorts.js"></script>
-        <!-- Generic multi-select component -->
-        <script src="configurationpage?name=config-multi-select.js"></script>
-        <!-- Searchable single-select component -->
-        <script src="configurationpage?name=config-searchable-select.js"></script>
-        <!-- User multi-select for playlists -->
-        <script src="configurationpage?name=config-user-select.js"></script>
-        <!-- Rule management -->
-        <script src="configurationpage?name=config-rules.js"></script>
-        <!-- List CRUD operations -->
-        <script src="configurationpage?name=config-lists.js"></script>
-        <!-- Template catalog and picker -->
-        <script src="configurationpage?name=config-templates.js"></script>
-        <!-- Filtering and search -->
-        <script src="configurationpage?name=config-filters.js"></script>
-        <!-- Bulk actions -->
-        <script src="configurationpage?name=config-bulk-actions.js"></script>
-        <!-- Status page -->
-        <script src="configurationpage?name=config-status.js"></script>
-        <!-- API calls -->
-        <script src="configurationpage?name=config-api.js"></script>
-        <!-- Initialization (must load last) -->
-        <script src="configurationpage?name=config-init.js"></script>
+        <!--
+            Module loader. These must NOT be plain <script src> tags.
+
+            Jellyfin-web parses plugin pages with innerHTML (viewContainer.js
+            parseHtml), which permanently disables the parsed <script> tags, then
+            revives them by re-appending the page with jQuery. jQuery loads a
+            <script src> through jQuery._evalUrl, which is a SYNCHRONOUS XHR - so a
+            reverse proxy sending "Permissions-Policy: sync-xhr=()" (the example in
+            Jellyfin's own nginx docs) blocks every module and the page renders empty.
+
+            An inline block is evaluated directly by jQuery instead, with no request
+            of its own, so it can inject the modules itself. See issue #471.
+        -->
+        <script>
+            (function () {
+                var modules = [
+                    'config-core.js',              // Core utilities and constants (must load first)
+                    'config-formatters.js',        // Formatters and option generators
+                    'config-schedules.js',         // Schedule management
+                    'config-images.js',            // Image management
+                    'config-sorts.js',             // Sort management
+                    'config-multi-select.js',      // Generic multi-select component
+                    'config-searchable-select.js', // Searchable single-select component
+                    'config-user-select.js',       // User multi-select for playlists
+                    'config-rules.js',             // Rule management
+                    'config-lists.js',             // List CRUD operations
+                    'config-templates.js',         // Template catalog and picker
+                    'config-filters.js',           // Filtering and search
+                    'config-bulk-actions.js',      // Bulk actions
+                    'config-status.js',            // Status page
+                    'config-api.js',               // API calls
+                    'config-init.js'               // Initialization (must load last)
+                ];
+
+                for (var i = 0; i < modules.length; i++) {
+                    var script = document.createElement('script');
+                    // Dynamically created scripts default to async; false keeps them
+                    // executing in the order above, which config-init.js depends on.
+                    script.async = false;
+                    script.src = 'configurationpage?name=' + modules[i];
+                    // The SPA re-runs this block on every visit to the page; drop the
+                    // element once it has executed so <head> does not grow unbounded.
+                    script.onload = function () {
+                        this.remove();
+                    };
+                    document.head.appendChild(script);
+                }
+            })();
+        </script>
     </div>
 </body>
 
