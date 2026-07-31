@@ -148,7 +148,7 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
 
         /// <summary>
         /// Gets or sets the Trakt client ID for fetching external lists.
-        /// Create a free app at https://trakt.tv/oauth/applications to get a client ID.
+        /// Create an app at https://trakt.tv/oauth/applications to get a client ID.
         /// </summary>
         public string? TraktClientId { get; set; } = null;
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -89,8 +90,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     {
                         if (totalFetched == 0)
                         {
-                            throw new HttpRequestException(
-                                $"Trakt API returned {response.StatusCode} for {apiPath}");
+                            throw new HttpRequestException(DescribeFailure(response.StatusCode, apiPath));
                         }
 
                         _logger.LogWarning("Trakt API returned {StatusCode} on page {Page}, stopping pagination", response.StatusCode, page);
@@ -155,6 +155,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 totalFetched, url, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
 
             return result;
+        }
+
+        /// <summary>
+        /// Turns a Trakt error status into a message that says what the user actually needs to fix.
+        /// Trakt uses 403 for a rejected client ID and 426 for VIP-only endpoints, so a bare status
+        /// name leaves the user guessing (and wrongly suspecting their list is private).
+        /// </summary>
+        private static string DescribeFailure(HttpStatusCode statusCode, string apiPath)
+        {
+            return statusCode switch
+            {
+                HttpStatusCode.Forbidden =>
+                    "Trakt rejected the client ID (invalid API key or unapproved app). Check the client ID in Settings > External Lists - note that even public lists require one.",
+                HttpStatusCode.UpgradeRequired =>
+                    $"This Trakt endpoint ({apiPath}) requires a Trakt VIP subscription.",
+                _ => $"Trakt API returned {statusCode} for {apiPath}",
+            };
         }
 
         private static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)

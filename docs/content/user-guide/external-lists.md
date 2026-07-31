@@ -175,9 +175,9 @@ External List / equals / https://listenbrainz.org/syndication-feed/user/rob/reco
 
 **Setup:**
 
-1. Go to [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications)
+1. Go to [app.trakt.tv/settings/apps/api](https://app.trakt.tv/settings/apps/api)
 2. Sign in to your Trakt account
-3. Click **New Application**
+3. Click the **+** button in the top right to create a new application
 4. Fill in the required fields:
     - **Name**: `Jellyfin SmartLists` (or any name you prefer)
     - **Redirect uri**: `urn:ietf:wg:oauth:2.0:oob`
@@ -185,6 +185,15 @@ External List / equals / https://listenbrainz.org/syndication-feed/user/rob/reco
 5. Click **Save App**
 6. Copy the **Client ID** from your new application
 7. Enter the client ID in the plugin **Settings** tab under **External Lists > Trakt Client ID**
+
+!!! note "A client ID is required even for public lists"
+
+    The Trakt API has no anonymous access - every request must carry a client ID, so
+    making a list public does not remove the need for one. If a Trakt list fails with
+    *"Trakt rejected the client ID"*, check that the app still exists under
+    [app.trakt.tv/settings/apps/api](https://app.trakt.tv/settings/apps/api) and that the
+    client ID was copied correctly. Free Trakt accounts are limited to one connected
+    application at a time.
 
 **Supported URLs:**
 
