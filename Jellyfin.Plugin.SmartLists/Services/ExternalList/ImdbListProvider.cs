@@ -413,6 +413,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
 
+            // IMDb's edge rejects GraphQL POSTs (403 Forbidden) that carry neither a Referer
+            // nor an x-imdb-client-name header. Either one alone is enough; both are sent so
+            // the request keeps working if IMDb tightens one of the two rules.
+            request.Headers.Add("Referer", "https://www.imdb.com/");
+            request.Headers.Add("x-imdb-client-name", "jellyfin-smartlists");
+
             using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
