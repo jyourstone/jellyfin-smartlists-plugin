@@ -1287,8 +1287,16 @@
 
             An inline block is evaluated directly by jQuery instead, with no request
             of its own, so it can inject the modules itself. See issue #471.
+
+            data-cfasync="false" opts the block out of Cloudflare Rocket Loader, which
+            rewrites inline scripts in text/html responses to type="text/rocketscript".
+            jQuery only evaluates a script whose type matches its rscriptType regex
+            (/^$|^module$|\/(?:java|ecma)script/i), so a rewritten block is skipped
+            silently - no console error, no server log, just an empty page. The
+            injected module elements need no such attribute: Rocket Loader only
+            rewrites HTML at the edge and never sees them. See issue #475.
         -->
-        <script>
+        <script data-cfasync="false">
             (function () {
                 var modules = [
                     'config-core.js',              // Core utilities and constants (must load first)

@@ -525,7 +525,9 @@
         </div>
 
         <!-- Initialize user mode BEFORE loading config-core.js -->
-        <script>
+        <!-- data-cfasync="false" keeps Cloudflare Rocket Loader from rewriting this
+             block; see the explanation in config.html and issue #475. -->
+        <script data-cfasync="false">
             window.SmartLists = window.SmartLists || {};
             window.SmartLists.IS_USER_PAGE = true;
             
@@ -635,9 +637,9 @@
         <!--
             Module loader - kept identical in shape to config.html. Plain <script src>
             tags are avoided here too so both pages load their modules the same way;
-            see the longer explanation in config.html and issue #471.
+            see the longer explanation in config.html and issues #471 and #475.
         -->
-        <script>
+        <script data-cfasync="false">
             (function () {
                 var modules = [
                     'config-core.js',              // Core utilities and constants (must load first)
