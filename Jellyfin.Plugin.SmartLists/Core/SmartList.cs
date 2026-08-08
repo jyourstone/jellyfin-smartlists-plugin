@@ -505,6 +505,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(expr.IncludeUnwatchedSeries?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeEpisodesWithinSeries?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.IncludeUnknownDates?.ToString() ?? "null");
                     }
                 }
 

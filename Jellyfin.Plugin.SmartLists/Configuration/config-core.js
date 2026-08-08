@@ -50,6 +50,9 @@
         USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'NextUnwatched', 'LastPlayedDate']
     };
 
+    // Date fields where metadata can be missing - these get the "unknown date" option
+    SmartLists.UNKNOWN_DATE_FIELDS = ['ReleaseDate', 'LastEpisodeAirDate'];
+
     // Media type capabilities - which types support audio/video streams
     SmartLists.AUDIO_CAPABLE_TYPES = ['Movie', 'Episode', 'Audio', 'AudioBook', 'MusicVideo', 'Video'];
     SmartLists.VIDEO_CAPABLE_TYPES = ['Movie', 'Episode', 'MusicVideo', 'Video'];

@@ -1634,6 +1634,12 @@
                             nextUnwatchedInfo = rule.IncludeUnwatchedSeries ? ' (including unwatched series)' : ' (excluding unwatched series)';
                         }
 
+                        // Add unknown-date configuration info
+                        let unknownDateInfo = '';
+                        if (rule.IncludeUnknownDates === true) {
+                            unknownDateInfo = ' (including unknown dates)';
+                        }
+
                         // Add Collections configuration info
                         let collectionsInfo = '';
                         if (rule.MemberName === 'Collections') {
@@ -1719,7 +1725,7 @@
                         }
 
                         rulesHtml += '<span style="font-family: monospace; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); padding: 4px 4px; border-radius: 3px;">';
-                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
+                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(unknownDateInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
                         rulesHtml += '</span>';
                     }
 

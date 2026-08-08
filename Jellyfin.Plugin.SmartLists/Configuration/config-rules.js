@@ -1140,6 +1140,15 @@
             '<option value="false">No - Only show next episodes from started series</option>' +
             '</select>' +
             '</div>' +
+            '<div class="rule-unknowndate-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
+            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
+            'When the date is unknown (missing metadata):' +
+            '</label>' +
+            '<select is="emby-select" class="emby-select rule-unknowndate-select" style="width: 100%;">' +
+            '<option value="false">Exclude items with an unknown date</option>' +
+            '<option value="true">Include items with an unknown date</option>' +
+            '</select>' +
+            '</div>' +
             '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
             '<div class="rule-collections-collection-only" style="margin-bottom: 0.75em;">' +
             '<label style="display: flex; align-items: center; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
@@ -1288,6 +1297,9 @@
         // Initialize NextUnwatched options visibility
         SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
+        // Initialize unknown-date options visibility
+        SmartLists.updateUnknownDateOptionsVisibility(newRuleRow, fieldSelect.value);
+
         // Initialize Collections options visibility
         SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
@@ -1333,6 +1345,7 @@
             fieldSelect.setAttribute('data-previous-field', newField);
             SmartLists.updateUserSelectorVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
+            SmartLists.updateUnknownDateOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateExternalListOptionsVisibility(newRuleRow, fieldSelect.value);
@@ -1516,6 +1529,10 @@
         const nextUnwatchedSelect = ruleRow.querySelector('.rule-nextunwatched-select');
         const nextUnwatchedValue = nextUnwatchedSelect ? nextUnwatchedSelect.value : '';
 
+        // Extract unknown-date options
+        const unknownDateSelect = ruleRow.querySelector('.rule-unknowndate-select');
+        const unknownDateValue = unknownDateSelect ? unknownDateSelect.value : '';
+
         // Extract Collections options
         const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
         const collectionOnlyValue = collectionOnlySelect ? collectionOnlySelect.value : '';
@@ -1580,6 +1597,9 @@
         }
         if (fieldValue === 'NextUnwatched' && nextUnwatchedValue === 'false') {
             expression.IncludeUnwatchedSeries = false;
+        }
+        if (SmartLists.UNKNOWN_DATE_FIELDS.indexOf(fieldValue) !== -1 && unknownDateValue === 'true') {
+            expression.IncludeUnknownDates = true;
         }
         if (fieldValue === 'Collections') {
             if (collectionOnlyValue === 'true') {
@@ -1918,6 +1938,7 @@
                     SmartLists.updateOperatorOptions(currentFieldValue, operatorSelect);
                     SmartLists.updateUserSelectorVisibility(ruleRow, currentFieldValue);
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentFieldValue, page);
+                    SmartLists.updateUnknownDateOptionsVisibility(ruleRow, currentFieldValue);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updatePlaylistsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, currentFieldValue, page);
@@ -1948,6 +1969,7 @@
                     fieldSelect.setAttribute('data-previous-field', newField);
                     SmartLists.updateUserSelectorVisibility(ruleRow, newField);
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, fieldSelect.value, page);
+                    SmartLists.updateUnknownDateOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, fieldSelect.value, page);
@@ -2143,6 +2165,7 @@
                     SmartLists.updateRegexHelp(ruleRow);
                     if (page) {
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, '', page);
+                        SmartLists.updateUnknownDateOptionsVisibility(ruleRow, '');
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updatePlaylistsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, '', page);
@@ -2160,6 +2183,7 @@
                     SmartLists.updateRegexHelp(ruleRow);
                     if (page) {
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentValue, page);
+                        SmartLists.updateUnknownDateOptionsVisibility(ruleRow, currentValue);
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, currentValue, page);
                         SmartLists.updateStudiosOptionsVisibility(ruleRow, currentValue, page);
@@ -2314,6 +2338,20 @@
     // Update visibility of NextUnwatched options for all rules when media types change
     SmartLists.updateAllNextUnwatchedOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateNextUnwatchedOptionsVisibility);
+    };
+
+    SmartLists.updateUnknownDateOptionsVisibility = function (ruleRow, fieldValue) {
+        const isUnknownDateField = SmartLists.UNKNOWN_DATE_FIELDS.indexOf(fieldValue) !== -1;
+        const unknownDateOptionsDiv = ruleRow.querySelector('.rule-unknowndate-options');
+
+        if (unknownDateOptionsDiv) {
+            if (isUnknownDateField) {
+                unknownDateOptionsDiv.style.display = 'block';
+            } else {
+                // Hide but preserve user's selection - don't reset value
+                unknownDateOptionsDiv.style.display = 'none';
+            }
+        }
     };
 
     SmartLists.updateCollectionsOptionsVisibility = function (ruleRow, fieldValue, page) {
@@ -2827,6 +2865,15 @@
                         // If true (default), don't include the parameter to save space
                     }
 
+                    // Check for unknown-date option on date fields where metadata can be missing
+                    const unknownDateSelect = rule.querySelector('.rule-unknowndate-select');
+                    if (unknownDateSelect && SmartLists.UNKNOWN_DATE_FIELDS.indexOf(memberName) !== -1) {
+                        if (unknownDateSelect.value === 'true') {
+                            expression.IncludeUnknownDates = true;
+                        }
+                        // If false (default), don't include the parameter to save space
+                    }
+
                     // Check for Collections specific options
                     if (memberName === 'Collections') {
                         // Check for collection-only option (only for Collections type)
@@ -3057,6 +3104,7 @@
                 SmartLists.refreshSearchableSelect(fieldSelect);
 
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
+                SmartLists.updateUnknownDateOptionsVisibility(ruleRow, actualMemberName);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updatePlaylistsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateExternalListOptionsVisibility(ruleRow, actualMemberName);
@@ -3105,6 +3153,12 @@
                 if (nextUnwatchedSelect) {
                     const includeValue = expression.IncludeUnwatchedSeries !== false ? 'true' : 'false';
                     nextUnwatchedSelect.value = includeValue;
+                }
+            }
+            if (SmartLists.UNKNOWN_DATE_FIELDS.indexOf(expression.MemberName) !== -1) {
+                const unknownDateSelect = ruleRow.querySelector('.rule-unknowndate-select');
+                if (unknownDateSelect) {
+                    unknownDateSelect.value = expression.IncludeUnknownDates === true ? 'true' : 'false';
                 }
             }
             if (expression.MemberName === 'Collections') {

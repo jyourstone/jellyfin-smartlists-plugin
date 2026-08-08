@@ -72,6 +72,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? RuntimeUnit { get; set; } = null;
 
+        // Date-field option (ReleaseDate, LastEpisodeAirDate): treat items with no known date as matching - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeUnknownDates { get; set; } = null;
+
         // Collections-specific depth option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? CollectionSearchDepth { get; set; } = null;
