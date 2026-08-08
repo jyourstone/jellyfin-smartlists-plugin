@@ -23,6 +23,10 @@ Here are some more complex playlist and collection examples:
 ## Weekend Binge Queue
 - **Next Unwatched** = True (excluding unwatched series) for started shows only
 
+## Fresh Episodes (metadata may lag)
+- **Release Date** newer than 2 weeks (including items with an unknown date)
+- Catches brand-new episodes even when they're downloaded before the release date metadata is published; once metadata arrives, the rule re-evaluates normally on the next refresh
+
 ## Kids' Shows Progress
 - **Next Unwatched** = True AND **Tags** contain "Kids" (with parent series tags enabled)
 

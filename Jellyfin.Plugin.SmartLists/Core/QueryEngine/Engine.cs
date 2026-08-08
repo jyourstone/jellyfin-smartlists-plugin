@@ -828,6 +828,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return System.Linq.Expressions.Expression.AndAlso(neverPlayedCheck, mainExpression);
             }
 
+            // ReleaseDate/LastEpisodeAirDate can be missing from metadata (stored as 0). Handle the
+            // sentinel explicitly in both directions, mirroring the LastPlayedDate pattern above:
+            // without it, operators like Before/OlderThan/NotEqual would silently match epoch 0.
+            if (r.MemberName == "ReleaseDate" || r.MemberName == "LastEpisodeAirDate")
+            {
+                var zero = System.Linq.Expressions.Expression.Constant(0.0);
+                var mainExpression = BuildStandardDateExpression(r, left, logger);
+
+                if (r.IncludeUnknownDates == true)
+                {
+                    // Combine: (date == 0) OR (main date condition)
+                    return System.Linq.Expressions.Expression.OrElse(
+                        System.Linq.Expressions.Expression.Equal(left, zero),
+                        mainExpression);
+                }
+
+                // Combine: (date != 0) AND (main date condition)
+                return System.Linq.Expressions.Expression.AndAlso(
+                    System.Linq.Expressions.Expression.NotEqual(left, zero),
+                    mainExpression);
+            }
+
             return BuildStandardDateExpression(r, left, logger);
         }
 

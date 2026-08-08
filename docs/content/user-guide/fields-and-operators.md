@@ -25,6 +25,14 @@ Fields are organized into categories that match the dropdown menu in the UI. Som
 | **TMDb ID** | TheMovieDb identifier (e.g., `875828`). Use **is in** with semicolons to match multiple IDs. |
 | **TVDb ID** | TheTVDB identifier. Use **is in** with semicolons to match multiple IDs. |
 
+#### Release Date / Last Episode Air Date
+
+These dates come from metadata providers and can be missing — for example, an episode downloaded before its metadata is published. By default, items with an unknown date never match a date rule.
+
+**Options:**
+
+- **When the date is unknown** (default: Exclude) - Choose **Include items with an unknown date** to also match items whose date is missing. Useful for "new releases" lists so freshly added episodes appear even before their release date metadata arrives; once the metadata is filled in, the next refresh re-evaluates the rule normally.
+
 #### Similar To
 
 Find items similar to a reference item based on metadata.
