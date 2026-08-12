@@ -6,24 +6,26 @@ This page documents all available fields and operators for creating smart list r
 
 Fields are organized into categories that match the dropdown menu in the UI. Some fields have additional options that appear when selected.
 
+The **JSON name** column shows each field's internal identifier — the value used for `MemberName` when [editing list files directly](advanced-configuration.md#creating-lists-from-files).
+
 ### Content
 
-| Field | Description |
-|-------|-------------|
-| **Name** | Title of the media item |
-| **Series Name** | Name of the parent series (episodes only) |
-| **Parental Rating** | Age rating (G, PG, PG-13, R, etc.) |
-| **Custom Rating** | Custom/user-defined rating string |
-| **Overview** | Description/summary of the content |
-| **Production Year** | Original production year |
-| **Release Date** | Original release date of the media |
-| **Last Episode Air Date** | Air date of the most recent episode (TV series only). Useful for finding actively airing shows. |
-| **Series Status** | Current status of a TV series — select from a dropdown: Continuing, Ended, or Unreleased. Only shown when the **Series** media type is selected and the list type is **Collection**. |
-| **Production Locations** | Countries/regions where the content was produced (e.g., "United States", "Japan") |
-| **Extra Type** | Type of extra — select from a dropdown (Behind the Scenes, Deleted Scene, Featurette, Trailer, etc.). Requires **Include Extras** enabled. |
-| **IMDb ID** | IMDb identifier (e.g., `tt15574124`). Use **is in** with semicolons to match multiple IDs. |
-| **TMDb ID** | TheMovieDb identifier (e.g., `875828`). Use **is in** with semicolons to match multiple IDs. |
-| **TVDb ID** | TheTVDB identifier. Use **is in** with semicolons to match multiple IDs. |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Name** | `Name` | Title of the media item |
+| **Series Name** | `SeriesName` | Name of the parent series (episodes only) |
+| **Parental Rating** | `OfficialRating` | Age rating (G, PG, PG-13, R, etc.) |
+| **Custom Rating** | `CustomRating` | Custom/user-defined rating string |
+| **Overview** | `Overview` | Description/summary of the content |
+| **Production Year** | `ProductionYear` | Original production year |
+| **Release Date** | `ReleaseDate` | Original release date of the media |
+| **Last Episode Air Date** | `LastEpisodeAirDate` | Air date of the most recent episode (TV series only). Useful for finding actively airing shows. |
+| **Series Status** | `SeriesStatus` | Current status of a TV series — select from a dropdown: Continuing, Ended, or Unreleased. Only shown when the **Series** media type is selected and the list type is **Collection**. |
+| **Production Locations** | `ProductionLocations` | Countries/regions where the content was produced (e.g., "United States", "Japan") |
+| **Extra Type** | `ExtraType` | Type of extra — select from a dropdown (Behind the Scenes, Deleted Scene, Featurette, Trailer, etc.). Requires **Include Extras** enabled. |
+| **IMDb ID** | `ImdbId` | IMDb identifier (e.g., `tt15574124`). Use **is in** with semicolons to match multiple IDs. |
+| **TMDb ID** | `TmdbId` | TheMovieDb identifier (e.g., `875828`). Use **is in** with semicolons to match multiple IDs. |
+| **TVDb ID** | `TvdbId` | TheTVDB identifier. Use **is in** with semicolons to match multiple IDs. |
 
 #### Release Date / Last Episode Air Date
 
@@ -34,6 +36,8 @@ These dates come from metadata providers and can be missing — for example, an 
 - **When the date is unknown** (default: Exclude) - Choose **Include items with an unknown date** to also match items whose date is missing. Useful for "new releases" lists so freshly added episodes appear even before their release date metadata arrives; once the metadata is filled in, the next refresh re-evaluates the rule normally.
 
 #### Similar To
+
+JSON name: `SimilarTo`
 
 Find items similar to a reference item based on metadata.
 
@@ -46,28 +50,30 @@ The more fields selected, the more comprehensive but potentially stricter the ma
 
 ### Video
 
-| Field | Description |
-|-------|-------------|
-| **Resolution** | Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K) |
-| **Framerate** | Video framerate in fps (e.g., 23.976, 29.97, 59.94) |
-| **Video Codec** | Codec format (e.g., HEVC, H264, AV1, VP9) |
-| **Video Profile** | Codec profile (e.g., Main 10, High) |
-| **Video Range** | Dynamic range (e.g., SDR, HDR) |
-| **Video Range Type** | Specific HDR format (e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG) |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Resolution** | `Resolution` | Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K) |
+| **Framerate** | `Framerate` | Video framerate in fps (e.g., 23.976, 29.97, 59.94) |
+| **Video Codec** | `VideoCodec` | Codec format (e.g., HEVC, H264, AV1, VP9) |
+| **Video Profile** | `VideoProfile` | Codec profile (e.g., Main 10, High) |
+| **Video Range** | `VideoRange` | Dynamic range (e.g., SDR, HDR) |
+| **Video Range Type** | `VideoRangeType` | Specific HDR format (e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG) |
 
 ### Audio
 
-| Field | Description |
-|-------|-------------|
-| **Subtitle Languages** | Available subtitle tracks (e.g., eng, spa, fra) |
-| **Audio Bitrate (kbps)** | Audio bitrate (e.g., 128, 256, 320, 1411) |
-| **Audio Sample Rate (Hz)** | Sample rate (e.g., 44100, 48000, 96000) |
-| **Audio Bit Depth** | Bit depth (e.g., 16, 24) |
-| **Audio Codec** | Codec format (e.g., FLAC, MP3, AAC, ALAC) |
-| **Audio Profile** | Codec profile (e.g., Dolby TrueHD, Dolby Atmos) |
-| **Audio Channels** | Number of channels (e.g., 2 for stereo, 6 for 5.1) |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Subtitle Languages** | `SubtitleLanguages` | Available subtitle tracks (e.g., eng, spa, fra) |
+| **Audio Bitrate (kbps)** | `AudioBitrate` | Audio bitrate (e.g., 128, 256, 320, 1411) |
+| **Audio Sample Rate (Hz)** | `AudioSampleRate` | Sample rate (e.g., 44100, 48000, 96000) |
+| **Audio Bit Depth** | `AudioBitDepth` | Bit depth (e.g., 16, 24) |
+| **Audio Codec** | `AudioCodec` | Codec format (e.g., FLAC, MP3, AAC, ALAC) |
+| **Audio Profile** | `AudioProfile` | Codec profile (e.g., Dolby TrueHD, Dolby Atmos) |
+| **Audio Channels** | `AudioChannels` | Number of channels (e.g., 2 for stereo, 6 for 5.1) |
 
 #### Audio Languages
+
+JSON name: `AudioLanguages`
 
 The audio language tracks available for the media item.
 
@@ -77,23 +83,23 @@ The audio language tracks available for the media item.
 
 ### Ratings & Playback
 
-| Field | Description |
-|-------|-------------|
-| **Community Rating** | User ratings (0-10) |
-| **Critic Rating** | Professional critic ratings |
-| **Runtime** | Duration of the content. Runtime rules can use minutes or seconds. |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Community Rating** | `CommunityRating` | User ratings (0-10) |
+| **Critic Rating** | `CriticRating` | Professional critic ratings |
+| **Runtime** | `RuntimeMinutes` | Duration of the content. Runtime rules can use minutes or seconds. |
 
 #### User-Specific Fields
 
 The following fields track per-user data and support an optional **user selector**:
 
-| Field | Description |
-|-------|-------------|
-| **Is Favorite** | Whether the item is marked as a favorite |
-| **Play Count** | Number of times the item has been played |
-| **Last Played** | When the item was last played |
-| **Playback Status** | Played, In Progress, or Unplayed |
-| **Next Unwatched** | Shows only the next unwatched episode for each series |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Is Favorite** | `IsFavorite` | Whether the item is marked as a favorite |
+| **Play Count** | `PlayCount` | Number of times the item has been played |
+| **Last Played** | `LastPlayedDate` | When the item was last played |
+| **Playback Status** | `PlaybackStatus` | Played, In Progress, or Unplayed |
+| **Next Unwatched** | `NextUnwatched` | Shows only the next unwatched episode for each series |
 
 **How user selection works:**
 
@@ -118,20 +124,20 @@ The following fields track per-user data and support an optional **user selector
 
 ### Library
 
-| Field | Description |
-|-------|-------------|
-| **Library Name** | The Jellyfin library the item belongs to |
-| **Date Added to Library** | When added to your Jellyfin library |
-| **Last Metadata Refresh** | When Jellyfin last updated metadata from online sources |
-| **Last Database Save** | When the item's data was last saved to the database |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Library Name** | `LibraryName` | The Jellyfin library the item belongs to |
+| **Date Added to Library** | `DateCreated` | When added to your Jellyfin library |
+| **Last Metadata Refresh** | `DateLastRefreshed` | When Jellyfin last updated metadata from online sources |
+| **Last Database Save** | `DateLastSaved` | When the item's data was last saved to the database |
 
 ### File Info
 
-| Field | Description |
-|-------|-------------|
-| **File Name** | Name of the media file |
-| **Folder Path** | File location in your library |
-| **Date Modified** | Last file modification date |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **File Name** | `FileName` | Name of the media file |
+| **Folder Path** | `FolderPath` | File location in your library |
+| **Date Modified** | `DateModified` | Last file modification date |
 
 ### People
 
@@ -139,56 +145,56 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 
 **General roles:**
 
-| Field | Description |
-|-------|-------------|
-| **People (All)** | Any cast or crew member |
-| **Actors** | Actors |
-| **Actor Roles (Character Names)** | Character names played by actors |
-| **Directors** | Directors |
-| **Writers** | Writers/screenwriters |
-| **Producers** | Producers |
-| **Guest Stars** | Guest stars (TV episodes) |
-| **Creators** | General content creators |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **People (All)** | `People` | Any cast or crew member |
+| **Actors** | `Actors` | Actors |
+| **Actor Roles (Character Names)** | `ActorRoles` | Character names played by actors |
+| **Directors** | `Directors` | Directors |
+| **Writers** | `Writers` | Writers/screenwriters |
+| **Producers** | `Producers` | Producers |
+| **Guest Stars** | `GuestStars` | Guest stars (TV episodes) |
+| **Creators** | `Creators` | General content creators |
 
 **Music-related roles:**
 
-| Field | Description |
-|-------|-------------|
-| **Composers** | Music composers |
-| **Conductors** | Orchestra/music conductors |
-| **Lyricists** | Song lyricists |
-| **Arrangers** | Music arrangers |
-| **Sound Engineers** | Audio/sound engineers |
-| **Mixers** | Audio mixers |
-| **Remixers** | Remix artists |
-| **Artists (Person Role)** | Track-level artists (person metadata) |
-| **Album Artists (Person Role)** | Album-level artists (person metadata) |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Composers** | `Composers` | Music composers |
+| **Conductors** | `Conductors` | Orchestra/music conductors |
+| **Lyricists** | `Lyricists` | Song lyricists |
+| **Arrangers** | `Arrangers` | Music arrangers |
+| **Sound Engineers** | `SoundEngineers` | Audio/sound engineers |
+| **Mixers** | `Mixers` | Audio mixers |
+| **Remixers** | `Remixers` | Remix artists |
+| **Artists (Person Role)** | `PersonArtists` | Track-level artists (person metadata) |
+| **Album Artists (Person Role)** | `PersonAlbumArtists` | Album-level artists (person metadata) |
 
 **Books & Comics roles:**
 
-| Field | Description |
-|-------|-------------|
-| **Authors** | Book authors |
-| **Illustrators** | Illustrators |
-| **Pencilers** | Comic book pencil artists |
-| **Inkers** | Comic book inkers |
-| **Colorists** | Comic book colorists |
-| **Letterers** | Comic book letterers |
-| **Cover Artists** | Cover artwork artists |
-| **Editors** | Editors |
-| **Translators** | Translators |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Authors** | `Authors` | Book authors |
+| **Illustrators** | `Illustrators` | Illustrators |
+| **Pencilers** | `Pencilers` | Comic book pencil artists |
+| **Inkers** | `Inkers` | Comic book inkers |
+| **Colorists** | `Colorists` | Comic book colorists |
+| **Letterers** | `Letterers` | Comic book letterers |
+| **Cover Artists** | `CoverArtists` | Cover artwork artists |
+| **Editors** | `Editors` | Editors |
+| **Translators** | `Translators` | Translators |
 
 ### Membership
 
-| Field | Description |
-|-------|-------------|
-| **Genres** | Content genres |
-| **Studios** | Production studios |
-| **Tags** | Custom tags assigned to media items |
-| **Album** | Album name (music) |
-| **Artists** | Track-level artists (music) |
-| **Album Artists** | Album-level primary artists (music) |
-| **External List** | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz). [See details below.](#external-list) |
+| Field | JSON name | Description |
+|-------|-----------|-------------|
+| **Genres** | `Genres` | Content genres |
+| **Studios** | `Studios` | Production studios |
+| **Tags** | `Tags` | Custom tags assigned to media items |
+| **Album** | `Album` | Album name (music) |
+| **Artists** | `Artists` | Track-level artists (music) |
+| **Album Artists** | `AlbumArtists` | Album-level primary artists (music) |
+| **External List** | `ExternalList` | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz). [See details below.](#external-list) |
 
 **Parent metadata options** for Tags, Studios, and Genres (shown when Episode or Audio media type is selected):
 
@@ -201,6 +207,8 @@ Each of these fields has three options:
 The label and option text adapts based on the selected media type (e.g., "parent series" for episodes, "parent album" for audio tracks).
 
 #### Collection Name
+
+JSON name: `Collections`
 
 Filter items based on Jellyfin collection membership.
 
@@ -229,6 +237,8 @@ How deep to traverse nested collections (default: 0):
     Smart collections never include themselves in results, even if they match the rule criteria.
 
 #### Playlist Name
+
+JSON name: `Playlists`
 
 Filter items based on Jellyfin playlist membership.
 
@@ -270,26 +280,28 @@ For setup instructions, supported URL formats, and examples, see the [External L
 
 Different operators are available depending on the field type.
 
+The **JSON name** column shows the value used for `Operator` when [editing list files directly](advanced-configuration.md#creating-lists-from-files).
+
 ### Text Operators
 
-| Operator | Description |
-|----------|-------------|
-| **equals** / **not equals** | Exact match |
-| **contains** / **not contains** | Partial text match |
-| **is in** / **is not in** | Match any of multiple values (semicolon-separated) |
-| **matches regex** | Pattern matching using .NET regex syntax |
+| Operator | JSON name | Description |
+|----------|-----------|-------------|
+| **equals** / **not equals** | `Equal` / `NotEqual` | Exact match |
+| **contains** / **not contains** | `Contains` / `NotContains` | Partial text match |
+| **is in** / **is not in** | `IsIn` / `IsNotIn` | Match any of multiple values (semicolon-separated) |
+| **matches regex** | `MatchRegex` | Pattern matching using .NET regex syntax |
 
 ### List Operators
 
 For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlists, etc.), operators work against the individual entries in the list:
 
-| Operator | Description |
-|----------|-------------|
-| **equals** | The list contains **only** this value and nothing else |
-| **not equals** | The list does **not** contain only this value |
-| **contains** / **not contains** | Any entry in the list contains the text (partial match) |
-| **is in** / **is not in** | Any entry in the list matches one of the semicolon-separated values |
-| **matches regex** | Any entry in the list matches the regex pattern |
+| Operator | JSON name | Description |
+|----------|-----------|-------------|
+| **equals** | `Equal` | The list contains **only** this value and nothing else |
+| **not equals** | `NotEqual` | The list does **not** contain only this value |
+| **contains** / **not contains** | `Contains` / `NotContains` | Any entry in the list contains the text (partial match) |
+| **is in** / **is not in** | `IsIn` / `IsNotIn` | Any entry in the list matches one of the semicolon-separated values |
+| **matches regex** | `MatchRegex` | Any entry in the list matches the regex pattern |
 
 !!! tip "Equals vs Contains on list fields"
     - **Studios equals "Marvel Studios"** — matches items where Marvel Studios is the *only* studio
@@ -297,26 +309,26 @@ For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlist
 
 ### Numeric Operators
 
-| Operator | Description |
-|----------|-------------|
-| **equals** / **not equals** | Exact match |
-| **greater than** / **less than** | Comparison |
-| **greater than or equal** / **less than or equal** | Comparison |
+| Operator | JSON name | Description |
+|----------|-----------|-------------|
+| **equals** / **not equals** | `Equal` / `NotEqual` | Exact match |
+| **greater than** / **less than** | `GreaterThan` / `LessThan` | Comparison |
+| **greater than or equal** / **less than or equal** | `GreaterThanOrEqual` / `LessThanOrEqual` | Comparison |
 
 ### Date Operators
 
-| Operator | Description |
-|----------|-------------|
-| **equals** / **not equals** | Exact date match |
-| **after** / **before** | Absolute date comparison |
-| **newer than** / **older than** | Relative date (days, weeks, months, years) |
-| **weekday** | Day of week (Monday, Tuesday, etc.) |
+| Operator | JSON name | Description |
+|----------|-----------|-------------|
+| **equals** / **not equals** | `Equal` / `NotEqual` | Exact date match |
+| **after** / **before** | `After` / `Before` | Absolute date comparison |
+| **newer than** / **older than** | `NewerThan` / `OlderThan` | Relative date (days, weeks, months, years) |
+| **weekday** | `Weekday` | Day of week (Monday, Tuesday, etc.) |
 
 ### Boolean Operators
 
-| Operator | Description |
-|----------|-------------|
-| **equals** / **not equals** | True or False |
+| Operator | JSON name | Description |
+|----------|-----------|-------------|
+| **equals** / **not equals** | `Equal` / `NotEqual` | True or False |
 
 ### Using "Is In" for Multiple Values
 

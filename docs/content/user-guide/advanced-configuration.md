@@ -54,6 +54,74 @@ You can manually edit these JSON files if needed, but please be aware:
 3. **Test thoroughly** after making changes to ensure lists still work correctly
 4. **Use the web interface** when possible - it's safer and includes validation
 
+## Creating Lists from Files
+
+New lists don't have to be created through the web interface. The plugin keeps no separate registry — it re-reads the `smartlists` directory whenever lists are needed — so a valid `config.json` placed in the right folder is picked up automatically on the next page load or refresh. No restart required.
+
+### Creating a New List
+
+1. Generate a new GUID (e.g. with `uuidgen` or an online generator).
+2. Create the folder `{DataPath}/smartlists/{new-guid}/`.
+3. Create a `config.json` inside it. Minimal example:
+
+```json
+{
+  "Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "Name": "Recent Comedies",
+  "Type": "Playlist",
+  "UserId": "your-jellyfin-user-guid",
+  "MediaTypes": ["Movie"],
+  "ExpressionSets": [
+    {
+      "Expressions": [
+        { "MemberName": "Genres", "Operator": "Contains", "TargetValue": "Comedy" },
+        { "MemberName": "ProductionYear", "Operator": "GreaterThanOrEqual", "TargetValue": "2000" }
+      ]
+    }
+  ]
+}
+```
+
+Requirements:
+
+- **`Id` must match the folder name** — the plugin looks lists up by folder name and saves them to the folder matching `Id`. A mismatch creates a duplicate the next time the list is saved.
+- **`Name` is required** — a file without it fails to load entirely.
+- **`Type`** is `"Playlist"` or `"Collection"` (defaults to `"Playlist"` if omitted).
+- **Ownership (playlists only)**: set `UserId` to a Jellyfin user GUID (copy one from an existing list's file), or set `"AllUsers": true` to create a personalized playlist for every user. Collections don't need an owner.
+- **`MediaTypes`** values must match the types listed in [Media Types](media-types.md) — unknown values are silently dropped.
+
+Everything else is optional with sensible defaults (`Enabled: true`, `AutoRefresh: "Never"`, no item limits). The Jellyfin playlist or collection itself is created automatically on the first refresh, and the plugin writes its ID back into `config.json`. The easiest way to fine-tune the result is to open the list in the web interface once it appears.
+
+### Copying an Existing List
+
+Copying a list's folder is a quick way to create variants:
+
+1. Copy the folder to a new folder named with a freshly generated GUID.
+2. In the copy's `config.json`, set `Id` to the new GUID and change `Name`.
+3. **Remove the link to the original's Jellyfin playlist**: delete the top-level `JellyfinPlaylistId` and the `JellyfinPlaylistId` inside every `UserPlaylists` entry (for collections: `JellyfinCollectionId`). If you skip this, both smart lists point at the same Jellyfin playlist and overwrite each other's contents on refresh.
+4. Optionally remove the `LastRefreshed`, `ItemCount` and `TotalRuntimeMinutes` fields — they are statistics and are regenerated on refresh.
+
+### Field and Operator Names
+
+Rules in JSON use internal names, not the labels shown in the web interface:
+
+- `MemberName` — the field's JSON name, e.g. `OfficialRating` for "Parental Rating". See the **JSON name** columns in [Fields and Operators](fields-and-operators.md).
+- `Operator` — e.g. `Equal`, `Contains`, `IsIn`, `GreaterThanOrEqual`, `MatchRegex`. Listed per operator type in [Fields and Operators](fields-and-operators.md#operators).
+- `TargetValue` — always a string, even for numbers (`"TargetValue": "2000"`).
+
+Administrators can also fetch the authoritative field list from the API (requires an admin API key):
+
+```
+GET /Plugins/SmartLists/fields
+```
+
+### Gotchas
+
+!!! warning
+    - **Errors are only visible in the logs.** A file with invalid JSON or an unknown enum value is silently skipped — the list simply doesn't appear. Check the Jellyfin log for `Skipping invalid smart list file`.
+    - **Field names in rules are validated at refresh time**, not at load time. A typo in `MemberName` loads fine but fails when the list refreshes.
+    - **The plugin rewrites `config.json` on every refresh** (statistics, playlist IDs). Don't hand-edit a file while a refresh is running, or your changes may be overwritten.
+
 ## Example Use Cases
 
 Manual editing can be useful for:
@@ -62,6 +130,7 @@ Manual editing can be useful for:
 - **Advanced configurations**: Settings not available in the web interface
 - **Migration**: Copying lists between Jellyfin instances
 - **Backup/restore**: Manual backup and restoration of list configurations
+- **Scripted creation**: Generating new lists from templates or scripts (see [Creating Lists from Files](#creating-lists-from-files))
 
 ## File Structure Reference
 
