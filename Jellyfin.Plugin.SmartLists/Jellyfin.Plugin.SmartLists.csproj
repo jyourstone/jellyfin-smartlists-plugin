@@ -20,6 +20,11 @@
     <None Include="..\images\logo.jpg" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Exposes internal members (e.g. Engine's internal statics) to the test project. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jellyfin.Plugin.SmartLists.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="Configuration\config.html" />
     <!-- User-facing pages -->

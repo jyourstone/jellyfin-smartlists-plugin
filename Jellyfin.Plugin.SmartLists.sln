@@ -1,19 +1,46 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29920.165
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.SmartLists", "Jellyfin.Plugin.SmartLists\Jellyfin.Plugin.SmartLists.csproj", "{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.SmartLists.Tests", "Jellyfin.Plugin.SmartLists.Tests\Jellyfin.Plugin.SmartLists.Tests.csproj", "{305A4E24-A1C3-4E48-BC5B-55D4666F525B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|x64.Build.0 = Debug|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Debug|x86.Build.0 = Debug|Any CPU
 		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|x64.ActiveCfg = Release|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|x64.Build.0 = Release|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|x86.ActiveCfg = Release|Any CPU
+		{EFE3257F-C3D6-4D49-AF40-486CBABAF49C}.Release|x86.Build.0 = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|x64.Build.0 = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Debug|x86.Build.0 = Debug|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|x64.ActiveCfg = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|x64.Build.0 = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|x86.ActiveCfg = Release|Any CPU
+		{305A4E24-A1C3-4E48-BC5B-55D4666F525B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

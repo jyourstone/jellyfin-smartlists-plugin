@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      ponytail: CEILING - tests run on net10.0 (Jellyfin 12 ABI) only, while the plugin
+      multi-targets net9.0;net10.0. Not a design preference: no .NET 9 *runtime* exists
+      to run them on. This machine has only Microsoft.NETCore.App 10.0.7, and CI
+      (.github/workflows/release.yml, DOTNET_VERSION: 10.0.x) installs only the 10 SDK.
+      net9.0 *compiles* via reference packs but the testhost aborts at launch:
+      "You must install or update .NET to run this application. Framework:
+      'Microsoft.NETCore.App', version '9.0.0'".
+      UPGRADE PATH: install the .NET 9 runtime locally (and add 9.0.x to setup-dotnet in
+      CI), then change this single line to <TargetFrameworks>net9.0;net10.0</TargetFrameworks>.
+      Nothing else here needs to change - the ProjectReference already TFM-matches.
+      Low urgency: every file under test is pure C# with zero Jellyfin dependencies, so
+      the two ABIs differ only in BCL, not in plugin surface.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.SmartLists.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      The plugin project builds under TreatWarningsAsErrors + AnalysisMode=Recommended.
+      Tests deliberately do things production code must not (pass null, assert on
+      obsolete paths, use magic numbers), so that strictness is relaxed here on purpose.
+      There is no Directory.Build.props in this repo, so nothing re-imposes it.
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AnalysisMode>None</AnalysisMode>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Jellyfin.Plugin.SmartLists\Jellyfin.Plugin.SmartLists.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
