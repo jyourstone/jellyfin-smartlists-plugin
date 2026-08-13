@@ -214,7 +214,12 @@ public class RoundRobinLeastRecentlyWatchedTests
     private static List<string> InvokeOrderGroupKeys(RoundRobinLeastRecentlyWatchedOrder order, IEnumerable<string> keys)
     {
         var method = typeof(RoundRobinLeastRecentlyWatchedOrder).GetMethod(
-            "OrderGroupKeys", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            "OrderGroupKeys", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Named failure instead of a bare NullReferenceException if the method is ever renamed -
+        // reflection turns what would be a compile error into a runtime one, so say which member.
+        Assert.NotNull(method);
+
         return (List<string>)method.Invoke(order, [keys])!;
     }
 
@@ -306,8 +311,7 @@ public class RoundRobinLeastRecentlyWatchedTests
         {
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
-                var season = new Season { Id = Guid.NewGuid(), Name = "Aggregate Season" };
-                season.SortName = season.Name;
+                var season = TestItems.SeasonOf("Aggregate Season");
                 cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = children;
                 return season;
             })
@@ -316,8 +320,7 @@ public class RoundRobinLeastRecentlyWatchedTests
         {
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
-                var album = new MusicAlbum { Id = Guid.NewGuid(), Name = "Aggregate Album" };
-                album.SortName = album.Name;
+                var album = TestItems.Album("Aggregate Album");
                 cache.AlbumTracks[(album.Id, TestItems.User.Id)] = children;
                 return album;
             })

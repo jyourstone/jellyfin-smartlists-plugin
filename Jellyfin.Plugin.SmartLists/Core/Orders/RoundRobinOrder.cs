@@ -65,20 +65,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         protected virtual bool ShuffleWithinGroups => false;
 
         /// <summary>
-        /// True when this order interleaves air blocks: Collections grouping with air-date
-        /// within-group order (shuffle wins over air-date order, so shuffled variants never
-        /// use blocks). Single source of the gate shared by SmartList and the interleave.
+        /// True when this refresh interleaves air blocks: Collections grouping with air-date
+        /// within-group order (shuffle wins over air-date order, so shuffled variants never use
+        /// blocks) AND a resolved collection map, without which block grouping has nothing to
+        /// group by. Answers exactly the question <see cref="BuildInterleavedPositions"/> asks,
+        /// so a caller can trust this alone.
         /// </summary>
-        internal bool UsesAirBlocks => ShouldUseAirBlocks(GroupByField, OrderWithinGroupsByAirDate, ShuffleWithinGroups);
+        internal bool UsesAirBlocks => ShouldUseAirBlocks(GroupByField, OrderWithinGroupsByAirDate, ShuffleWithinGroups, CollectionGroupKeys);
 
         /// <summary>
         /// The air-block gate itself, in one place. <see cref="UsesAirBlocks"/> reads it from
         /// instance state; <see cref="BuildInterleavedPositions"/> reads it from its parameters.
         /// Both must agree on whether a refresh uses blocks - if they drift, SmartList prepares
-        /// state for one mode while the interleave runs the other.
+        /// state for one mode while the interleave runs the other. Every condition lives here,
+        /// including the map presence, so there is no "and also check X" for callers to forget.
         /// </summary>
-        internal static bool ShouldUseAirBlocks(string? groupByField, bool airDateWithinGroups, bool shuffleWithinGroups) =>
-            groupByField == "Collections" && airDateWithinGroups && !shuffleWithinGroups;
+        internal static bool ShouldUseAirBlocks(string? groupByField, bool airDateWithinGroups, bool shuffleWithinGroups, Dictionary<Guid, string>? collectionGroupKeys) =>
+            groupByField == "Collections" && airDateWithinGroups && !shuffleWithinGroups && collectionGroupKeys != null;
 
         /// <summary>
         /// Pre-computed interleave positions for each item.
@@ -205,10 +208,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             // Air blocks apply only to collection grouping with air-date order; the plain
             // per-item interleave stays allocation-free for every other round-robin variant.
-            // The field name is part of the gate (via ShouldUseAirBlocks) so this cannot diverge
-            // from UsesAirBlocks; the map check stays because block grouping is only meaningful
-            // once collection membership has actually been resolved.
-            bool useAirBlocks = ShouldUseAirBlocks(groupByField, airDateWithinGroups, shuffleWithinGroups) && collectionGroupKeys != null;
+            // Same gate as UsesAirBlocks, evaluated from parameters instead of instance state,
+            // so the two cannot diverge.
+            bool useAirBlocks = ShouldUseAirBlocks(groupByField, airDateWithinGroups, shuffleWithinGroups, collectionGroupKeys);
             if (!useAirBlocks)
             {
                 int maxGroupSize = groups.Values.Max(g => g.Count);
@@ -591,7 +593,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 return;
             }
 
-            var collectHoldState = UsesAirBlocks && CollectionGroupKeys != null;
+            // UsesAirBlocks already requires CollectionGroupKeys, so the null-forgiving uses of it
+            // below are safe.
+            var collectHoldState = UsesAirBlocks;
             if (collectHoldState)
             {
                 WatchedByGroup = new Dictionary<string, List<(BaseItem Item, DateTime LastPlayed, DateTime Air)>>(StringComparer.OrdinalIgnoreCase);

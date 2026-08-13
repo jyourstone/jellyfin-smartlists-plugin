@@ -144,6 +144,25 @@ public static class TestItems
         return item;
     }
 
+    /// <summary>
+    /// A Season - a container whose recency is aggregated over cached children rather than read
+    /// from its own user-data row.
+    /// </summary>
+    public static Season SeasonOf(string name)
+    {
+        var season = new Season { Id = Guid.NewGuid(), Name = name };
+        season.SortName = name;
+        return season;
+    }
+
+    /// <summary>A MusicAlbum - the audio equivalent of <see cref="SeasonOf"/>.</summary>
+    public static MusicAlbum Album(string name)
+    {
+        var album = new MusicAlbum { Id = Guid.NewGuid(), Name = name };
+        album.SortName = name;
+        return album;
+    }
+
     /// <summary>An Audio track. Disc is ParentIndexNumber, track is IndexNumber.</summary>
     public static Audio Track(string album, int disc, int track, string? name = null, string? artist = null)
     {

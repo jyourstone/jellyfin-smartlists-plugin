@@ -29,9 +29,12 @@ namespace Jellyfin.Plugin.SmartLists.Tests.Core.Orders;
 ///
 /// NOTE ON THE TWO GATES: <c>UsesAirBlocks</c> (which tells SmartList whether to prepare block
 /// state) and the internal flag inside <c>BuildInterleavedPositions</c> (which decides whether the
-/// interleave emits blocks) both route through <c>RoundRobinBase.ShouldUseAirBlocks</c>, so they
-/// cannot drift. They previously did: the interleave gated on <c>collectionGroupKeys != null</c>
-/// alone and never inspected the field name. A dedicated test below guards against a regression.
+/// interleave emits blocks) both route through <c>RoundRobinBase.ShouldUseAirBlocks</c>, evaluated
+/// from instance state and from parameters respectively, so they cannot drift. They previously
+/// did: the interleave gated on <c>collectionGroupKeys != null</c> alone and never inspected the
+/// field name, while <c>UsesAirBlocks</c> inspected the field name and ignored the map. Every
+/// condition - including map presence - now lives in the one helper, so <c>UsesAirBlocks</c> can
+/// be trusted on its own. A dedicated test below guards against a regression.
 ///
 /// OUT OF SCOPE (owned by other test files): ExtractGroupKey/CompareWithinGroup/Shuffle in
 /// isolation, the plain non-air-block interleave on its own, and
@@ -58,13 +61,20 @@ public class RoundRobinAirBlockTests
     // ============================================================================================
 
     [Theory]
-    [InlineData("Collections", true, true)] // baseline: all conditions met
-    [InlineData("SeriesName", true, false)] // wrong field
-    [InlineData("Genres", true, false)] // wrong field, another value
-    [InlineData("Collections", false, false)] // no air-date within-group order
-    public void UsesAirBlocks_RequiresCollectionsGroupingAndAirDateOrder(string groupByField, bool orderByAirDate, bool expected)
+    [InlineData("Collections", true, true, true)] // baseline: all conditions met
+    [InlineData("SeriesName", true, true, false)] // wrong field
+    [InlineData("Genres", true, true, false)] // wrong field, another value
+    [InlineData("Collections", false, true, false)] // no air-date within-group order
+    [InlineData("Collections", true, false, false)] // no resolved collection map to group blocks by
+    public void UsesAirBlocks_RequiresCollectionsGroupingAirDateOrderAndAResolvedMap(
+        string groupByField, bool orderByAirDate, bool withMap, bool expected)
     {
-        var order = new RoundRobinOrder { GroupByField = groupByField, OrderWithinGroupsByAirDate = orderByAirDate };
+        var order = new RoundRobinOrder
+        {
+            GroupByField = groupByField,
+            OrderWithinGroupsByAirDate = orderByAirDate,
+            CollectionGroupKeys = withMap ? [] : null,
+        };
 
         Assert.Equal(expected, order.UsesAirBlocks);
     }
@@ -74,13 +84,23 @@ public class RoundRobinAirBlockTests
     {
         // RoundRobinShuffledOrder overrides ShuffleWithinGroups => true; shuffle wins over
         // air-date order even when every other condition for blocks is satisfied.
-        var shuffled = new RoundRobinShuffledOrder { GroupByField = "Collections", OrderWithinGroupsByAirDate = true };
+        var shuffled = new RoundRobinShuffledOrder
+        {
+            GroupByField = "Collections",
+            OrderWithinGroupsByAirDate = true,
+            CollectionGroupKeys = [],
+        };
         Assert.False(shuffled.UsesAirBlocks);
 
         // Contrast: RoundRobinRandomOrder randomizes GROUP order but never overrides
         // ShuffleWithinGroups, so the identical configuration keeps blocks on for it - proving
         // ShuffleWithinGroups specifically (not "any random-flavoured order") is the differentiator.
-        var random = new RoundRobinRandomOrder { GroupByField = "Collections", OrderWithinGroupsByAirDate = true };
+        var random = new RoundRobinRandomOrder
+        {
+            GroupByField = "Collections",
+            OrderWithinGroupsByAirDate = true,
+            CollectionGroupKeys = [],
+        };
         Assert.True(random.UsesAirBlocks);
     }
 
@@ -130,8 +150,13 @@ public class RoundRobinAirBlockTests
         Assert.Equal(NamesInPositionOrder(withoutMap, items), NamesInPositionOrder(withEmptyMap, items));
         Assert.NotEqual(new[] { "Comedy1", "DramaAlpha", "DramaBeta", "Comedy2" }, NamesInPositionOrder(withEmptyMap, items));
 
-        // And the public gate agrees with what the interleave just did.
-        Assert.False(new RoundRobinOrder { GroupByField = "Genres", OrderWithinGroupsByAirDate = true }.UsesAirBlocks);
+        // And the public gate agrees with what the interleave just did, on the same inputs.
+        Assert.False(new RoundRobinOrder
+        {
+            GroupByField = "Genres",
+            OrderWithinGroupsByAirDate = true,
+            CollectionGroupKeys = emptyCollectionMap,
+        }.UsesAirBlocks);
     }
 
     // ============================================================================================
@@ -336,7 +361,11 @@ public class RoundRobinAirBlockTests
     {
         var day = new DateTime(2024, 1, 1);
         var itemA = TestItems.Ep("ShowA", 1, 1, aired: day, name: "A");
-        var itemB = TestItems.Ep("ShowB", 1, 1, aired: day, name: "B"); // same day as A, different show
+        // Episode 2, not 1: A and B share an air date, are both episodes, and both have an empty
+        // SeriesId, so CompareWithinGroupByAirDate returns 0 for the pair on every other tier. A
+        // distinct episode number makes the within-group sort decide the order rather than leaving
+        // it to List<T>.Sort, which is not a stable sort.
+        var itemB = TestItems.Ep("ShowB", 1, 2, aired: day, name: "B"); // same day as A, different show
         var itemC = TestItems.Ep("ShowC", 1, 1, aired: day.AddDays(10), name: "C"); // far away - never chains either way
         var itemD = TestItems.Ep("ShowD", 1, 1, aired: day, name: "D");
 
