@@ -312,9 +312,15 @@ public class RoundRobinAirBlockTests
     }
 
     /// <summary>
-    /// An item with no air date can never chain onto a preceding block (forms a block of one) and
-    /// also breaks the chain for whatever follows it - even when the item after it would otherwise
-    /// have been within the window of the item before the gap.
+    /// An item with no air date forms a block of one and breaks the chain for whatever follows it:
+    /// the next dated item starts a fresh block even though nothing dated preceded it in range.
+    ///
+    /// The undated item goes FIRST because that is the only arrangement production can hand this
+    /// method. Both callers sort by <see cref="RoundRobinBase.CompareWithinGroupByAirDate"/> first,
+    /// and a missing date is DateTime.MinValue, which sorts ahead of every real date - so an
+    /// undated item can never appear mid-group. Feeding it in the middle would assert on a
+    /// sequence the production pipeline cannot produce, which looks like coverage while pinning
+    /// nothing real.
     /// </summary>
     [Fact]
     public void ChunkIntoAirBlocks_ItemWithNoAirDate_FormsItsOwnBlock_AndBreaksTheChainAfterIt()
@@ -322,9 +328,41 @@ public class RoundRobinAirBlockTests
         var day = new DateTime(2024, 1, 1);
         var items = new List<BaseItem>
         {
+            TestItems.Ep("ShowB", 1, 1, aired: null, name: "NoDate"),
+            TestItems.Ep("ShowA", 1, 1, aired: day, name: "A1"),
+            TestItems.Ep("ShowC", 1, 1, aired: day, name: "C1"), // same day as A1, different show - chains to it
+        };
+
+        var blocks = RoundRobinBase.ChunkIntoAirBlocks(items, windowDays: 3);
+
+        // NoDate alone; A1 cannot chain onto an undated predecessor so it opens a new block, and
+        // C1 then chains to A1 normally.
+        Assert.Equal("NoDate | A1,C1", RenderBlocks(blocks));
+    }
+
+    /// <summary>
+    /// Deliberately OUT OF CONTRACT: an undated item mid-sequence, which the sort in front of
+    /// every production caller cannot produce. It is here because it is the only thing that
+    /// exercises the `date > DateTime.MinValue` clause of the chaining condition.
+    ///
+    /// Without that clause an undated item chains onto a dated predecessor, because the gap
+    /// computes as `(MinValue - prevDate).TotalDays` — a large NEGATIVE number, which satisfies
+    /// `&lt;= windowDays` for every window. The result would be "A1,NoDate | C1": an item with no
+    /// air date silently absorbed into someone else's air block.
+    ///
+    /// The in-contract test above cannot catch that (verified by mutation: with the undated item
+    /// sorted first, removing the clause changes nothing). So the two tests are not redundant —
+    /// one pins the reachable behaviour, this one pins the guard that keeps it reachable-only.
+    /// </summary>
+    [Fact]
+    public void ChunkIntoAirBlocks_UndatedItemMidSequence_StillRefusesToChain_GuardingAgainstAnUnsortedCaller()
+    {
+        var day = new DateTime(2024, 1, 1);
+        var items = new List<BaseItem>
+        {
             TestItems.Ep("ShowA", 1, 1, aired: day, name: "A1"),
             TestItems.Ep("ShowB", 1, 1, aired: null, name: "NoDate"),
-            TestItems.Ep("ShowC", 1, 1, aired: day, name: "C1"), // same day as A1 - would chain if NoDate weren't between them
+            TestItems.Ep("ShowC", 1, 1, aired: day, name: "C1"),
         };
 
         var blocks = RoundRobinBase.ChunkIntoAirBlocks(items, windowDays: 3);
