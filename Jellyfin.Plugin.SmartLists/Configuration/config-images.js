@@ -525,10 +525,17 @@
                     body: formData
                 }).then(function (response) {
                     if (!response.ok) {
-                        return response.json().then(function (errorData) {
-                            throw new Error(errorData.message || 'Upload failed');
-                        }).catch(function () {
-                            throw new Error('Upload failed with status ' + response.status);
+                        // Read the body once: chaining .catch onto .json().then() used to swallow
+                        // the parsed message along with the parse error and always report the
+                        // generic "status N" text.
+                        return response.text().then(function (bodyText) {
+                            var detail = null;
+                            try {
+                                detail = SmartLists.pickErrorText(JSON.parse(bodyText));
+                            } catch (e) {
+                                detail = null;
+                            }
+                            throw new Error(detail || ('Upload failed with status ' + response.status));
                         });
                     }
                     return response.json();

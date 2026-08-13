@@ -49,6 +49,7 @@ nav:
     - Common Use Cases: examples/common-use-cases.md
     - Advanced Examples: examples/advanced-examples.md
   - Development:
+    - Integration API: development/integration-api.md
     - Building Locally: development/building-locally.md
     - Debugging: development/debugging.md
     - Contributing: development/contributing.md

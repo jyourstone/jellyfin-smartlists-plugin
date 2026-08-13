@@ -8,54 +8,25 @@
         // Try to extract meaningful error message from server response
         if (err && typeof err.text === 'function') {
             return err.text().then(function (serverMessage) {
-                let friendlyMessage = baseMessage;
+                // The API answers with RFC 7807 ProblemDetails; pickErrorText knows that shape
+                // (plus the legacy ones). Anything it can't read falls back to the raw body.
+                let detail = null;
                 try {
-                    const parsedMessage = JSON.parse(serverMessage);
-
-                    // Handle ValidationProblemDetails format (has 'errors' object with field-level errors)
-                    if (parsedMessage && parsedMessage.errors && typeof parsedMessage.errors === 'object') {
-                        const fieldErrors = [];
-                        for (const field in parsedMessage.errors) {
-                            if (parsedMessage.errors.hasOwnProperty(field)) {
-                                const fieldErrorMessages = Array.isArray(parsedMessage.errors[field])
-                                    ? parsedMessage.errors[field].join(', ')
-                                    : parsedMessage.errors[field];
-                                fieldErrors.push(field + ': ' + fieldErrorMessages);
-                            }
-                        }
-                        if (fieldErrors.length > 0) {
-                            friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + fieldErrors.join('; ');
-                        } else if (parsedMessage.detail) {
-                            friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + parsedMessage.detail;
-                        }
-                    }
-                    // Handle ProblemDetails format (has 'detail' property)
-                    else if (parsedMessage && parsedMessage.detail) {
-                        friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + parsedMessage.detail;
-                    }
-                    // Handle other JSON error formats
-                    else if (parsedMessage && parsedMessage.message) {
-                        friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + parsedMessage.message;
-                    } else if (parsedMessage && parsedMessage.title) {
-                        friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + parsedMessage.title;
-                    } else if (serverMessage && serverMessage.trim()) {
-                        // Remove quotes and Unicode escapes, then add context
-                        const cleanMessage = serverMessage
-                            .replace(/"/g, '')
-                            .replace(/\\u0027/g, "'")
-                            .replace(/\\u0022/g, '"');
-                        friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + cleanMessage;
-                    }
+                    detail = SmartLists.pickErrorText(JSON.parse(serverMessage));
                 } catch (e) {
-                    if (serverMessage && serverMessage.trim()) {
-                        // Remove quotes and Unicode escapes, then add context
-                        const cleanMessage = serverMessage
-                            .replace(/"/g, '')
-                            .replace(/\\u0027/g, "'")
-                            .replace(/\\u0022/g, '"');
-                        friendlyMessage = baseMessage.replace(/\.$/, '') + ': ' + cleanMessage;
-                    }
+                    detail = null;
                 }
+                if (!detail && serverMessage && serverMessage.trim()) {
+                    // Remove quotes and Unicode escapes, then add context
+                    detail = serverMessage
+                        .replace(/"/g, '')
+                        .replace(/\\u0027/g, "'")
+                        .replace(/\\u0022/g, '"');
+                }
+
+                const friendlyMessage = detail
+                    ? baseMessage.replace(/\.$/, '') + ': ' + detail
+                    : baseMessage;
                 SmartLists.showNotification(friendlyMessage);
                 return Promise.resolve();
             }).catch(function () {

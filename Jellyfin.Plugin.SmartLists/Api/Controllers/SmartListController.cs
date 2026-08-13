@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Plugin.SmartLists.Api.Filters;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
@@ -41,6 +42,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     [Authorize(Policy = "RequiresElevation")]
     [Route("Plugins/SmartLists")]
     [Produces("application/json")]
+    // Error bodies below use several ad-hoc shapes (new { message }, new { error }, bare strings).
+    // This attribute rewrites them all to RFC 7807 ProblemDetails on the way out, so the wire
+    // contract is always { title, detail, status }. See SmartListsProblemDetailsAttribute.
+    [SmartListsProblemDetails]
     public partial class SmartListController(
         ILogger<SmartListController> logger,
         ILoggerFactory loggerFactory,
@@ -374,6 +379,40 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             return currentUser;
+        }
+
+        /// <summary>
+        /// Resolves the owner from a request body's CreatedByUserId value.
+        /// Used as a fallback when there is no Jellyfin-UserId claim (API key callers carry no such claim).
+        /// </summary>
+        /// <param name="createdByUserId">The CreatedByUserId value supplied in the request body</param>
+        /// <returns>The User object if the value resolves to a real user, null otherwise</returns>
+        private Jellyfin.Database.Implementations.Entities.User? ResolveCreatedByUser(string? createdByUserId)
+        {
+            if (string.IsNullOrWhiteSpace(createdByUserId)
+                || !Guid.TryParse(createdByUserId, out var createdByGuid)
+                || createdByGuid == Guid.Empty)
+            {
+                return null;
+            }
+
+            return _userManager.GetUserById(createdByGuid);
+        }
+
+        /// <summary>
+        /// Builds the 400 response returned when a collection owner cannot be determined from
+        /// the request body or the authenticated user context.
+        /// </summary>
+        /// <returns>A 400 ProblemDetails result</returns>
+        private ActionResult CollectionOwnerUnresolvable()
+        {
+            logger.LogWarning("Could not determine collection owner: no valid UserId or CreatedByUserId in the request body and no Jellyfin-UserId claim on the request");
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Validation Error",
+                Detail = "Collection owner could not be determined. Supply 'UserId' (or 'CreatedByUserId') in the request body when calling with an API key.",
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         /// <summary>
@@ -893,14 +932,29 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 // Default to currently logged-in user
                 var currentUserId = GetCurrentUserId();
-                var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
-                if (currentUser == null)
+                if (currentUserId != Guid.Empty)
                 {
-                    return errorResult!;
-                }
+                    var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                    if (currentUser == null)
+                    {
+                        return errorResult!;
+                    }
 
-                collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
-                logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                    collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
+                    logger.LogDebug("Set default collection owner to currently logged-in user: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                }
+                else
+                {
+                    // No Jellyfin-UserId claim (API key callers) - fall back to CreatedByUserId from the request body
+                    var creator = ResolveCreatedByUser(collection.CreatedByUserId);
+                    if (creator == null)
+                    {
+                        return CollectionOwnerUnresolvable();
+                    }
+
+                    collection.UserId = creator.Id.ToString("N").ToLowerInvariant();
+                    logger.LogDebug("Set collection owner from request CreatedByUserId: {Username} ({UserId})", creator.Username, creator.Id);
+                }
             }
             else
             {
@@ -1732,23 +1786,54 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     return NotFound("Smart collection not found");
                 }
 
-                // Set default owner user if not specified, or normalize if already set (same as CreateCollectionInternal)
+                // Resolve owner. Unlike create, an update must PRESERVE the existing owner when the
+                // request does not name one - omitting UserId means "leave it alone", not "reassign
+                // this collection to me".
                 if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
                 {
-                    // Default to currently logged-in user
-                    var currentUserId = GetCurrentUserId();
-                    var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
-                    if (currentUser == null)
+                    // The stored owner must still resolve to a real user - a deleted account would
+                    // otherwise be preserved as a dangling owner instead of falling through below.
+                    if (!string.IsNullOrEmpty(existingCollection.UserId)
+                        && Guid.TryParse(existingCollection.UserId, out var existingUserId)
+                        && existingUserId != Guid.Empty
+                        && _userManager.GetUserById(existingUserId) is not null)
                     {
-                        return errorResult!;
+                        // Keep the current owner untouched.
+                        collection.UserId = NormalizeUserId(existingCollection.UserId);
+                        logger.LogDebug("Preserved existing collection owner during update: {UserId}", collection.UserId);
                     }
+                    else
+                    {
+                        // Stored record has no usable owner (legacy or corrupt data) - re-derive one.
+                        var currentUserId = GetCurrentUserId();
+                        if (currentUserId != Guid.Empty)
+                        {
+                            var currentUser = ValidateAndGetCurrentUser(currentUserId, out var errorResult);
+                            if (currentUser == null)
+                            {
+                                return errorResult!;
+                            }
 
-                    collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
-                    logger.LogDebug("Set default collection owner to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                            collection.UserId = currentUser.Id.ToString("N").ToLowerInvariant();
+                            logger.LogDebug("Existing collection had no owner; set to currently logged-in user during update: {Username} ({UserId})", currentUser.Username, currentUser.Id);
+                        }
+                        else
+                        {
+                            // No Jellyfin-UserId claim (API key callers) - fall back to CreatedByUserId from the request body
+                            var creator = ResolveCreatedByUser(collection.CreatedByUserId);
+                            if (creator == null)
+                            {
+                                return CollectionOwnerUnresolvable();
+                            }
+
+                            collection.UserId = creator.Id.ToString("N").ToLowerInvariant();
+                            logger.LogDebug("Existing collection had no owner; set from request CreatedByUserId during update: {Username} ({UserId})", creator.Username, creator.Id);
+                        }
+                    }
                 }
                 else
                 {
-                    // Normalize existing UserId to canonical "N" format (no dashes)
+                    // Normalize explicitly-supplied UserId to canonical "N" format (no dashes)
                     collection.UserId = NormalizeUserId(collection.UserId);
                     logger.LogDebug("Normalized collection UserId to canonical format during update: {UserId}", collection.UserId);
                 }
@@ -2584,9 +2669,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="overwrite">If true, overwrites existing lists with the same ID. If false, skips them.</param>
         /// <returns>Restore results with counts of imported and skipped lists.</returns>
         [HttpPost("backups/upload")]
+        [Consumes("multipart/form-data")]
         [DisableRequestSizeLimit]
         [RequestFormLimits(MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024)]
-        public async Task<ActionResult> RestoreFromUpload([FromForm] IFormFile file, [FromQuery] bool overwrite = false)
+        // Bind the file as a bare IFormFile. [FromForm] here makes Swashbuckle throw and returns
+        // HTTP 500 for /api-docs/openapi.json server-wide. See docs/content/development/integration-api.md
+        public async Task<ActionResult> RestoreFromUpload(IFormFile file, [FromQuery] bool overwrite = false)
         {
             // Maximum upload size: 1GB
             const long MaxUploadSize = 1L * 1024 * 1024 * 1024;
@@ -2624,9 +2712,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="file">ZIP file to preview.</param>
         /// <returns>Preview information including list count.</returns>
         [HttpPost("backups/preview")]
+        [Consumes("multipart/form-data")]
         [DisableRequestSizeLimit]
         [RequestFormLimits(MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024)]
-        public ActionResult PreviewUploadedBackup([FromForm] IFormFile file)
+        // Bare IFormFile, never [FromForm] — see RestoreFromUpload above.
+        public ActionResult PreviewUploadedBackup(IFormFile file)
         {
             const long MaxUploadSize = 1L * 1024 * 1024 * 1024;
 
@@ -2922,10 +3012,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="imageType">The image type (Primary, Backdrop, Banner, etc.).</param>
         /// <returns>The uploaded image info.</returns>
         [HttpPost("{id}/images")]
+        [Consumes("multipart/form-data")]
         [DisableRequestSizeLimit]
+        // 'file' is a bare IFormFile on purpose — [FromForm] on it breaks OpenAPI generation
+        // server-wide. [FromForm] on the plain string below is fine.
         public async Task<ActionResult<SmartListImageDto>> UploadImage(
             [FromRoute, Required] string id,
-            [FromForm] IFormFile file,
+            IFormFile file,
             [FromForm, Required] string imageType)
         {
             if (file == null || file.Length == 0)
