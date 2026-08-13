@@ -169,17 +169,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Failed to parse Scrob API response for list {ListId}", listId);
+                // Same reasoning as the failure status below: an empty-but-complete result silently
+                // empties the list (or, for a NotEqual rule, matches the whole library) with no warning.
+                throw new InvalidOperationException(
+                    $"Scrob returned a response for list {listId} that could not be read. Check that the "
+                    + "Scrob Server URL in Settings > External Lists points at Scrob itself.", ex);
             }
             catch (HttpRequestException)
             {
-                // Same reasoning as the failure status below (and the same as TraktListProvider):
-                // an unreachable server must not be reported as an empty list.
+                // Same reasoning, and the same as TraktListProvider: an unreachable server must not be
+                // reported as an empty list. Anything else unexpected propagates for the same reason —
+                // ExternalListService logs it and records a refresh warning.
                 throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unexpected error fetching Scrob list {ListId}", listId);
             }
 
             if (failureStatus != null)

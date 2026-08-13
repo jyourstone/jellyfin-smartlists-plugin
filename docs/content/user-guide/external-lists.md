@@ -205,6 +205,9 @@ List items are matched in the order Scrob returns them, so **External List Order
 !!! warning "Matching Requires TMDB IDs"
     Scrob doesn't store IMDb IDs — items match on TMDB ID, plus the series TVDB ID for season entries and the episode TVDB ID for episodes Scrob resolved from TVDB. Library items with none of those won't match.
 
+!!! note "Seasons Match the Whole Series"
+    A season added to a Scrob list is matched as its parent series, so the rule pulls in the whole show rather than that one season. This is the same behaviour as season entries in Trakt lists. Person entries are ignored entirely.
+
 ---
 
 ### Trakt
