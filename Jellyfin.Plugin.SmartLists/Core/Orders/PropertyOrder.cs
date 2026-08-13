@@ -61,7 +61,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             RefreshQueueService.RefreshCache? refreshCache = null)
         {
             // Delegate to unified GetSortValue
-            return GetSortValue(item, user, userDataManager, logger, refreshCache);
+            var value = GetSortValue(item, user, userDataManager, logger, refreshCache);
+
+            // OrderBy passes Comparer to LINQ, but multi-sort (SmartList.ApplySortingCore)
+            // compares the returned keys with no comparer. Wrap so an overridden comparer
+            // still applies there; leave the value bare otherwise so ApplySortingCore can
+            // still recognise DateTime keys for its day-precision truncation.
+            var comparer = Comparer;
+            return ReferenceEquals(comparer, Comparer<T>.Default)
+                ? value
+                : new ComparerBackedKey<T>(value, comparer);
         }
     }
 }

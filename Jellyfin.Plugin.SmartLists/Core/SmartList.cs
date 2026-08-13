@@ -2813,6 +2813,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is PlayCountOrderDesc ||
                    order is LastPlayedOrderDesc ||
                    order is RuntimeOrderDesc ||
+                   order is ResolutionOrderDesc ||
                    order is SeriesNameOrderDesc ||
                    order is SeriesNameIgnoreArticlesOrderDesc ||
                    order is AlbumNameOrderDesc ||
@@ -3593,6 +3594,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "LastPlayed (owner) Descending", () => new LastPlayedOrderDesc() },
             { "Runtime Ascending", () => new RuntimeOrder() },
             { "Runtime Descending", () => new RuntimeOrderDesc() },
+            { "Resolution Ascending", () => new ResolutionOrder() },
+            { "Resolution Descending", () => new ResolutionOrderDesc() },
             { "SeriesName Ascending", () => new SeriesNameOrder() },
             { "SeriesName Descending", () => new SeriesNameOrderDesc() },
             { "SeriesName (Ignore Articles) Ascending", () => new SeriesNameIgnoreArticlesOrder() },

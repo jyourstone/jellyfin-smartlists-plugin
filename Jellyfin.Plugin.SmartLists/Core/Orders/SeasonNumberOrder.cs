@@ -44,7 +44,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             Dictionary<Guid, int>? itemRandomKeys = null,
             RefreshQueueService.RefreshCache? refreshCache = null)
         {
-            return OrderUtilities.GetSeasonNumber(item);
+            // Return composite key matching OrderBy logic: SeasonNumber -> EpisodeNumber -> Name.
+            // ICompositeSortKey means a non-final SeasonNumber sort strips back to the season
+            // alone, letting the user's own secondary sort order episodes within a season.
+            var seasonNumber = OrderUtilities.GetSeasonNumber(item);
+            var episodeNumber = OrderUtilities.GetEpisodeNumber(item);
+            var name = item.Name ?? "";
+            return new ComparableTuple4<int, int, string, string>(
+                seasonNumber,
+                episodeNumber,
+                name,
+                "", // Fourth element not used, but ComparableTuple4 requires 4 elements
+                comparer3: OrderUtilities.SharedNaturalComparer);
         }
     }
 
@@ -82,7 +93,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             Dictionary<Guid, int>? itemRandomKeys = null,
             RefreshQueueService.RefreshCache? refreshCache = null)
         {
-            return OrderUtilities.GetSeasonNumber(item);
+            // Return composite key matching OrderBy logic: SeasonNumber -> EpisodeNumber -> Name.
+            // NOTE: Do NOT negate values here! The sorting direction is controlled by
+            // OrderBy vs OrderByDescending in ApplyMultipleOrders for multi-level sorting.
+            var seasonNumber = OrderUtilities.GetSeasonNumber(item);
+            var episodeNumber = OrderUtilities.GetEpisodeNumber(item);
+            var name = item.Name ?? "";
+            return new ComparableTuple4<int, int, string, string>(
+                seasonNumber,
+                episodeNumber,
+                name,
+                "", // Fourth element not used, but ComparableTuple4 requires 4 elements
+                comparer3: OrderUtilities.SharedNaturalComparer);
         }
     }
 }

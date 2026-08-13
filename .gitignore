@@ -356,3 +356,5 @@ dev/media/
 
 # MkDocs build output
 docs/site/
+# Playwright MCP session artifacts
+.playwright-mcp/
