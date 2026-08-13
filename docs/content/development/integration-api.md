@@ -68,8 +68,14 @@ cannot infer "the current user" from the request.
     evaluate user-specific rules. With a logged-in admin token the plugin defaults that owner to
     the caller. With an API key there is no caller to default to.
 
-    Send **`UserId`** (preferred) or **`CreatedByUserId`** in the request body when creating or
-    updating a collection with an API key. Omit both and you get:
+    **Creating:** send **`UserId`** (preferred) or **`CreatedByUserId`** in the request body.
+    There is no existing owner to fall back on, so one of them is required.
+
+    **Updating:** both are optional. Omitting `UserId` means "leave ownership alone" — the stored
+    owner is kept. Send `UserId` only when you actually intend to reassign the collection. An owner
+    is required again only if the stored one is missing or points at a deleted user.
+
+    When no owner can be determined you get:
 
     ```json
     {

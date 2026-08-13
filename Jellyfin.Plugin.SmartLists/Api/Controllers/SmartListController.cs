@@ -1791,9 +1791,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // this collection to me".
                 if (string.IsNullOrEmpty(collection.UserId) || !Guid.TryParse(collection.UserId, out var userId) || userId == Guid.Empty)
                 {
+                    // The stored owner must still resolve to a real user - a deleted account would
+                    // otherwise be preserved as a dangling owner instead of falling through below.
                     if (!string.IsNullOrEmpty(existingCollection.UserId)
                         && Guid.TryParse(existingCollection.UserId, out var existingUserId)
-                        && existingUserId != Guid.Empty)
+                        && existingUserId != Guid.Empty
+                        && _userManager.GetUserById(existingUserId) is not null)
                     {
                         // Keep the current owner untouched.
                         collection.UserId = NormalizeUserId(existingCollection.UserId);
