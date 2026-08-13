@@ -390,6 +390,9 @@ When using multiple OR blocks, you can set a **Max Items limit for each individu
 !!! tip "Combining with Global Limits"
     Per-group limits are applied first, then the global Max Items limit. Example: 3 blocks × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
 
+!!! note "Collection-only / playlist-only groups"
+    OR blocks using "collection only" or "playlist only" mode participate like any other block: their matched collections/playlists count toward that block's own limit and are unaffected by limits set on other blocks.
+
 !!! info "See Examples"
     For detailed examples using per-group limits, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).
 
