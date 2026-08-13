@@ -81,6 +81,14 @@ Adding new sort options requires updates in: `Core/Orders/`, `OrderFactory.cs`, 
 - Use `showNotification()` for user messages, not `Dashboard.alert()`
 - **New JS files must be registered in TWO places**: `.csproj` (as `<EmbeddedResource>`) AND `Plugin.cs` (in `GetPages()` as `PluginPageInfo`)
 
+### Multipart uploads break OpenAPI if bound wrong
+Bind uploaded files as a bare `IFormFile` parameter — **never** `[FromForm] IFormFile`. MVC already
+binds `IFormFile` from the multipart body, so the attribute is a runtime no-op, but it downgrades the
+binding source to `BindingSource.Form`, which makes Swashbuckle throw and return **HTTP 500 for
+`/api-docs/openapi.json` server-wide** — breaking API-doc generation for all of Jellyfin, not just this
+plugin. Add `[Consumes("multipart/form-data")]` alongside so the schema declares the right shape.
+`[FromForm]` on plain scalar parameters (e.g. `string imageType`) is fine.
+
 ### Media Type Constants
 Use `MediaTypes.Episode` instead of `"Episode"` - see `Core/Constants/MediaTypes.cs`.
 

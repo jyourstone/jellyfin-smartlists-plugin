@@ -109,11 +109,8 @@ Rules in JSON use internal names, not the labels shown in the web interface:
 - `Operator` — e.g. `Equal`, `Contains`, `IsIn`, `GreaterThanOrEqual`, `MatchRegex`. Listed per operator type in [Fields and Operators](fields-and-operators.md#operators).
 - `TargetValue` — always a string, even for numbers (`"TargetValue": "2000"`).
 
-Administrators can also fetch the authoritative field list from the API (requires an admin API key):
-
-```
-GET /Plugins/SmartLists/fields
-```
+Administrators can also fetch the authoritative field list from the API — see
+[Integration API](../development/integration-api.md#reference-data).
 
 ### Gotchas
 

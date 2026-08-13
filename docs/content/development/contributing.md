@@ -69,4 +69,36 @@ All contributions are welcome:
 - Follow existing code style and patterns
 - Write clear, descriptive commit messages
 - Test your changes thoroughly before submitting
+
+## API error responses
+
+Every error body the plugin's controllers return uses [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807)
+`ProblemDetails`:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "List name cannot be empty",
+  "traceId": "00-..."
+}
+```
+
+Read `detail` for the human-readable message. Validation failures may additionally carry an
+`errors` object (`ValidationProblemDetails`) with field-level messages.
+
+You do not have to build this shape by hand. Controllers may keep returning
+`BadRequest("...")`, `BadRequest(new { message = "..." })` or `StatusCode(500, new { error = "..." })`;
+the `[SmartListsProblemDetails]` result filter on each controller rewrites those into
+`ProblemDetails` before serialization, preserving both the status code and the message text.
+Returning a `ProblemDetails` explicitly also works and is left untouched.
+
+Two limits are worth knowing:
+
+- The filter only sees results produced by the plugin's own controllers. Authorization
+  challenges, model-binding failures and Jellyfin's exception middleware answer before it runs,
+  so a caller should still cope with a bare `403` or a plain-text `500`.
+- On the client side, `SmartLists.pickErrorText(parsedBody)` in `config-core.js` is the single
+  place that knows this shape. Use it instead of reading `.message` or `.detail` directly.
 - Update documentation if you add new features or change behavior

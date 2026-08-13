@@ -253,6 +253,33 @@
             .replace(/`/g, '&#96;');
     };
 
+    // Pull the human-readable text out of a parsed API error body.
+    // The API returns RFC 7807 ProblemDetails ({ title, detail, status }), so 'detail' is the
+    // primary key. The legacy 'message'/'error' keys are kept so this also works against older
+    // plugin versions, and 'title' is the last resort for detail-less ProblemDetails such as
+    // framework-generated 404s. Returns null when the body carries no usable text.
+    SmartLists.pickErrorText = function (body) {
+        if (!body) return null;
+        if (typeof body === 'string') return body;
+        if (typeof body !== 'object') return null;
+
+        // ValidationProblemDetails: field-level errors take precedence over the generic detail
+        if (body.errors && typeof body.errors === 'object') {
+            const fieldErrors = [];
+            for (const field in body.errors) {
+                if (Object.prototype.hasOwnProperty.call(body.errors, field)) {
+                    const fieldMessages = Array.isArray(body.errors[field])
+                        ? body.errors[field].join(', ')
+                        : body.errors[field];
+                    fieldErrors.push(field + ': ' + fieldMessages);
+                }
+            }
+            if (fieldErrors.length > 0) return fieldErrors.join('; ');
+        }
+
+        return body.detail || body.message || body.error || body.title || null;
+    };
+
     // Extract error message from API error responses
     // Handles both modern Response objects and legacy error formats
     SmartLists.extractErrorMessage = async function (err, defaultMessage) {
@@ -267,11 +294,9 @@
                     if (textContent) {
                         // Try to parse as JSON first
                         try {
-                            const errorData = JSON.parse(textContent);
-                            if (errorData.message) {
-                                return errorData.message;
-                            } else if (typeof errorData === 'string') {
-                                return errorData;
+                            const picked = SmartLists.pickErrorText(JSON.parse(textContent));
+                            if (picked) {
+                                return picked;
                             }
                         } catch (parseError) {
                             // If JSON parsing fails, use the raw text
@@ -285,11 +310,9 @@
             // Legacy check for Response with json method (shouldn't happen, but defensive)
             else if (err && typeof err.json === 'function') {
                 try {
-                    const errorData = await err.json();
-                    if (errorData.message) {
-                        return errorData.message;
-                    } else if (typeof errorData === 'string') {
-                        return errorData;
+                    const picked = SmartLists.pickErrorText(await err.json());
+                    if (picked) {
+                        return picked;
                     }
                 } catch (parseError) {
                     console.log('Could not parse error JSON:', parseError);
@@ -298,11 +321,9 @@
             // Check if the error has response text (legacy error format)
             else if (err.responseText) {
                 try {
-                    const errorData = JSON.parse(err.responseText);
-                    if (errorData.message) {
-                        return errorData.message;
-                    } else if (typeof errorData === 'string') {
-                        return errorData;
+                    const picked = SmartLists.pickErrorText(JSON.parse(err.responseText));
+                    if (picked) {
+                        return picked;
                     }
                 } catch (parseError) {
                     // If JSON parsing fails, use the raw response text

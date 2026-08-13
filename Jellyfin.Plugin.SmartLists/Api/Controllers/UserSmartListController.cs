@@ -9,6 +9,7 @@ using Jellyfin.Data;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Database.Implementations.Enums;
+using Jellyfin.Plugin.SmartLists.Api.Filters;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
@@ -39,6 +40,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     [Authorize]
     [Route("Plugins/SmartLists/User")]
     [Produces("application/json")]
+    // Rewrites this controller's new { message } / new { error } / string error bodies to
+    // RFC 7807 ProblemDetails. See SmartListsProblemDetailsAttribute.
+    [SmartListsProblemDetails]
     public class UserSmartListController : ControllerBase
     {
         private const int MaxMediaTypesLimit = 50;
@@ -1797,13 +1801,16 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="imageType">The image type (Primary, Backdrop, Banner, etc.).</param>
         /// <returns>The uploaded image info.</returns>
         [HttpPost("{id}/images")]
+        [Consumes("multipart/form-data")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
+        // 'file' is a bare IFormFile on purpose — [FromForm] on it breaks OpenAPI generation
+        // server-wide. [FromForm] on the plain string below is fine.
         public async Task<ActionResult<SmartListImageDto>> UploadImage(
             [FromRoute, Required] string id,
-            [FromForm] IFormFile file,
+            IFormFile file,
             [FromForm, Required] string imageType)
         {
             // Check if user page is enabled
