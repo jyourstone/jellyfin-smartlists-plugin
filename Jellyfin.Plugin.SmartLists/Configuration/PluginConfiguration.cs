@@ -170,6 +170,22 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         /// </summary>
         public string? ListenBrainzUserToken { get; set; } = null;
 
+        /// <summary>
+        /// Gets or sets how the User-Agent header for external list requests is chosen.
+        /// </summary>
+        public UserAgentMode UserAgentMode { get; set; } = UserAgentMode.Default;
+
+        /// <summary>
+        /// Gets or sets the custom User-Agent used when <see cref="UserAgentMode"/> is Custom.
+        /// </summary>
+        public string? CustomUserAgent { get; set; } = null;
+
+        /// <summary>
+        /// Gets or sets the browser User-Agent captured from the admin page,
+        /// used by the Clone and AutoClone modes.
+        /// </summary>
+        public string? ClonedUserAgent { get; set; } = null;
+
         // ===== Backup Settings =====
 
         /// <summary>
