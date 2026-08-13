@@ -15,7 +15,7 @@ This plugin allows you to create dynamic playlists and collections based on a se
 ## ✨ Features
 
 - **Modern Web Interface** - A full-featured UI to create, manage and view status for smart playlists and collections
-- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), and [ListenBrainz](https://listenbrainz.org) — trending charts, watchlists, top lists, music playlists, and more
+- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), [ListenBrainz](https://listenbrainz.org), and [Scrob](https://github.com/ellite/scrob) — trending charts, watchlists, top lists, music playlists, and more
 - **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - **Automatic Updates** - Playlists and collections refresh automatically on library updates, playback status changes, or via scheduled tasks
 - **Refresh Status & Statistics** - Monitor ongoing refresh operations with real-time progress, view refresh history, and track statistics for all your lists

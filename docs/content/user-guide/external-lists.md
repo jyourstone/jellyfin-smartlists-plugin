@@ -1,6 +1,6 @@
 # External Lists
 
-External Lists let you populate smart lists from external services like MDBList, IMDb, Letterboxd, Trakt, TMDB, and ListenBrainz. Use them to create collections based on trending lists, watchlists, top charts, curated lists, and music playlists from these services.
+External Lists let you populate smart lists from external services like MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz, and Scrob. Use them to create collections based on trending lists, watchlists, top charts, curated lists, and music playlists from these services.
 
 ## How It Works
 
@@ -18,6 +18,7 @@ Items are matched by comparing provider IDs between the external list and your l
 | **IMDb** | No | IMDb |
 | **Letterboxd** | No | TMDB |
 | **ListenBrainz** | No (optional user token) | MusicBrainz recording ID (title + artist fallback) |
+| **Scrob** | Yes | TMDB, TVDB |
 | **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
 | **TMDB** | Yes | TMDB |
 
@@ -169,6 +170,46 @@ External List / equals / https://listenbrainz.org/syndication-feed/user/rob/reco
 
 ---
 
+### Scrob
+
+[Scrob](https://github.com/ellite/scrob) is a self-hosted media tracker with user-created lists. Because it's self-hosted, the admin configures the Scrob server URL and API key once for the whole plugin, in the same place as the other provider credentials.
+
+**Setup:**
+
+1. Enter your Scrob server URL — the same URL you use in your browser, e.g. `https://scrob.example.com` — in the plugin **Settings** tab under **External Lists > Scrob Server URL**
+2. Go to your Scrob instance's **Connections** page and copy your API key
+3. Enter the API key under **External Lists > Scrob API Key**
+
+**Supported URLs:**
+
+| Type | URL format |
+|------|-----------|
+| User list | `{server}/list/{id}` |
+
+**Example:**
+
+```
+External List / equals / https://scrob.example.com/list/12
+```
+
+List items are matched in the order Scrob returns them, so **External List Order** sort works the same as with the other providers.
+
+!!! note "List URLs Must Match the Configured Server"
+    A list URL is only recognised when it uses the exact address configured in **Settings** — same scheme, host and port. If you configured `https://scrob.example.com`, then `http://192.168.1.50:7330/list/12` won't be recognised even though it's the same Scrob instance.
+
+!!! note "Only Lists Visible to the Configured Account"
+    The configured API key determines what's accessible: your own lists always work, and other users' lists work only if they're public. A private list belonging to a different Scrob user returns an error.
+
+    Note that this is a grant, not just a limit: one key is shared by the whole Jellyfin server, so **every user allowed to create smart lists can reference any list that key can see** — including the key owner's private lists. Use a Scrob account whose visibility you're happy to share.
+
+!!! warning "Matching Requires TMDB IDs"
+    Scrob doesn't store IMDb IDs — items match on TMDB ID, plus the series TVDB ID for season entries and the episode TVDB ID for episodes Scrob resolved from TVDB. Library items with none of those won't match.
+
+!!! note "Seasons Match the Whole Series"
+    A season added to a Scrob list is matched as its parent series, so the rule pulls in the whole show rather than that one season. This is the same behaviour as season entries in Trakt lists. Person entries are ignored entirely.
+
+---
+
 ### Trakt
 
 [Trakt](https://trakt.tv) is a popular tracking service with user lists, watchlists, and curated charts. The plugin uses the Trakt API which requires a client ID.
@@ -315,7 +356,7 @@ The plugin sends a User-Agent header when fetching external lists. Each provider
 - **Clone**: Uses your browser's User-Agent, captured once when you save the settings.
 - **Custom**: Uses exactly the value you enter in the text field.
 
-The clone modes capture the User-Agent from the browser you access the admin configuration page with. The override applies to all providers that send a User-Agent (IMDb, Letterboxd, Trakt, ListenBrainz).
+The clone modes capture the User-Agent from the browser you access the admin configuration page with. The override applies to all providers that send a User-Agent (IMDb, Letterboxd, Trakt, ListenBrainz, Scrob).
 
 ---
 
