@@ -181,16 +181,42 @@ public class EngineInternalsTests
     }
 
     /// <summary>
-    /// A pathological pattern must not be able to pin a refresh thread indefinitely.
-    /// "^(a+)+$" against 40 non-matching characters is roughly 2^40 backtracking steps -
-    /// hours of CPU. Whether the fix surfaces as a RegexMatchTimeoutException (which the
-    /// outer catch in AnyRegexMatch would re-wrap as an ArgumentException) or as a plain
-    /// bounded false is an implementation choice; what this pins is that the call
-    /// *returns*.
+    /// Regression test. A pathological pattern must not be able to pin a refresh thread
+    /// indefinitely. "^(a+)+$" against 40 non-matching characters is roughly 2^40 backtracking
+    /// steps - hours of CPU - and Engine used to compile with InfiniteMatchTimeout.
     ///
-    /// Engine.GetOrCreateRegex passes Engine.RegexMatchTimeout to the Regex constructor, so
-    /// evaluation is bounded.
+    /// GetOrCreateRegex now passes Engine.RegexMatchTimeout, and RegexIsMatch turns a timeout
+    /// into a bounded false. What this pins is simply that the call *returns*. Do not skip or
+    /// delete this.
     /// </summary>
+    /// <summary>
+    /// A bounded timeout on its own is not enough: item processing is serialized, so paying the
+    /// full timeout on every item would still block the refresh queue for hours on a large
+    /// library. Once a pattern has timed out, Engine remembers it and later matches short-circuit.
+    ///
+    /// Uses a pattern unique to this test - the timed-out set is process-wide, so sharing a
+    /// pattern with another test would make this race.
+    /// </summary>
+    [Fact]
+    public void AnyRegexMatch_AfterATimeout_ShortCircuitsLaterMatchesForThatPattern()
+    {
+        const string pattern = "^(b+)+$";
+        var input = new string('b', 40) + "!";
+
+        // First evaluation pays the timeout and poisons the pattern.
+        Engine.AnyRegexMatch([input], pattern);
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = Engine.AnyRegexMatch([input], pattern);
+        stopwatch.Stop();
+
+        Assert.False(result);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromMilliseconds(100),
+            $"Second evaluation of a known-bad pattern took {stopwatch.ElapsedMilliseconds}ms; "
+                + "it should short-circuit rather than pay the timeout again.");
+    }
+
     [Fact]
     public void AnyRegexMatch_CatastrophicBacktrackingPattern_ReturnsInsteadOfRunningUnbounded()
     {

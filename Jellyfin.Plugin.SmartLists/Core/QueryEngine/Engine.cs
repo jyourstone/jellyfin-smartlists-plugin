@@ -51,12 +51,35 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         internal static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(1000);
 
         /// <summary>
+        /// Patterns that have already exceeded <see cref="RegexMatchTimeout"/> at least once.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, byte> _timedOutPatterns = new();
+
+        /// <summary>
         /// Runs a regex match, treating a timeout as "no match" rather than letting it abort the
         /// refresh. A single pathological item should not fail an entire smart list.
         /// </summary>
+        /// <remarks>
+        /// The timeout alone is not enough. Item processing is serialized (one refresh at a time),
+        /// so a catastrophic pattern that times out on every value would still cost
+        /// <see cref="RegexMatchTimeout"/> x item-count and block the queue for hours on a large
+        /// library. Once a pattern times out it is therefore remembered and every later match
+        /// against it short-circuits to false, capping the total cost at roughly one timeout.
+        ///
+        /// The trade-off is deliberate: a pattern that backtracks catastrophically on real library
+        /// data is broken either way, and the outcome (no matches) is the same - this only makes it
+        /// fast instead of hanging the plugin. Editing the rule produces a different pattern string,
+        /// so a corrected regex is never affected.
+        /// </remarks>
         internal static bool RegexIsMatch(Regex regex, string value)
         {
             if (regex == null || value == null)
+            {
+                return false;
+            }
+
+            var pattern = regex.ToString();
+            if (_timedOutPatterns.ContainsKey(pattern))
             {
                 return false;
             }
@@ -67,8 +90,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
             catch (RegexMatchTimeoutException)
             {
-                // ponytail: swallowed without logging - this runs inside a compiled expression
-                // tree with no logger in scope. Thread one through if timeouts need diagnosing.
+                // ponytail: no logging - this runs inside a compiled expression tree with no logger
+                // in scope. Thread one through if timeouts need diagnosing in the field.
+                _timedOutPatterns.TryAdd(pattern, 0);
                 return false;
             }
         }

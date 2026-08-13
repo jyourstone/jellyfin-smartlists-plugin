@@ -751,14 +751,14 @@ public class EngineOperatorTests
     }
 
     /// <summary>
-    /// SUSPECTED REAL BUG - test written to the intended behaviour and skipped so the suite stays
-    /// green. LastPlayedDate is registered as a Date field and the UI offers Equal with a
-    /// YYYY-MM-DD picker, but because it is also user-specific it goes through
-    /// BuildDateExpressionForMethodCall, which has no BuildDateEqualityExpression branch: Equal
-    /// falls into the generic Enum.TryParse path and compiles to an exact-second comparison
-    /// against midnight UTC. Every other date field (DateCreated, ReleaseDate, ...) treats Equal
-    /// as a whole-day range. So "last played equals 2024-01-15" matches only an item played at
-    /// exactly 00:00:00 UTC, i.e. effectively never.
+    /// Regression test. LastPlayedDate is a Date field, but because it is also user-specific it
+    /// compiles through BuildDateExpressionForMethodCall rather than the member-access path.
+    /// That method used to lack Equal/NotEqual branches, so Equal fell into the generic
+    /// Enum.TryParse arm and compiled to an exact-second comparison against midnight UTC -
+    /// "last played equals 2024-01-15" matched only an item played at exactly 00:00:00 UTC.
+    ///
+    /// Both paths now share BuildDateEqualityExpression, so Equal means the whole UTC day here
+    /// exactly as it does for DateCreated, ReleaseDate and friends. Do not skip or delete this.
     /// </summary>
     [Fact]
     public void CompileRule_LastPlayedDateEqual_MatchesAnyTimeWithinTargetUtcDay()
