@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 10.11-release
+
+# A newer push to the same branch/PR makes the in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: 10.0.x
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Both ABIs are built because the plugin ships both and the build treats all
+      # warnings as errors (AnalysisMode=Recommended) - an analyzer regression on
+      # either target should fail here, not at release-tag time.
+      # net9.0 compiles against reference packs, so no .NET 9 runtime is needed.
+      - name: Build plugin (net9.0 / Jellyfin 10.11)
+        run: >-
+          dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj
+          --framework net9.0 --configuration Release --no-restore
+
+      - name: Build plugin (net10.0 / Jellyfin 12)
+        run: >-
+          dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj
+          --framework net10.0 --configuration Release --no-restore
+
+      # The test project targets net10.0 only - it needs a runtime to execute, and
+      # only .NET 10 is installed here. See the note in the test csproj.
+      - name: Run tests
+        run: >-
+          dotnet test Jellyfin.Plugin.SmartLists.Tests/Jellyfin.Plugin.SmartLists.Tests.csproj
+          --configuration Release --no-restore
+          --logger "trx;LogFileName=test-results.trx"
+          --logger "console;verbosity=normal"
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: warn
+          retention-days: 14
