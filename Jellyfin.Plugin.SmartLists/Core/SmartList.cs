@@ -905,6 +905,26 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Still need to apply sorting and limits to the collection/playlist results
                     try
                     {
+                        // Apply per-group limits and wire Rule Block Order group mappings - the
+                        // include-only matchers record _itemGroupMappings, so these work here too
+                        if (HasPerGroupLimits())
+                        {
+                            results = ApplyPerGroupLimits(results, user, userDataManager, logger, refreshCache);
+                            logger?.LogDebug("Include-only results limited to {Count} items after per-group MaxItems applied", results.Count);
+                        }
+
+                        foreach (var order in Orders)
+                        {
+                            if (order is Orders.RuleBlockOrder ruleBlockOrder)
+                            {
+                                ruleBlockOrder.GroupMappings = _itemGroupMappings;
+                            }
+                            else if (order is Orders.RuleBlockOrderDesc ruleBlockOrderDesc)
+                            {
+                                ruleBlockOrderDesc.GroupMappings = _itemGroupMappings;
+                            }
+                        }
+
                         // Pre-compute Round Robin positions before sorting
                         PrepareRoundRobinPositions(results, logger);
 
@@ -1555,6 +1575,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private sealed class IncludeOnlyRuleSet
         {
+            /// <summary>Index of the originating ExpressionSet (for group tracking: per-group limits, Rule Block Order).</summary>
+            public int SetIndex { get; set; }
+
             /// <summary>Include-only rules, matched against the collection/playlist name.</summary>
             public List<Expression> NameRules { get; } = [];
 
@@ -1586,13 +1609,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
             bool isCollections = fieldName == "Collections";
             var defaultUserId = user.Id.ToString("N");
 
-            foreach (var set in ExpressionSets)
+            for (int setIndex = 0; setIndex < ExpressionSets.Count; setIndex++)
             {
-                var expressions = set?.Expressions;
+                var expressions = ExpressionSets[setIndex]?.Expressions;
                 if (expressions == null)
                     continue;
 
-                var ruleSet = new IncludeOnlyRuleSet();
+                var ruleSet = new IncludeOnlyRuleSet { SetIndex = setIndex };
 
                 foreach (var expr in expressions)
                 {
@@ -1698,20 +1721,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Checks whether a collection/playlist satisfies at least one include-only rule group.
+        /// Returns the indices of every include-only rule group the collection/playlist satisfies.
         /// A group matches when ALL its include-only rules match the item's name AND all its
         /// sibling rules match the item itself (AND logic within groups, OR across groups).
+        /// The indices feed _itemGroupMappings so per-group limits and Rule Block Order
+        /// treat matched collections/playlists like any other matched item.
         /// </summary>
         /// <param name="names">The item's name (single-element list)</param>
         /// <param name="ruleSets">Prepared include-only rule groups</param>
         /// <param name="nameMatcher">Field-specific name matcher (collection or playlist rules)</param>
         /// <param name="operandProvider">Lazily builds the operand for sibling-rule evaluation; may return null on failure</param>
-        private static bool MatchesIncludeOnlyRuleSets(
+        private static List<int> GetMatchingIncludeOnlySetIndices(
             List<string> names,
             List<IncludeOnlyRuleSet> ruleSets,
             Func<List<string>, Expression, bool> nameMatcher,
             Func<Operand?> operandProvider)
         {
+            var matchedIndices = new List<int>();
             Operand? operand = null;
             bool operandLoaded = false;
 
@@ -1723,36 +1749,52 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (!ruleSet.NameRules.All(rule => nameMatcher(names, rule)))
                     continue;
 
-                if (ruleSet.SiblingRules.Count == 0)
-                    return true;
-
-                if (!operandLoaded)
+                if (ruleSet.SiblingRules.Count > 0)
                 {
-                    operand = operandProvider();
-                    operandLoaded = true;
+                    if (!operandLoaded)
+                    {
+                        operand = operandProvider();
+                        operandLoaded = true;
+                    }
+
+                    if (operand == null)
+                        continue; // Extraction failed - conservatively treat sibling rules as not matching
+
+                    bool allSiblingsMatch = ruleSet.SiblingRules.All(rule =>
+                    {
+                        try
+                        {
+                            return rule(operand);
+                        }
+                        catch (Exception)
+                        {
+                            // Conservative approach: assume rule doesn't match if it fails
+                            return false;
+                        }
+                    });
+
+                    if (!allSiblingsMatch)
+                        continue;
                 }
 
-                if (operand == null)
-                    continue; // Extraction failed - conservatively treat sibling rules as not matching
-
-                bool allSiblingsMatch = ruleSet.SiblingRules.All(rule =>
-                {
-                    try
-                    {
-                        return rule(operand);
-                    }
-                    catch (Exception)
-                    {
-                        // Conservative approach: assume rule doesn't match if it fails
-                        return false;
-                    }
-                });
-
-                if (allSiblingsMatch)
-                    return true;
+                matchedIndices.Add(ruleSet.SetIndex);
             }
 
-            return false;
+            return matchedIndices;
+        }
+
+        /// <summary>
+        /// Records which rule groups a matched collection/playlist belongs to, so
+        /// ApplyPerGroupLimits doesn't silently drop it and Rule Block Order places it
+        /// in its group's block. Merges with any existing mapping (an item can be both
+        /// a direct match and a nested child of another matched collection).
+        /// </summary>
+        private void TrackIncludeOnlyGroupMapping(Guid itemId, List<int> matchedSetIndices)
+        {
+            _itemGroupMappings.AddOrUpdate(
+                itemId,
+                _ => new List<int>(matchedSetIndices),
+                (_, existing) => existing.Union(matchedSetIndices).ToList());
         }
 
         /// <summary>
@@ -1855,6 +1897,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // (name rules + sibling rules) must match for a collection to be included
                 var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Collections", user, logger);
                 var extractionOptions = BuildIncludeOnlyExtractionOptions(includeOnlyRuleSets);
+                bool trackGroups = NeedsGroupTracking();
 
                 // Check each collection against the collection-only rule groups
                 foreach (var collection in allCollections)
@@ -1872,7 +1915,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // The whole rule group must match: name rules against the collection name,
                     // sibling rules against the collection's own metadata
                     var collectionNames = new List<string> { collection.Name };
-                    if (MatchesIncludeOnlyRuleSets(collectionNames, includeOnlyRuleSets, DoesCollectionMatchRule, () =>
+                    var matchedSetIndices = GetMatchingIncludeOnlySetIndices(collectionNames, includeOnlyRuleSets, DoesCollectionMatchRule, () =>
                         {
                             try
                             {
@@ -1883,8 +1926,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 logger?.LogWarning(ex, "Error extracting fields from collection '{CollectionName}' for include-only rule matching", collection.Name);
                                 return null;
                             }
-                        }))
+                        });
+                    if (matchedSetIndices.Count > 0)
                     {
+                        var firstNewIndex = matchingCollections.Count;
                         // Add this collection and recursively add nested collections
                         AddCollectionWithNestedCollections(
                             collection,
@@ -1896,6 +1941,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             0,  // Start at depth 0 (root level)
                             maxRecursionDepth,
                             currentListBaseName);
+
+                        if (trackGroups)
+                        {
+                            // Map the matched collection and its nested children to the matched
+                            // groups so per-group limits and Rule Block Order see them.
+                            // The root is mapped explicitly: if it was already added as another
+                            // root's nested child, the visited guard appends nothing new and the
+                            // slice below would miss its direct match.
+                            TrackIncludeOnlyGroupMapping(collection.Id, matchedSetIndices);
+                            for (int i = firstNewIndex; i < matchingCollections.Count; i++)
+                            {
+                                TrackIncludeOnlyGroupMapping(matchingCollections[i].Id, matchedSetIndices);
+                            }
+                        }
                     }
                 }
 
@@ -2138,6 +2197,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // (name rules + sibling rules) must match for a playlist to be included
                 var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Playlists", user, logger);
                 var extractionOptions = BuildIncludeOnlyExtractionOptions(includeOnlyRuleSets);
+                bool trackGroups = NeedsGroupTracking();
 
                 // Check each playlist against the playlist-only rule groups
                 foreach (var playlist in allPlaylists)
@@ -2155,7 +2215,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // The whole rule group must match: name rules against the playlist name,
                     // sibling rules against the playlist's own metadata
                     var playlistNames = new List<string> { playlist.Name };
-                    if (MatchesIncludeOnlyRuleSets(playlistNames, includeOnlyRuleSets, DoesPlaylistMatchRule, () =>
+                    var matchedSetIndices = GetMatchingIncludeOnlySetIndices(playlistNames, includeOnlyRuleSets, DoesPlaylistMatchRule, () =>
                         {
                             try
                             {
@@ -2166,9 +2226,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 logger?.LogWarning(ex, "Error extracting fields from playlist '{PlaylistName}' for include-only rule matching", playlist.Name);
                                 return null;
                             }
-                        }))
+                        });
+                    if (matchedSetIndices.Count > 0)
                     {
                         matchingPlaylists.Add(playlist);
+                        if (trackGroups)
+                        {
+                            TrackIncludeOnlyGroupMapping(playlist.Id, matchedSetIndices);
+                        }
                         logger?.LogDebug("Playlist '{PlaylistName}' matches a playlist-only rule group", playlist.Name);
                     }
                 }
