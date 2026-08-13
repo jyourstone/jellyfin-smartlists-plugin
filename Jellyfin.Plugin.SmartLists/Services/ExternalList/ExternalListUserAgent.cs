@@ -24,7 +24,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 _ => null,
             };
 
-            return string.IsNullOrWhiteSpace(overrideValue) ? providerDefault : overrideValue.Trim();
+            if (string.IsNullOrWhiteSpace(overrideValue))
+            {
+                return providerDefault;
+            }
+
+            var trimmed = overrideValue.Trim();
+
+            // The override is persisted user input and the providers add it via
+            // TryAddWithoutValidation, which skips the framework's CRLF checks —
+            // embedded control characters could corrupt or inject headers.
+            foreach (var ch in trimmed)
+            {
+                if (char.IsControl(ch))
+                {
+                    return providerDefault;
+                }
+            }
+
+            return trimmed;
         }
     }
 }
