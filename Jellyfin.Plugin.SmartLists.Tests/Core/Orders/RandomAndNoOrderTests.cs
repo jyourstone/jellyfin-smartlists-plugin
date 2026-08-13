@@ -362,18 +362,25 @@ public class RandomAndNoOrderTests
     }
 
     [Fact]
-    public void PropertyOrder_GetSortKey_ReturnsTheRawSortValue_WithoutApplyingTheComparer()
+    public void PropertyOrder_GetSortKey_CarriesAnOverriddenComparer_ButLeavesDefaultComparerValuesBare()
     {
-        // Pins what GetSortKey actually hands back: the unwrapped value, with no comparer
-        // attached. See the skipped test below for why that matters in multi-sort.
+        // Pins what GetSortKey hands back in each of the two shapes. An order that left
+        // Comparer at its default returns the unwrapped value, so ApplySortingCore can still
+        // see through it (its `key is DateTime` day-precision branch depends on that). An
+        // order that overrode Comparer returns a key carrying the comparer, because multi-sort
+        // compares keys with no comparer of its own - see the ordering test below.
         var item = ItemWithAlbum("Two", "2 Albums");
+        var user = new User("t", "a", "p");
 
-        var key = new NaturalAlbumProbeOrder().GetSortKey(item, new User("t", "a", "p"), null, null);
+        var bare = new PlainAlbumProbeOrder().GetSortKey(item, user, null, null);
+        Assert.Equal("2 Albums", Assert.IsType<string>(bare));
 
-        Assert.Equal("2 Albums", Assert.IsType<string>(key));
+        var wrapped = Assert.IsType<ComparerBackedKey<string>>(
+            new NaturalAlbumProbeOrder().GetSortKey(item, user, null, null));
+        Assert.Equal("2 Albums", wrapped.Value);
     }
 
-    [Fact(Skip = "suspected real bug: PropertyOrder.GetSortKey drops the overridden Comparer, so a string order (AlbumName/Name/Artist/SeriesName) sorts differently in multi-sort than in single-sort")]
+    [Fact]
     public void PropertyOrder_GetSortKeyOrdering_MatchesOrderByOrdering_ForANaturalComparerOrder()
     {
         // Single-sort goes through Order.OrderBy, which applies the overridden Comparer.

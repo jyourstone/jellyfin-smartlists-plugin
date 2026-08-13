@@ -536,10 +536,14 @@ public class NumericAndDateOrderTests
         };
 
         Assert.Equal(new[] { "Movie", "NoSeason", "Season1" }, Names(new SeasonNumberOrder().OrderBy(items)));
-        Assert.Equal(0, Assert.IsType<int>(new SeasonNumberOrder().GetSortKey(items[1], TestUser, null, null)));
+
+        // The key is the season -> episode -> name composite, so the collapsed season is its
+        // primary value - which is also exactly what a non-final multi-sort strips it back to.
+        var movieKey = new SeasonNumberOrder().GetSortKey(items[1], TestUser, null, null);
+        Assert.Equal(0, Assert.IsType<int>(Assert.IsAssignableFrom<ICompositeSortKey>(movieKey).PrimaryValue));
     }
 
-    [Fact(Skip = "suspected real bug: SeasonNumberOrder.GetSortKey returns the bare season number, dropping the episode/name tiebreakers its own OrderBy applies. Every other multi-level order (EpisodeNumber, TrackNumber, ReleaseDate) returns a ComparableTuple4 carrying its tiebreakers, and ICompositeSortKey exists precisely so non-final sorts can strip them again. Consequence: as the FINAL sort in a multi-sort, episodes within one season come out in library order instead of episode order, while a single SeasonNumber sort orders them by episode. Verified by unskipping: the OrderBy assert passes, the GetSortKey assert returns S1E2,S1E1.")]
+    [Fact]
     public void SeasonNumberOrder_GetSortKey_ShouldCarryEpisodeTiebreakerLikeOrderByDoes()
     {
         var e2 = NewEpisode("S1E2", 1, 2);

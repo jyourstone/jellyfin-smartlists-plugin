@@ -224,8 +224,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Shared helper to extract media streams from a BaseItem using reflection.
         /// Reduces code duplication across AudioLanguages/Resolution/Framerate/VideoQuality extraction methods.
+        /// Internal so <see cref="Utilities.MediaStreamHelper"/> can serve the same streams to sorting.
         /// </summary>
-        private static List<object> TryGetAllMediaStreams(BaseItem baseItem, ILogger? logger)
+        internal static List<object> TryGetAllMediaStreams(BaseItem baseItem, ILogger? logger)
         {
             var mediaStreams = new List<object>();
 
@@ -1579,49 +1580,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             operand.Resolution = string.Empty;
             try
             {
-                // Check cache first
-                IEnumerable<object> mediaStreams;
-                if (cache.MediaStreamsCache.TryGetValue(baseItem.Id, out var cachedStreams))
-                {
-                    mediaStreams = cachedStreams;
-                }
-                else
-                {
-                    // Use shared helper to extract media streams
-                    mediaStreams = TryGetAllMediaStreams(baseItem, logger);
-                    // Cache the result
-                    cache.MediaStreamsCache[baseItem.Id] = mediaStreams;
-                }
-
-                // Process found streams to find the highest resolution video stream
-                int maxHeight = 0;
-                foreach (var stream in mediaStreams)
-                {
-                    try
-                    {
-                        var typeProperty = stream.GetType().GetProperty("Type");
-                        var heightProperty = stream.GetType().GetProperty("Height");
-
-                        if (typeProperty != null && heightProperty != null)
-                        {
-                            var streamType = typeProperty.GetValue(stream);
-                            var height = heightProperty.GetValue(stream);
-
-                            // Check if it's a video stream
-                            if (streamType != null && streamType.ToString() == "Video" && height != null)
-                            {
-                                if (int.TryParse(height.ToString(), out int heightValue) && heightValue > maxHeight)
-                                {
-                                    maxHeight = heightValue;
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger?.LogDebug(ex, "Failed to process individual stream for item {Name}", baseItem.Name);
-                    }
-                }
+                // Cache lookup + max video height derivation is shared with ResolutionOrder
+                var maxHeight = Utilities.MediaStreamHelper.GetMaxVideoHeight(baseItem, cache, logger);
 
                 // Convert height to resolution string
                 if (maxHeight > 0)

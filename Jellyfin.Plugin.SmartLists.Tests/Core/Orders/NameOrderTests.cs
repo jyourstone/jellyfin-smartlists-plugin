@@ -61,6 +61,15 @@ public class NameOrderTests
 
     private static string[] NamesOf(IEnumerable<BaseItem> items) => items.Select(i => i.Name).ToArray();
 
+    /// <summary>
+    /// Every order in this file overrides <c>PropertyOrder.Comparer</c> with the natural
+    /// comparer, so <c>GetSortKey</c> hands back a <see cref="ComparerBackedKey{T}"/> carrying
+    /// that comparer rather than a bare string - that wrapper is what makes multi-sort compare
+    /// names the same way single-sort does. Asserting the wrapper here (rather than tolerating
+    /// either shape) keeps a silent regression back to a bare key visible.
+    /// </summary>
+    private static string KeyValue(IComparable key) => Assert.IsType<ComparerBackedKey<string>>(key).Value;
+
     // =================================================================================
     // NameSortHelper - auto-generated SortName detection
     // Audio pattern:   ^\d+\s+-\s+          e.g. "0001 - Track Title"
@@ -213,8 +222,8 @@ public class NameOrderTests
         // ever started returning an inverted key, multi-sort would double-invert it.
         var item = NewAudio("Track Name", "0001 - Track Name");
 
-        Assert.Equal("Track Name", new NameOrder().GetSortKey(item, null!, null, null));
-        Assert.Equal("Track Name", new NameOrderDesc().GetSortKey(item, null!, null, null));
+        Assert.Equal("Track Name", KeyValue(new NameOrder().GetSortKey(item, null!, null, null)));
+        Assert.Equal("Track Name", KeyValue(new NameOrderDesc().GetSortKey(item, null!, null, null)));
     }
 
     // =================================================================================
@@ -272,12 +281,7 @@ public class NameOrderTests
         Assert.Equal(expected, NameIgnoreArticlesOrder.ComputeNameIgnoreArticlesSortValue(episode));
     }
 
-    [Fact(Skip = "suspected real bug: the two episode auto-sort-name detectors disagree. "
-        + "NameSortHelper uses ^\\d{3,}\\s+-\\s+\\d{4,}\\s+-\\s+ (any whitespace run) while "
-        + "NameIgnoreArticlesOrder uses ^\\d{3,} - \\d{4,} -  (literal single spaces). They are "
-        + "meant to detect the same thing, so the same episode is 'auto-generated' to Name "
-        + "Ascending and 'manual' to Name (Ignore Articles) Ascending. Fix by widening the "
-        + "NameIgnoreArticlesOrder pattern to \\s+, then un-skip.")]
+    [Fact]
     public void ComputeNameIgnoreArticlesSortValue_EpisodePattern_AgreesWithNameSortHelper()
     {
         // Written to the intended behaviour: both detectors should recognise the same
@@ -318,8 +322,8 @@ public class NameOrderTests
     {
         var item = NewMovie("The Matrix");
 
-        Assert.Equal("Matrix", new NameIgnoreArticlesOrder().GetSortKey(item, null!, null, null));
-        Assert.Equal("Matrix", new NameIgnoreArticlesOrderDesc().GetSortKey(item, null!, null, null));
+        Assert.Equal("Matrix", KeyValue(new NameIgnoreArticlesOrder().GetSortKey(item, null!, null, null)));
+        Assert.Equal("Matrix", KeyValue(new NameIgnoreArticlesOrderDesc().GetSortKey(item, null!, null, null)));
     }
 
     // =================================================================================
@@ -331,10 +335,10 @@ public class NameOrderTests
     // =================================================================================
 
     private static string SeriesKey(BaseItem item, RefreshQueueService.RefreshCache? cache) =>
-        (string)new SeriesNameOrder().GetSortKey(item, null!, null, null, null, cache);
+        KeyValue(new SeriesNameOrder().GetSortKey(item, null!, null, null, null, cache));
 
     private static string SeriesIgnoreArticlesKey(BaseItem item, RefreshQueueService.RefreshCache? cache) =>
-        (string)new SeriesNameIgnoreArticlesOrder().GetSortKey(item, null!, null, null, null, cache);
+        KeyValue(new SeriesNameIgnoreArticlesOrder().GetSortKey(item, null!, null, null, null, cache));
 
     [Fact]
     public void GetSortValue_BothCacheEntriesPresent_TheTwoSeriesOrdersDeliberatelyDisagree()
@@ -549,16 +553,16 @@ public class NameOrderTests
     {
         var audio = NewAudio("Track", artists: ["Zed Leppelin", "Alpha Guest"]);
 
-        Assert.Equal("Zed Leppelin", new ArtistOrder().GetSortKey(audio, null!, null, null));
-        Assert.Equal("Zed Leppelin", new ArtistOrderDesc().GetSortKey(audio, null!, null, null));
+        Assert.Equal("Zed Leppelin", KeyValue(new ArtistOrder().GetSortKey(audio, null!, null, null)));
+        Assert.Equal("Zed Leppelin", KeyValue(new ArtistOrderDesc().GetSortKey(audio, null!, null, null)));
     }
 
     [Fact]
     public void GetSortValue_Artist_ReturnsEmptyStringWhenThereIsNoArtist()
     {
-        Assert.Equal("", new ArtistOrder().GetSortKey(NewAudio("Track", artists: []), null!, null, null));
-        Assert.Equal("", new ArtistOrder().GetSortKey(NewMovie("Casablanca"), null!, null, null));
-        Assert.Equal("", new ArtistOrderDesc().GetSortKey(NewMovie("Casablanca"), null!, null, null));
+        Assert.Equal("", KeyValue(new ArtistOrder().GetSortKey(NewAudio("Track", artists: []), null!, null, null)));
+        Assert.Equal("", KeyValue(new ArtistOrder().GetSortKey(NewMovie("Casablanca"), null!, null, null)));
+        Assert.Equal("", KeyValue(new ArtistOrderDesc().GetSortKey(NewMovie("Casablanca"), null!, null, null)));
     }
 
     [Fact]

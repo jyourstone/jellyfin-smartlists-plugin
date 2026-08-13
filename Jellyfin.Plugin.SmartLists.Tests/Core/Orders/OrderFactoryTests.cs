@@ -57,6 +57,8 @@ public class OrderFactoryTests
         "LastPlayed (owner) Descending",
         "Runtime Ascending",
         "Runtime Descending",
+        "Resolution Ascending",
+        "Resolution Descending",
         "SeriesName Ascending",
         "SeriesName Descending",
         "SeriesName (Ignore Articles) Ascending",
@@ -418,27 +420,18 @@ public class OrderFactoryTests
         OrderFactory.IsDirectionless(sortBy) ? sortBy : $"{sortBy} {sortOrder}";
 
     /// <summary>
-    /// Every sort the admin/user UI offers must land on a real registered order. The one known
-    /// exception is carved out explicitly (see the skipped test below) so that a NEW unbacked
-    /// option still fails here instead of quietly joining it.
+    /// Every sort the admin/user UI offers must land on a real registered order. There are no
+    /// carve-outs: "Resolution" used to be the one known unbacked option and is now registered,
+    /// so any NEW unbacked option fails here.
     /// </summary>
     [Fact]
     public void EverySortOptionOfferedByTheConfigUi_ResolvesToARegisteredOrder()
     {
-        // "Resolution" is offered by the UI and documented, but has no order class at all.
-        // Tracked by CreateOrder_ResolutionSortOfferedByTheUi_ShouldResolveToAResolutionOrder.
-        var knownUnbacked = new HashSet<string>(StringComparer.Ordinal) { "Resolution" };
-
         var map = OrderMap();
         var unbacked = new List<string>();
 
         foreach (var sortBy in UiSortOptionValues())
         {
-            if (knownUnbacked.Contains(sortBy))
-            {
-                continue;
-            }
-
             foreach (var direction in new[] { SortOrder.Ascending, SortOrder.Descending })
             {
                 var composed = ComposeOrderName(sortBy, direction);
@@ -471,24 +464,24 @@ public class OrderFactoryTests
     }
 
     /// <summary>
-    /// SUSPECTED REAL BUG - left written and skipped rather than asserting the broken behaviour.
+    /// REGRESSION TEST for a fixed bug.
     ///
     /// config-core.js SORT_OPTIONS offers { value: 'Resolution', label: 'Resolution' } and
     /// docs/content/user-guide/sorting-and-limits.md documents it ("Sort by video resolution
-    /// (e.g., 480p, 720p, 1080p, 4K)"), but there is no ResolutionOrder class and no
+    /// (e.g., 480p, 720p, 1080p, 4K)"), but there used to be no ResolutionOrder class and no
     /// "Resolution Ascending"/"Resolution Descending" entry in OrderFactory.OrderMap.
     ///
-    /// Consequence, traced through SmartList.InitializeFromDto:
+    /// The old consequence, traced through SmartList.InitializeFromDto:
     ///   CreateOrder("Resolution Ascending") -> NoOrder
     ///   -> Orders == [NoOrder] -> ResolveDefaultOrder() rewrites it to NameOrder
-    ///   -> the list silently sorts by Name Ascending with no warning anywhere.
-    /// Nothing validates SortBy on the API side either, so the misconfiguration is unreachable
-    /// by any error path.
+    ///   -> the list silently sorted by Name Ascending with no warning anywhere.
+    /// Nothing validates SortBy on the API side either, so the misconfiguration was unreachable
+    /// by any error path - hence this explicit pin.
     ///
     /// (A ChannelResolutionOrder exists on the unmerged new/live_tv branch, but that is a
     /// different field - it does not back this option.)
     /// </summary>
-    [Fact(Skip = "suspected real bug: UI+docs offer a 'Resolution' sort with no OrderMap entry; it silently falls back to Name Ascending")]
+    [Fact]
     public void CreateOrder_ResolutionSortOfferedByTheUi_ShouldResolveToAResolutionOrder()
     {
         Assert.Contains("Resolution", UiSortOptionValues());

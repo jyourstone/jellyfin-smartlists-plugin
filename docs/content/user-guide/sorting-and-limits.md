@@ -62,7 +62,7 @@ Sort music and music videos by artist name.
 Sort by album name, disc number, then track number. Designed specifically for music to maintain proper album order.
 
 ### Resolution
-Sort by video resolution (e.g., 480p, 720p, 1080p, 4K). Available for movies, episodes, music videos, and home videos.
+Sort by video resolution (e.g., 480p, 720p, 1080p, 4K). Available for movies, episodes, music videos, and home videos. Sorting uses the actual pixel height of the highest-resolution video track, so 4K ranks above 1440p above 1080p. Items with no video track (such as music) are treated as having no resolution, so they appear first when ascending and last when descending.
 
 ### Similarity
 Sort by similarity score (highest first). Only available when using the "Similar To" filter field in your rules.
