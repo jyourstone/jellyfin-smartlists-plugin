@@ -185,59 +185,45 @@ public class EngineInternalsTests
     /// indefinitely. "^(a+)+$" against 40 non-matching characters is roughly 2^40 backtracking
     /// steps - hours of CPU - and Engine used to compile with InfiniteMatchTimeout.
     ///
-    /// GetOrCreateRegex now passes Engine.RegexMatchTimeout, and RegexIsMatch turns a timeout
-    /// into a bounded false. What this pins is simply that the call *returns*. Do not skip or
-    /// delete this.
+    /// GetOrCreateRegex now passes Engine.RegexMatchTimeout, and RegexIsMatch surfaces the
+    /// timeout as a descriptive ArgumentException. Failing here is deliberate: swallowing it
+    /// would cost the full timeout on every item and block the serialized refresh queue, and
+    /// suppressing the pattern after its first timeout would return silently wrong results.
+    /// Do not skip or delete this.
     /// </summary>
-    /// <summary>
-    /// A bounded timeout on its own is not enough: item processing is serialized, so paying the
-    /// full timeout on every item would still block the refresh queue for hours on a large
-    /// library. Once a pattern has timed out, Engine remembers it and later matches short-circuit.
-    ///
-    /// Uses a pattern unique to this test - the timed-out set is process-wide, so sharing a
-    /// pattern with another test would make this race.
-    /// </summary>
-    [Fact]
-    public void AnyRegexMatch_AfterATimeout_ShortCircuitsLaterMatchesForThatPattern()
-    {
-        const string pattern = "^(b+)+$";
-        var input = new string('b', 40) + "!";
-
-        // First evaluation pays the timeout and poisons the pattern.
-        Engine.AnyRegexMatch([input], pattern);
-
-        var stopwatch = Stopwatch.StartNew();
-        var result = Engine.AnyRegexMatch([input], pattern);
-        stopwatch.Stop();
-
-        Assert.False(result);
-        Assert.True(
-            stopwatch.Elapsed < TimeSpan.FromMilliseconds(100),
-            $"Second evaluation of a known-bad pattern took {stopwatch.ElapsedMilliseconds}ms; "
-                + "it should short-circuit rather than pay the timeout again.");
-    }
-
     [Fact]
     public void AnyRegexMatch_CatastrophicBacktrackingPattern_ReturnsInsteadOfRunningUnbounded()
     {
         var input = new string('a', 40) + "!";
 
         var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            Engine.AnyRegexMatch([input], "^(a+)+$");
-        }
-        catch (ArgumentException)
-        {
-            // AnyRegexMatch re-wraps every non-ArgumentException, including
-            // RegexMatchTimeoutException, so a timeout arrives here. Still a pass:
-            // the point is that evaluation terminated.
-        }
+        var ex = Assert.Throws<ArgumentException>(
+            () => Engine.AnyRegexMatch([input], "^(a+)+$"));
         stopwatch.Stop();
 
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(5),
             $"Regex evaluation was unbounded: still running after {stopwatch.Elapsed}.");
+
+        // The message is the contract: it must name the pattern and say why it stopped,
+        // because failing loudly is only useful if the user can tell what to fix.
+        Assert.Contains("^(a+)+$", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("timed out", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A timeout must not be mislabelled as a syntax error - those are different problems with
+    /// different fixes, and AnyRegexMatch catches them separately to keep them distinguishable.
+    /// </summary>
+    [Fact]
+    public void AnyRegexMatch_Timeout_IsNotReportedAsAnInvalidPattern()
+    {
+        var input = new string('a', 40) + "!";
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => Engine.AnyRegexMatch([input], "^(a+)+$"));
+
+        Assert.DoesNotContain("Invalid regex pattern", ex.Message, StringComparison.Ordinal);
     }
 
     // ---------------------------------------------------------------------------------

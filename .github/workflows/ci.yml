@@ -7,6 +7,11 @@ on:
       - main
       - 10.11-release
 
+# Build and test needs nothing but the source. Without this the job inherits the
+# repository default token scope, which is broader than it needs on push events.
+permissions:
+  contents: read
+
 # A newer push to the same branch/PR makes the in-flight run obsolete.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +28,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # Nothing here pushes; don't leave the token in .git/config for build steps to reach.
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5

@@ -51,25 +51,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         internal static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(1000);
 
         /// <summary>
-        /// Patterns that have already exceeded <see cref="RegexMatchTimeout"/> at least once.
+        /// Builds the error raised when a pattern exceeds <see cref="RegexMatchTimeout"/>.
         /// </summary>
-        private static readonly ConcurrentDictionary<string, byte> _timedOutPatterns = new();
+        private static ArgumentException RegexTimedOut(string pattern, Exception inner) =>
+            new ArgumentException(
+                $"Regex pattern '{pattern}' timed out after {RegexMatchTimeout.TotalMilliseconds:F0}ms. " +
+                "Simplify it - it backtracks excessively on this library's data.",
+                inner);
 
         /// <summary>
-        /// Runs a regex match, treating a timeout as "no match" rather than letting it abort the
-        /// refresh. A single pathological item should not fail an entire smart list.
+        /// Runs a regex match, surfacing a timeout as a descriptive error.
         /// </summary>
         /// <remarks>
-        /// The timeout alone is not enough. Item processing is serialized (one refresh at a time),
-        /// so a catastrophic pattern that times out on every value would still cost
-        /// <see cref="RegexMatchTimeout"/> x item-count and block the queue for hours on a large
-        /// library. Once a pattern times out it is therefore remembered and every later match
-        /// against it short-circuits to false, capping the total cost at roughly one timeout.
-        ///
-        /// The trade-off is deliberate: a pattern that backtracks catastrophically on real library
-        /// data is broken either way, and the outcome (no matches) is the same - this only makes it
-        /// fast instead of hanging the plugin. Editing the rule produces a different pattern string,
-        /// so a corrected regex is never affected.
+        /// A timeout deliberately fails the refresh rather than degrading to "no match". Item
+        /// processing is serialized, so swallowing it would cost <see cref="RegexMatchTimeout"/>
+        /// per item and block the queue for hours on a large library; suppressing the pattern
+        /// after its first timeout would instead return silently wrong results. Failing loudly
+        /// stops the work immediately and tells the user which pattern to fix - the same way an
+        /// unparseable pattern already behaves.
         /// </remarks>
         internal static bool RegexIsMatch(Regex regex, string value)
         {
@@ -78,22 +77,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return false;
             }
 
-            var pattern = regex.ToString();
-            if (_timedOutPatterns.ContainsKey(pattern))
-            {
-                return false;
-            }
-
             try
             {
                 return regex.IsMatch(value);
             }
-            catch (RegexMatchTimeoutException)
+            catch (RegexMatchTimeoutException ex)
             {
-                // ponytail: no logging - this runs inside a compiled expression tree with no logger
-                // in scope. Thread one through if timeouts need diagnosing in the field.
-                _timedOutPatterns.TryAdd(pattern, 0);
-                return false;
+                throw RegexTimedOut(regex.ToString(), ex);
             }
         }
 
@@ -1678,33 +1668,32 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (list == null) return false;
 
+            // Compiling the pattern and matching against it fail for different reasons, so they
+            // are caught separately - otherwise a match timeout gets reported as "invalid pattern".
+            Regex regex;
             try
             {
-                var regex = GetOrCreateRegex(pattern);
-                
-                // Convert to list to check if empty and iterate
-                var listItems = list.ToList();
-                
-                // If the list is empty, check if the regex matches an empty string
-                // This handles cases like ^$ which should match items with no tags/genres/etc.
-                if (listItems.Count == 0)
-                {
-                    return RegexIsMatch(regex, string.Empty);
-                }
-
-                // Otherwise, check if any item in the list matches the regex
-                return listItems.Any(s => s != null && RegexIsMatch(regex, s));
+                regex = GetOrCreateRegex(pattern);
             }
             catch (ArgumentException ex)
             {
                 // Preserve the original error details while providing context
                 throw new ArgumentException($"Invalid regex pattern '{pattern}': {ex.Message}", ex);
             }
-            catch (Exception ex)
+
+            // Convert to list to check if empty and iterate
+            var listItems = list.ToList();
+
+            // If the list is empty, check if the regex matches an empty string
+            // This handles cases like ^$ which should match items with no tags/genres/etc.
+            if (listItems.Count == 0)
             {
-                // For other unexpected errors, preserve the original exception details
-                throw new ArgumentException($"Regex pattern '{pattern}' caused an error: {ex.Message}", ex);
+                return RegexIsMatch(regex, string.Empty);
             }
+
+            // Otherwise, check if any item in the list matches the regex.
+            // RegexIsMatch converts a match timeout into a descriptive ArgumentException.
+            return listItems.Any(s => s != null && RegexIsMatch(regex, s));
         }
 
         /// <summary>
