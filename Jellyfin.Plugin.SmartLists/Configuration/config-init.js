@@ -2052,9 +2052,11 @@
             }
             SmartLists.updateUserAgentContainers(page);
 
-            // Auto Clone: keep the stored browser User-Agent current on every admin page load
+            // Auto Clone: keep the stored browser User-Agent current on every admin page load.
+            // The handle is kept so saveConfiguration can wait it out - both this and a save are
+            // read-modify-write cycles over the whole config, so overlapping them loses one side.
             if (config.UserAgentMode === 'AutoClone' && config.ClonedUserAgent !== navigator.userAgent) {
-                SmartLists.getApiClient().getPluginConfiguration(SmartLists.getPluginId()).then(function (freshConfig) {
+                SmartLists.pendingAutoCloneWrite = SmartLists.getApiClient().getPluginConfiguration(SmartLists.getPluginId()).then(function (freshConfig) {
                     freshConfig.ClonedUserAgent = navigator.userAgent;
                     return SmartLists.getApiClient().updatePluginConfiguration(SmartLists.getPluginId(), freshConfig);
                 }).then(function () {
@@ -2137,7 +2139,11 @@
     SmartLists.saveConfiguration = function (page) {
         Dashboard.showLoadingMsg();
         const apiClient = SmartLists.getApiClient();
-        apiClient.getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
+        // Wait out an in-flight Auto Clone write before reading: its snapshot predates this save,
+        // so letting it land afterwards would revert everything saved here.
+        Promise.resolve(SmartLists.pendingAutoCloneWrite).catch(function () { }).then(function () {
+            return apiClient.getPluginConfiguration(SmartLists.getPluginId());
+        }).then(function (config) {
             // Handle DefaultSortBy with ignore articles checkbox
             let sortBy = page.querySelector('#defaultSortBy').value;
             const ignoreArticlesCheckbox = page.querySelector('#defaultIgnoreArticles');
