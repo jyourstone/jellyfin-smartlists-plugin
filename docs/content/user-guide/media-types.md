@@ -2,6 +2,9 @@
 
 When creating a smart list, you must select at least one **Media Type** to specify what kind of content should be included. Media types in SmartLists correspond directly to the **Content type** options you see when adding a new Media Library in Jellyfin.
 
+!!! tip "Default Media Types"
+    If you usually create lists with the same media types, admins can set **Default Media Types** in the Settings tab of the admin configuration page. New lists created there will start with those types pre-selected (types only available for collections are skipped when the new list is a playlist).
+
 ## Available Media Types
 
 | Media Type | Jellyfin Library | Description |

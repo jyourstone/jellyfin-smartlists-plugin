@@ -223,6 +223,28 @@
             SmartLists.populateSelect(defaultSortOrderSetting, SORT_ORDER_OPTIONS_LEGACY, 'Ascending');
         }
 
+        // Populate the Default Media Types multi-select (Settings tab, admin page only)
+        const defaultMediaTypesContainer = page.querySelector('#defaultMediaTypesMultiSelect');
+        if (defaultMediaTypesContainer) {
+            SmartLists.initializeMultiSelect(page, {
+                containerId: 'defaultMediaTypesMultiSelect',
+                displayId: 'defaultMediaTypesMultiSelectDisplay',
+                dropdownId: 'defaultMediaTypesMultiSelectDropdown',
+                optionsId: 'defaultMediaTypesMultiSelectOptions',
+                placeholderText: 'None (default)',
+                checkboxClass: 'default-media-types-checkbox',
+                onChange: null
+            });
+            SmartLists.loadItemsIntoMultiSelect(
+                page,
+                'defaultMediaTypesMultiSelect',
+                SmartLists.mediaTypes,
+                'default-media-types-checkbox',
+                function (item) { return item.Label; },
+                function (item) { return item.Value; }
+            );
+        }
+
         // Add event listener to show/hide ignore articles checkbox based on sort selection
         if (defaultSortBySetting && defaultIgnoreArticlesContainer) {
             defaultSortBySetting.addEventListener('change', function () {
@@ -292,6 +314,52 @@
         }
     };
 
+    // ===== MEDIA TYPE DEPENDENT UI UPDATES =====
+    // Batch update function for all media type changes
+    // Order matters: repopulate fields first (may invalidate), then sync dependent UI
+    SmartLists.applyMediaTypeDependentUpdates = function (page) {
+        // 1) Re-populate fields (may invalidate current selections)
+        if (SmartLists.updateAllFieldSelects) {
+            SmartLists.updateAllFieldSelects(page);
+        }
+
+        // 2) Re-sync dependent UI for all rules
+        if (SmartLists.updateAllUserSelectorVisibility) {
+            SmartLists.updateAllUserSelectorVisibility(page);
+        }
+        if (SmartLists.updateAllNextUnwatchedOptionsVisibility) {
+            SmartLists.updateAllNextUnwatchedOptionsVisibility(page);
+        }
+        if (SmartLists.updateAllCollectionsOptionsVisibility) {
+            SmartLists.updateAllCollectionsOptionsVisibility(page);
+        }
+        if (SmartLists.updateAllTagsOptionsVisibility) {
+            SmartLists.updateAllTagsOptionsVisibility(page);
+        }
+        if (SmartLists.updateAllStudiosOptionsVisibility) {
+            SmartLists.updateAllStudiosOptionsVisibility(page);
+        }
+        if (SmartLists.updateAllGenresOptionsVisibility) {
+            SmartLists.updateAllGenresOptionsVisibility(page);
+        }
+        if (SmartLists.updateAllAudioLanguagesOptionsVisibility) {
+            SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
+        }
+
+        // 3) Update sort options visibility based on media types
+        if (SmartLists.updateAllSortOptionsVisibility) {
+            SmartLists.updateAllSortOptionsVisibility(page);
+        }
+        if (SmartLists.syncRandomGroupSelectionUI) {
+            SmartLists.syncRandomGroupSelectionUI(page);
+        }
+
+        // 4) Update Include Extras checkbox visibility based on media types
+        if (SmartLists.updateIncludeExtrasVisibility) {
+            SmartLists.updateIncludeExtrasVisibility(page);
+        }
+    };
+
     // ===== MEDIA TYPE CHECKBOXES GENERATION =====
     SmartLists.generateMediaTypeCheckboxes = function (page) {
         const container = page.querySelector('#mediaTypesMultiSelect');
@@ -305,51 +373,6 @@
             page._mediaTypeAbortController.abort();
         }
         page._mediaTypeAbortController = SmartLists.createAbortController();
-
-        // Batch update function for all media type changes
-        // Order matters: repopulate fields first (may invalidate), then sync dependent UI
-        const batchUpdateMediaTypeChanges = function () {
-            // 1) Re-populate fields (may invalidate current selections)
-            if (SmartLists.updateAllFieldSelects) {
-                SmartLists.updateAllFieldSelects(page);
-            }
-
-            // 2) Re-sync dependent UI for all rules
-            if (SmartLists.updateAllUserSelectorVisibility) {
-                SmartLists.updateAllUserSelectorVisibility(page);
-            }
-            if (SmartLists.updateAllNextUnwatchedOptionsVisibility) {
-                SmartLists.updateAllNextUnwatchedOptionsVisibility(page);
-            }
-            if (SmartLists.updateAllCollectionsOptionsVisibility) {
-                SmartLists.updateAllCollectionsOptionsVisibility(page);
-            }
-            if (SmartLists.updateAllTagsOptionsVisibility) {
-                SmartLists.updateAllTagsOptionsVisibility(page);
-            }
-            if (SmartLists.updateAllStudiosOptionsVisibility) {
-                SmartLists.updateAllStudiosOptionsVisibility(page);
-            }
-            if (SmartLists.updateAllGenresOptionsVisibility) {
-                SmartLists.updateAllGenresOptionsVisibility(page);
-            }
-            if (SmartLists.updateAllAudioLanguagesOptionsVisibility) {
-                SmartLists.updateAllAudioLanguagesOptionsVisibility(page);
-            }
-
-            // 3) Update sort options visibility based on media types
-            if (SmartLists.updateAllSortOptionsVisibility) {
-                SmartLists.updateAllSortOptionsVisibility(page);
-            }
-            if (SmartLists.syncRandomGroupSelectionUI) {
-                SmartLists.syncRandomGroupSelectionUI(page);
-            }
-
-            // 4) Update Include Extras checkbox visibility based on media types
-            if (SmartLists.updateIncludeExtrasVisibility) {
-                SmartLists.updateIncludeExtrasVisibility(page);
-            }
-        };
 
         // Generate media types array filtered by list type
         if (!SmartLists.mediaTypes || !Array.isArray(SmartLists.mediaTypes)) {
@@ -388,7 +411,7 @@
 
                 // Schedule batched update after debounce delay
                 page._mediaTypeUpdateTimer = setTimeout(function () {
-                    batchUpdateMediaTypeChanges();
+                    SmartLists.applyMediaTypeDependentUpdates(page);
                     page._mediaTypeUpdateTimer = null;
                 }, SmartLists.MEDIA_TYPE_UPDATE_DEBOUNCE_MS || 200);
             }
@@ -419,6 +442,15 @@
         // Set default list type
         SmartLists.setElementValue(page, '#listType', config.DefaultListType || 'Playlist');
         SmartLists.handleListTypeChange(page);
+
+        // Pre-select default media types. Collection-only types are skipped
+        // automatically for playlists - their checkboxes don't exist after
+        // handleListTypeChange regenerated the multi-select for the list type.
+        if (config.DefaultMediaTypes && Array.isArray(config.DefaultMediaTypes) && config.DefaultMediaTypes.length > 0) {
+            SmartLists.setSelectedItems(page, 'mediaTypesMultiSelect', config.DefaultMediaTypes, 'media-type-multi-select-checkbox', 'Select media types...');
+            // setSelectedItems doesn't fire change handlers - re-sync dependent UI explicitly
+            SmartLists.applyMediaTypeDependentUpdates(page);
+        }
 
         // Set default values for Max Items and Max Playtime
         const defaultMaxItems = config.DefaultMaxItems !== undefined && config.DefaultMaxItems !== null ? config.DefaultMaxItems : 500;
@@ -1924,6 +1956,12 @@
             }
 
             if (defaultListTypeEl) defaultListTypeEl.value = config.DefaultListType || 'Playlist';
+
+            // Options are populated synchronously in populateStaticSelects before this async load resolves
+            if (SmartLists.setSelectedItems) {
+                SmartLists.setSelectedItems(page, 'defaultMediaTypesMultiSelect', config.DefaultMediaTypes || [], 'default-media-types-checkbox', 'None (default)');
+            }
+
             if (defaultMakePublicEl) defaultMakePublicEl.checked = config.DefaultMakePublic || false;
 
             if (defaultHideWhenEmptyEl) defaultHideWhenEmptyEl.checked = SmartLists.getDefaultHideWhenEmpty(config);
@@ -2059,6 +2097,10 @@
             config.DefaultSortBy = sortBy;
             config.DefaultSortOrder = page.querySelector('#defaultSortOrder').value;
             config.DefaultListType = page.querySelector('#defaultListType').value;
+
+            const defaultMediaTypes = SmartLists.getSelectedItems ? SmartLists.getSelectedItems(page, 'defaultMediaTypesMultiSelect', 'default-media-types-checkbox') : [];
+            config.DefaultMediaTypes = defaultMediaTypes && defaultMediaTypes.length > 0 ? defaultMediaTypes : null;
+
             config.DefaultMakePublic = page.querySelector('#defaultMakePublic').checked;
             config.DefaultHideWhenEmpty = SmartLists.getElementChecked(page, '#defaultHideWhenEmpty', SmartLists.getDefaultHideWhenEmpty(config));
             config.ShowSmartListBadge = page.querySelector('#showSmartListBadge').checked;

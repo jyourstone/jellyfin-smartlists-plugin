@@ -269,6 +269,7 @@ Monitor refresh operations and view statistics:
 Configure global settings for the plugin:
 
 - Set the default sort order for new lists
+- Set the default media types pre-selected for new lists (types only available for collections are skipped when creating a playlist)
 - Set the default max items and max playtime for new lists
 - Set whether new lists hide when empty by default
 - Configure custom prefix and suffix for list names
