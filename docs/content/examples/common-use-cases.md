@@ -42,6 +42,12 @@ Here are some popular playlist and collection types you can create:
 - Creates a single collection that organizes multiple collections together (e.g., a "Superhero Universes" collection containing your Marvel, DC, and other superhero collections)
 - **Important**: The smart collection will never include itself in the results, even if its name matches the rule. So you can safely name your meta-collection "Superhero Universes" and use rules that match "Marvel" without worrying about it including itself
 
+### Filtered Meta-Collection (Marvel Collections Only)
+- **Collection name** contains "Collection" with "Include collections only" enabled AND **Studios** contains "Marvel"
+- **List Type**: Collection
+- Includes only the collections whose own metadata lists a Marvel studio — other rules in the same group filter the collections themselves, not the items inside them
+- **Note**: Jellyfin aggregates studios and genres from a collection's items, so fields like Studios and Genres work well here. Fields a collection doesn't have (playback status, resolution, etc.) won't match anything
+
 ### Combine Multiple Playlists
 - **Playlist name** is in "Favorites;Top Rated;Recent Additions"
 - **List Type**: Playlist

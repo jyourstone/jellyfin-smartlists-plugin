@@ -222,6 +222,9 @@ Filter items based on Jellyfin collection membership.
 - **Include collections only** (Collections only, default: No) - Include the collection object instead of its contents. Creates "collections of collections" (meta-collections). Media type selection is ignored when enabled.
 - **Include episodes within series** (Playlists with Episodes, default: No) - Include individual episodes from series in collections.
 
+!!! note "Combining with other rules"
+    When **Include collections only** is enabled, every other rule in the same rule group applies to the **collection itself** rather than to individual media items — the whole group must match for a collection to be included. For example, `Collection Name contains "Collection"` (collections only) AND `Studios contains "Marvel"` includes only collections whose own metadata lists a Marvel studio (Jellyfin aggregates studios and genres from a collection's items). Fields a collection doesn't carry (e.g. playback status or resolution) won't match anything. A rule group containing a collections-only rule never adds individual media items — use a separate rule group (OR) to combine collections with loose items.
+
 ##### Collection Search Depth {#collection-search-depth}
 
 How deep to traverse nested collections (default: 0):
@@ -250,6 +253,9 @@ Filter items based on Jellyfin playlist membership.
 **Options:**
 
 - **Include playlist only** (Collections only, default: No) - Include the playlist object instead of its contents. Media type selection is ignored when enabled.
+
+!!! note "Combining with other rules"
+    When **Include playlist only** is enabled, every other rule in the same rule group applies to the **playlist itself** — the whole group must match for a playlist to be included. A rule group containing a playlist-only rule never adds individual media items; use a separate rule group (OR) for that.
 
 !!! note "Permissions"
     Only playlists you own or that are marked as public are accessible.
