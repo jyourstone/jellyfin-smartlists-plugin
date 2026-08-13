@@ -125,7 +125,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 else
                 {
                     var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                    var items = JsonSerializer.Deserialize<ScrobListResponse>(json)?.Items ?? [];
+                    // A missing items collection means this is not a Scrob list response (an error
+                    // envelope, another app on the configured URL, ...). Treating it as an empty list
+                    // would be the same silent failure as a parse error, so make it one. A real list
+                    // with no items still deserializes to an empty array and passes through.
+                    var items = JsonSerializer.Deserialize<ScrobListResponse>(json)?.Items
+                        ?? throw new JsonException("The Scrob response did not contain an items collection.");
 
                     foreach (var item in items)
                     {
