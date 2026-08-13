@@ -69,7 +69,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// within-group order (shuffle wins over air-date order, so shuffled variants never
         /// use blocks). Single source of the gate shared by SmartList and the interleave.
         /// </summary>
-        internal bool UsesAirBlocks => GroupByField == "Collections" && OrderWithinGroupsByAirDate && !ShuffleWithinGroups;
+        internal bool UsesAirBlocks => ShouldUseAirBlocks(GroupByField, OrderWithinGroupsByAirDate, ShuffleWithinGroups);
+
+        /// <summary>
+        /// The air-block gate itself, in one place. <see cref="UsesAirBlocks"/> reads it from
+        /// instance state; <see cref="BuildInterleavedPositions"/> reads it from its parameters.
+        /// Both must agree on whether a refresh uses blocks - if they drift, SmartList prepares
+        /// state for one mode while the interleave runs the other.
+        /// </summary>
+        internal static bool ShouldUseAirBlocks(string? groupByField, bool airDateWithinGroups, bool shuffleWithinGroups) =>
+            groupByField == "Collections" && airDateWithinGroups && !shuffleWithinGroups;
 
         /// <summary>
         /// Pre-computed interleave positions for each item.
@@ -196,7 +205,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             // Air blocks apply only to collection grouping with air-date order; the plain
             // per-item interleave stays allocation-free for every other round-robin variant.
-            bool useAirBlocks = collectionGroupKeys != null && airDateWithinGroups && !shuffleWithinGroups;
+            // The field name is part of the gate (via ShouldUseAirBlocks) so this cannot diverge
+            // from UsesAirBlocks; the map check stays because block grouping is only meaningful
+            // once collection membership has actually been resolved.
+            bool useAirBlocks = ShouldUseAirBlocks(groupByField, airDateWithinGroups, shuffleWithinGroups) && collectionGroupKeys != null;
             if (!useAirBlocks)
             {
                 int maxGroupSize = groups.Values.Max(g => g.Count);
