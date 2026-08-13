@@ -194,7 +194,7 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | **Album** | `Album` | Album name (music) |
 | **Artists** | `Artists` | Track-level artists (music) |
 | **Album Artists** | `AlbumArtists` | Album-level primary artists (music) |
-| **External List** | `ExternalList` | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz). [See details below.](#external-list) |
+| **External List** | `ExternalList` | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz, Scrob). [See details below.](#external-list) |
 
 **Parent metadata options** for Tags, Studios, and Genres (shown when Episode or Audio media type is selected):
 
@@ -265,7 +265,7 @@ Filter items based on Jellyfin playlist membership.
 
 #### External List
 
-Filter items based on membership in an external list. Supports [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), and [ListenBrainz](https://listenbrainz.org) — including user lists, watchlists, charts/trending, and music playlists.
+Filter items based on membership in an external list. Supports [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), [ListenBrainz](https://listenbrainz.org), and [Scrob](https://github.com/ellite/scrob) — including user lists, watchlists, charts/trending, and music playlists.
 
 | Provider | API key required | Matches by |
 |----------|-----------------|------------|
@@ -273,6 +273,7 @@ Filter items based on membership in an external list. Supports [MDBList](https:/
 | **IMDb** | No | IMDb |
 | **Letterboxd** | No | TMDB |
 | **ListenBrainz** | No (optional user token) | MusicBrainz recording ID (title + artist fallback) |
+| **Scrob** | Yes | TMDB, TVDB |
 | **Trakt** | Yes (client ID) | IMDb, TMDB, TVDB |
 | **TMDB** | Yes | TMDB |
 

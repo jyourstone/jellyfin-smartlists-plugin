@@ -983,6 +983,28 @@
                             </div>
                         </div>
 
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="scrobServerUrl">Scrob Server URL</label>
+                            <input type="text" id="scrobServerUrl" class="emby-input"
+                                placeholder="https://scrob.example.com">
+                            <div class="fieldDescription">The base URL of your self-hosted Scrob instance - the
+                                same URL you use to open it in your browser. List URLs in rules must use this
+                                exact address (same scheme, host and port) or they won't be recognised.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em;">
+                            <label class="inputLabel" for="scrobApiKey">Scrob API Key</label>
+                            <input type="password" id="scrobApiKey" class="emby-input"
+                                placeholder="Enter your Scrob API key">
+                            <div class="fieldDescription">Find your key on your Scrob instance's Connections page.
+                                Lists are referenced by their browser URL ({server}/list/{id}); only lists visible
+                                to that Scrob account can be used. See the
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/external-lists/"
+                                    target="_blank" rel="noopener noreferrer"
+                                    style="color: inherit;">documentation</a> for details.
+                            </div>
+                        </div>
+
                         <div class="selectContainer" style="margin-bottom: 1em;">
                             <label class="selectLabel" for="userAgentMode">User-Agent</label>
                             <select is="emby-select" id="userAgentMode" class="emby-select">

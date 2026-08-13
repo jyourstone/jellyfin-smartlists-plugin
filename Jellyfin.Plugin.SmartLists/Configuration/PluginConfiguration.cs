@@ -171,6 +171,18 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public string? ListenBrainzUserToken { get; set; } = null;
 
         /// <summary>
+        /// Gets or sets the base URL of the self-hosted Scrob server (e.g. https://scrob.example.com)
+        /// for fetching external lists. Find your instance URL at https://github.com/ellite/scrob
+        /// </summary>
+        public string? ScrobServerUrl { get; set; } = null;
+
+        /// <summary>
+        /// Gets or sets the Scrob API key for fetching external lists.
+        /// Find it on your Scrob instance's Connections page.
+        /// </summary>
+        public string? ScrobApiKey { get; set; } = null;
+
+        /// <summary>
         /// Gets or sets how the User-Agent header for external list requests is chosen.
         /// </summary>
         public UserAgentMode UserAgentMode { get; set; } = UserAgentMode.Default;

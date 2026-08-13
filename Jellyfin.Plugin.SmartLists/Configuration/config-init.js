@@ -2022,6 +2022,14 @@
             if (listenBrainzUserTokenEl) {
                 listenBrainzUserTokenEl.value = config.ListenBrainzUserToken || '';
             }
+            var scrobServerUrlEl = page.querySelector('#scrobServerUrl');
+            if (scrobServerUrlEl) {
+                scrobServerUrlEl.value = config.ScrobServerUrl || '';
+            }
+            var scrobApiKeyEl = page.querySelector('#scrobApiKey');
+            if (scrobApiKeyEl) {
+                scrobApiKeyEl.value = config.ScrobApiKey || '';
+            }
 
             // Load User-Agent settings
             var userAgentModeEl = page.querySelector('#userAgentMode');
@@ -2262,6 +2270,10 @@
             config.TmdbApiKey = tmdbApiKeyInput ? (tmdbApiKeyInput.value.trim() || null) : null;
             var listenBrainzUserTokenInput = page.querySelector('#listenBrainzUserToken');
             config.ListenBrainzUserToken = listenBrainzUserTokenInput ? (listenBrainzUserTokenInput.value.trim() || null) : null;
+            var scrobServerUrlInput = page.querySelector('#scrobServerUrl');
+            config.ScrobServerUrl = scrobServerUrlInput ? (scrobServerUrlInput.value.trim() || null) : null;
+            var scrobApiKeyInput = page.querySelector('#scrobApiKey');
+            config.ScrobApiKey = scrobApiKeyInput ? (scrobApiKeyInput.value.trim() || null) : null;
 
             // Save User-Agent settings
             var userAgentModeInput = page.querySelector('#userAgentMode');

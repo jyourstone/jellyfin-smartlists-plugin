@@ -1,3 +1,4 @@
+using System.Net.Http;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,7 +45,15 @@ namespace Jellyfin.Plugin.SmartLists
             serviceCollection.AddSingleton<IExternalListProvider, TmdbListProvider>();
             serviceCollection.AddSingleton<IExternalListProvider, LetterboxdListProvider>();
             serviceCollection.AddSingleton<IExternalListProvider, ListenBrainzListProvider>();
+            serviceCollection.AddSingleton<IExternalListProvider, ScrobListProvider>();
             serviceCollection.AddSingleton<ExternalListService>();
+
+            // Scrob is the only provider that sends a secret in a custom header (X-Api-Key) to an
+            // admin-configured host. .NET strips Authorization on a cross-origin redirect but replays
+            // custom headers verbatim, so an auth-proxy redirect (or a hijacked domain) would hand the
+            // admin's key to a third-party host. Disable redirects: a 3xx is reported as an error instead.
+            serviceCollection.AddHttpClient("Scrob")
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
             // Register backup service
             serviceCollection.AddSingleton<IBackupService, BackupService>();
