@@ -65,8 +65,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100)))
             .ToArray();
 
+        // \z rather than $: in .NET, $ also matches before a single trailing newline, so
+        // "Genres\n" would pass a check whose message promises letters/numbers/underscores only.
         private static readonly Regex FieldNameRegex = new Regex(
-            @"^[a-zA-Z_][a-zA-Z0-9_]*$",
+            @"^[a-zA-Z_][a-zA-Z0-9_]*\z",
             RegexOptions.Compiled
         );
 

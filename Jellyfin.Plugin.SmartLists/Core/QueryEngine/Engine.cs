@@ -46,6 +46,48 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Upper bound on a single regex match. Matches InputValidator's validation timeout.
+        /// </summary>
+        internal static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(1000);
+
+        /// <summary>
+        /// Builds the error raised when a pattern exceeds <see cref="RegexMatchTimeout"/>.
+        /// </summary>
+        private static ArgumentException RegexTimedOut(string pattern, Exception inner) =>
+            new ArgumentException(
+                $"Regex pattern '{pattern}' timed out after {RegexMatchTimeout.TotalMilliseconds:F0}ms. " +
+                "Simplify it - it backtracks excessively on this library's data.",
+                inner);
+
+        /// <summary>
+        /// Runs a regex match, surfacing a timeout as a descriptive error.
+        /// </summary>
+        /// <remarks>
+        /// A timeout deliberately fails the refresh rather than degrading to "no match". Item
+        /// processing is serialized, so swallowing it would cost <see cref="RegexMatchTimeout"/>
+        /// per item and block the queue for hours on a large library; suppressing the pattern
+        /// after its first timeout would instead return silently wrong results. Failing loudly
+        /// stops the work immediately and tells the user which pattern to fix - the same way an
+        /// unparseable pattern already behaves.
+        /// </remarks>
+        internal static bool RegexIsMatch(Regex regex, string value)
+        {
+            if (regex == null || value == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return regex.IsMatch(value);
+            }
+            catch (RegexMatchTimeoutException ex)
+            {
+                throw RegexTimedOut(regex.ToString(), ex);
+            }
+        }
+
+        /// <summary>
         /// Gets or creates a compiled regex pattern from the cache.
         /// </summary>
         /// <param name="pattern">The regex pattern</param>
@@ -59,7 +101,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 try
                 {
                     logger?.LogDebug("SmartLists compiling new regex pattern: {Pattern}", key);
-                    return new Regex(key, RegexOptions.Compiled | RegexOptions.None);
+                    // A match timeout is mandatory. Catastrophic backtracking cannot be detected
+                    // reliably when the pattern is validated (the outcome depends on the subject
+                    // string), so an unbounded match lets one pathological pattern pin a CPU core
+                    // for the whole refresh with no way to interrupt it.
+                    return new Regex(key, RegexOptions.Compiled | RegexOptions.None, RegexMatchTimeout);
                 }
                 catch (ArgumentException ex)
                 {
@@ -530,6 +576,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildRelativeDateExpressionForMethodCall(r, methodCall, logger);
             }
 
+            // Equal/NotEqual compare whole UTC days, not exact timestamps. Without these the
+            // generic Enum.TryParse arm below would build an exact-timestamp comparison, so
+            // "Last Played is <date>" only matched items played at exactly 00:00:00 UTC.
+            // Reuses the same builders the non-user-specific date fields use.
+            if (r.Operator == "Equal")
+            {
+                return BuildDateEqualityExpression(r, methodCall, logger);
+            }
+
+            if (r.Operator == "NotEqual")
+            {
+                return BuildDateInequalityExpression(r, methodCall, logger);
+            }
+
 
 
             if (string.IsNullOrWhiteSpace(r.TargetValue))
@@ -764,10 +824,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 case "MatchRegex":
                     logger?.LogDebug("SmartLists applying single string MatchRegex to {Field}", r.MemberName);
                     var regex = GetOrCreateRegex(r.TargetValue, logger);
-                    var method = typeof(Regex).GetMethod("IsMatch", [typeof(string)]);
-                    if (method == null) throw new InvalidOperationException("Regex.IsMatch method not found");
+                    // Route through Engine.RegexIsMatch so a match timeout degrades to "no match"
+                    // instead of throwing out of the compiled delegate and failing the refresh.
+                    var method = typeof(Engine).GetMethod("RegexIsMatch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    if (method == null) throw new InvalidOperationException("Engine.RegexIsMatch method not found");
                     var regexConstant = System.Linq.Expressions.Expression.Constant(regex);
-                    return System.Linq.Expressions.Expression.Call(regexConstant, method, left);
+                    return System.Linq.Expressions.Expression.Call(method, regexConstant, left);
                 case "IsIn":
                     logger?.LogDebug("SmartLists applying string IsIn to {Field} with value '{Value}'", r.MemberName, r.TargetValue);
                     var isInMethod = typeof(Engine).GetMethod("StringIsInList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
@@ -1114,8 +1176,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         /// <summary>
         /// Builds expressions for date equality (comparing date ranges).
+        /// Accepts any expression so both the member-access path and the user-specific
+        /// method-call path share one definition of "same UTC day".
         /// </summary>
-        private static BinaryExpression BuildDateEqualityExpression(Expression r, MemberExpression left, ILogger? logger)
+        private static BinaryExpression BuildDateEqualityExpression(Expression r, System.Linq.Expressions.Expression left, ILogger? logger)
         {
             logger?.LogDebug("SmartLists handling date equality for field {Field} with date {Date}", r.MemberName, r.TargetValue);
 
@@ -1145,8 +1209,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
         /// <summary>
         /// Builds expressions for date inequality (outside date ranges).
+        /// Accepts any expression so both the member-access path and the user-specific
+        /// method-call path share one definition of "same UTC day".
         /// </summary>
-        private static BinaryExpression BuildDateInequalityExpression(Expression r, MemberExpression left, ILogger? logger)
+        private static BinaryExpression BuildDateInequalityExpression(Expression r, System.Linq.Expressions.Expression left, ILogger? logger)
         {
             logger?.LogDebug("SmartLists handling date inequality for field {Field} with date {Date}", r.MemberName, r.TargetValue);
 
@@ -1602,33 +1668,32 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             if (list == null) return false;
 
+            // Compiling the pattern and matching against it fail for different reasons, so they
+            // are caught separately - otherwise a match timeout gets reported as "invalid pattern".
+            Regex regex;
             try
             {
-                var regex = GetOrCreateRegex(pattern);
-                
-                // Convert to list to check if empty and iterate
-                var listItems = list.ToList();
-                
-                // If the list is empty, check if the regex matches an empty string
-                // This handles cases like ^$ which should match items with no tags/genres/etc.
-                if (listItems.Count == 0)
-                {
-                    return regex.IsMatch(string.Empty);
-                }
-                
-                // Otherwise, check if any item in the list matches the regex
-                return listItems.Any(s => s != null && regex.IsMatch(s));
+                regex = GetOrCreateRegex(pattern);
             }
             catch (ArgumentException ex)
             {
                 // Preserve the original error details while providing context
                 throw new ArgumentException($"Invalid regex pattern '{pattern}': {ex.Message}", ex);
             }
-            catch (Exception ex)
+
+            // Convert to list to check if empty and iterate
+            var listItems = list.ToList();
+
+            // If the list is empty, check if the regex matches an empty string
+            // This handles cases like ^$ which should match items with no tags/genres/etc.
+            if (listItems.Count == 0)
             {
-                // For other unexpected errors, preserve the original exception details
-                throw new ArgumentException($"Regex pattern '{pattern}' caused an error: {ex.Message}", ex);
+                return RegexIsMatch(regex, string.Empty);
             }
+
+            // Otherwise, check if any item in the list matches the regex.
+            // RegexIsMatch converts a match timeout into a descriptive ArgumentException.
+            return listItems.Any(s => s != null && RegexIsMatch(regex, s));
         }
 
         /// <summary>
