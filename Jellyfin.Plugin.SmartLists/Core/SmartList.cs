@@ -254,6 +254,17 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 continue;
                             }
 
+                            // Sets containing include-only rules (Collections "collection only" / Playlists "playlist only")
+                            // match collections/playlists as a whole - every rule in the set is evaluated against
+                            // the collection/playlist itself in GetMatchingCollections/GetMatchingPlaylists.
+                            // They never match individual media items, so no item rules are compiled for them.
+                            if (set.Expressions.Any(expr => IsCollectionOnlyExpression(expr) || IsPlaylistOnlyExpression(expr)))
+                            {
+                                logger?.LogDebug("Skipping expression set {SetIndex} for item evaluation in playlist '{PlaylistName}' - contains include-only rules (handled separately)", setIndex, Name);
+                                compiledRuleSets.Add([]);
+                                continue;
+                            }
+
                             var compiledRules = new List<Func<Operand, bool>>();
 
                             for (int exprIndex = 0; exprIndex < set.Expressions.Count; exprIndex++)
@@ -269,20 +280,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 if (expr.MemberName == "SimilarTo")
                                 {
                                     logger?.LogDebug("Skipping SimilarTo expression at set {SetIndex}, index {ExprIndex} for playlist '{PlaylistName}' - handled separately", setIndex, exprIndex, Name);
-                                    continue;
-                                }
-
-                                // Skip Collections expressions with IncludeCollectionOnly=true - they're handled separately
-                                if (expr.MemberName == "Collections" && expr.IncludeCollectionOnly == true)
-                                {
-                                    logger?.LogDebug("Skipping Collections expression with IncludeCollectionOnly=true at set {SetIndex}, index {ExprIndex} for playlist '{PlaylistName}' - handled separately", setIndex, exprIndex, Name);
-                                    continue;
-                                }
-
-                                // Skip Playlists expressions with IncludePlaylistOnly=true - they're handled separately
-                                if (expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true)
-                                {
-                                    logger?.LogDebug("Skipping Playlists expression with IncludePlaylistOnly=true at set {SetIndex}, index {ExprIndex} for playlist '{PlaylistName}' - handled separately", setIndex, exprIndex, Name);
                                     continue;
                                 }
 
@@ -544,17 +541,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (group == null)
                         continue; // Skip null groups
 
-                    // Check if this group has only skipped rules (SimilarTo or IncludeCollectionOnly Collections or IncludePlaylistOnly Playlists)
-                    // If so, skip it for item evaluation (these are handled separately)
-                    bool hasOnlySkippedRules = group.Expressions != null && 
-                        group.Expressions.All(expr => 
-                            expr?.MemberName == "SimilarTo" || 
-                            (expr?.MemberName == "Collections" && expr.IncludeCollectionOnly == true) ||
-                            (expr?.MemberName == "Playlists" && expr.IncludePlaylistOnly == true));
+                    // Groups containing include-only rules match collections/playlists as a whole
+                    // (all rules in the group AND together against the collection/playlist itself),
+                    // so they never match individual media items. Groups with only SimilarTo rules
+                    // are handled separately by similarity filtering.
+                    bool hasIncludeOnlyRule = group.Expressions != null &&
+                        group.Expressions.Any(expr => IsCollectionOnlyExpression(expr) || IsPlaylistOnlyExpression(expr));
+                    bool hasOnlySkippedRules = group.Expressions != null &&
+                        group.Expressions.All(expr => expr?.MemberName == "SimilarTo");
 
-                    if (hasOnlySkippedRules)
+                    if (hasIncludeOnlyRule || hasOnlySkippedRules)
                     {
-                        continue; // Skip groups with only skipped rules - they don't match items
+                        continue; // Handled separately - these groups don't match items
                     }
 
                     if (groupRules == null || groupRules.Count == 0)
@@ -626,7 +624,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     var groupRules = compiledRules[groupIndex];
 
                     if (group == null || groupRules == null || groupRules.Count == 0 || group.Expressions == null)
-                        continue; // Skip empty or null groups
+                        continue; // Skip empty or null groups (include-only groups compile to empty rule sets)
 
                     try
                     {
@@ -644,22 +642,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             if (expression.MemberName == "SimilarTo")
                             {
                                 logger?.LogDebug("Skipping SimilarTo rule in episode evaluation (not compiled)");
-                                continue;
-                            }
-
-                            // Skip Collections rules with IncludeCollectionOnly=true - handled separately
-                            if (expression.MemberName == "Collections" && expression.IncludeCollectionOnly == true)
-                            {
-                                logger?.LogDebug("Skipping Collections rule with IncludeCollectionOnly=true in episode evaluation (handled separately)");
-                                compiledIndex++; // Still advance the compiled index
-                                continue;
-                            }
-
-                            // Skip Playlists rules with IncludePlaylistOnly=true - handled separately
-                            if (expression.MemberName == "Playlists" && expression.IncludePlaylistOnly == true)
-                            {
-                                logger?.LogDebug("Skipping Playlists rule with IncludePlaylistOnly=true in episode evaluation (handled separately)");
-                                compiledIndex++; // Still advance the compiled index
                                 continue;
                             }
 
@@ -876,7 +858,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (hasCollectionsIncludeCollectionOnly)
                 {
                     logger?.LogDebug("IncludeCollectionOnly is enabled - fetching matching collections directly");
-                    var matchingCollections = GetMatchingCollections(libraryManager, user, logger);
+                    var matchingCollections = GetMatchingCollections(libraryManager, user, userDataManager, refreshCache, logger);
                     if (matchingCollections.Count > 0)
                     {
                         logger?.LogDebug("Found {Count} matching collections to include directly", matchingCollections.Count);
@@ -897,7 +879,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (hasPlaylistsIncludePlaylistOnly)
                 {
                     logger?.LogDebug("IncludePlaylistOnly is enabled - fetching matching playlists directly");
-                    var matchingPlaylists = GetMatchingPlaylists(libraryManager, user, logger);
+                    var matchingPlaylists = GetMatchingPlaylists(libraryManager, user, userDataManager, refreshCache, logger);
                     if (matchingPlaylists.Count > 0)
                     {
                         logger?.LogDebug("Found {Count} matching playlists to include directly", matchingPlaylists.Count);
@@ -909,12 +891,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                // Check if ALL rules have IncludeCollectionOnly or IncludePlaylistOnly enabled
-                // If so, skip media item processing entirely (only return collections/playlists)
+                // Check if EVERY rule group contains an include-only rule. Such groups match
+                // collections/playlists as a whole (handled above) and never match individual
+                // media items, so there is nothing left to evaluate items against.
                 var allRulesAreIncludeOnly = ExpressionSets?.All(set =>
-                    set?.Expressions?.All(expr =>
-                        (expr.MemberName == "Collections" && expr.IncludeCollectionOnly == true) ||
-                        (expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true)) == true) == true;
+                    set?.Expressions?.Any(expr =>
+                        IsCollectionOnlyExpression(expr) || IsPlaylistOnlyExpression(expr)) == true) == true;
 
                 if (allRulesAreIncludeOnly && (hasCollectionsIncludeCollectionOnly || hasPlaylistsIncludePlaylistOnly))
                 {
@@ -1556,6 +1538,211 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
+        /// True when the expression is a Collections rule in "collection only" mode.
+        /// </summary>
+        private static bool IsCollectionOnlyExpression(Expression? expr) =>
+            expr?.MemberName == "Collections" && expr.IncludeCollectionOnly == true;
+
+        /// <summary>
+        /// True when the expression is a Playlists rule in "playlist only" mode.
+        /// </summary>
+        private static bool IsPlaylistOnlyExpression(Expression? expr) =>
+            expr?.MemberName == "Playlists" && expr.IncludePlaylistOnly == true;
+
+        /// <summary>
+        /// A rule group containing at least one include-only rule, prepared for evaluating
+        /// collections/playlists against the ENTIRE group with AND logic (issue #479).
+        /// </summary>
+        private sealed class IncludeOnlyRuleSet
+        {
+            /// <summary>Include-only rules, matched against the collection/playlist name.</summary>
+            public List<Expression> NameRules { get; } = [];
+
+            /// <summary>Original sibling expressions (used for field-requirement analysis).</summary>
+            public List<Expression> SiblingExpressions { get; } = [];
+
+            /// <summary>Compiled sibling rules, evaluated against the collection/playlist itself.</summary>
+            public List<Func<Operand, bool>> SiblingRules { get; } = [];
+
+            /// <summary>True when the group can never match (e.g. it requires both a collection and a playlist).</summary>
+            public bool Impossible { get; set; }
+        }
+
+        /// <summary>
+        /// Builds the rule groups relevant for include-only matching of the given field.
+        /// Each returned group contains at least one include-only rule for <paramref name="fieldName"/>;
+        /// all other rules in the group are compiled so the whole group can be evaluated with AND logic
+        /// against the collection/playlist itself.
+        /// </summary>
+        /// <param name="fieldName">"Collections" or "Playlists"</param>
+        /// <param name="user">User context used as the default for user-specific rules</param>
+        /// <param name="logger">Logger for debugging</param>
+        private List<IncludeOnlyRuleSet> BuildIncludeOnlyRuleSets(string fieldName, User user, ILogger? logger)
+        {
+            var ruleSets = new List<IncludeOnlyRuleSet>();
+            if (ExpressionSets == null)
+                return ruleSets;
+
+            bool isCollections = fieldName == "Collections";
+            var defaultUserId = user.Id.ToString("N");
+
+            foreach (var set in ExpressionSets)
+            {
+                var expressions = set?.Expressions;
+                if (expressions == null)
+                    continue;
+
+                var ruleSet = new IncludeOnlyRuleSet();
+
+                foreach (var expr in expressions)
+                {
+                    if (expr == null)
+                        continue;
+
+                    bool isOwnIncludeOnly = isCollections ? IsCollectionOnlyExpression(expr) : IsPlaylistOnlyExpression(expr);
+                    bool isOtherIncludeOnly = isCollections ? IsPlaylistOnlyExpression(expr) : IsCollectionOnlyExpression(expr);
+
+                    if (isOwnIncludeOnly)
+                    {
+                        ruleSet.NameRules.Add(expr);
+                        continue;
+                    }
+
+                    if (isOtherIncludeOnly)
+                    {
+                        // A group cannot require an item to be both a collection and a playlist
+                        ruleSet.Impossible = true;
+                        continue;
+                    }
+
+                    if (expr.MemberName == "SimilarTo")
+                    {
+                        logger?.LogDebug("Ignoring SimilarTo rule when matching {FieldName} include-only groups for '{ListName}'", fieldName, Name);
+                        continue;
+                    }
+
+                    ruleSet.SiblingExpressions.Add(expr);
+                }
+
+                if (ruleSet.NameRules.Count == 0)
+                    continue; // Group has no include-only rule for this field - matched via normal item evaluation
+
+                if (ruleSet.Impossible)
+                {
+                    logger?.LogWarning("Rule group in '{ListName}' combines collection-only and playlist-only rules - it can never match anything", Name);
+                    ruleSets.Add(ruleSet);
+                    continue;
+                }
+
+                foreach (var expr in ruleSet.SiblingExpressions)
+                {
+                    try
+                    {
+                        var compiledRule = Engine.CompileRule<Operand>(expr, defaultUserId, logger);
+                        if (compiledRule != null)
+                        {
+                            ruleSet.SiblingRules.Add(compiledRule);
+                        }
+                        else
+                        {
+                            logger?.LogWarning("Failed to compile include-only sibling rule for '{ListName}': {Field} {Operator} {Value}",
+                                Name, expr.MemberName, expr.Operator, expr.TargetValue);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError(ex, "Error compiling include-only sibling rule for '{ListName}': {Field} {Operator} {Value}",
+                            Name, expr.MemberName, expr.Operator, expr.TargetValue);
+                    }
+                }
+
+                ruleSets.Add(ruleSet);
+            }
+
+            return ruleSets;
+        }
+
+        /// <summary>
+        /// Builds extraction options covering the fields referenced by sibling rules of include-only groups,
+        /// so those rules can be evaluated against the collection/playlist itself.
+        /// </summary>
+        private MediaTypeExtractionOptions BuildIncludeOnlyExtractionOptions(List<IncludeOnlyRuleSet> ruleSets)
+        {
+            var siblingSets = ruleSets
+                .Where(rs => !rs.Impossible && rs.SiblingExpressions.Count > 0)
+                .Select(rs => new ExpressionSet { Expressions = rs.SiblingExpressions })
+                .ToList();
+
+            var fieldReqs = FieldRequirements.Analyze(siblingSets);
+
+            return new MediaTypeExtractionOptions
+            {
+                RequiredGroups = fieldReqs.RequiredGroups,
+                CollectionRecursionDepth = Math.Max(1, CollectionSearchDepth),
+                AdditionalUserIds = fieldReqs.AdditionalUserIds,
+                OriginListName = Name,
+            };
+        }
+
+        /// <summary>
+        /// Checks whether a collection/playlist satisfies at least one include-only rule group.
+        /// A group matches when ALL its include-only rules match the item's name AND all its
+        /// sibling rules match the item itself (AND logic within groups, OR across groups).
+        /// </summary>
+        /// <param name="names">The item's name (single-element list)</param>
+        /// <param name="ruleSets">Prepared include-only rule groups</param>
+        /// <param name="nameMatcher">Field-specific name matcher (collection or playlist rules)</param>
+        /// <param name="operandProvider">Lazily builds the operand for sibling-rule evaluation; may return null on failure</param>
+        private static bool MatchesIncludeOnlyRuleSets(
+            List<string> names,
+            List<IncludeOnlyRuleSet> ruleSets,
+            Func<List<string>, Expression, bool> nameMatcher,
+            Func<Operand?> operandProvider)
+        {
+            Operand? operand = null;
+            bool operandLoaded = false;
+
+            foreach (var ruleSet in ruleSets)
+            {
+                if (ruleSet.Impossible)
+                    continue;
+
+                if (!ruleSet.NameRules.All(rule => nameMatcher(names, rule)))
+                    continue;
+
+                if (ruleSet.SiblingRules.Count == 0)
+                    return true;
+
+                if (!operandLoaded)
+                {
+                    operand = operandProvider();
+                    operandLoaded = true;
+                }
+
+                if (operand == null)
+                    continue; // Extraction failed - conservatively treat sibling rules as not matching
+
+                bool allSiblingsMatch = ruleSet.SiblingRules.All(rule =>
+                {
+                    try
+                    {
+                        return rule(operand);
+                    }
+                    catch (Exception)
+                    {
+                        // Conservative approach: assume rule doesn't match if it fails
+                        return false;
+                    }
+                });
+
+                if (allSiblingsMatch)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Core logic for checking if Collections data matches Collections rules.
         /// </summary>
         /// <param name="collections">The collections data to check</param>
@@ -1615,13 +1802,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Gets collections that match Collections rules when IncludeCollectionOnly is enabled.
+        /// Gets collections that match rule groups containing "collection only" rules.
+        /// The ENTIRE group must match: collection-only rules against the collection name,
+        /// sibling rules against the collection itself (AND logic, issue #479).
         /// </summary>
         /// <param name="libraryManager">Library manager to query collections</param>
         /// <param name="user">User context</param>
+        /// <param name="userDataManager">User data manager for sibling-rule evaluation</param>
+        /// <param name="refreshCache">Cache for performance optimization</param>
         /// <param name="logger">Logger for debugging</param>
         /// <returns>List of matching collections</returns>
-        private List<BaseItem> GetMatchingCollections(ILibraryManager libraryManager, User user, ILogger? logger)
+        private List<BaseItem> GetMatchingCollections(ILibraryManager libraryManager, User user,
+            IUserDataManager? userDataManager, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             var matchingCollections = new List<BaseItem>();
 
@@ -1646,7 +1838,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var visitedCollectionIds = new HashSet<Guid>();
                 var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
 
-                // Check each collection against Collections rules with IncludeCollectionOnly=true
+                // Prepare the rule groups containing collection-only rules - the whole group
+                // (name rules + sibling rules) must match for a collection to be included
+                var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Collections", user, logger);
+                var extractionOptions = BuildIncludeOnlyExtractionOptions(includeOnlyRuleSets);
+
+                // Check each collection against the collection-only rule groups
                 foreach (var collection in allCollections)
                 {
                     if (collection == null) continue;
@@ -1659,9 +1856,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         continue;
                     }
 
-                    // Check if this collection's name matches any Collections rule with IncludeCollectionOnly=true
+                    // The whole rule group must match: name rules against the collection name,
+                    // sibling rules against the collection's own metadata
                     var collectionNames = new List<string> { collection.Name };
-                    if (DoCollectionsMatchRulesForIncludeCollectionOnly(collectionNames))
+                    if (MatchesIncludeOnlyRuleSets(collectionNames, includeOnlyRuleSets, DoesCollectionMatchRule, () =>
+                        {
+                            try
+                            {
+                                return OperandFactory.GetMediaType(libraryManager, collection, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogWarning(ex, "Error extracting fields from collection '{CollectionName}' for include-only rule matching", collection.Name);
+                                return null;
+                            }
+                        }))
                     {
                         // Add this collection and recursively add nested collections
                         AddCollectionWithNestedCollections(
@@ -1881,34 +2090,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Checks if collections match Collections rules with IncludeCollectionOnly=true.
-        /// This is used specifically for IncludeCollectionOnly mode to match collection names.
-        /// </summary>
-        /// <param name="collections">The collection names to check</param>
-        /// <returns>True if collections match any Collections rule with IncludeCollectionOnly=true, false otherwise</returns>
-        private bool DoCollectionsMatchRulesForIncludeCollectionOnly(List<string> collections)
-        {
-            if (collections == null || collections.Count == 0)
-                return false;
-
-            // Check if any collection matches any Collections rule with IncludeCollectionOnly=true
-            return ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    expr.MemberName == "Collections" &&
-                    expr.IncludeCollectionOnly == true && // Only check IncludeCollectionOnly rules
-                    DoesCollectionMatchRule(collections, expr)) == true) == true;
-        }
-
-        /// <summary>
-        /// Gets playlists that match Playlists rules when IncludePlaylistOnly is enabled.
+        /// Gets playlists that match rule groups containing "playlist only" rules.
+        /// The ENTIRE group must match: playlist-only rules against the playlist name,
+        /// sibling rules against the playlist itself (AND logic, issue #479).
         /// Note: Playlists in Jellyfin are flat - they cannot contain other playlists or collections.
         /// Therefore, no recursion is needed; we simply find playlists that match the rule criteria.
         /// </summary>
         /// <param name="libraryManager">Library manager to query playlists</param>
         /// <param name="user">User context</param>
+        /// <param name="userDataManager">User data manager for sibling-rule evaluation</param>
+        /// <param name="refreshCache">Cache for performance optimization</param>
         /// <param name="logger">Logger for debugging</param>
         /// <returns>List of matching playlists</returns>
-        private List<BaseItem> GetMatchingPlaylists(ILibraryManager libraryManager, User user, ILogger? logger)
+        private List<BaseItem> GetMatchingPlaylists(ILibraryManager libraryManager, User user,
+            IUserDataManager? userDataManager, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             var matchingPlaylists = new List<BaseItem>();
 
@@ -1926,7 +2121,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
 
-                // Check each playlist against Playlists rules with IncludePlaylistOnly=true
+                // Prepare the rule groups containing playlist-only rules - the whole group
+                // (name rules + sibling rules) must match for a playlist to be included
+                var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Playlists", user, logger);
+                var extractionOptions = BuildIncludeOnlyExtractionOptions(includeOnlyRuleSets);
+
+                // Check each playlist against the playlist-only rule groups
                 foreach (var playlist in allPlaylists)
                 {
                     if (playlist == null) continue;
@@ -1939,12 +2139,24 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         continue;
                     }
 
-                    // Check if this playlist's name matches any Playlists rule with IncludePlaylistOnly=true
+                    // The whole rule group must match: name rules against the playlist name,
+                    // sibling rules against the playlist's own metadata
                     var playlistNames = new List<string> { playlist.Name };
-                    if (DoPlaylistsMatchRulesForIncludePlaylistOnly(playlistNames))
+                    if (MatchesIncludeOnlyRuleSets(playlistNames, includeOnlyRuleSets, DoesPlaylistMatchRule, () =>
+                        {
+                            try
+                            {
+                                return OperandFactory.GetMediaType(libraryManager, playlist, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogWarning(ex, "Error extracting fields from playlist '{PlaylistName}' for include-only rule matching", playlist.Name);
+                                return null;
+                            }
+                        }))
                     {
                         matchingPlaylists.Add(playlist);
-                        logger?.LogDebug("Playlist '{PlaylistName}' matches Playlists rules with IncludePlaylistOnly=true", playlist.Name);
+                        logger?.LogDebug("Playlist '{PlaylistName}' matches a playlist-only rule group", playlist.Name);
                     }
                 }
 
@@ -1957,25 +2169,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
 
             return matchingPlaylists;
-        }
-
-        /// <summary>
-        /// Checks if playlists match Playlists rules with IncludePlaylistOnly=true.
-        /// This is used specifically for IncludePlaylistOnly mode to match playlist names.
-        /// </summary>
-        /// <param name="playlists">The playlist names to check</param>
-        /// <returns>True if playlists match any Playlists rule with IncludePlaylistOnly=true, false otherwise</returns>
-        private bool DoPlaylistsMatchRulesForIncludePlaylistOnly(List<string> playlists)
-        {
-            if (playlists == null || playlists.Count == 0)
-                return false;
-
-            // Check if any playlist matches any Playlists rule with IncludePlaylistOnly=true
-            return ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    expr.MemberName == "Playlists" &&
-                    expr.IncludePlaylistOnly == true && // Only check IncludePlaylistOnly rules
-                    DoesPlaylistMatchRule(playlists, expr)) == true) == true;
         }
 
         /// <summary>
@@ -2660,6 +2853,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         {
                             var set = ExpressionSets[setIndex];
                             if (set?.Expressions == null) continue;
+
+                            // Include-only groups never match individual media items (their compiled
+                            // set is empty) - exclude them here so Phase 1 doesn't mistake them for
+                            // expensive-only rule sets that force every item into Phase 2
+                            if (set.Expressions.Any(expr => IsCollectionOnlyExpression(expr) || IsPlaylistOnlyExpression(expr)))
+                            {
+                                logger?.LogDebug("Rule set {SetIndex}: contains include-only rules - excluded from item filtering", setIndex);
+                                continue;
+                            }
 
                             var cheapRules = new List<Func<Operand, bool>>();
                             int expensiveCount = 0;
