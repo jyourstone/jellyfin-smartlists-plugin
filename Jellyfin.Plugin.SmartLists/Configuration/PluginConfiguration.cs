@@ -25,6 +25,12 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public SmartListType DefaultListType { get; set; } = SmartListType.Playlist;
 
         /// <summary>
+        /// Gets or sets the default media types pre-selected for new lists.
+        /// Null or empty means no media types are pre-selected.
+        /// </summary>
+        public List<string>? DefaultMediaTypes { get; set; } = null;
+
+        /// <summary>
         /// Gets or sets whether new playlists should be public by default.
         /// </summary>
         public bool DefaultMakePublic { get; set; } = false;

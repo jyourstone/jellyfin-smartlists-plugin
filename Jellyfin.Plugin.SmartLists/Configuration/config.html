@@ -613,6 +613,25 @@
                         </div>
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel" for="defaultMediaTypesMultiSelect">Default Media Types</label>
+                            <div id="defaultMediaTypesMultiSelect">
+                                <div class="multi-select-container">
+                                    <div class="multi-select-display emby-select-withcolor" id="defaultMediaTypesMultiSelectDisplay">
+                                        <span class="multi-select-placeholder">None (default)</span>
+                                    </div>
+                                    <div class="multi-select-dropdown" id="defaultMediaTypesMultiSelectDropdown" style="display: none;">
+                                        <div class="multi-select-options" id="defaultMediaTypesMultiSelectOptions">
+                                            <!-- Checkboxes populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="fieldDescription">Media types pre-selected when creating a new smart list.
+                                Types only available for collections (Series, Season, Album) are skipped when the new
+                                list is a playlist.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="inputLabel" for="defaultSortBy">Default Sort By</label>
                             <select is="emby-select" id="defaultSortBy" class="emby-select"></select>
                             <div class="fieldDescription">Default sorting method for new smart lists.</div>
