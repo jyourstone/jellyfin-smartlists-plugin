@@ -1929,7 +1929,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         });
                     if (matchedSetIndices.Count > 0)
                     {
-                        var firstNewIndex = matchingCollections.Count;
+                        // When tracking groups, collect every collection this root's walk reaches -
+                        // including ones already appended by an earlier root - so shared descendants
+                        // get mapped to every matching group, not just the first
+                        var encounteredIds = trackGroups ? new HashSet<Guid>() : null;
+
                         // Add this collection and recursively add nested collections
                         AddCollectionWithNestedCollections(
                             collection,
@@ -1940,19 +1944,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             0,  // Start at depth 0 (root level)
                             maxRecursionDepth,
-                            currentListBaseName);
+                            currentListBaseName,
+                            encounteredIds);
 
-                        if (trackGroups)
+                        if (encounteredIds != null)
                         {
                             // Map the matched collection and its nested children to the matched
-                            // groups so per-group limits and Rule Block Order see them.
-                            // The root is mapped explicitly: if it was already added as another
-                            // root's nested child, the visited guard appends nothing new and the
-                            // slice below would miss its direct match.
-                            TrackIncludeOnlyGroupMapping(collection.Id, matchedSetIndices);
-                            for (int i = firstNewIndex; i < matchingCollections.Count; i++)
+                            // groups so per-group limits and Rule Block Order see them
+                            foreach (var encounteredId in encounteredIds)
                             {
-                                TrackIncludeOnlyGroupMapping(matchingCollections[i].Id, matchedSetIndices);
+                                TrackIncludeOnlyGroupMapping(encounteredId, matchedSetIndices);
                             }
                         }
                     }
@@ -1971,6 +1972,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         /// <summary>
         /// Recursively adds a collection and its nested collections up to the specified depth.
+        /// When <paramref name="encounteredIds"/> is provided, every collection reached by this
+        /// walk is recorded in it - including collections already appended by an earlier root -
+        /// so group tracking can map shared descendants to every matching group. The walk then
+        /// continues through already-visited nodes (guarded per-call against cycles) while
+        /// <paramref name="visitedCollectionIds"/> still deduplicates the appended results.
         /// </summary>
         private static void AddCollectionWithNestedCollections(
             BaseItem collection,
@@ -1981,19 +1987,31 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ILogger? logger,
             int currentDepth,
             int maxDepth,
-            string currentListBaseName)
+            string currentListBaseName,
+            HashSet<Guid>? encounteredIds = null)
         {
-            // Circular reference protection
-            if (visitedCollectionIds.Contains(collection.Id))
-            {
-                logger?.LogDebug("Skipping collection '{CollectionName}' - already visited (preventing circular reference)", collection.Name);
-                return;
-            }
-            visitedCollectionIds.Add(collection.Id);
+            bool alreadyAdded = visitedCollectionIds.Contains(collection.Id);
 
-            // Add this collection
-            matchingCollections.Add(collection);
-            logger?.LogDebug("Collection '{CollectionName}' matches Collections rules with IncludeCollectionOnly=true (depth={Depth})", collection.Name, currentDepth);
+            if (encounteredIds == null)
+            {
+                // No group tracking: already-visited nodes need no re-walk
+                if (alreadyAdded)
+                {
+                    logger?.LogDebug("Skipping collection '{CollectionName}' - already visited (preventing circular reference)", collection.Name);
+                    return;
+                }
+            }
+            else if (!encounteredIds.Add(collection.Id))
+            {
+                return; // Circular reference protection within this root's walk
+            }
+
+            if (!alreadyAdded)
+            {
+                visitedCollectionIds.Add(collection.Id);
+                matchingCollections.Add(collection);
+                logger?.LogDebug("Collection '{CollectionName}' matches Collections rules with IncludeCollectionOnly=true (depth={Depth})", collection.Name, currentDepth);
+            }
 
             // If we haven't reached max depth, look for nested collections
             if (currentDepth < maxDepth)
@@ -2020,7 +2038,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             currentDepth + 1,
                             maxDepth,
-                            currentListBaseName);
+                            currentListBaseName,
+                            encounteredIds);
                     }
                 }
             }
