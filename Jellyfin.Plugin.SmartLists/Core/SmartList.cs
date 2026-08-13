@@ -1611,13 +1611,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (isOtherIncludeOnly)
                     {
                         // A group cannot require an item to be both a collection and a playlist
-                        ruleSet.Impossible = true;
+                        if (!ruleSet.Impossible)
+                        {
+                            ruleSet.Impossible = true;
+                            logger?.LogWarning("Rule group in '{ListName}' combines collection-only and playlist-only rules - it can never match anything", Name);
+                        }
                         continue;
                     }
 
                     if (expr.MemberName == "SimilarTo")
                     {
-                        logger?.LogDebug("Ignoring SimilarTo rule when matching {FieldName} include-only groups for '{ListName}'", fieldName, Name);
+                        // Similar To cannot be evaluated against a collection/playlist itself.
+                        // Under AND semantics an unevaluable rule must not silently pass (issue #479).
+                        if (!ruleSet.Impossible)
+                        {
+                            ruleSet.Impossible = true;
+                            logger?.LogWarning("Similar To cannot be combined with {FieldName} include-only rules in the same group for '{ListName}' - the group will match nothing", fieldName, Name);
+                        }
                         continue;
                     }
 
@@ -1627,32 +1637,34 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (ruleSet.NameRules.Count == 0)
                     continue; // Group has no include-only rule for this field - matched via normal item evaluation
 
-                if (ruleSet.Impossible)
+                if (!ruleSet.Impossible)
                 {
-                    logger?.LogWarning("Rule group in '{ListName}' combines collection-only and playlist-only rules - it can never match anything", Name);
-                    ruleSets.Add(ruleSet);
-                    continue;
-                }
-
-                foreach (var expr in ruleSet.SiblingExpressions)
-                {
-                    try
+                    foreach (var expr in ruleSet.SiblingExpressions)
                     {
-                        var compiledRule = Engine.CompileRule<Operand>(expr, defaultUserId, logger);
-                        if (compiledRule != null)
+                        // A sibling rule that fails to compile cannot be evaluated - fail closed
+                        // instead of silently widening the AND group to a name-only match
+                        try
                         {
-                            ruleSet.SiblingRules.Add(compiledRule);
+                            var compiledRule = Engine.CompileRule<Operand>(expr, defaultUserId, logger);
+                            if (compiledRule != null)
+                            {
+                                ruleSet.SiblingRules.Add(compiledRule);
+                            }
+                            else
+                            {
+                                ruleSet.Impossible = true;
+                                logger?.LogWarning("Failed to compile rule '{Field} {Operator} {Value}' in an include-only group for '{ListName}' - the group will match nothing",
+                                    expr.MemberName, expr.Operator, expr.TargetValue, Name);
+                                break;
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            logger?.LogWarning("Failed to compile include-only sibling rule for '{ListName}': {Field} {Operator} {Value}",
-                                Name, expr.MemberName, expr.Operator, expr.TargetValue);
+                            ruleSet.Impossible = true;
+                            logger?.LogError(ex, "Error compiling rule '{Field} {Operator} {Value}' in an include-only group for '{ListName}' - the group will match nothing",
+                                expr.MemberName, expr.Operator, expr.TargetValue, Name);
+                            break;
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger?.LogError(ex, "Error compiling include-only sibling rule for '{ListName}': {Field} {Operator} {Value}",
-                            Name, expr.MemberName, expr.Operator, expr.TargetValue);
                     }
                 }
 
@@ -1679,6 +1691,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             {
                 RequiredGroups = fieldReqs.RequiredGroups,
                 CollectionRecursionDepth = Math.Max(1, CollectionSearchDepth),
+                IncludeUnwatchedSeries = fieldReqs.IncludeUnwatchedSeries,
                 AdditionalUserIds = fieldReqs.AdditionalUserIds,
                 OriginListName = Name,
             };
