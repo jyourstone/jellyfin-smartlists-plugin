@@ -306,6 +306,19 @@ This creates a collection sorted exactly like IMDb's Top 250 chart.
 
 ---
 
+## User-Agent
+
+The plugin sends a User-Agent header when fetching external lists. Each provider has a sensible built-in default, but if a provider starts blocking the plugin's requests you can override the User-Agent in the plugin **Settings** tab under **External Lists > User-Agent**:
+
+- **Default**: Each provider uses its own built-in User-Agent (recommended).
+- **Auto Clone**: Uses your browser's User-Agent, automatically re-captured every time you open the SmartLists admin page.
+- **Clone**: Uses your browser's User-Agent, captured once when you save the settings.
+- **Custom**: Uses exactly the value you enter in the text field.
+
+The clone modes capture the User-Agent from the browser you access the admin configuration page with. The override applies to all providers that send a User-Agent (IMDb, Letterboxd, Trakt, ListenBrainz).
+
+---
+
 ## Tips
 
 !!! tip "Combining with other rules"

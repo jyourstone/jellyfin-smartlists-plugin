@@ -236,7 +236,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         {
             var httpClient = _httpClientFactory.CreateClient("LetterboxdList");
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            request.Headers.TryAddWithoutValidation("User-Agent", ExternalListUserAgent.Resolve("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"));
             request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
 
             using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);

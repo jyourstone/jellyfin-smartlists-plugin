@@ -217,7 +217,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            request.Headers.Add("User-Agent", UserAgent);
+            request.Headers.TryAddWithoutValidation("User-Agent", ExternalListUserAgent.Resolve(UserAgent));
 
             var token = Plugin.Instance?.Configuration?.ListenBrainzUserToken;
             if (!string.IsNullOrWhiteSpace(token))

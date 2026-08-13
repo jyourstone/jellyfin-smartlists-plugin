@@ -82,7 +82,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                     request.Headers.Add("trakt-api-version", "2");
                     request.Headers.Add("trakt-api-key", clientId);
-                    request.Headers.Add("User-Agent", "JellyfinSmartLists/1.0");
+                    request.Headers.TryAddWithoutValidation("User-Agent", ExternalListUserAgent.Resolve("JellyfinSmartLists/1.0"));
 
                     using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 

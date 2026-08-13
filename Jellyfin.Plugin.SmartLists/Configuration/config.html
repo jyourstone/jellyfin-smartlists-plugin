@@ -983,6 +983,35 @@
                             </div>
                         </div>
 
+                        <div class="selectContainer" style="margin-bottom: 1em;">
+                            <label class="selectLabel" for="userAgentMode">User-Agent</label>
+                            <select is="emby-select" id="userAgentMode" class="emby-select">
+                                <option value="Default">Default</option>
+                                <option value="AutoClone">Auto Clone (updates from your browser on every page
+                                    load)</option>
+                                <option value="Clone">Clone (captures your browser's User-Agent when you save)</option>
+                                <option value="Custom">Custom (enter below)</option>
+                            </select>
+                            <div class="fieldDescription">The User-Agent header sent when fetching external lists
+                                (IMDb, Letterboxd, Trakt, ListenBrainz). Change this if a provider starts blocking
+                                requests. The clone modes use the browser you access this admin page with.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em; display: none;"
+                            id="customUserAgentContainer">
+                            <label class="inputLabel" for="customUserAgent">Custom User-Agent</label>
+                            <input type="text" id="customUserAgent" class="emby-input"
+                                placeholder="e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...">
+                            <div class="fieldDescription">Sent exactly as entered. Leave empty to fall back to the
+                                default.</div>
+                        </div>
+
+                        <div class="inputContainer" style="margin-bottom: 1em; display: none;"
+                            id="clonedUserAgentContainer">
+                            <div class="fieldDescription">Cloned User-Agent: <span id="clonedUserAgentDisplay"
+                                    style="word-break: break-all;"></span></div>
+                        </div>
+
                         <h2 class="sectionTitle" style="margin-top: 2em; display: flex; align-items: center;">
                             Backup & Restore
                             <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#backup-restore"

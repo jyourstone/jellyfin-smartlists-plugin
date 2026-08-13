@@ -1917,6 +1917,15 @@
     };
 
     // ===== CONFIGURATION MANAGEMENT =====
+    SmartLists.updateUserAgentContainers = function (page) {
+        var userAgentModeEl = page.querySelector('#userAgentMode');
+        var customContainer = page.querySelector('#customUserAgentContainer');
+        var clonedContainer = page.querySelector('#clonedUserAgentContainer');
+        var mode = userAgentModeEl ? userAgentModeEl.value : 'Default';
+        if (customContainer) customContainer.style.display = mode === 'Custom' ? '' : 'none';
+        if (clonedContainer) clonedContainer.style.display = (mode === 'Clone' || mode === 'AutoClone') ? '' : 'none';
+    };
+
     SmartLists.loadConfiguration = function (page) {
         Dashboard.showLoadingMsg();
         SmartLists.getApiClient().getPluginConfiguration(SmartLists.getPluginId()).then(function (config) {
@@ -2012,6 +2021,41 @@
             var listenBrainzUserTokenEl = page.querySelector('#listenBrainzUserToken');
             if (listenBrainzUserTokenEl) {
                 listenBrainzUserTokenEl.value = config.ListenBrainzUserToken || '';
+            }
+
+            // Load User-Agent settings
+            var userAgentModeEl = page.querySelector('#userAgentMode');
+            if (userAgentModeEl) {
+                userAgentModeEl.value = config.UserAgentMode || 'Default';
+                if (!userAgentModeEl.dataset.changeListenerAdded) {
+                    userAgentModeEl.dataset.changeListenerAdded = 'true';
+                    userAgentModeEl.addEventListener('change', function () {
+                        SmartLists.updateUserAgentContainers(page);
+                    });
+                }
+            }
+            var customUserAgentEl = page.querySelector('#customUserAgent');
+            if (customUserAgentEl) {
+                customUserAgentEl.value = config.CustomUserAgent || '';
+            }
+            var clonedUserAgentDisplayEl = page.querySelector('#clonedUserAgentDisplay');
+            if (clonedUserAgentDisplayEl) {
+                clonedUserAgentDisplayEl.textContent = config.ClonedUserAgent || 'Not captured yet - save the settings to capture it.';
+            }
+            SmartLists.updateUserAgentContainers(page);
+
+            // Auto Clone: keep the stored browser User-Agent current on every admin page load
+            if (config.UserAgentMode === 'AutoClone' && config.ClonedUserAgent !== navigator.userAgent) {
+                SmartLists.getApiClient().getPluginConfiguration(SmartLists.getPluginId()).then(function (freshConfig) {
+                    freshConfig.ClonedUserAgent = navigator.userAgent;
+                    return SmartLists.getApiClient().updatePluginConfiguration(SmartLists.getPluginId(), freshConfig);
+                }).then(function () {
+                    if (clonedUserAgentDisplayEl) {
+                        clonedUserAgentDisplayEl.textContent = navigator.userAgent;
+                    }
+                }).catch(function (err) {
+                    console.error('Failed to auto-clone User-Agent:', err);
+                });
             }
 
             // Load backup settings
@@ -2218,6 +2262,19 @@
             config.TmdbApiKey = tmdbApiKeyInput ? (tmdbApiKeyInput.value.trim() || null) : null;
             var listenBrainzUserTokenInput = page.querySelector('#listenBrainzUserToken');
             config.ListenBrainzUserToken = listenBrainzUserTokenInput ? (listenBrainzUserTokenInput.value.trim() || null) : null;
+
+            // Save User-Agent settings
+            var userAgentModeInput = page.querySelector('#userAgentMode');
+            config.UserAgentMode = userAgentModeInput ? userAgentModeInput.value : 'Default';
+            var customUserAgentInput = page.querySelector('#customUserAgent');
+            config.CustomUserAgent = customUserAgentInput ? (customUserAgentInput.value.trim() || null) : null;
+            if (config.UserAgentMode === 'Clone' || config.UserAgentMode === 'AutoClone') {
+                config.ClonedUserAgent = navigator.userAgent;
+                var clonedUserAgentDisplaySpan = page.querySelector('#clonedUserAgentDisplay');
+                if (clonedUserAgentDisplaySpan) {
+                    clonedUserAgentDisplaySpan.textContent = navigator.userAgent;
+                }
+            }
 
             // Save backup settings
             var backupEnabledCheckbox = page.querySelector('#backupEnabled');
