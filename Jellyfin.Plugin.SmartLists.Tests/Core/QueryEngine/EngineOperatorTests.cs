@@ -895,32 +895,33 @@ public class EngineOperatorTests
     // ---------------------------------------------------------------------------------------
 
     /// <summary>
-    /// With a parent source enabled, POSITIVE operators OR the item field with the parent field:
-    /// an episode with no tags of its own inherits a match from its series.
+    /// With the parent option enabled, POSITIVE operators OR the item field with the ancestor
+    /// field: an episode with no tags of its own inherits a match from anywhere above it
+    /// (season, series, folder, library).
     /// </summary>
     [Fact]
-    public void CompileRule_TagsIncludingParentSeries_OrsItemAndParentForPositiveOperators()
+    public void CompileRule_TagsIncludingParent_OrsItemAndParentForPositiveOperators()
     {
-        var rule = Compile(new Expression("Tags", "Equal", "Anime") { IncludeParentSeriesTags = true });
+        var rule = Compile(new Expression("Tags", "Equal", "Anime") { IncludeParentTags = true });
 
-        Assert.True(rule(new Operand("item") { ParentSeriesTags = ["Anime"] }));
+        Assert.True(rule(new Operand("item") { ParentTags = ["Anime"] }));
         Assert.True(rule(new Operand("item") { Tags = ["Anime"] }));
-        Assert.False(rule(new Operand("item") { Tags = ["Drama"], ParentSeriesTags = ["Comedy"] }));
+        Assert.False(rule(new Operand("item") { Tags = ["Drama"], ParentTags = ["Comedy"] }));
     }
 
     /// <summary>
     /// NEGATIVE operators (NotEqual/NotContains/IsNotIn) AND the per-field results instead, so a
-    /// match on EITHER the item or its parent excludes the item. Anything else would let a
+    /// match on EITHER the item or its ancestors excludes the item. Anything else would let a
     /// "not tagged Anime" rule leak in episodes of an Anime-tagged series.
     /// </summary>
     [Fact]
-    public void CompileRule_TagsIncludingParentSeries_AndsItemAndParentForNegativeOperators()
+    public void CompileRule_TagsIncludingParent_AndsItemAndParentForNegativeOperators()
     {
-        var rule = Compile(new Expression("Tags", "NotEqual", "Anime") { IncludeParentSeriesTags = true });
+        var rule = Compile(new Expression("Tags", "NotEqual", "Anime") { IncludeParentTags = true });
 
         Assert.False(rule(new Operand("item") { Tags = ["Anime"] }));
-        Assert.False(rule(new Operand("item") { ParentSeriesTags = ["Anime"] }));
-        Assert.True(rule(new Operand("item") { Tags = ["Drama"], ParentSeriesTags = ["Comedy"] }));
+        Assert.False(rule(new Operand("item") { ParentTags = ["Anime"] }));
+        Assert.True(rule(new Operand("item") { Tags = ["Drama"], ParentTags = ["Comedy"] }));
         Assert.True(rule(new Operand("item")));
     }
 
@@ -928,16 +929,16 @@ public class EngineOperatorTests
     /// OnlyParent skips the item's own tags entirely.
     /// </summary>
     [Fact]
-    public void CompileRule_TagsOnlyParentSeries_IgnoresTheItemsOwnTags()
+    public void CompileRule_TagsOnlyParent_IgnoresTheItemsOwnTags()
     {
         var rule = Compile(new Expression("Tags", "Equal", "Anime")
         {
             OnlyParentTags = true,
-            IncludeParentSeriesTags = true,
+            IncludeParentTags = true,
         });
 
         Assert.False(rule(new Operand("item") { Tags = ["Anime"] }));
-        Assert.True(rule(new Operand("item") { ParentSeriesTags = ["Anime"] }));
+        Assert.True(rule(new Operand("item") { ParentTags = ["Anime"] }));
     }
 
     /// <summary>
@@ -950,19 +951,19 @@ public class EngineOperatorTests
         var rule = Compile(new Expression("Tags", "Equal", "Anime") { OnlyParentTags = true });
 
         Assert.False(rule(new Operand("item") { Tags = ["Anime"] }));
-        Assert.False(rule(new Operand("item") { ParentSeriesTags = ["Anime"] }));
+        Assert.False(rule(new Operand("item") { ParentTags = ["Anime"] }));
     }
 
     /// <summary>
-    /// Genres behaves the same way as Tags, including for the album-parent source (music).
+    /// Genres behaves the same way as Tags, including for music (album / artist folder / library).
     /// </summary>
     [Fact]
-    public void CompileRule_GenresIncludingParentAlbum_OrsItemAndParent()
+    public void CompileRule_GenresIncludingParent_OrsItemAndParent()
     {
-        var rule = Compile(new Expression("Genres", "Contains", "jazz") { IncludeParentAlbumGenres = true });
+        var rule = Compile(new Expression("Genres", "Contains", "jazz") { IncludeParentGenres = true });
 
-        Assert.True(rule(new Operand("item") { ParentAlbumGenres = ["Smooth Jazz"] }));
-        Assert.False(rule(new Operand("item") { Genres = ["Rock"], ParentAlbumGenres = ["Blues"] }));
+        Assert.True(rule(new Operand("item") { ParentGenres = ["Smooth Jazz"] }));
+        Assert.False(rule(new Operand("item") { Genres = ["Rock"], ParentGenres = ["Blues"] }));
     }
 
     // ---------------------------------------------------------------------------------------

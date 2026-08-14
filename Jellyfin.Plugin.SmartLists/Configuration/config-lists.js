@@ -1650,17 +1650,15 @@
                             playlistsInfo = ' (playlist only)';
                         }
 
-                        // Add Tags configuration info
+                        // Add Tags configuration info. The legacy IncludeParentSeries*/IncludeParentAlbum*
+                        // keys are still read here (permanently): rules saved by older builds carry
+                        // only those, and would otherwise lose their suffix on the card.
                         let tagsInfo = '';
                         if (rule.MemberName === 'Tags') {
                             if (rule.OnlyParentTags === true) {
-                                tagsInfo = ' (only parent series/album tags)';
-                            } else if (rule.IncludeParentSeriesTags === true && rule.IncludeParentAlbumTags === true) {
-                                tagsInfo = ' (including parent series/album tags)';
-                            } else if (rule.IncludeParentAlbumTags === true) {
-                                tagsInfo = ' (including parent album tags)';
-                            } else if (rule.IncludeParentSeriesTags === true) {
-                                tagsInfo = ' (including parent series tags)';
+                                tagsInfo = ' (only parent tags)';
+                            } else if (rule.IncludeParentTags === true || rule.IncludeParentSeriesTags === true || rule.IncludeParentAlbumTags === true) {
+                                tagsInfo = ' (including parent tags)';
                             }
                         }
 
@@ -1668,29 +1666,19 @@
                         let studiosInfo = '';
                         if (rule.MemberName === 'Studios') {
                             if (rule.OnlyParentStudios === true) {
-                                studiosInfo = ' (only parent series/album studios)';
-                            } else if (rule.IncludeParentSeriesStudios === true && rule.IncludeParentAlbumStudios === true) {
-                                studiosInfo = ' (including parent series/album studios)';
-                            } else if (rule.IncludeParentAlbumStudios === true) {
-                                studiosInfo = ' (including parent album studios)';
-                            } else if (rule.IncludeParentSeriesStudios === true) {
-                                studiosInfo = ' (including parent series studios)';
+                                studiosInfo = ' (only parent studios)';
+                            } else if (rule.IncludeParentStudios === true || rule.IncludeParentSeriesStudios === true || rule.IncludeParentAlbumStudios === true) {
+                                studiosInfo = ' (including parent studios)';
                             }
                         }
 
                         // Add Genres configuration info
                         let genresInfo = '';
                         if (rule.MemberName === 'Genres') {
-                            const includesParentSeriesGenres = rule.IncludeParentSeriesGenres === true;
-                            const includesParentAlbumGenres = rule.IncludeParentAlbumGenres === true;
                             if (rule.OnlyParentGenres === true) {
-                                genresInfo = ' (only parent series/album genres)';
-                            } else if (includesParentSeriesGenres && includesParentAlbumGenres) {
-                                genresInfo = ' (including parent series/album genres)';
-                            } else if (includesParentAlbumGenres) {
-                                genresInfo = ' (including parent album genres)';
-                            } else if (includesParentSeriesGenres) {
-                                genresInfo = ' (including parent series genres)';
+                                genresInfo = ' (only parent genres)';
+                            } else if (rule.IncludeParentGenres === true || rule.IncludeParentSeriesGenres === true || rule.IncludeParentAlbumGenres === true) {
+                                genresInfo = ' (including parent genres)';
                             }
                         }
 

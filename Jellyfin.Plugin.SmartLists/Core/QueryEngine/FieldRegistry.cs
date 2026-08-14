@@ -47,13 +47,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// - Playlists: ItemPlaylists, PlaylistMembershipCache
     /// - NextUnwatched: NextUnwatched cache
     /// - SeriesName: SeriesNameById
-        /// - ParentSeriesTags: SeriesTagsById
-        /// - ParentSeriesStudios: SeriesStudiosById
-        /// - ParentSeriesGenres: SeriesGenresById
-        /// - ParentAlbumGenres: AlbumGenresById
-        /// - ParentAlbumTags: AlbumTagsById
-        /// - ParentAlbumStudios: AlbumStudiosById
-        /// - LastEpisodeAirDate: LastEpisodeAirDateById
+    /// - ParentTags: AncestorValuesById
+    /// - ParentStudios: AncestorValuesById
+    /// - ParentGenres: AncestorValuesById
+    /// - LastEpisodeAirDate: LastEpisodeAirDateById
     /// - LibraryInfo: LibraryNameById
     /// </summary>
     [Flags]
@@ -71,15 +68,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         Playlists = 1 << 5,           // Fields: Playlists | Cache: ItemPlaylists, PlaylistMembershipCache
         NextUnwatched = 1 << 6,       // Fields: NextUnwatched | Cache: NextUnwatched
         SeriesName = 1 << 7,          // Fields: SeriesName | Cache: SeriesNameById
-        ParentSeriesTags = 1 << 8,    // Fields: Tags (with IncludeParentSeriesTags) | Cache: SeriesTagsById
-        ParentSeriesStudios = 1 << 9, // Fields: Studios (with IncludeParentSeriesStudios) | Cache: SeriesStudiosById
-        ParentSeriesGenres = 1 << 10, // Fields: Genres (with IncludeParentSeriesGenres) | Cache: SeriesGenresById
+        ParentTags = 1 << 8,          // Fields: Tags (with IncludeParentTags) | Cache: AncestorValuesById
+        ParentStudios = 1 << 9,       // Fields: Studios (with IncludeParentStudios) | Cache: AncestorValuesById
+        ParentGenres = 1 << 10,       // Fields: Genres (with IncludeParentGenres) | Cache: AncestorValuesById
         SimilarTo = 1 << 11,          // Fields: SimilarTo | Special handling in Engine
         LastEpisodeAirDate = 1 << 12, // Fields: LastEpisodeAirDate | Cache: LastEpisodeAirDateById
         ExternalLists = 1 << 20,      // Fields: ExternalList | Cache: ExternalListData, ItemExternalLists
-        ParentAlbumGenres = 1 << 21,  // Fields: Genres (with IncludeParentAlbumGenres) | Cache: AlbumGenresById
-        ParentAlbumTags = 1 << 22,    // Fields: Tags (with IncludeParentAlbumTags) | Cache: AlbumTagsById
-        ParentAlbumStudios = 1 << 23, // Fields: Studios (with IncludeParentAlbumStudios) | Cache: AlbumStudiosById
+                                      // (1 << 21 .. 1 << 23 free)
 
         // Cheap extraction groups (conditional but fast - don't trigger two-phase filtering)
         // Defined in FieldRegistry.CheapExtractionGroups

@@ -188,23 +188,46 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 
 | Field | JSON name | Description |
 |-------|-----------|-------------|
-| **Genres** | `Genres` | Content genres |
-| **Studios** | `Studios` | Production studios |
-| **Tags** | `Tags` | Custom tags assigned to media items |
+| **Genres** | `Genres` | Content genres. [See parent metadata options below.](#parent-metadata-options) |
+| **Studios** | `Studios` | Production studios. [See parent metadata options below.](#parent-metadata-options) |
+| **Tags** | `Tags` | Custom tags assigned to media items. [See parent metadata options below.](#parent-metadata-options) |
 | **Album** | `Album` | Album name (music) |
 | **Artists** | `Artists` | Track-level artists (music) |
 | **Album Artists** | `AlbumArtists` | Album-level primary artists (music) |
 | **External List** | `ExternalList` | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz, Scrob). [See details below.](#external-list) |
 
-**Parent metadata options** for Tags, Studios, and Genres (shown when Episode or Audio media type is selected):
+#### Parent metadata options {#parent-metadata-options}
+
+**Tags**, **Studios**, and **Genres** can also match values inherited from the item's parents. The option is available for **every media type**.
 
 Each of these fields has three options:
 
 - **No - Only check item [tags/studios/genres]** (default) - Only checks the item's own metadata.
-- **Yes - Also check [tags/studios/genres] from parent series/album** - Matches if either the item or its parent series/album has the specified value. Useful when parent-level metadata is more complete.
-- **Yes - Only check [tags/studios/genres] from parent series/album** - Skips the item's own metadata entirely and only checks the parent series/album. Useful when you want to filter purely by series/album-level metadata.
+- **Yes - Also check parent [tags/studios/genres] (season, series, album, folder, library)** - Matches if the item **or** any of its parents has the value. Useful when the metadata lives higher up than the item itself.
+- **Yes - Only check parent [tags/studios/genres] (season, series, album, folder, library)** - Skips the item's own metadata entirely and checks only its parents.
 
-The label and option text adapts based on the selected media type (e.g., "parent series" for episodes, "parent album" for audio tracks).
+**What counts as a parent?** Everything above the item, all the way up to and including the Jellyfin library it lives in:
+
+| Item | What is checked |
+|-------|-----------|
+| **Episode** | Season → series → the folders they sit in → library |
+| **Season** | Series → the folders it sits in → library |
+| **Track** | Album → artist folder → the folders they sit in → library |
+| **Movie, series, album, video, photo, book** | The folders it sits in → library |
+| **Extras** (trailers, behind the scenes, ...) | The movie or series they belong to → everything above that |
+
+So a tag set on a single **season** now applies to that season's episodes, and a tag set on the **library itself** applies to everything inside it.
+
+!!! note "Collections and playlists are not parents"
+    Being a member of a Jellyfin **collection** or **playlist** does not count — those are links, not folders, so their tags, studios, and genres never flow down to the items inside them. Use the [Collection Name](#collection-name) or [Playlist Name](#playlist-name) fields to filter on membership instead.
+
+!!! warning "Positive operators match more items, negative operators match fewer"
+    Enabling the option adds the parents' values to what gets checked, which pulls the two families of operators in opposite directions:
+
+    - **equals**, **contains**, **is in**, **matches regex** match **more** items - the item matches if it *or any parent* matches.
+    - **not equals**, **not contains**, **is not in** match **fewer** items - *every* checked source has to not match, so a value sitting on a season, folder, or library is now enough to exclude the item.
+
+    Lists that already had the option enabled before the plugin gained the full parent walk will therefore change contents on their first refresh - music lists most of all, since they now also see values from the artist folder and the library, not just the album.
 
 #### Collection Name
 

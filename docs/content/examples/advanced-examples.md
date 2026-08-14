@@ -28,13 +28,13 @@ Here are some more complex playlist and collection examples:
 - Catches brand-new episodes even when they're downloaded before the release date metadata is published; once metadata arrives, the rule re-evaluates normally on the next refresh
 
 ## Kids' Shows Progress
-- **Next Unwatched** = True AND **Tags** contain "Kids" (with parent series tags enabled)
+- **Next Unwatched** = True AND **Tags** contain "Kids" (with parent tags enabled, so a tag on the season or series applies to its episodes)
 
 ## Foreign Language Practice
 - **Audio Languages** match `(?i)(ger|fra|spa)` AND **Playback Status** = Unplayed
 
 ## Tagged Series Marathon
-- **Tags** is in "Drama;Thriller" (with parent series tags enabled) AND **Runtime** < 50 minutes
+- **Tags** is in "Drama;Thriller" (with parent tags enabled, so a tag on the season or series applies to its episodes) AND **Runtime** < 50 minutes
 
 ## High-Quality FLAC Music
 - **Audio Codec** = "FLAC" AND **Audio Bit Depth** >= 24 AND **Audio Sample Rate** >= 96000

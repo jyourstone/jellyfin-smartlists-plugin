@@ -25,12 +25,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public double DateModified { get; set; } = 0;
         public double ReleaseDate { get; set; } = 0;
         public List<string> Tags { get; set; } = [];
-        public List<string> ParentSeriesTags { get; set; } = [];
-        public List<string> ParentAlbumTags { get; set; } = [];
-        public List<string> ParentSeriesStudios { get; set; } = [];
-        public List<string> ParentAlbumStudios { get; set; } = [];
-        public List<string> ParentSeriesGenres { get; set; } = [];
-        public List<string> ParentAlbumGenres { get; set; } = [];
+        // Ancestor-inherited values (season/series/album/artist/folder/library), resolved by
+        // AncestorValueResolver. IReadOnlyList so the shared AncestorValues.Empty singleton cannot
+        // be mutated through an operand; the "= []" initializers are load-bearing, because
+        // AnyRegexMatch treats an empty list (pattern tested against string.Empty) differently
+        // from a null one.
+        public IReadOnlyList<string> ParentTags { get; set; } = [];
+        public IReadOnlyList<string> ParentStudios { get; set; } = [];
+        public IReadOnlyList<string> ParentGenres { get; set; } = [];
         public double RuntimeMinutes { get; set; } = 0;
         public string OfficialRating { get; set; } = string.Empty;
         public List<string> AudioLanguages { get; set; } = [];

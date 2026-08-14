@@ -1207,8 +1207,8 @@
             '</label>' +
             '<select is="emby-select" class="emby-select rule-tags-select" style="width: 100%;">' +
             '<option value="false">No - Only check item tags</option>' +
-            '<option value="true">Yes - Also check tags from parent series/album</option>' +
-            '<option value="only">Yes - Only check tags from parent series/album</option>' +
+            '<option value="true">Yes - Also check parent tags (season, series, album, folder, library)</option>' +
+            '<option value="only">Yes - Only check parent tags (season, series, album, folder, library)</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-studios-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1217,8 +1217,8 @@
             '</label>' +
             '<select is="emby-select" class="emby-select rule-studios-select" style="width: 100%;">' +
             '<option value="false">No - Only check item studios</option>' +
-            '<option value="true">Yes - Also check studios from parent series/album</option>' +
-            '<option value="only">Yes - Only check studios from parent series/album</option>' +
+            '<option value="true">Yes - Also check parent studios (season, series, album, folder, library)</option>' +
+            '<option value="only">Yes - Only check parent studios (season, series, album, folder, library)</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-genres-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1227,8 +1227,8 @@
             '</label>' +
             '<select is="emby-select" class="emby-select rule-genres-select" style="width: 100%;">' +
             '<option value="false">No - Only check item genres</option>' +
-            '<option value="true">Yes - Also check parent genres</option>' +
-            '<option value="only">Yes - Only check genres from parent series/album</option>' +
+            '<option value="true">Yes - Also check parent genres (season, series, album, folder, library)</option>' +
+            '<option value="only">Yes - Only check parent genres (season, series, album, folder, library)</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-audiolanguages-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1622,25 +1622,30 @@
                 expression.IncludePlaylistOnly = true;
             }
         }
+        // Must emit exactly what collectRulesFromForm emits, or a cloned rule round-trips
+        // differently from a saved one.
         if (fieldValue === 'Tags') {
             if (tagsValue === 'only') {
                 expression.OnlyParentTags = true;
+                expression.IncludeParentTags = true;
             } else if (tagsValue === 'true') {
-                expression.IncludeParentSeriesTags = true;
+                expression.IncludeParentTags = true;
             }
         }
         if (fieldValue === 'Studios') {
             if (studiosValue === 'only') {
                 expression.OnlyParentStudios = true;
+                expression.IncludeParentStudios = true;
             } else if (studiosValue === 'true') {
-                expression.IncludeParentSeriesStudios = true;
+                expression.IncludeParentStudios = true;
             }
         }
         if (fieldValue === 'Genres') {
             if (genresValue === 'only') {
                 expression.OnlyParentGenres = true;
+                expression.IncludeParentGenres = true;
             } else if (genresValue === 'true') {
-                expression.IncludeParentSeriesGenres = true;
+                expression.IncludeParentGenres = true;
             }
         }
         if (fieldValue === 'AudioLanguages' && audioLanguagesValue === 'true') {
@@ -2448,143 +2453,41 @@
         }
     };
 
+    // The parent options apply to every media type - ancestors are resolved by walking the
+    // item tree (season, series, album, folder, library), not by media type. The page
+    // parameter is unused but must stay: updateAllRules always passes it.
     SmartLists.updateTagsOptionsVisibility = function (ruleRow, fieldValue, page) {
-        const isTagsField = fieldValue === 'Tags';
         const tagsOptionsDiv = ruleRow.querySelector('.rule-tags-options');
-
         if (tagsOptionsDiv) {
-            // Get selected media types to check if Episode or Audio is selected
-            const ruleScope = SmartLists.getRowScope(ruleRow);
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
-            const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
-            const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
-
-            const label = tagsOptionsDiv.querySelector('label');
-            const select = tagsOptionsDiv.querySelector('.rule-tags-select');
-            if (label && select && select.options.length >= 3) {
-                if (hasEpisode && hasAudio) {
-                    label.textContent = 'Include parent series/album tags:';
-                    select.options[0].textContent = 'No - Only check item tags';
-                    select.options[1].textContent = 'Yes - Also check tags from parent series/album';
-                    select.options[2].textContent = 'Yes - Only check tags from parent series/album';
-                } else if (hasAudio) {
-                    label.textContent = 'Include parent album tags:';
-                    select.options[0].textContent = 'No - Only check track tags';
-                    select.options[1].textContent = 'Yes - Also check tags from parent album';
-                    select.options[2].textContent = 'Yes - Only check tags from parent album';
-                } else {
-                    label.textContent = 'Include parent series tags:';
-                    select.options[0].textContent = 'No - Only check episode tags';
-                    select.options[1].textContent = 'Yes - Also check tags from parent series';
-                    select.options[2].textContent = 'Yes - Only check tags from parent series';
-                }
-            }
-
-            // Show only if Tags field is selected AND Episode or Audio media type is selected
-            if (isTagsField && (hasEpisode || hasAudio)) {
-                tagsOptionsDiv.style.display = 'block';
-            } else {
-                // Hide but preserve user's selection - don't reset value
-                tagsOptionsDiv.style.display = 'none';
-            }
+            tagsOptionsDiv.style.display = fieldValue === 'Tags' ? 'block' : 'none';
         }
     };
 
-    // Update visibility of Tags options for all rules when media types change
+    // Update visibility of Tags options for all rules
     SmartLists.updateAllTagsOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateTagsOptionsVisibility);
     };
 
     SmartLists.updateStudiosOptionsVisibility = function (ruleRow, fieldValue, page) {
-        const isStudiosField = fieldValue === 'Studios';
         const studiosOptionsDiv = ruleRow.querySelector('.rule-studios-options');
-
         if (studiosOptionsDiv) {
-            // Get selected media types to check if Episode or Audio is selected
-            const ruleScope = SmartLists.getRowScope(ruleRow);
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
-            const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
-            const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
-
-            const label = studiosOptionsDiv.querySelector('label');
-            const select = studiosOptionsDiv.querySelector('.rule-studios-select');
-            if (label && select && select.options.length >= 3) {
-                if (hasEpisode && hasAudio) {
-                    label.textContent = 'Include parent series/album studios:';
-                    select.options[0].textContent = 'No - Only check item studios';
-                    select.options[1].textContent = 'Yes - Also check studios from parent series/album';
-                    select.options[2].textContent = 'Yes - Only check studios from parent series/album';
-                } else if (hasAudio) {
-                    label.textContent = 'Include parent album studios:';
-                    select.options[0].textContent = 'No - Only check track studios';
-                    select.options[1].textContent = 'Yes - Also check studios from parent album';
-                    select.options[2].textContent = 'Yes - Only check studios from parent album';
-                } else {
-                    label.textContent = 'Include parent series studios:';
-                    select.options[0].textContent = 'No - Only check episode studios';
-                    select.options[1].textContent = 'Yes - Also check studios from parent series';
-                    select.options[2].textContent = 'Yes - Only check studios from parent series';
-                }
-            }
-
-            // Show only if Studios field is selected AND Episode or Audio media type is selected
-            if (isStudiosField && (hasEpisode || hasAudio)) {
-                studiosOptionsDiv.style.display = 'block';
-            } else {
-                // Hide but preserve user's selection - don't reset value
-                studiosOptionsDiv.style.display = 'none';
-            }
+            studiosOptionsDiv.style.display = fieldValue === 'Studios' ? 'block' : 'none';
         }
     };
 
-    // Update visibility of Studios options for all rules when media types change
+    // Update visibility of Studios options for all rules
     SmartLists.updateAllStudiosOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateStudiosOptionsVisibility);
     };
 
     SmartLists.updateGenresOptionsVisibility = function (ruleRow, fieldValue, page) {
-        const isGenresField = fieldValue === 'Genres';
         const genresOptionsDiv = ruleRow.querySelector('.rule-genres-options');
-
         if (genresOptionsDiv) {
-            // Get selected media types to check if Episode or Audio is selected
-            const ruleScope = SmartLists.getRowScope(ruleRow);
-            const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
-            const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
-            const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
-
-            const label = genresOptionsDiv.querySelector('label');
-            const select = genresOptionsDiv.querySelector('.rule-genres-select');
-            if (label && select && select.options.length >= 3) {
-                if (hasEpisode && hasAudio) {
-                    label.textContent = 'Include parent series/album genres:';
-                    select.options[0].textContent = 'No - Only check item genres';
-                    select.options[1].textContent = 'Yes - Also check genres from parent series/album';
-                    select.options[2].textContent = 'Yes - Only check genres from parent series/album';
-                } else if (hasAudio) {
-                    label.textContent = 'Include parent album genres:';
-                    select.options[0].textContent = 'No - Only check track genres';
-                    select.options[1].textContent = 'Yes - Also check genres from parent album';
-                    select.options[2].textContent = 'Yes - Only check genres from parent album';
-                } else {
-                    label.textContent = 'Include parent series genres:';
-                    select.options[0].textContent = 'No - Only check episode genres';
-                    select.options[1].textContent = 'Yes - Also check genres from parent series';
-                    select.options[2].textContent = 'Yes - Only check genres from parent series';
-                }
-            }
-
-            // Show only if Genres field is selected AND Episode or Audio media type is selected
-            if (isGenresField && (hasEpisode || hasAudio)) {
-                genresOptionsDiv.style.display = 'block';
-            } else {
-                // Hide but preserve user's selection - don't reset value
-                genresOptionsDiv.style.display = 'none';
-            }
+            genresOptionsDiv.style.display = fieldValue === 'Genres' ? 'block' : 'none';
         }
     };
 
-    // Update visibility of Genres options for all rules when media types change
+    // Update visibility of Genres options for all rules
     SmartLists.updateAllGenresOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateGenresOptionsVisibility);
     };
@@ -2799,7 +2702,6 @@
         if (!container) { return expressionSets; }
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, scope);
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
-        const hasAudio = selectedMediaTypes.indexOf('Audio') !== -1;
         const hasAudioCapable = selectedMediaTypes.some(function (type) {
             return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
         });
@@ -2926,47 +2828,44 @@
                         }
                     }
 
-                    // Handle Tags-specific options (only if Episode or Audio is selected)
+                    // Handle Tags-specific options (all media types - ancestors are resolved
+                    // by walking the item tree, not by media type). Only the current keys are
+                    // written; the legacy IncludeParentSeriesTags/IncludeParentAlbumTags keys
+                    // are still READ when repopulating an older rule, but never written.
                     const tagsSelect = rule.querySelector('.rule-tags-select');
-                    if (tagsSelect && memberName === 'Tags' && (hasEpisode || hasAudio)) {
+                    if (tagsSelect && memberName === 'Tags') {
                         const tagsSelectValue = tagsSelect.value;
                         if (tagsSelectValue === 'only') {
                             expression.OnlyParentTags = true;
-                            if (hasEpisode) expression.IncludeParentSeriesTags = true;
-                            if (hasAudio) expression.IncludeParentAlbumTags = true;
+                            expression.IncludeParentTags = true;
                         } else if (tagsSelectValue === 'true') {
-                            if (hasEpisode) expression.IncludeParentSeriesTags = true;
-                            if (hasAudio) expression.IncludeParentAlbumTags = true;
+                            expression.IncludeParentTags = true;
                         }
                         // If 'false' (default), don't include the parameter to save space
                     }
 
-                    // Handle Studios-specific options (only if Episode or Audio is selected)
+                    // Handle Studios-specific options (all media types)
                     const studiosSelect = rule.querySelector('.rule-studios-select');
-                    if (studiosSelect && memberName === 'Studios' && (hasEpisode || hasAudio)) {
+                    if (studiosSelect && memberName === 'Studios') {
                         const studiosSelectValue = studiosSelect.value;
                         if (studiosSelectValue === 'only') {
                             expression.OnlyParentStudios = true;
-                            if (hasEpisode) expression.IncludeParentSeriesStudios = true;
-                            if (hasAudio) expression.IncludeParentAlbumStudios = true;
+                            expression.IncludeParentStudios = true;
                         } else if (studiosSelectValue === 'true') {
-                            if (hasEpisode) expression.IncludeParentSeriesStudios = true;
-                            if (hasAudio) expression.IncludeParentAlbumStudios = true;
+                            expression.IncludeParentStudios = true;
                         }
                         // If 'false' (default), don't include the parameter to save space
                     }
 
-                    // Handle Genres-specific options (only if Episode or Audio is selected)
+                    // Handle Genres-specific options (all media types)
                     const genresSelect = rule.querySelector('.rule-genres-select');
-                    if (genresSelect && memberName === 'Genres' && (hasEpisode || hasAudio)) {
+                    if (genresSelect && memberName === 'Genres') {
                         const genresSelectValue = genresSelect.value;
                         if (genresSelectValue === 'only') {
                             expression.OnlyParentGenres = true;
-                            if (hasEpisode) expression.IncludeParentSeriesGenres = true;
-                            if (hasAudio) expression.IncludeParentAlbumGenres = true;
+                            expression.IncludeParentGenres = true;
                         } else if (genresSelectValue === 'true') {
-                            if (hasEpisode) expression.IncludeParentSeriesGenres = true;
-                            if (hasAudio) expression.IncludeParentAlbumGenres = true;
+                            expression.IncludeParentGenres = true;
                         }
                         // If 'false' (default), don't include the parameter to save space
                     }
@@ -3199,7 +3098,7 @@
                     let includeValue = 'false';
                     if (expression.OnlyParentTags === true) {
                         includeValue = 'only';
-                    } else if (expression.IncludeParentSeriesTags === true || expression.IncludeParentAlbumTags === true) {
+                    } else if (expression.IncludeParentTags === true || expression.IncludeParentSeriesTags === true || expression.IncludeParentAlbumTags === true) {
                         includeValue = 'true';
                     }
                     tagsSelect.value = includeValue;
@@ -3211,7 +3110,7 @@
                     let includeValue = 'false';
                     if (expression.OnlyParentStudios === true) {
                         includeValue = 'only';
-                    } else if (expression.IncludeParentSeriesStudios === true || expression.IncludeParentAlbumStudios === true) {
+                    } else if (expression.IncludeParentStudios === true || expression.IncludeParentSeriesStudios === true || expression.IncludeParentAlbumStudios === true) {
                         includeValue = 'true';
                     }
                     studiosSelect.value = includeValue;
@@ -3223,7 +3122,7 @@
                     let includeValue = 'false';
                     if (expression.OnlyParentGenres === true) {
                         includeValue = 'only';
-                    } else if (expression.IncludeParentSeriesGenres === true || expression.IncludeParentAlbumGenres === true) {
+                    } else if (expression.IncludeParentGenres === true || expression.IncludeParentSeriesGenres === true || expression.IncludeParentAlbumGenres === true) {
                         includeValue = 'true';
                     }
                     genresSelect.value = includeValue;
