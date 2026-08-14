@@ -52,21 +52,40 @@ Continue anyway? (yes / no)
 
 Run `git pull` to bring the local branch up to date, then `git fetch --tags --prune-tags --force` so the local tag list matches the remote (a plain `git pull` doesn't reliably sync new or deleted tags, and a stale tag list would corrupt the version calculation). If the pull fails, stop and show the error — do not proceed with a stale or diverged branch.
 
-**For `stable` releases**, fast-forward `12-release` up to `main` before tagging:
+#### For `stable` releases: work out what will ship
+
+`12-release` sits at the previous stable and has to be fast-forwarded to `main` so the release actually contains the new work. **Do not fast-forward yet** — compute the delta here, show it, and only move the branch after the user confirms in step 7. Nothing destructive happens before that gate.
+
+`git pull` while standing on `12-release` updates `12-release`, **not** `origin/main`, so fetch main explicitly or the delta is computed against a stale ref:
 
 ```bash
-git merge --ff-only origin/main
+git fetch origin main
 ```
 
-`--ff-only` is deliberate — `12-release` must never carry commits of its own. If this fails, the branch has diverged: stop, show the error, and do not attempt a merge commit. Report it to the user, since recovering means resetting `12-release` back onto a `main` commit.
-
-Then confirm there is nothing left behind:
+Check a fast-forward is even possible:
 
 ```bash
-git log HEAD..origin/main --oneline
+git merge-base --is-ancestor HEAD origin/main && echo FF_OK || echo DIVERGED
 ```
 
-This must be empty. If it is not, the fast-forward did not take — stop rather than tagging a partial release.
+`DIVERGED` means `12-release` has commits of its own and is no longer a pointer at a `main` commit. **Stop.** Do not merge, do not force. Report it — recovery means resetting `12-release` back onto a `main` commit, which is the user's call.
+
+Then compute what the release will newly contain:
+
+```bash
+git log HEAD..origin/main --oneline --no-merges
+git rev-parse --short HEAD origin/main
+```
+
+- **Non-empty** → this is the set of changes the stable will ship. Carry it into the step-7 summary. Because `12-release` sits at the previous stable tag, this range is the same one the changelog is generated from in step 3 — compute it once, show it once, don't prompt twice.
+- **Empty** → `12-release` already equals `main`; there is nothing new to release. Warn and ask before continuing, since re-tagging an identical tree is almost always a mistake:
+
+  ```
+  12-release is already up to date with main — this release would contain no new commits.
+  Re-tag the same tree anyway? (yes / no)
+  ```
+
+**Releasing a subset of `main`:** if the user wants to ship only part of what's on `main` (e.g. a feature merged but not yet smoke-tested should wait), fast-forward to a specific commit rather than main's tip — `git merge --ff-only <sha>` in step 8, with the delta and changelog computed against that `<sha>` instead of `origin/main` throughout. Ask for the target commit and confirm the reduced set.
 
 Then check for uncommitted changes:
 
@@ -208,13 +227,29 @@ Changelog:
 Ready to create and push this tag? (yes / no / edit)
 ```
 
+**For `stable` releases**, insert the branch move above the changelog — this is the substantive part of the confirmation, since advancing `12-release` is what decides the release contents *and* what the docs site will serve:
+
+```
+Branch:     12-release <old-sha> -> <new-sha> (fast-forward to main, <count> commits)
+            will be pushed, so the mkdocs Cloudflare Worker picks up the new docs
+```
+
 - **yes** → proceed to step 8
 - **no** → abort, inform the user no tag was created
 - **edit** → ask the user to provide the revised changelog, then re-show the summary and ask again
 
 ### 8. Create and push the tag
 
-Write the changelog text to a temporary file and use `-F` — passing a multi-line message with embedded quotes/backticks through `-m "..."` is a shell-quoting accident waiting to happen:
+**For `stable` releases, advance and push `12-release` first**, so the tag lands on the released commit and the docs site follows:
+
+```bash
+git merge --ff-only origin/main     # or the specific <sha> if releasing a subset
+git push origin 12-release
+```
+
+Pushing the branch is **not optional**. The mkdocs Cloudflare Worker publishes from `12-release`; if the branch moves only locally, the tag ships but the docs site keeps serving the previous release's content with no visible error. If either command fails, stop before tagging — a tag on an unadvanced branch would point at the old tree.
+
+Then write the changelog text to a temporary file and use `-F` — passing a multi-line message with embedded quotes/backticks through `-m "..."` is a shell-quoting accident waiting to happen:
 
 ```bash
 # Write tag message to a temp file
@@ -236,3 +271,5 @@ git push origin <new-version>
 Confirm success: "✓ Tagged and pushed <new-version>"
 
 If any command fails, show the error output and stop — do not attempt to clean up automatically. If the tag was created locally but the push failed, tell the user the tag exists locally and can be removed with `git tag -d <new-version>` or pushed manually once the issue is resolved.
+
+For `stable`, if the branch push succeeded but the tag push failed, say so explicitly: `12-release` is already published at the new commit, so the docs site has updated but no release was cut. Re-pushing the tag is all that is needed — do not roll the branch back.
