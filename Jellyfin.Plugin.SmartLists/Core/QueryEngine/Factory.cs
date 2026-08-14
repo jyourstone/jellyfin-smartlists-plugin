@@ -94,40 +94,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.SeriesName : RequiredGroups & ~ExtractionGroup.SeriesName;
         }
 
-        public bool ExtractParentSeriesTags
+        public bool ExtractParentTags
         {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesTags : RequiredGroups & ~ExtractionGroup.ParentSeriesTags;
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentTags);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentTags : RequiredGroups & ~ExtractionGroup.ParentTags;
         }
 
-        public bool ExtractParentSeriesStudios
+        public bool ExtractParentStudios
         {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesStudios : RequiredGroups & ~ExtractionGroup.ParentSeriesStudios;
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentStudios);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentStudios : RequiredGroups & ~ExtractionGroup.ParentStudios;
         }
 
-        public bool ExtractParentSeriesGenres
+        public bool ExtractParentGenres
         {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentSeriesGenres : RequiredGroups & ~ExtractionGroup.ParentSeriesGenres;
-        }
-
-        public bool ExtractParentAlbumGenres
-        {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumGenres);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumGenres : RequiredGroups & ~ExtractionGroup.ParentAlbumGenres;
-        }
-
-        public bool ExtractParentAlbumTags
-        {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumTags);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumTags : RequiredGroups & ~ExtractionGroup.ParentAlbumTags;
-        }
-
-        public bool ExtractParentAlbumStudios
-        {
-            get => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumStudios);
-            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentAlbumStudios : RequiredGroups & ~ExtractionGroup.ParentAlbumStudios;
+            get => RequiredGroups.HasFlag(ExtractionGroup.ParentGenres);
+            set => RequiredGroups = value ? RequiredGroups | ExtractionGroup.ParentGenres : RequiredGroups & ~ExtractionGroup.ParentGenres;
         }
 
         public bool ExtractLastEpisodeAirDate
@@ -318,8 +300,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _parentIndexPropertyCache = new();
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _indexPropertyCache = new();
         private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _seriesIdPropertyCache = new();
-        private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _albumIdPropertyCache = new();
-        private static readonly ConcurrentDictionary<Type, System.Reflection.PropertyInfo?> _parentIdPropertyCache = new();
 
 
         /// <summary>
@@ -1935,27 +1915,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return false;
         }
 
-        /// <summary>
-        /// Helper method to safely extract an album ID as Guid from audio items.
-        /// Prefers AlbumId when available and falls back to ParentId.
-        /// </summary>
-        private static bool TryGetAudioAlbumGuid(BaseItem baseItem, out Guid albumGuid)
-        {
-            albumGuid = Guid.Empty;
-            if (baseItem is not Audio) return false;
-
-            var audioType = baseItem.GetType();
-
-            var albumIdProperty = _albumIdPropertyCache.GetOrAdd(audioType, t => t.GetProperty("AlbumId"));
-            if (albumIdProperty != null && TryExtractGuid(albumIdProperty.GetValue(baseItem), out albumGuid))
-            {
-                return true;
-            }
-
-            var parentIdProperty = _parentIdPropertyCache.GetOrAdd(audioType, t => t.GetProperty("ParentId"));
-            return parentIdProperty != null && TryExtractGuid(parentIdProperty.GetValue(baseItem), out albumGuid);
-        }
-
         private static bool TryExtractGuid(object? value, out Guid guid)
         {
             guid = Guid.Empty;
@@ -1982,43 +1941,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             return false;
-        }
-
-        private delegate bool TryResolveParentKey(BaseItem baseItem, out Guid parentId);
-
-        private static List<string>? GetOrFetchParentValues(
-            BaseItem baseItem,
-            TryResolveParentKey keyResolver,
-            ConcurrentDictionary<Guid, List<string>> cache,
-            Func<Guid, (List<string> Values, string ParentName)> fetcher,
-            Action<Guid, List<string>> logCacheHit,
-            Action<Guid, string, List<string>> logFetched,
-            Action<Exception, Guid> logFailure)
-        {
-            if (!keyResolver(baseItem, out var parentId))
-            {
-                return null;
-            }
-
-            if (cache.TryGetValue(parentId, out var cachedValues))
-            {
-                logCacheHit(parentId, cachedValues);
-                return cachedValues;
-            }
-
-            try
-            {
-                var (values, parentName) = fetcher(parentId);
-                cache[parentId] = values;
-                logFetched(parentId, parentName, values);
-                return values;
-            }
-            catch (Exception ex)
-            {
-                logFailure(ex, parentId);
-                cache[parentId] = [];
-                return [];
-            }
         }
 
         /// <summary>
@@ -2174,353 +2096,30 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Extracts the parent series tags for episodes with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
+        /// Resolves ancestor-inherited Tags/Studios/Genres in ONE walk and assigns only the
+        /// requested lists. Assignment is BY REFERENCE — AncestorValues is immutable and its
+        /// members are IReadOnlyList, so sharing across operands is safe and allocation-free.
         /// </summary>
-        private static void ExtractParentSeriesTags(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        private static void ExtractAncestorValues(
+            Operand operand,
+            BaseItem baseItem,
+            ILibraryManager libraryManager,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger,
+            bool wantTags,
+            bool wantStudios,
+            bool wantGenres)
         {
-            operand.ParentSeriesTags = [];
             try
             {
-                // Only process episodes - other item types don't have parent series
-                if (baseItem is not Episode)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an episode, parent series tags remain empty", baseItem.Name);
-                    return;
-                }
-
-                // Use helper to extract SeriesId safely
-                if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
-                {
-                    // Check cache first to avoid repeated library lookups (expensive!)
-                    if (cache.SeriesTagsById.TryGetValue(seriesGuid, out var cachedTags))
-                    {
-                        operand.ParentSeriesTags = cachedTags;
-                        logger?.LogDebug("Using cached parent series tags for episode '{EpisodeName}' (series ID: {SeriesId}): [{Tags}]",
-                            baseItem.Name, seriesGuid, string.Join(", ", cachedTags));
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Get the parent series from the library manager (expensive operation!)
-                            var parentSeries = libraryManager.GetItemById(seriesGuid);
-                            var seriesTags = parentSeries?.Tags?.ToList() ?? [];
-
-                            // Cache the result for future episodes from the same series
-                            cache.SeriesTagsById[seriesGuid] = seriesTags;
-                            operand.ParentSeriesTags = seriesTags;
-
-                            logger?.LogDebug("Extracted and cached parent series tags for episode '{EpisodeName}' (series: '{SeriesName}'): [{Tags}]",
-                                baseItem.Name, parentSeries?.Name ?? "Unknown", string.Join(", ", seriesTags));
-                        }
-                        catch (Exception ex)
-                        {
-                            logger?.LogDebug(ex, "Failed to get parent series tags for episode '{EpisodeName}' with SeriesId {SeriesId}",
-                                baseItem.Name, seriesGuid);
-
-                            // Cache empty list to avoid repeated failures
-                            cache.SeriesTagsById[seriesGuid] = [];
-                        }
-                    }
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid SeriesId from episode '{EpisodeName}'", baseItem.Name);
-                }
+                var values = AncestorValueResolver.Resolve(baseItem, libraryManager, cache.AncestorValuesById, logger);
+                if (wantTags) { operand.ParentTags = values.Tags; }
+                if (wantStudios) { operand.ParentStudios = values.Studios; }
+                if (wantGenres) { operand.ParentGenres = values.Genres; }
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Failed to extract parent series tags for item '{ItemName}'", baseItem.Name);
-            }
-        }
-
-        /// <summary>
-        /// Extracts the parent series studios for episodes with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
-        /// </summary>
-        private static void ExtractParentSeriesStudios(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            operand.ParentSeriesStudios = [];
-            try
-            {
-                // Only process episodes - other item types don't have parent series
-                if (baseItem is not Episode)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an episode, parent series studios remain empty", baseItem.Name);
-                    return;
-                }
-
-                // Use helper to extract SeriesId safely
-                if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
-                {
-                    // Check cache first to avoid repeated library lookups (expensive!)
-                    if (cache.SeriesStudiosById.TryGetValue(seriesGuid, out var cachedStudios))
-                    {
-                        operand.ParentSeriesStudios = cachedStudios;
-                        logger?.LogDebug("Using cached parent series studios for episode '{EpisodeName}' (series ID: {SeriesId}): [{Studios}]",
-                            baseItem.Name, seriesGuid, string.Join(", ", cachedStudios));
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Get the parent series from the library manager (expensive operation!)
-                            var parentSeries = libraryManager.GetItemById(seriesGuid);
-                            var seriesStudios = parentSeries?.Studios?.ToList() ?? [];
-
-                            // Cache the result for future episodes from the same series
-                            cache.SeriesStudiosById[seriesGuid] = seriesStudios;
-                            operand.ParentSeriesStudios = seriesStudios;
-
-                            logger?.LogDebug("Extracted and cached parent series studios for episode '{EpisodeName}' (series: '{SeriesName}'): [{Studios}]",
-                                baseItem.Name, parentSeries?.Name ?? "Unknown", string.Join(", ", seriesStudios));
-                        }
-                        catch (Exception ex)
-                        {
-                            logger?.LogDebug(ex, "Failed to get parent series studios for episode '{EpisodeName}' with SeriesId {SeriesId}",
-                                baseItem.Name, seriesGuid);
-
-                            // Cache empty list to avoid repeated failures
-                            cache.SeriesStudiosById[seriesGuid] = [];
-                        }
-                    }
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid SeriesId from episode '{EpisodeName}'", baseItem.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to extract parent series studios for item '{ItemName}'", baseItem.Name);
-            }
-        }
-
-        /// <summary>
-        /// Extracts the parent series genres for episodes with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
-        /// </summary>
-        private static void ExtractParentSeriesGenres(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            operand.ParentSeriesGenres = [];
-            try
-            {
-                // Only process episodes - other item types don't have parent series
-                if (baseItem is not Episode)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an episode, parent series genres remain empty", baseItem.Name);
-                    return;
-                }
-
-                // Use helper to extract SeriesId safely
-                if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
-                {
-                    // Check cache first to avoid repeated library lookups (expensive!)
-                    if (cache.SeriesGenresById.TryGetValue(seriesGuid, out var cachedGenres))
-                    {
-                        operand.ParentSeriesGenres = cachedGenres;
-                        logger?.LogDebug("Using cached parent series genres for episode '{EpisodeName}' (series ID: {SeriesId}): [{Genres}]",
-                            baseItem.Name, seriesGuid, string.Join(", ", cachedGenres));
-                    }
-                    else
-                    {
-                        try
-                        {
-                            // Get the parent series from the library manager (expensive operation!)
-                            var parentSeries = libraryManager.GetItemById(seriesGuid);
-                            var seriesGenres = parentSeries?.Genres?.ToList() ?? [];
-
-                            // Cache the result for future episodes from the same series
-                            cache.SeriesGenresById[seriesGuid] = seriesGenres;
-                            operand.ParentSeriesGenres = seriesGenres;
-
-                            logger?.LogDebug("Extracted and cached parent series genres for episode '{EpisodeName}' (series: '{SeriesName}'): [{Genres}]",
-                                baseItem.Name, parentSeries?.Name ?? "Unknown", string.Join(", ", seriesGenres));
-                        }
-                        catch (Exception ex)
-                        {
-                            logger?.LogDebug(ex, "Failed to get parent series genres for episode '{EpisodeName}' with SeriesId {SeriesId}",
-                                baseItem.Name, seriesGuid);
-
-                            // Cache empty list to avoid repeated failures
-                            cache.SeriesGenresById[seriesGuid] = [];
-                        }
-                    }
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid SeriesId from episode '{EpisodeName}'", baseItem.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to extract parent series genres for item '{ItemName}'", baseItem.Name);
-            }
-        }
-
-        /// <summary>
-        /// Extracts parent album genres for audio tracks with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
-        /// </summary>
-        private static void ExtractParentAlbumGenres(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            operand.ParentAlbumGenres = [];
-            try
-            {
-                if (baseItem is not Audio)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album genres remain empty", baseItem.Name);
-                    return;
-                }
-
-                var albumGenres = GetOrFetchParentValues(
-                    baseItem,
-                    TryGetAudioAlbumGuid,
-                    cache.AlbumGenresById,
-                    albumGuid =>
-                    {
-                        var parentAlbum = libraryManager.GetItemById(albumGuid);
-                        return (parentAlbum?.Genres?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
-                    },
-                    (albumGuid, cachedGenres) =>
-                    {
-                        logger?.LogDebug("Using cached parent album genres for audio track '{TrackName}' (album ID: {AlbumId}): [{Genres}]",
-                            baseItem.Name, albumGuid, string.Join(", ", cachedGenres));
-                    },
-                    (albumGuid, albumName, fetchedGenres) =>
-                    {
-                        logger?.LogDebug("Extracted and cached parent album genres for audio track '{TrackName}' (album: '{AlbumName}'): [{Genres}]",
-                            baseItem.Name, albumName, string.Join(", ", fetchedGenres));
-                    },
-                    (ex, albumGuid) =>
-                    {
-                        logger?.LogDebug(ex, "Failed to get parent album genres for audio track '{TrackName}' with AlbumId {AlbumId}",
-                            baseItem.Name, albumGuid);
-                    });
-
-                if (albumGenres != null)
-                {
-                    operand.ParentAlbumGenres = albumGenres;
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to extract parent album genres for item '{ItemName}'", baseItem.Name);
-            }
-        }
-
-        /// <summary>
-        /// Extracts parent album tags for audio tracks with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
-        /// </summary>
-        private static void ExtractParentAlbumTags(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            operand.ParentAlbumTags = [];
-            try
-            {
-                if (baseItem is not Audio)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album tags remain empty", baseItem.Name);
-                    return;
-                }
-
-                var albumTags = GetOrFetchParentValues(
-                    baseItem,
-                    TryGetAudioAlbumGuid,
-                    cache.AlbumTagsById,
-                    albumGuid =>
-                    {
-                        var parentAlbum = libraryManager.GetItemById(albumGuid);
-                        return (parentAlbum?.Tags?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
-                    },
-                    (albumGuid, cachedTags) =>
-                    {
-                        logger?.LogDebug("Using cached parent album tags for audio track '{TrackName}' (album ID: {AlbumId}): [{Tags}]",
-                            baseItem.Name, albumGuid, string.Join(", ", cachedTags));
-                    },
-                    (albumGuid, albumName, fetchedTags) =>
-                    {
-                        logger?.LogDebug("Extracted and cached parent album tags for audio track '{TrackName}' (album: '{AlbumName}'): [{Tags}]",
-                            baseItem.Name, albumName, string.Join(", ", fetchedTags));
-                    },
-                    (ex, albumGuid) =>
-                    {
-                        logger?.LogDebug(ex, "Failed to get parent album tags for audio track '{TrackName}' with AlbumId {AlbumId}",
-                            baseItem.Name, albumGuid);
-                    });
-
-                if (albumTags != null)
-                {
-                    operand.ParentAlbumTags = albumTags;
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to extract parent album tags for item '{ItemName}'", baseItem.Name);
-            }
-        }
-
-        /// <summary>
-        /// Extracts parent album studios for audio tracks with per-refresh caching.
-        /// This is an expensive operation as it requires a database lookup, so caching is critical for performance.
-        /// </summary>
-        private static void ExtractParentAlbumStudios(Operand operand, BaseItem baseItem, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            operand.ParentAlbumStudios = [];
-            try
-            {
-                if (baseItem is not Audio)
-                {
-                    logger?.LogDebug("Item '{ItemName}' is not an audio track, parent album studios remain empty", baseItem.Name);
-                    return;
-                }
-
-                var albumStudios = GetOrFetchParentValues(
-                    baseItem,
-                    TryGetAudioAlbumGuid,
-                    cache.AlbumStudiosById,
-                    albumGuid =>
-                    {
-                        var parentAlbum = libraryManager.GetItemById(albumGuid);
-                        return (parentAlbum?.Studios?.ToList() ?? [], parentAlbum?.Name ?? "Unknown");
-                    },
-                    (albumGuid, cachedStudios) =>
-                    {
-                        logger?.LogDebug("Using cached parent album studios for audio track '{TrackName}' (album ID: {AlbumId}): [{Studios}]",
-                            baseItem.Name, albumGuid, string.Join(", ", cachedStudios));
-                    },
-                    (albumGuid, albumName, fetchedStudios) =>
-                    {
-                        logger?.LogDebug("Extracted and cached parent album studios for audio track '{TrackName}' (album: '{AlbumName}'): [{Studios}]",
-                            baseItem.Name, albumName, string.Join(", ", fetchedStudios));
-                    },
-                    (ex, albumGuid) =>
-                    {
-                        logger?.LogDebug(ex, "Failed to get parent album studios for audio track '{TrackName}' with AlbumId {AlbumId}",
-                            baseItem.Name, albumGuid);
-                    });
-
-                if (albumStudios != null)
-                {
-                    operand.ParentAlbumStudios = albumStudios;
-                }
-                else
-                {
-                    logger?.LogDebug("Could not extract valid AlbumId or ParentId from audio track '{TrackName}'", baseItem.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to extract parent album studios for item '{ItemName}'", baseItem.Name);
+                logger?.LogWarning(ex, "SmartLists failed to resolve ancestor values for '{Name}'", baseItem.Name);
             }
         }
 
@@ -2874,10 +2473,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var extractPeople = options.ExtractPeople;
             var extractNextUnwatched = options.ExtractNextUnwatched;
             var extractSeriesName = options.ExtractSeriesName;
-            var extractParentSeriesTags = options.ExtractParentSeriesTags;
-            var extractParentSeriesStudios = options.ExtractParentSeriesStudios;
-            var extractParentSeriesGenres = options.ExtractParentSeriesGenres;
-            var extractParentAlbumGenres = options.ExtractParentAlbumGenres;
+            var extractParentTags = options.ExtractParentTags;
+            var extractParentStudios = options.ExtractParentStudios;
+            var extractParentGenres = options.ExtractParentGenres;
             var extractLastEpisodeAirDate = options.ExtractLastEpisodeAirDate;
 
             // Cheap extraction flags (for performance optimization)
@@ -3305,71 +2903,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 logger?.LogDebug("LibraryInfo extraction skipped for item {Name} - not needed by rules", baseItem.Name);
             }
 
-            // Extract parent series tags for episodes - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (extractParentSeriesTags)
+            // Ancestor-inherited Tags/Studios/Genres (season/series/album/artist/folder/library).
+            // Expensive (tree walk + library lookup), so gated on the requirement flags and
+            // memoized per ancestor node. The else-branch reset is load-bearing: Phase 1 builds
+            // its operand with the parent groups masked off, and must never see stale values.
+            if (extractParentTags || extractParentStudios || extractParentGenres)
             {
-                ExtractParentSeriesTags(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentSeriesTags = [];
-            }
-
-            // Extract parent series studios for episodes - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (extractParentSeriesStudios)
-            {
-                ExtractParentSeriesStudios(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentSeriesStudios = [];
+                ExtractAncestorValues(operand, baseItem, libraryManager, cache, logger,
+                    extractParentTags, extractParentStudios, extractParentGenres);
             }
 
-            // Extract parent series genres for episodes - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (extractParentSeriesGenres)
-            {
-                ExtractParentSeriesGenres(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentSeriesGenres = [];
-            }
-
-            // Extract parent album genres for audio tracks - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (extractParentAlbumGenres)
-            {
-                ExtractParentAlbumGenres(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentAlbumGenres = [];
-            }
-
-            // Extract parent album tags for audio tracks - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (options.ExtractParentAlbumTags)
-            {
-                ExtractParentAlbumTags(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentAlbumTags = [];
-            }
-
-            // Extract parent album studios for audio tracks - only when needed for performance
-            // This is an expensive operation (database lookup), so we use caching
-            if (options.ExtractParentAlbumStudios)
-            {
-                ExtractParentAlbumStudios(operand, baseItem, libraryManager, cache, logger);
-            }
-            else
-            {
-                operand.ParentAlbumStudios = [];
-            }
+            if (!extractParentTags) { operand.ParentTags = []; }
+            if (!extractParentStudios) { operand.ParentStudios = []; }
+            if (!extractParentGenres) { operand.ParentGenres = []; }
 
             // AudioMetadata extraction - conditionally extracted for performance optimization
             // Includes Album, Artists, AlbumArtists for music-related items

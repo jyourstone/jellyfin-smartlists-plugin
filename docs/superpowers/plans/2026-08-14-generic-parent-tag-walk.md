@@ -1254,7 +1254,32 @@ Expected during a full refresh: **no** `NotSupportedException`, **no** `Argument
 | | line 37 | same |
 | `docs/content/examples/common-use-cases.md` | line 68 | same |
 | | new section | One Movies-library-tag example (the capability gain) |
-| Release notes (tag message body) | — | Existing lists change contents on first refresh: positive operators gain items, **negative operators lose items**; audio lists with the album option now also see artist-folder and library values |
+| Release notes (tag message body) | — | Existing lists change contents on first refresh: positive operators gain items, **negative operators lose items**; audio lists with the album option now also see artist-folder and library values. **Draft text parked below — carry it into the `/release` tag message.** |
+
+### Drafted release-note text (for the `/release` tag message body)
+
+Parked here so it survives to tag time. The docs version in `fields-and-operators.md` is deliberately
+abbreviated; this is the only place the audio-specific shrinkage is spelled out for users.
+
+> **Parent tags, studios, and genres now walk the whole ancestor chain**
+>
+> The "also check parent" option on **Tags**, **Studios**, and **Genres** used to stop at the parent
+> series (episodes) or the parent album (audio). It now walks every ancestor up to and including the
+> Jellyfin library: season → series → the folders they sit in → library for episodes, album → artist
+> folder → the folders they sit in → library for tracks, and the folders → library for everything
+> else. The option is also no longer limited to episodes and audio — it is available for every media
+> type, so a tag on a movie library or on a plain folder now applies to everything inside it.
+>
+> **Existing lists that already had the option enabled will change contents on their first refresh.**
+> Positive operators (equals, contains, is in, matches regex) match **more** items, because the item
+> matches if it *or any ancestor* matches. Negative operators (not equals, not contains, is not in)
+> match **fewer** items, because every checked source has to not match — a value sitting on a season,
+> a folder, or the library is now enough to exclude the item. Music lists move the most: a
+> not-contains or not-equals rule with the album option enabled now also sees values from the artist
+> folder and the library, not just the album, so those playlists can visibly shrink.
+>
+> Collection and playlist membership still does not count — those are links, not folders, so their
+> tags, studios, and genres never flow down to the items inside them.
 
 Not touched, deliberately: `docs/content/user-guide/advanced-configuration.md` (parent flags were never documented for file editors — see Open Question 2) and `docs/content/development/integration-api.md` (see Open Question 2).
 

@@ -22,10 +22,10 @@ namespace Jellyfin.Plugin.SmartLists.Tests.Support;
 /// library manager that comparison throws, so every air-block test would have to avoid the exact
 /// case air blocks exist for.
 ///
-/// Only <c>GetItemById(Guid)</c> is implemented. Every other member throws
-/// <see cref="NotSupportedException"/> on purpose: if production code under test ever starts
-/// depending on more of the library manager, these tests must fail loudly rather than quietly
-/// sort against a default-valued stub.
+/// Only <c>GetItemById(Guid)</c> and the one-argument <c>GetCollectionFolders(BaseItem)</c> are
+/// implemented. Every other member throws <see cref="NotSupportedException"/> on purpose: if
+/// production code under test ever starts depending on more of the library manager, these tests
+/// must fail loudly rather than quietly sort against a default-valued stub.
 /// </summary>
 public class TestLibraryManager : DispatchProxy
 {
@@ -36,11 +36,39 @@ public class TestLibraryManager : DispatchProxy
     /// </summary>
     internal static readonly ConcurrentDictionary<Guid, BaseItem> Items = new();
 
+    /// <summary>
+    /// Answers <c>GetCollectionFolders(BaseItem)</c>, keyed by the id of the item the resolver
+    /// passes as the anchor - i.e. the CHAIN-TOP folder, deliberately NOT the leaf item id.
+    ///
+    /// This arm exists because a Jellyfin library (a <c>CollectionFolder</c>) is never in an
+    /// item's <c>ParentId</c> chain: it hangs off the UserRootFolder as a sibling structure.
+    /// A parents-only walk therefore finds season tags but never library tags, so without this
+    /// stub the library half of the ancestor walk could not be tested at all.
+    /// </summary>
+    internal static readonly ConcurrentDictionary<Guid, List<Folder>> CollectionFolders = new();
+
+    /// <summary>
+    /// Per-id <c>GetItemById</c> call counter. Keyed by id rather than being a single total so
+    /// it stays meaningful under xUnit's parallel test collections: ids are freshly generated
+    /// per test, so no other class can perturb the count for the ids one test cares about.
+    /// </summary>
+    internal static readonly ConcurrentDictionary<Guid, int> GetItemByIdCalls = new();
+
+    /// <summary>Total <c>GetItemById</c> calls recorded for the given ids.</summary>
+    internal static int CallsFor(params Guid[] ids)
+        => ids.Sum(id => GetItemByIdCalls.TryGetValue(id, out var count) ? count : 0);
+
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
         if (targetMethod?.Name == "GetItemById" && args is { Length: 1 } && args[0] is Guid id)
         {
+            GetItemByIdCalls.AddOrUpdate(id, 1, (_, count) => count + 1);
             return Items.TryGetValue(id, out var item) ? item : null;
+        }
+
+        if (targetMethod?.Name == "GetCollectionFolders" && args is { Length: 1 } && args[0] is BaseItem anchor)
+        {
+            return CollectionFolders.TryGetValue(anchor.Id, out var folders) ? folders : new List<Folder>();
         }
 
         throw new NotSupportedException(
@@ -153,6 +181,42 @@ public static class TestItems
         var season = new Season { Id = Guid.NewGuid(), Name = name };
         season.SortName = name;
         return season;
+    }
+
+    /// <summary>
+    /// Links <paramref name="child"/> to <paramref name="parent"/> through <c>ParentId</c> - the
+    /// only link the ancestor walk follows - and registers BOTH with the library-manager stub so
+    /// <c>GetParent()</c> can resolve them.
+    ///
+    /// Deliberately does NOT touch <c>SeriesId</c>/<c>SeasonId</c>: those drift from the real
+    /// tree, and reaching for them instead of the parent chain is exactly what issue #495 was.
+    /// </summary>
+    public static T Under<T>(T child, BaseItem parent)
+        where T : BaseItem
+    {
+        child.ParentId = parent.Id;
+        TestLibraryManager.Items[child.Id] = child;
+        TestLibraryManager.Items[parent.Id] = parent;
+        return child;
+    }
+
+    /// <summary>
+    /// A plain physical folder - the <c>/shows</c> or <c>/movies</c> level of the tree, and the
+    /// stand-in for a library's CollectionFolder. Returned UNREGISTERED: <see cref="Under{T}"/>
+    /// registers it when it is linked into a chain, and library folders are reached through
+    /// <see cref="TestLibraryManager.CollectionFolders"/> rather than through <c>GetItemById</c>.
+    /// </summary>
+    public static Folder PhysicalFolder(string name, params string[] tags)
+    {
+        var folder = new Folder { Id = Guid.NewGuid(), Name = name };
+        folder.SortName = name;
+
+        if (tags.Length > 0)
+        {
+            folder.Tags = tags;
+        }
+
+        return folder;
     }
 
     /// <summary>A MusicAlbum - the audio equivalent of <see cref="SeasonOf"/>.</summary>

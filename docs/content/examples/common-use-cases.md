@@ -65,7 +65,7 @@ Here are some popular playlist and collection types you can create:
 - **Important**: The smart collection will never include itself, and only playlists you own or that are public are accessible
 
 ### Unplayed Sitcom Episodes
-- **Tags** contains "Sitcom" (with parent series tags enabled) AND **Playback Status** = Unplayed
+- **Tags** contains "Sitcom" (with parent tags enabled, so a tag on the season or series applies to its episodes) AND **Playback Status** = Unplayed
 
 ### Currently Airing Series Collection
 - **Media Types**: Series
@@ -328,6 +328,13 @@ Collections are great for organizing related content that you want to browse tog
 - **Library Name** not equals "Kids Movies"
 - **Genre** contains "Animation"
 - Creates a playlist of animated content, but excludes anything from your "Kids Movies" library
+
+### Everything from a Tagged Library
+- **Tags** contains "kids-safe" with **Yes - Also check parent tags** enabled
+- **Media Type**: Movie
+- Tag the library itself and every movie inside it matches - no need to tag the movies one by one
+- Works the same way for a tag on a plain folder inside the library, or on a season or series for episodes
+- See [Parent metadata options](../user-guide/fields-and-operators.md#parent-metadata-options) for the full list of what counts as a parent
 
 ## Operator Examples
 

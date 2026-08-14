@@ -226,33 +226,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 return BuildParentAwareFieldExpression(r, param, logger,
                     baseField: "Tags",
-                    parentSeriesField: "ParentSeriesTags",
-                    parentAlbumField: "ParentAlbumTags",
+                    parentField: "ParentTags",
                     onlyParent: r.OnlyParentTags == true,
-                    includeParentSeries: r.IncludeParentSeriesTags == true,
-                    includeParentAlbum: r.IncludeParentAlbumTags == true);
+                    includeParent: r.IncludeParentTagsEffective);
             }
 
             if (r.MemberName == "Studios")
             {
                 return BuildParentAwareFieldExpression(r, param, logger,
                     baseField: "Studios",
-                    parentSeriesField: "ParentSeriesStudios",
-                    parentAlbumField: "ParentAlbumStudios",
+                    parentField: "ParentStudios",
                     onlyParent: r.OnlyParentStudios == true,
-                    includeParentSeries: r.IncludeParentSeriesStudios == true,
-                    includeParentAlbum: r.IncludeParentAlbumStudios == true);
+                    includeParent: r.IncludeParentStudiosEffective);
             }
 
             if (r.MemberName == "Genres")
             {
                 return BuildParentAwareFieldExpression(r, param, logger,
                     baseField: "Genres",
-                    parentSeriesField: "ParentSeriesGenres",
-                    parentAlbumField: "ParentAlbumGenres",
+                    parentField: "ParentGenres",
                     onlyParent: r.OnlyParentGenres == true,
-                    includeParentSeries: r.IncludeParentSeriesGenres == true,
-                    includeParentAlbum: r.IncludeParentAlbumGenres == true);
+                    includeParent: r.IncludeParentGenresEffective);
             }
 
             return null;
@@ -268,22 +262,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             ParameterExpression param,
             ILogger? logger,
             string baseField,
-            string parentSeriesField,
-            string parentAlbumField,
+            string parentField,
             bool onlyParent,
-            bool includeParentSeries,
-            bool includeParentAlbum)
+            bool includeParent)
         {
             if (onlyParent)
             {
-                var fields = new List<string>();
-                if (includeParentSeries) fields.Add(parentSeriesField);
-                if (includeParentAlbum) fields.Add(parentAlbumField);
-
-                if (fields.Count > 0)
+                if (includeParent)
                 {
-                    logger?.LogDebug("SmartLists building {Field} expression with ONLY parent fields: {Fields}", baseField, string.Join(", ", fields));
-                    return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
+                    logger?.LogDebug("SmartLists building {Field} expression with ONLY parent fields: {Fields}", baseField, parentField);
+                    return BuildCombinedStringEnumerableExpression(r, param, logger, parentField);
                 }
 
                 // OnlyParent is true but no parent source flags are set — return always-false
@@ -292,13 +280,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return System.Linq.Expressions.Expression.Constant(false);
             }
 
-            if (includeParentSeries || includeParentAlbum)
+            if (includeParent)
             {
-                var fields = new List<string> { baseField };
-                if (includeParentSeries) fields.Add(parentSeriesField);
-                if (includeParentAlbum) fields.Add(parentAlbumField);
-                logger?.LogDebug("SmartLists building {Field} expression with parent inclusion: {Fields}", baseField, string.Join(", ", fields));
-                return BuildCombinedStringEnumerableExpression(r, param, logger, [.. fields]);
+                logger?.LogDebug("SmartLists building {Field} expression with parent inclusion: {Fields}", baseField, string.Join(", ", baseField, parentField));
+                return BuildCombinedStringEnumerableExpression(r, param, logger, baseField, parentField);
             }
 
             return null;
@@ -312,7 +297,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="r">The expression rule</param>
         /// <param name="param">The parameter expression</param>
         /// <param name="logger">Logger instance</param>
-        /// <param name="fieldNames">The fields to evaluate together (e.g., "Genres", "ParentSeriesGenres", "ParentAlbumGenres")</param>
+        /// <param name="fieldNames">The fields to evaluate together (e.g., "Genres", "ParentGenres")</param>
         private static System.Linq.Expressions.Expression BuildCombinedStringEnumerableExpression(Expression r, ParameterExpression param, ILogger? logger, params string[] fieldNames)
         {
             if (fieldNames.Length == 0)
@@ -1633,35 +1618,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             return false;
-        }
-
-        /// <summary>
-        /// Checks if the combined (deduplicated) entries from both lists contain exactly one
-        /// distinct value and that value equals the target. Used for Equal/NotEqual on
-        /// Tags/Studios/Genres when "Include parent series" is enabled.
-        /// </summary>
-        private static bool OnlyCombinedItemEquals(IEnumerable<string> list, IEnumerable<string> parentList, string value)
-        {
-            var items = (list ?? Enumerable.Empty<string>())
-                .Concat(parentList ?? Enumerable.Empty<string>())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(2)
-                .ToList();
-
-            return items.Count == 1 && items[0].Equals(value, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Checks if any item in the combined (deduplicated) list from both sources
-        /// exactly equals the target value. Used for Equal/NotEqual on Tags/Studios/Genres
-        /// when "Include parent series" is enabled.
-        /// </summary>
-        private static bool AnyCombinedItemEquals(IEnumerable<string> list, IEnumerable<string> parentList, string value)
-        {
-            return (list ?? Enumerable.Empty<string>())
-                .Concat(parentList ?? Enumerable.Empty<string>())
-                .Any(s => s != null && s.Equals(value, StringComparison.OrdinalIgnoreCase));
         }
 
         internal static bool AnyRegexMatch(IEnumerable<string> list, string pattern)

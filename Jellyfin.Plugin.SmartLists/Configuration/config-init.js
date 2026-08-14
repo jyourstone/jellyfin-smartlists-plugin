@@ -2939,7 +2939,7 @@
             SmartLists.updateAllFieldSelects(page);
         }
 
-        // Update visibility of parent series options based on media types
+        // Update visibility of parent metadata options
         if (SmartLists.updateAllTagsOptionsVisibility) {
             SmartLists.updateAllTagsOptionsVisibility(page);
         }

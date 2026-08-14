@@ -65,9 +65,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         private static bool IsParentAwareListExpression(Expression expr)
         {
-            return (expr.MemberName == "Tags" && (expr.IncludeParentSeriesTags == true || expr.IncludeParentAlbumTags == true || expr.OnlyParentTags == true)) ||
-                   (expr.MemberName == "Studios" && (expr.IncludeParentSeriesStudios == true || expr.IncludeParentAlbumStudios == true || expr.OnlyParentStudios == true)) ||
-                   (expr.MemberName == "Genres" && (expr.IncludeParentSeriesGenres == true || expr.IncludeParentAlbumGenres == true || expr.OnlyParentGenres == true));
+            return (expr.MemberName == "Tags" && (expr.IncludeParentTagsEffective || expr.OnlyParentTags == true)) ||
+                   (expr.MemberName == "Studios" && (expr.IncludeParentStudiosEffective || expr.OnlyParentStudios == true)) ||
+                   (expr.MemberName == "Genres" && (expr.IncludeParentGenresEffective || expr.OnlyParentGenres == true));
         }
 
         public SmartList(SmartPlaylistDto dto)
@@ -474,21 +474,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.UserId ?? "");
                         hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentSeriesTags?.ToString() ?? "null");
-                        hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentAlbumTags?.ToString() ?? "null");
+                        hashBuilder.Append(expr.IncludeParentTagsEffective);
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.OnlyParentTags?.ToString() ?? "null");
                         hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentSeriesStudios?.ToString() ?? "null");
-                        hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentAlbumStudios?.ToString() ?? "null");
+                        hashBuilder.Append(expr.IncludeParentStudiosEffective);
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.OnlyParentStudios?.ToString() ?? "null");
                         hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentSeriesGenres?.ToString() ?? "null");
-                        hashBuilder.Append(':');
-                        hashBuilder.Append(expr.IncludeParentAlbumGenres?.ToString() ?? "null");
+                        hashBuilder.Append(expr.IncludeParentGenresEffective);
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.OnlyParentGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
@@ -3693,12 +3687,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public bool NeedsPlaylists => RequiredGroups.HasFlag(ExtractionGroup.Playlists);
         public bool NeedsNextUnwatched => RequiredGroups.HasFlag(ExtractionGroup.NextUnwatched);
         public bool NeedsSeriesName => RequiredGroups.HasFlag(ExtractionGroup.SeriesName);
-        public bool NeedsParentSeriesTags => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesTags);
-        public bool NeedsParentAlbumTags => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumTags);
-        public bool NeedsParentSeriesStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesStudios);
-        public bool NeedsParentAlbumStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumStudios);
-        public bool NeedsParentSeriesGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentSeriesGenres);
-        public bool NeedsParentAlbumGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentAlbumGenres);
+        public bool NeedsParentTags => RequiredGroups.HasFlag(ExtractionGroup.ParentTags);
+        public bool NeedsParentStudios => RequiredGroups.HasFlag(ExtractionGroup.ParentStudios);
+        public bool NeedsParentGenres => RequiredGroups.HasFlag(ExtractionGroup.ParentGenres);
         public bool NeedsSimilarTo => RequiredGroups.HasFlag(ExtractionGroup.SimilarTo);
         public bool NeedsLastEpisodeAirDate => RequiredGroups.HasFlag(ExtractionGroup.LastEpisodeAirDate);
         public bool NeedsExternalLists => RequiredGroups.HasFlag(ExtractionGroup.ExternalLists);
@@ -3758,15 +3749,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var group = FieldRegistry.GetExtractionGroup(expr.MemberName);
                 requirements.RequiredGroups |= group;
 
-                // Handle special cases for parent series/album fields (conditional on expression flags).
-                // Only add each parent group when its corresponding IncludeParent* flag is explicitly true.
-                // OnlyParent* alone does NOT trigger extraction of both groups — use IncludeParent* to decide which.
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentSeriesTags,    ExtractionGroup.ParentSeriesTags);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentAlbumTags,     ExtractionGroup.ParentAlbumTags);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentSeriesStudios, ExtractionGroup.ParentSeriesStudios);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentAlbumStudios,  ExtractionGroup.ParentAlbumStudios);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentSeriesGenres,  ExtractionGroup.ParentSeriesGenres);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentAlbumGenres,   ExtractionGroup.ParentAlbumGenres);
+                // Handle special cases for ancestor-inherited fields (conditional on expression flags).
+                // Only add each parent group when the folded IncludeParent*Effective flag is true.
+                // OnlyParent* alone does NOT trigger extraction: with no source it compiles to
+                // constant-false (Engine), so requesting the walk would be wasted work.
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentTagsEffective,    ExtractionGroup.ParentTags);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentStudiosEffective, ExtractionGroup.ParentStudios);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentGenresEffective,  ExtractionGroup.ParentGenres);
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")

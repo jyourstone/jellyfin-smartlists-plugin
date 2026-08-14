@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
+using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
 using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
@@ -294,6 +295,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 }
                 _logger.LogError(ex, "Error processing {OperationType} operation for list {ListId} ({ListName})",
                     item.OperationType, item.ListId, item.ListName);
+            }
+            finally
+            {
+                // Bound ancestor-memo staleness to a single list refresh. RefreshCache itself is
+                // per-user and survives until the whole queue drains, but each AncestorValuesById
+                // entry embeds every value above it, so a season/library retag would otherwise
+                // stay invisible across an entire batch. Rebuilding costs one walk per container.
+                foreach (var cache in _refreshCaches.Values)
+                {
+                    cache.AncestorValuesById.Clear();
+                }
             }
         }
 
@@ -735,12 +747,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, HashSet<Guid>> PlaylistMembershipCache { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesNameById { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesSortNameById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> SeriesTagsById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> SeriesStudiosById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> SeriesGenresById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> AlbumGenresById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> AlbumTagsById { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> AlbumStudiosById { get; } = new();
+
+            /// <summary>
+            /// Ancestor-inherited Tags/Studios/Genres, keyed by the ANCESTOR NODE id (season id,
+            /// album id, folder id) — never the item id — so every episode of a season is a single
+            /// lookup and the walk itself runs once per container. Each entry is the COMPLETE union
+            /// for that node and everything above it INCLUDING the library CollectionFolder, so a
+            /// memo hit needs no further work. Cleared per queue item (see ProcessQueueItemAsync)
+            /// rather than per queue drain: entries embed everything above them, so a stale entry
+            /// after a retag would otherwise affect a whole subtree until the queue emptied.
+            /// </summary>
+            public ConcurrentDictionary<Guid, AncestorValues> AncestorValuesById { get; } = new();
+
             public ConcurrentDictionary<Guid, CategorizedPeople> ItemPeople { get; } = new();
             
             // User-specific data cache - keyed by (ItemId, UserId) to support playlist user + additional users in rules

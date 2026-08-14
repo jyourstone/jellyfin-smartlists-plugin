@@ -28,11 +28,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludePlaylistOnly { get; set; } = null;
 
-        // Tags-specific option - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesTags { get; set; } = null;
 
-        // Tags-specific option for audio tracks - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentAlbumTags { get; set; } = null;
 
@@ -40,11 +42,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyParentTags { get; set; } = null;
 
-        // Studios-specific option - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesStudios { get; set; } = null;
 
-        // Studios-specific option for audio tracks - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentAlbumStudios { get; set; } = null;
 
@@ -52,17 +56,43 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyParentStudios { get; set; } = null;
 
-        // Genres-specific option - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentSeriesGenres { get; set; } = null;
 
-        // Genres-specific option for audio tracks - only serialize when meaningful
+        // Legacy - read via IncludeParent*Effective, no longer written by the UI.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentAlbumGenres { get; set; } = null;
 
         // Genres-specific option to only check parent genres (skip item's own genres) - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyParentGenres { get; set; } = null;
+
+        // Tags-specific option: also match values inherited from ancestors (season, series, album, folder, library) - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentTags { get; set; } = null;
+
+        // Studios-specific option: also match values inherited from ancestors - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentStudios { get; set; } = null;
+
+        // Genres-specific option: also match values inherited from ancestors - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? IncludeParentGenres { get; set; } = null;
+
+        // Legacy parent flags fold into these. This is the ONLY place new + legacy are combined —
+        // Engine, IsParentAwareListExpression, GenerateRuleSetHash and FieldRequirements.Analyze
+        // all read these, never the raw flags.
+        [JsonIgnore]
+        public bool IncludeParentTagsEffective => IncludeParentTags == true || IncludeParentSeriesTags == true || IncludeParentAlbumTags == true;
+
+        [JsonIgnore]
+        public bool IncludeParentStudiosEffective => IncludeParentStudios == true || IncludeParentSeriesStudios == true || IncludeParentAlbumStudios == true;
+
+        [JsonIgnore]
+        public bool IncludeParentGenresEffective => IncludeParentGenres == true || IncludeParentSeriesGenres == true || IncludeParentAlbumGenres == true;
 
         // AudioLanguages-specific option - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
