@@ -1,29 +1,29 @@
 ---
 name: release
-description: Create and push a release tag for the SmartLists plugin with a changelog in the annotated tag message. Project-specific version scheme — RC number lives in the Revision segment with a bare -rc suffix (e.g. v12.0.0.3-rc); stable releases bump the Build segment (e.g. v10.11.31.0). Use when the user wants to tag a release or create an RC.
+description: Create and push a release tag for the SmartLists plugin with a changelog in the annotated tag message. Project-specific version scheme — RC number lives in the Revision segment with a bare -rc suffix (e.g. v12.0.0.3-rc); stable releases bump the Build segment and reset Revision to 0 (e.g. v12.0.1.0). Use when the user wants to tag a release or create an RC.
 argument-hint: stable|rc
 allowed-tools: Bash
 ---
 
 # Release Skill
 
-Create a new git version tag with a changelog generated from commits and PR titles since the last relevant tag, then push it to the remote. This plugin uses .NET's four-part `Major.Minor.Build.Revision` version scheme, not SemVer, and currently ships two parallel release lines while Jellyfin 12 is in RC — this skill handles both.
+Create a new git version tag with a changelog generated from commits and PR titles since the last relevant tag, then push it to the remote. This plugin uses .NET's four-part `Major.Minor.Build.Revision` version scheme, not SemVer, and ships a single `12.x` release line: RCs are tagged on `main`, stables on `12-release`.
 
 ## Steps
 
 ### 1. Validate input
 
-`$ARGUMENTS` must be `stable` or `rc`. `patch` and `minor` are accepted as synonyms for `stable` — the four-part scheme doesn't distinguish bump sizes, since the plugin version tracks the Jellyfin version line, not the size of the change.
+`$ARGUMENTS` must be `stable` or `rc`. `patch` and `minor` are accepted as synonyms for `stable` — the four-part scheme doesn't distinguish bump sizes, so every stable is a Build bump regardless of how large the change is.
 
-If `$ARGUMENTS` is `major`, stop and explain: the Major/Minor segments of the version track the target Jellyfin version line, and only change when that target changes. That's a manual decision made when a new Jellyfin release lands, not something this skill infers from a bump type.
+If `$ARGUMENTS` is `major`, stop and explain: the Major/Minor segments are pinned to the `12.x` line and only move as a deliberate manual decision, not something this skill infers from a bump type.
 
 **If `$ARGUMENTS` is empty**, present this prompt and wait for the user's answer before proceeding:
 
 ```
 What type of release do you want to create?
 
-  stable — Final release for the current Jellyfin 10.11 line (tagged on 10.11-release, e.g. v10.11.31.0)
-  rc     — Release candidate for the upcoming Jellyfin 12 line (tagged on main, e.g. v12.0.0.3-rc)
+  stable — Stable release (tagged on main, e.g. v12.0.1.0)
+  rc     — Release candidate (tagged on main, e.g. v12.0.0.3-rc)
 ```
 
 Use the user's answer as `$ARGUMENTS` and continue. If `$ARGUMENTS` is present but doesn't match `stable`, `patch`, `minor`, or `rc`, stop and tell the user: "Usage: /release stable|rc".
@@ -36,9 +36,12 @@ First check the current branch:
 git branch --show-current
 ```
 
-The correct branch depends on release type:
+There is a single `12.x` release line (see "Release Line" in `CLAUDE.md`). The correct branch depends on release type:
+
 - `rc` → must be on `main`.
-- `stable` → must be on `10.11-release` (the current stable line while Jellyfin 12 is in RC).
+- `stable` → must be on `12-release`, which tracks the last stable and is fast-forwarded to `main` at release time.
+
+The old `10.11-release` branch is retired; never tag from it.
 
 If on the wrong branch, warn and ask for confirmation before continuing:
 
@@ -49,13 +52,21 @@ Continue anyway? (yes / no)
 
 Run `git pull` to bring the local branch up to date, then `git fetch --tags --prune-tags --force` so the local tag list matches the remote (a plain `git pull` doesn't reliably sync new or deleted tags, and a stale tag list would corrupt the version calculation). If the pull fails, stop and show the error — do not proceed with a stale or diverged branch.
 
-For `stable` releases specifically, also verify `main` has been merged in:
+**For `stable` releases**, fast-forward `12-release` up to `main` before tagging:
+
+```bash
+git merge --ff-only origin/main
+```
+
+`--ff-only` is deliberate — `12-release` must never carry commits of its own. If this fails, the branch has diverged: stop, show the error, and do not attempt a merge commit. Report it to the user, since recovering means resetting `12-release` back onto a `main` commit.
+
+Then confirm there is nothing left behind:
 
 ```bash
 git log HEAD..origin/main --oneline
 ```
 
-If this returns any commits, warn the user that `main` has unmerged work and point them at the promotion flow documented in `CLAUDE.md`: merge `main` into `10.11-release`, merge back so the trees converge, then smoke test with `JELLYFIN_ABI=10.11.0 ./build-local.sh`. Ask whether to continue anyway despite the gap.
+This must be empty. If it is not, the fast-forward did not take — stop rather than tagging a partial release.
 
 Then check for uncommitted changes:
 
@@ -89,8 +100,9 @@ Determine the changelog base tag depending on release type:
 # rc: highest v12.* tag of any kind (stable or RC)
 git tag --list 'v12.*' --sort=-v:refname | head -1
 
-# stable: highest v10.11.* tag of any kind (hotfix revisions included)
-git tag --list 'v10.11.*' --sort=-v:refname | head -1
+# stable: highest stable v12.*.0 tag — exclude RCs, since the changelog for a
+# stable covers everything since the previous STABLE, not since the last RC
+git tag --list 'v12.*.0' --sort=-v:refname | grep -v -- '-rc$' | head -1
 ```
 
 Then collect commits and PR titles since that base:
@@ -130,11 +142,10 @@ The version scheme is .NET's four-part `Major.Minor.Build.Revision`. Ordering is
 - If the base is a stable v12 tag (a future state, once Jellyfin 12 has shipped and this line has stable releases), start a new RC cycle: bump Build, set Revision to 1: `v12.0.1.0` → `v12.0.2.1-rc`.
 - If there is no `v12.*` tag yet, ask the user for the starting Major.Minor before proceeding — this skill has no basis to guess it.
 
-**`stable`**: base = highest stable `v10.11.*.0` tag.
-- Bump Build, Revision stays 0: `v10.11.30.0` → `v10.11.31.0`.
-- Never put a hotfix counter in Revision — Revision is reserved exclusively for RC numbers on the v12 line.
-
-**Future note**: when Jellyfin 12 final ships, the first `v12.0.X.0` stable release is cut from `main`, it sorts above both existing lines, all users converge onto it, and the split-line scheme described here ends. Update this skill at that point.
+**`stable`**: base = highest stable `v12.*.0` tag (RCs excluded — see step 3).
+- Bump Build, Revision resets to 0. From the highest `v12.*` tag *of any kind*: `v12.0.0.3-rc` → `v12.0.1.0`; `v12.0.1.0` → `v12.0.2.0`.
+- Never put a hotfix counter in Revision — Revision is reserved exclusively for RC numbers.
+- If no stable `v12.*.0` tag exists yet, the first stable closes out the current RC cycle: take the highest `v12.*-rc` tag, bump Build, set Revision to 0.
 
 ### 5. Generate changelog
 

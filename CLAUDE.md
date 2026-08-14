@@ -125,17 +125,37 @@ The `-rc` suffix on the git tag is only a workflow marker — it routes the buil
 
 Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-update through RCs and into the final stable release. Because Revision is reserved for RC numbers, stable releases always bump the **Build** component (never use Revision for stable).
 
-### Release Lines (current, while Jellyfin 12 is in RC)
+### Release Line — single `12.x` line (decided 2026-08-14)
 
-Every tag builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 and 12.0.0/net10.0) and writes both `targetAbi` entries to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
+**All version numbers are `v12.x.y.z`.** The old split scheme (RCs on `main`, `v10.11.X.0` stables on `10.11-release`) is **retired** — no further stable releases will be cut on the `10.11-release` branch. It is kept only as history; never tag from it.
 
-- **RCs** are tagged on `main` and MUST use `v12.x.y.z-rc` numbering. The unstable manifest already carries ABI-10.11 entries at version `12.x` from past RCs, so a lower-numbered RC tag (e.g. `v10.11.x.y-rc`) would sort below them and never be offered to existing RC users.
-- **Stable releases** (until Jellyfin 12 final) are tagged on `10.11-release` as `v10.11.X.0`, keeping the plugin-version-follows-Jellyfin convention prod users expect. Promotion flow:
-  1. Merge `main` into `10.11-release` (never fast-forward assumptions — the branch carries its own commits), and merge back so the trees converge.
-  2. Smoke test against a real 10.11 container: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
-  3. Tag `v10.11.X.0` on `10.11-release`.
-- Known cosmetic trade-off: RC users don't auto-roll into a `10.11.X.0` stable (it sorts below `12.x` RC versions); they stay on the byte-identical RC build until the next RC.
-- **When Jellyfin 12 final ships**: cut the first `v12.0.X.0` stable from `main` — it sorts above both lines, all users converge, and the split-line scheme ends.
+Every tag still builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 and 12.0.0/net10.0) and writes both `targetAbi` entries to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
+
+**Jellyfin 10.11 users keep receiving updates.** Support is unchanged — the plugin still multi-targets `net9.0` and every release still publishes an ABI-10.11 entry. Only the *version number* they see changed: updates now arrive as `12.x.y.z` instead of `10.11.x.0`. The plugin version no longer tracks the Jellyfin version line.
+
+#### Branches
+
+| Branch | Role |
+|---|---|
+| `main` | Trunk. All development lands here. **RCs are tagged here.** |
+| `12-release` | Tracks the **last stable release**. Fast-forwarded to `main` at each stable. **Stables are tagged here.** The mkdocs Cloudflare Worker publishes from this branch, so the docs site shows released state rather than unreleased trunk. |
+| `10.11-release` | Historical only. Do not tag, do not merge into. |
+
+#### Cutting a release
+
+- **RC** — on `main`: tag `v12.x.y.z-rc` → unstable manifest, GitHub prerelease. Revision *is* the RC number.
+- **Stable** — fast-forward `12-release` up to `main`, then tag there:
+
+  ```bash
+  git checkout 12-release && git merge --ff-only main
+  git tag -a v12.0.X.0 -m "..."   # Build bumps; Revision stays 0
+  ```
+
+  `--ff-only` is deliberate: `12-release` must never carry commits of its own, or it stops being a pointer at a `main` commit and the next fast-forward fails. This is the key difference from `10.11-release`, which did carry its own commits and needed merging both ways.
+
+Bump the **Build** segment for stables; Revision is reserved exclusively for RC numbers. Ordering holds across the whole line, so RC users now roll straight into stables — the old trade-off where a `10.11.X.0` stable sorted *below* the `12.x` RCs and was never offered to RC users is gone with the split.
+
+Smoke testing the 10.11 ABI before a stable is still worthwhile since it is still shipped: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
 
 ## When Making Changes
 
