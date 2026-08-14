@@ -93,6 +93,36 @@ public class NaturalStringComparerTests
         Assert.True(Comparer.Compare("Alpha", "2 Fast") > 0);
     }
 
+    /// <summary>
+    /// Numbers-before-letters holds in every script, not just ASCII. ASCII gets it for free ('2'
+    /// is ordinally below 'A'), but a non-ASCII digit sits far above the Latin letters in
+    /// code-unit order, so without an explicit rule "٢ Fast" sorted after "Alpha" while "2 Fast"
+    /// sorted before it — digits the comparer otherwise treats as numbers behaving like letters.
+    /// Raised on #494.
+    /// </summary>
+    [Theory]
+    [InlineData("2 Fast")]
+    [InlineData("٢ Fast")]
+    [InlineData("२ Fast")]
+    public void NumberedItems_SortBeforeLetters_InEveryScript(string numbered)
+    {
+        Assert.True(Comparer.Compare(numbered, "Alpha") < 0);
+        Assert.True(Comparer.Compare("Alpha", numbered) > 0);
+        Assert.Equal([numbered, "Alpha"], Sorted("Alpha", numbered));
+    }
+
+    /// <summary>
+    /// The rule above is digit-vs-LETTER on purpose. A blanket "digits before everything" rule
+    /// would also lift digits above punctuation and silently reorder existing ASCII titles, so
+    /// punctuation keeps its ordinal position ahead of digits.
+    /// </summary>
+    [Fact]
+    public void PunctuationKeepsItsOrdinalPosition_AheadOfDigits()
+    {
+        Assert.True(Comparer.Compare("!Bang", "2 Fast") < 0);
+        Assert.Equal(["!Bang", "2 Fast", "Alpha"], Sorted("Alpha", "2 Fast", "!Bang"));
+    }
+
     /// <summary>A prefix sorts before the longer string that extends it.</summary>
     [Fact]
     public void ShorterStringSortsFirst_WhenItIsAPrefix()

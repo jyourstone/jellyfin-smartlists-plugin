@@ -3930,6 +3930,22 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         continue;
                     }
 
+                    // Numbers sort ahead of letters in EVERY script. ASCII gets this for free
+                    // ('2' is ordinally below 'A'), but a non-ASCII digit sits far above the Latin
+                    // letters in code-unit order, so "٢ Fast" would sort after "Alpha" while
+                    // "2 Fast" sorts before it - digits we otherwise treat as numbers behaving
+                    // like letters. Deliberately digit-vs-LETTER only: a blanket digits-first rule
+                    // would also lift digits above punctuation and reorder existing ASCII titles.
+                    if (char.IsDigit(x[i]) && char.IsLetter(y[j]))
+                    {
+                        return -1;
+                    }
+
+                    if (char.IsLetter(x[i]) && char.IsDigit(y[j]))
+                    {
+                        return 1;
+                    }
+
                     var cx = _ignoreCase ? char.ToUpperInvariant(x[i]) : x[i];
                     var cy = _ignoreCase ? char.ToUpperInvariant(y[j]) : y[j];
                     if (cx != cy)
