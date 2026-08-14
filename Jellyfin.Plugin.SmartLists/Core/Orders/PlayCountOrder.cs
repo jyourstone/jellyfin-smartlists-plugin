@@ -86,8 +86,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Returns the cached child array for aggregate items (Season → episodes, MusicAlbum → tracks),
-        /// or null if the item is not an aggregate type or the cache has no entry for it.
+        /// Returns the cached child array for aggregate items (Series → episodes, Season → episodes,
+        /// MusicAlbum → tracks), or null if the item is not an aggregate type or the cache has no
+        /// entry for it.
+        ///
+        /// All three container types aggregate, matching
+        /// <see cref="LastPlayedOrderBase.GetAggregateLastPlayedDate"/>. Series was previously
+        /// missing, so a fully watched series reported a play count of 0 while its seasons
+        /// reported the real figure.
         /// </summary>
         private static BaseItem[]? TryGetAggregateChildren(
             BaseItem item,
@@ -95,6 +101,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             RefreshQueueService.RefreshCache refreshCache)
         {
             var key = (item.Id, user.Id);
+            if (item is Series && refreshCache.SeriesEpisodes.TryGetValue(key, out var seriesEpisodes) && seriesEpisodes.Length > 0)
+            {
+                return seriesEpisodes;
+            }
             if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
             {
                 return episodes;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
@@ -3878,26 +3879,38 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 while (i < x.Length && j < y.Length)
                 {
+                    // char.IsDigit covers every Unicode decimal digit, not just ASCII - Arabic-Indic
+                    // "٢", Devanagari "२" and so on. Everything below therefore works on each
+                    // digit's NUMERIC VALUE rather than its code unit, so a run of any script
+                    // compares as the number it represents. Comparing code units here would order
+                    // "٢" (2) after "10" and would not recognise "٠" as a leading zero.
                     if (char.IsDigit(x[i]) && char.IsDigit(y[j]))
                     {
                         int xStart = i, yStart = j;
                         while (i < x.Length && char.IsDigit(x[i])) i++;
                         while (j < y.Length && char.IsDigit(y[j])) j++;
 
-                        var xDigits = x.AsSpan(xStart, i - xStart).TrimStart('0');
-                        var yDigits = y.AsSpan(yStart, j - yStart).TrimStart('0');
+                        // Skip leading zeros by value, keeping at least one digit so "0" and "000"
+                        // both reduce to a single zero.
+                        int xFirst = xStart, yFirst = yStart;
+                        while (xFirst < i - 1 && CharUnicodeInfo.GetDecimalDigitValue(x[xFirst]) == 0) xFirst++;
+                        while (yFirst < j - 1 && CharUnicodeInfo.GetDecimalDigitValue(y[yFirst]) == 0) yFirst++;
 
-                        // Fewer significant digits means a smaller number; same count compares
-                        // digit-by-digit, which for equal-length runs is the numeric order.
-                        if (xDigits.Length != yDigits.Length)
+                        // Fewer significant digits means a smaller number.
+                        int xLength = i - xFirst, yLength = j - yFirst;
+                        if (xLength != yLength)
                         {
-                            return xDigits.Length < yDigits.Length ? -1 : 1;
+                            return xLength < yLength ? -1 : 1;
                         }
 
-                        var digitComparison = xDigits.SequenceCompareTo(yDigits);
-                        if (digitComparison != 0)
+                        for (int k = 0; k < xLength; k++)
                         {
-                            return digitComparison < 0 ? -1 : 1;
+                            var xDigit = CharUnicodeInfo.GetDecimalDigitValue(x[xFirst + k]);
+                            var yDigit = CharUnicodeInfo.GetDecimalDigitValue(y[yFirst + k]);
+                            if (xDigit != yDigit)
+                            {
+                                return xDigit < yDigit ? -1 : 1;
+                            }
                         }
 
                         if (paddingTieBreak == 0 && (i - xStart) != (j - yStart))

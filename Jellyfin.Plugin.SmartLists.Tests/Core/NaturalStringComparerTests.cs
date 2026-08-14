@@ -144,6 +144,78 @@ public class NaturalStringComparerTests
         Assert.Equal([big, bigger], Sorted(bigger, big));
     }
 
+    // -------------------------------------------------------- non-ASCII numerals
+
+    /// <summary>
+    /// Digits are compared by NUMERIC VALUE, not by code unit, so non-ASCII decimal digits sort
+    /// as the numbers they are. `char.IsDigit` accepts every Unicode decimal digit — Arabic-Indic
+    /// ٠-٩, Devanagari ०-९ and the rest — so comparing code units here would order "٢" (2) after
+    /// "10" and would not recognise "٠" as a leading zero. Flagged independently by two reviewers
+    /// on #494.
+    /// </summary>
+    [Fact]
+    public void NonAsciiDigits_CompareByNumericValue_NotByCodeUnit()
+    {
+        const string ar2 = "٢", ar10 = "١٠", ar02 = "٠٢";
+
+        // 2 < 10 in Arabic-Indic digits, exactly as in ASCII.
+        Assert.True(Comparer.Compare("Track " + ar2, "Track " + ar10) < 0);
+
+        // U+0660 is a zero, so "٠٢" is the number 2 and sorts before 10 - the case CodeRabbit named.
+        Assert.True(Comparer.Compare("Track " + ar02, "Track 10") < 0);
+
+        Assert.Equal(
+            ["Track " + ar2, "Track " + ar10],
+            Sorted("Track " + ar10, "Track " + ar2));
+    }
+
+    /// <summary>
+    /// Leading zeros are stripped by digit VALUE, so a non-ASCII zero counts as padding just like
+    /// '0'. The lengths here are what makes this detectable: "٠٠٥" is 3 characters but the number
+    /// 5, and "١٢" is 2 characters and the number 12. Strip by value and 5 sorts below 12; strip
+    /// by literal '0' and the run stays 3 long, so the more-digits-means-bigger shortcut declares
+    /// 5 the larger number.
+    ///
+    /// A shorter example does not catch it — "٠٢" vs "10" compares equal-length either way and
+    /// the per-digit comparison rescues the result, which is exactly how the first version of this
+    /// test passed against a broken implementation.
+    /// </summary>
+    [Fact]
+    public void NonAsciiLeadingZeros_AreStrippedByValue_SoRunLengthReflectsTheNumber()
+    {
+        Assert.True(Comparer.Compare("٠٠٥", "١٢") < 0);   // 5 < 12
+        Assert.True(Comparer.Compare("١٢", "٠٠٥") > 0);
+    }
+
+    /// <summary>Devanagari, to prove the rule is per-Unicode-digit and not an Arabic special case.</summary>
+    [Fact]
+    public void DevanagariDigits_AlsoCompareNumerically()
+    {
+        Assert.True(Comparer.Compare("भाग २", "भाग १०") < 0); // Part 2 before Part 10
+    }
+
+    /// <summary>
+    /// Cross-script: a digit's value is what counts, so Arabic-Indic 1 sorts below ASCII 2 even
+    /// though its code point (U+0661) is far above '2' (U+0032).
+    /// </summary>
+    [Fact]
+    public void DigitsFromDifferentScripts_CompareByValue()
+    {
+        Assert.True(Comparer.Compare("١", "2") < 0);
+    }
+
+    /// <summary>
+    /// The ASCII-only rule must not weaken ASCII handling in a string that also carries non-ASCII
+    /// characters — a title is not disqualified from natural sorting by containing non-Latin text.
+    /// </summary>
+    [Fact]
+    public void AsciiDigits_StillSortNumerically_InStringsContainingNonAsciiText()
+    {
+        Assert.Equal(
+            ["مسلسل 2", "مسلسل 10"],
+            Sorted("مسلسل 10", "مسلسل 2"));
+    }
+
     // ------------------------------------------------------------ case and nulls
 
     [Fact]

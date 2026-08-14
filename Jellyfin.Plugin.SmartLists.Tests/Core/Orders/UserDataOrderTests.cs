@@ -26,10 +26,10 @@ namespace Jellyfin.Plugin.SmartLists.Tests.Core.Orders;
 ///    (SmartList.ApplyMultipleOrders returns Order.OrderBy directly for exactly one order);
 ///    GetSortKey drives multi-sort via SmartList.ApplySortingCore. A disagreement means the same
 ///    list sorts differently depending on how many sorts the user configured - SeasonNumberOrder
-///    shipped exactly that defect. NOTE: for PlayCountOrder this file deliberately avoids ties in
-///    the agreement assertions - see the "OrderBy applies a DateCreated tie-break GetSortKey does
-///    not" note in the accompanying report, which documents a real (unfixed) divergence on tied
-///    PlayCount values rather than writing a test that would hide it.
+///    shipped exactly that defect. PlayCountOrder had it too, on TIED play counts only: OrderBy
+///    applied a DateCreated tie-break that GetSortKey did not. It is fixed - GetSortKey now
+///    embeds DateCreated as a composite key - and pinned by
+///    PlayCount_OrderByAndGetSortKey_AgreeOnTies_ViaTheDateCreatedTiebreaker.
 ///
 /// 2. DIRECTION IS NOT BAKED INTO THE KEY. The Asc and Desc subclasses must return the SAME key for
 ///    the same item; direction comes from the caller choosing OrderByDescending. A negated key
@@ -412,15 +412,15 @@ public class UserDataOrderTests
     }
 
     /// <summary>
-    /// FINDING (see report): unlike LastPlayedOrderBase.GetAggregateLastPlayedDate, which aggregates
-    /// Series too, PlayCountOrder.TryGetAggregateChildren (PlayCountOrder.cs:92-107) only matches
-    /// Season and MusicAlbum. A Series container is silently NOT aggregated - it falls through to
-    /// reading its own (nonexistent) user-data row and returns 0, even with fully-watched cached
-    /// episodes sitting right there. This test pins the CURRENT behavior (not the desired one) so a
-    /// future fix is a deliberate, visible change rather than an accidental one.
+    /// A Series aggregates over its cached episodes, the same as Season and MusicAlbum, and the
+    /// same set LastPlayedOrderBase.GetAggregateLastPlayedDate already covered.
+    ///
+    /// This previously asserted the opposite: Series was missing from
+    /// TryGetAggregateChildren, so a fully watched series fell through to its own (nonexistent)
+    /// user-data row and reported 0 while its seasons reported the real figure.
     /// </summary>
     [Fact]
-    public void PlayCount_SeriesContainer_DoesNotAggregate_UnlikeLastPlayedOrderBase()
+    public void PlayCount_SeriesContainer_AggregatesOverCachedEpisodes_LikeSeasonAndAlbum()
     {
         var cache = new RefreshQueueService.RefreshCache();
         var series = TestItems.Show("Aggregate Series");
@@ -431,7 +431,48 @@ public class UserDataOrderTests
 
         var result = PlayCountOrder.GetPlayCountFromUserData(series, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
 
-        Assert.Equal(0, result); // NOT 7 - the cached child is never consulted for a Series container.
+        Assert.Equal(7, result);
+    }
+
+    /// <summary>
+    /// Aggregation takes the MINIMUM across children, so a series counts as watched only as many
+    /// times as its least-watched episode - one unwatched episode keeps the whole series at 0,
+    /// which is the same rule Season and MusicAlbum already used.
+    /// </summary>
+    [Fact]
+    public void PlayCount_SeriesContainer_TakesTheMinimumAcrossEpisodes_NotTheMaxOrSum()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var series = TestItems.Show("Partly Watched Series");
+        var watched = TestItems.Ep("Partly Watched Series", 1, 1);
+        var unwatched = TestItems.Ep("Partly Watched Series", 1, 2);
+        SeedPlayCount(cache, watched, TestItems.User, 4);
+        SeedPlayCount(cache, unwatched, TestItems.User, 0);
+        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [watched, unwatched];
+        TestItems.SeedNoUserData(cache, series, TestItems.User);
+
+        var result = PlayCountOrder.GetPlayCountFromUserData(series, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
+
+        Assert.Equal(0, result);
+    }
+
+    /// <summary>Aggregation is per-user: the cache key carries the user id, so two users with
+    /// different watch histories over the same series get different counts.</summary>
+    [Fact]
+    public void PlayCount_SeriesAggregation_IsPerUser()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var series = TestItems.Show("Shared Series");
+        var child = TestItems.Ep("Shared Series", 1, 1);
+        SeedPlayCount(cache, child, TestItems.User, 5);
+        SeedPlayCount(cache, child, TestItems.OtherUser, 1);
+        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [child];
+        cache.SeriesEpisodes[(series.Id, TestItems.OtherUser.Id)] = [child];
+        TestItems.SeedNoUserData(cache, series, TestItems.User);
+        TestItems.SeedNoUserData(cache, series, TestItems.OtherUser);
+
+        Assert.Equal(5, PlayCountOrder.GetPlayCountFromUserData(series, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache));
+        Assert.Equal(1, PlayCountOrder.GetPlayCountFromUserData(series, TestItems.OtherUser, TestItems.ThrowingUserData(), logger: null, cache));
     }
 
     [Fact]
