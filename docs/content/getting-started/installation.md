@@ -53,3 +53,11 @@ https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/unstable/m
 
 !!! warning "RC Releases"
     RC releases are pre-release versions that may contain bugs or incomplete features. Use at your own risk and consider backing up your smart list configurations before upgrading.
+
+!!! info "Documentation for RC releases"
+    The documentation is published twice, because RC builds often include features and options that do not exist in stable yet:
+
+    - **Stable** — [jellyfin-smartlists-plugin.dinsten.se](https://jellyfin-smartlists-plugin.dinsten.se/)
+    - **RC / unstable** — [jellyfin-smartlists-plugin-preview.dinsten.se](https://jellyfin-smartlists-plugin-preview.dinsten.se/)
+
+    If you installed from the unstable manifest above, use the RC site — otherwise the pages may describe options your build does not have, or omit ones it does.
