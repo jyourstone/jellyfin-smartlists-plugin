@@ -12,7 +12,9 @@
 
 Official documentation for the Jellyfin SmartLists plugin.
 
-SmartLists creates rule-based playlists and collections that refresh automatically as your Jellyfin library changes. The plugin is maintained in the open on GitHub and the documentation in this site tracks the current released behavior of the project.
+SmartLists creates rule-based playlists and collections that refresh automatically as your Jellyfin library changes. The plugin is maintained in the open on GitHub.
+
+The documentation is published twice — a [stable site](https://jellyfin-smartlists-plugin.dinsten.se/) tracking the current release, and a [preview site](https://jellyfin-smartlists-plugin-preview.dinsten.se/) tracking release candidates. If you installed from the [unstable manifest](getting-started/installation.md#try-rc-releases-unstable), use the preview site.
 
 **Requires Jellyfin version `10.11.0` and newer.**
 
@@ -22,7 +24,8 @@ SmartLists creates rule-based playlists and collections that refresh automatical
 - **Releases**: [GitHub Releases](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases)
 - **Bug reports and feature requests**: [GitHub Issues](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues)
 - **Questions and community help**: [GitHub Discussions](https://github.com/jyourstone/jellyfin-smartlists-plugin/discussions)
-- **Plugin manifest**: [Stable manifest](https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/main/manifest.json)
+- **Plugin manifest**: [Stable](https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/main/manifest.json) · [Unstable (RC)](https://raw.githubusercontent.com/jyourstone/jellyfin-plugin-manifest/unstable/manifest.json)
+- **Documentation**: [Stable](https://jellyfin-smartlists-plugin.dinsten.se/) · [Preview (RC)](https://jellyfin-smartlists-plugin-preview.dinsten.se/)
 
 ## What SmartLists Does
 
