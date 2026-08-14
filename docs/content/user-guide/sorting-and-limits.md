@@ -16,6 +16,18 @@ Automatically selects the best sort order based on your rules. If your list uses
 ### Name
 Sort alphabetically by the item's title. Respects Jellyfin's **Sort Title** metadata field when set.
 
+!!! info "Numbers in titles sort numerically"
+    Alphabetical sorting is *natural*: numbers inside a title are compared as numbers, not as
+    text, so `Track 2` comes before `Track 10` rather than after it. Leading zeros are ignored,
+    so `Track 02` and `Track 2` sort together.
+
+    Most items were already ordered correctly, because Jellyfin's own **Sort Title** is generated
+    with numbers zero-padded. This matters for the cases that sort on the raw title instead:
+    **music tracks and episodes** sorted by Name (whose auto-generated Sort Titles force
+    track/chronological order, so Name sorting deliberately uses the title itself), and
+    **round robin group ordering**, where the group names — collections, genres, studios,
+    artists, series — are compared as-is.
+
 ### Name (Ignore 'The')
 Sort alphabetically by title, ignoring the leading article "The". Respects Jellyfin's **Sort Title** metadata field when set.
 
