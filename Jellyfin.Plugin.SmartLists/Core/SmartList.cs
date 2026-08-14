@@ -3879,11 +3879,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 while (i < x.Length && j < y.Length)
                 {
-                    // char.IsDigit covers every Unicode decimal digit, not just ASCII - Arabic-Indic
-                    // "٢", Devanagari "२" and so on. Everything below therefore works on each
-                    // digit's NUMERIC VALUE rather than its code unit, so a run of any script
-                    // compares as the number it represents. Comparing code units here would order
-                    // "٢" (2) after "10" and would not recognise "٠" as a leading zero.
+                    // char.IsDigit covers every BMP Unicode decimal digit, not just ASCII -
+                    // Arabic-Indic "٢", Devanagari "२" and so on. Everything below therefore works
+                    // on each digit's NUMERIC VALUE rather than its code unit, so a run in any of
+                    // those scripts compares as the number it represents. Comparing code units
+                    // here would order "٢" (2) after "10" and would not recognise "٠" as a
+                    // leading zero.
+                    //
+                    // KNOWN LIMIT: decimal digits outside the BMP (surrogate pairs - mathematical
+                    // alphanumerics like "𝟐", Osage, Chakma) are NOT recognised, because char.IsDigit
+                    // sees only the high surrogate. Those compare as text, as they always have.
+                    // Making this scalar-aware means rebuilding the whole loop - including the
+                    // character comparison and case folding below - around Rune, on a comparer
+                    // that runs for every name sort, to serve titles no metadata provider emits.
+                    // Pinned by NaturalStringComparerTests.SupplementaryPlaneDigits_AreNotRecognised.
                     if (char.IsDigit(x[i]) && char.IsDigit(y[j]))
                     {
                         int xStart = i, yStart = j;

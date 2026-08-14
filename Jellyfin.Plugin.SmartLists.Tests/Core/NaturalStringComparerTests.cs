@@ -187,6 +187,31 @@ public class NaturalStringComparerTests
         Assert.True(Comparer.Compare("١٢", "٠٠٥") > 0);
     }
 
+    /// <summary>
+    /// KNOWN LIMIT, pinned deliberately. Decimal digits outside the BMP — mathematical
+    /// alphanumerics like 𝟐, Osage, Chakma — are encoded as surrogate pairs, and
+    /// <c>char.IsDigit</c> inspects only the high surrogate, so they never enter the numeric
+    /// branch and compare as text instead.
+    ///
+    /// Not fixed on purpose (raised on #494 by both reviewers): recognising them means rebuilding
+    /// the whole comparison loop — character comparison and case folding included — around
+    /// <c>Rune</c>, in a comparer that runs for every name sort, in exchange for titles no
+    /// metadata provider emits. This test exists so the limit is a recorded decision rather than
+    /// an unnoticed gap, and so it fails loudly if someone later makes the loop scalar-aware and
+    /// forgets this file.
+    /// </summary>
+    [Fact]
+    public void SupplementaryPlaneDigits_AreNotRecognised_AndCompareAsText()
+    {
+        var mathTwo = char.ConvertFromUtf32(0x1D7D0 + 2);   // MATHEMATICAL BOLD DIGIT TWO
+
+        // A BMP digit in the same position WOULD sort numerically...
+        Assert.True(Comparer.Compare("Track ٢", "Track 10") < 0);
+
+        // ...but the supplementary-plane one falls through to text ordering, so it lands after.
+        Assert.True(Comparer.Compare("Track " + mathTwo, "Track 10") > 0);
+    }
+
     /// <summary>Devanagari, to prove the rule is per-Unicode-digit and not an Arabic special case.</summary>
     [Fact]
     public void DevanagariDigits_AlsoCompareNumerically()
