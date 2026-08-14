@@ -147,8 +147,11 @@ Every tag still builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 a
 - **Stable** — fast-forward `12-release` up to `main`, then tag there:
 
   ```bash
-  git checkout 12-release && git merge --ff-only main
-  git tag -a v12.0.X.0 -m "..."   # Build bumps; Revision stays 0
+  git checkout 12-release
+  git fetch origin main
+  git merge --ff-only origin/main   # origin/main, not local main — a stale local ref ships old code
+  git push origin 12-release        # the docs Worker publishes from this branch
+  git tag -a v12.0.X.0 -m "..."     # Build bumps; Revision resets to 0
   ```
 
   `--ff-only` is deliberate: `12-release` must never carry commits of its own, or it stops being a pointer at a `main` commit and the next fast-forward fails. This is the key difference from `10.11-release`, which did carry its own commits and needed merging both ways.

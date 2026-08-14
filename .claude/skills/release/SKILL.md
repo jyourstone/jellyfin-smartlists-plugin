@@ -19,10 +19,10 @@ If `$ARGUMENTS` is `major`, stop and explain: the Major/Minor segments are pinne
 
 **If `$ARGUMENTS` is empty**, present this prompt and wait for the user's answer before proceeding:
 
-```
+```text
 What type of release do you want to create?
 
-  stable — Stable release (tagged on main, e.g. v12.0.1.0)
+  stable — Stable release (tagged on 12-release, e.g. v12.0.1.0)
   rc     — Release candidate (tagged on main, e.g. v12.0.0.3-rc)
 ```
 
@@ -41,11 +41,16 @@ There is a single `12.x` release line (see "Release Line" in `CLAUDE.md`). The c
 - `rc` → must be on `main`.
 - `stable` → must be on `12-release`, which tracks the last stable and is fast-forwarded to `main` at release time.
 
-The old `10.11-release` branch is retired; never tag from it.
+If the current branch is `10.11-release`, **hard stop** — no confirmation prompt. That line is retired and a tag on it would publish a manifest entry that sorts below the `12.x` line and reaches nobody:
 
-If on the wrong branch, warn and ask for confirmation before continuing:
-
+```text
+10.11-release is retired — releases are no longer cut from it.
+Switch to 'main' (rc) or '12-release' (stable) and re-run.
 ```
+
+For any other wrong branch, warn and ask for confirmation before continuing:
+
+```text
 You are on branch '<current>' but <rc/stable> releases are tagged from '<expected>'.
 Continue anyway? (yes / no)
 ```
@@ -80,12 +85,18 @@ git rev-parse --short HEAD origin/main
 - **Non-empty** → this is the set of changes the stable will ship. Carry it into the step-7 summary. Because `12-release` sits at the previous stable tag, this range is the same one the changelog is generated from in step 3 — compute it once, show it once, don't prompt twice.
 - **Empty** → `12-release` already equals `main`; there is nothing new to release. Warn and ask before continuing, since re-tagging an identical tree is almost always a mistake:
 
-  ```
+  ```text
   12-release is already up to date with main — this release would contain no new commits.
   Re-tag the same tree anyway? (yes / no)
   ```
 
-**Releasing a subset of `main`:** if the user wants to ship only part of what's on `main` (e.g. a feature merged but not yet smoke-tested should wait), fast-forward to a specific commit rather than main's tip — `git merge --ff-only <sha>` in step 8, with the delta and changelog computed against that `<sha>` instead of `origin/main` throughout. Ask for the target commit and confirm the reduced set.
+**Releasing a subset of `main`:** if the user wants to ship only part of what's on `main` (e.g. a feature merged but not yet smoke-tested should wait), fast-forward to a specific commit rather than main's tip. Ask for the target commit, then **validate it is actually on `origin/main`** before confirming or merging:
+
+```bash
+git merge-base --is-ancestor <sha> origin/main || echo "NOT_ON_MAIN"
+```
+
+`git merge --ff-only <sha>` alone only proves `<sha>` descends from `12-release` — it would happily publish a local commit that was never pushed to `main`. Reject anything that is not an ancestor of `origin/main`. Compute the delta and changelog against the validated `<sha>` throughout, and use it in place of `origin/main` in step 8.
 
 Then check for uncommitted changes:
 
@@ -95,7 +106,7 @@ git status --porcelain
 
 If there are uncommitted changes, show the user a summary and ask:
 
-```
+```text
 You have uncommitted changes:
   <list of changed files>
 
@@ -120,7 +131,9 @@ Determine the changelog base tag depending on release type:
 git tag --list 'v12.*' --sort=-v:refname | head -1
 
 # stable: highest stable v12.*.0 tag — exclude RCs, since the changelog for a
-# stable covers everything since the previous STABLE, not since the last RC
+# stable covers everything since the previous STABLE, not since the last RC.
+# NOTE: this is the CHANGELOG base only. The VERSION base in step 4 is the
+# highest v12.* tag of ANY kind (RCs included) — see the warning there.
 git tag --list 'v12.*.0' --sort=-v:refname | grep -v -- '-rc$' | head -1
 ```
 
@@ -161,10 +174,23 @@ The version scheme is .NET's four-part `Major.Minor.Build.Revision`. Ordering is
 - If the base is a stable v12 tag (a future state, once Jellyfin 12 has shipped and this line has stable releases), start a new RC cycle: bump Build, set Revision to 1: `v12.0.1.0` → `v12.0.2.1-rc`.
 - If there is no `v12.*` tag yet, ask the user for the starting Major.Minor before proceeding — this skill has no basis to guess it.
 
-**`stable`**: base = highest stable `v12.*.0` tag (RCs excluded — see step 3).
-- Bump Build, Revision resets to 0. From the highest `v12.*` tag *of any kind*: `v12.0.0.3-rc` → `v12.0.1.0`; `v12.0.1.0` → `v12.0.2.0`.
+**`stable`**: base = highest `v12.*` tag of **any** kind — RCs included.
+
+> **Two different bases, do not confuse them.** The *changelog* base (step 3) is the last **stable** tag, so the release notes span everything since the previous stable. The *version* base here is the highest tag of **any** kind, including RCs. Using the changelog base to compute the version produces a version that sorts **below** the RCs it supersedes.
+
+- Bump Build, reset Revision to 0: `v12.0.2.2-rc` → `v12.0.3.0`; `v12.0.1.0` → `v12.0.2.0`.
 - Never put a hotfix counter in Revision — Revision is reserved exclusively for RC numbers.
-- If no stable `v12.*.0` tag exists yet, the first stable closes out the current RC cycle: take the highest `v12.*-rc` tag, bump Build, set Revision to 0.
+
+Why any-kind: suppose the last stable is `v12.0.1.0` and the RC cycle since then produced `v12.0.2.1-rc` and `v12.0.2.2-rc`. Bumping Build from the last *stable* gives `v12.0.2.0`, whose manifest version `12.0.2.0` sorts **below** `12.0.2.2` — every RC user is already on a higher version and would never be offered the stable. Bumping from the highest tag of any kind gives `v12.0.3.0`, which sorts above the whole cycle and pulls RC users onto it.
+
+**Sanity check before tagging** — the new version must sort above every existing `v12.*` tag:
+
+```bash
+printf '%s\n%s\n' "$(git tag --list 'v12.*' --sort=-v:refname | head -1 | sed 's/-rc$//')" "<new-version>" \
+  | sort -V | tail -1
+```
+
+This must print `<new-version>`. If it prints the existing tag instead, the version is too low — stop and recompute.
 
 ### 5. Generate changelog
 
@@ -181,7 +207,7 @@ Guidelines:
 - The changelog is shown to end users (GitHub release + Jellyfin plugin catalog), so keep the wording non-technical and focused on what changed for them.
 
 Format:
-```
+```text
 Features:
 - ...
 
@@ -200,7 +226,7 @@ The release workflow reads the changelog with `git tag -l --format='%(contents:b
 
 This means the tag message must be structured as:
 
-```
+```text
 Release <version>
 
 <changelog body from step 5>
@@ -214,7 +240,7 @@ The first line and the blank line beneath it are stripped before publishing — 
 
 Display to the user:
 
-```
+```text
 New tag:    <new-version>
 Previous:   <changelog-base-tag> (or "none")
 Commits:    <count> commit(s) since previous tag
@@ -229,7 +255,7 @@ Ready to create and push this tag? (yes / no / edit)
 
 **For `stable` releases**, insert the branch move above the changelog — this is the substantive part of the confirmation, since advancing `12-release` is what decides the release contents *and* what the docs site will serve:
 
-```
+```text
 Branch:     12-release <old-sha> -> <new-sha> (fast-forward to main, <count> commits)
             will be pushed, so the mkdocs Cloudflare Worker picks up the new docs
 ```

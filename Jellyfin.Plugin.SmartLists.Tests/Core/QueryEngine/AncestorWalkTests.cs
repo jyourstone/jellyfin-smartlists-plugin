@@ -287,10 +287,55 @@ public class AncestorWalkTests
         Assert.Contains("foldertag", values.Tags);
         Assert.DoesNotContain("roottag", values.Tags);
 
-        // An item hanging directly off the boundary inherits nothing at all - and gets the shared
-        // Empty singleton rather than a fresh allocation.
+        // An item hanging directly off the boundary inherits nothing from the chain - and with no
+        // library registered for it, gets the shared Empty singleton rather than a fresh allocation.
         var direct = TestItems.Under(TestItems.Mov("Directly Under Root"), root);
         Assert.Same(AncestorValues.Empty, Resolve(direct));
+    }
+
+    /// <summary>
+    /// "No walkable ancestors" must not mean "no library". <c>GetCollectionFolders</c> resolves
+    /// independently of the parent chain, so an item sitting directly under the boundary still
+    /// belongs to a library and must still inherit its values. Returning Empty here would drop
+    /// library values the same way the old one-level extractors dropped season values in #495.
+    /// </summary>
+    [Fact]
+    public void Resolve_ItemDirectlyUnderBoundary_StillInheritsLibraryValues()
+    {
+        var root = new AggregateFolder { Id = Guid.NewGuid(), Name = "root" };
+        root.SortName = "root";
+
+        var movie = TestItems.Under(TestItems.Mov("Rootless Movie"), root);
+
+        var library = TestItems.PhysicalFolder("Filmer", "movielibtag");
+        TestLibraryManager.CollectionFolders[movie.Id] = [library];
+
+        var values = Resolve(movie);
+
+        Assert.Contains("movielibtag", values.Tags);
+    }
+
+    /// <summary>
+    /// Same principle for an unresolvable parent: <c>ParentId</c> is set but the item it points at
+    /// is gone from the library (deleted mid-refresh, stale reference), so both <c>GetParent()</c>
+    /// and <c>GetOwner()</c> return null. The library lookup does not depend on that reference and
+    /// must still contribute.
+    /// </summary>
+    [Fact]
+    public void Resolve_UnresolvableParent_StillInheritsLibraryValues()
+    {
+        var orphan = TestItems.Mov("Orphaned Movie");
+        orphan.ParentId = Guid.NewGuid();          // points at an id that was never registered
+        TestLibraryManager.Items[orphan.Id] = orphan;
+
+        Assert.Null(orphan.GetParent());
+
+        var library = TestItems.PhysicalFolder("Filmer", "orphanlibtag");
+        TestLibraryManager.CollectionFolders[orphan.Id] = [library];
+
+        var values = Resolve(orphan);
+
+        Assert.Contains("orphanlibtag", values.Tags);
     }
 
     /// <summary>

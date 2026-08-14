@@ -24,7 +24,7 @@ Every instruction in this plan to **dual-write** the legacy flags is **cancelled
 | **Read** legacy keys | **YES, permanently.** Lists saved by older builds still carry them. C# folds via `IncludeParent*Effective`; JS edit-mode repopulation must still recognise them. |
 | Legacy flag declarations on `Expression` | **Kept**, unchanged, read-only. |
 
-Affected: **Major 5** (withdrawn), the "Written by" column of the mapping table (read `JS dual-write (one release)` as **"not written"**), **Task 10 Steps 3-4**, **Task 12** grep gate, **Task 13 Step E**, **Open Question 1** (closed).
+Affected: **Major 5** (withdrawn), the "Written by" column of the mapping table, **Task 10 Steps 3-4**, **Task 12** grep gate, **Task 13 Step E**, **Open Question 1** (closed). Those sections have been corrected in place; any residual `dual-write` phrasing below is superseded by this amendment.
 
 Task 12's gate becomes: legacy identifiers must still appear in JS on the **read/repopulate** path, and must **not** appear on the **write/serialize** path.
 
@@ -154,22 +154,22 @@ Claude-Session: https://claude.ai/code/session_01S9FFji6MP136o3bq298BWJ
 
 ## Back-Compat: exact old-flag → new-flag mapping
 
-**Strategy: additive on disk, fold on read, dual-write from the UI for one release.** No migration, no deserialize-only shim, no restore-path hook, no deprecation window. `SmartListDto.MigrateLegacyFields` (SmartListDto.cs:157-180) and `StorageMigrationHostedService` are **not** touched.
+**Strategy: additive on disk, fold on read.** (The plan originally added "dual-write from the UI for one release"; **cancelled by Amendment 1** — new saves write only the new keys.) No migration, no deserialize-only shim, no restore-path hook, no deprecation window. `SmartListDto.MigrateLegacyFields` (SmartListDto.cs:157-180) and `StorageMigrationHostedService` are **not** touched.
 
 ### Persisted flags (all nine keep their exact names and behaviour)
 
 | On-disk JSON key | Status after change | Read by | Written by |
 |---|---|---|---|
-| `IncludeParentSeriesTags` | **kept**, legacy | `IncludeParentTagsEffective` fold | JS dual-write (one release) |
-| `IncludeParentAlbumTags` | **kept**, legacy | `IncludeParentTagsEffective` fold | JS dual-write (one release) |
+| `IncludeParentSeriesTags` | **kept**, legacy | `IncludeParentTagsEffective` fold | **not written** (Amendment 1) |
+| `IncludeParentAlbumTags` | **kept**, legacy | `IncludeParentTagsEffective` fold | **not written** (Amendment 1) |
 | `IncludeParentTags` | **new** | `IncludeParentTagsEffective` fold | JS |
 | `OnlyParentTags` | **unchanged** | read directly, `== true` | JS |
-| `IncludeParentSeriesStudios` | **kept**, legacy | `IncludeParentStudiosEffective` fold | JS dual-write (one release) |
-| `IncludeParentAlbumStudios` | **kept**, legacy | `IncludeParentStudiosEffective` fold | JS dual-write (one release) |
+| `IncludeParentSeriesStudios` | **kept**, legacy | `IncludeParentStudiosEffective` fold | **not written** (Amendment 1) |
+| `IncludeParentAlbumStudios` | **kept**, legacy | `IncludeParentStudiosEffective` fold | **not written** (Amendment 1) |
 | `IncludeParentStudios` | **new** | `IncludeParentStudiosEffective` fold | JS |
 | `OnlyParentStudios` | **unchanged** | read directly, `== true` | JS |
-| `IncludeParentSeriesGenres` | **kept**, legacy | `IncludeParentGenresEffective` fold | JS dual-write (one release) |
-| `IncludeParentAlbumGenres` | **kept**, legacy | `IncludeParentGenresEffective` fold | JS dual-write (one release) |
+| `IncludeParentSeriesGenres` | **kept**, legacy | `IncludeParentGenresEffective` fold | **not written** (Amendment 1) |
+| `IncludeParentAlbumGenres` | **kept**, legacy | `IncludeParentGenresEffective` fold | **not written** (Amendment 1) |
 | `IncludeParentGenres` | **new** | `IncludeParentGenresEffective` fold | JS |
 | `OnlyParentGenres` | **unchanged** | read directly, `== true` | JS |
 
@@ -1003,7 +1003,7 @@ Identical surgery for `.rule-studios-options` / `'Studios'` and `.rule-genres-op
 
 - [ ] **Step 3: Serialize — `collectRulesFromForm`** (2929-2942, 2944-2957, 2959-2972)
 
-Drop `&& (hasEpisode || hasAudio)` from all three guards. **Dual-write** the legacy flags (Major 5) so an older plugin build on the other release line still honours the setting:
+Drop `&& (hasEpisode || hasAudio)` from all three guards. Write **only the new keys** — the dual-write this step originally specified is cancelled by Amendment 1:
 
 ```js
                     const tagsSelect = rule.querySelector('.rule-tags-select');
@@ -1012,20 +1012,14 @@ Drop `&& (hasEpisode || hasAudio)` from all three guards. **Dual-write** the leg
                         if (tagsSelectValue === 'only') {
                             expression.OnlyParentTags = true;
                             expression.IncludeParentTags = true;
-                            // Downgrade compatibility: the 10.11 stable line still reads only these.
-                            // Remove once that line is retired (see plan Open Question 1).
-                            expression.IncludeParentSeriesTags = true;
-                            expression.IncludeParentAlbumTags = true;
                         } else if (tagsSelectValue === 'true') {
                             expression.IncludeParentTags = true;
-                            expression.IncludeParentSeriesTags = true;
-                            expression.IncludeParentAlbumTags = true;
                         }
                         // If 'false' (default), don't include the parameter to save space
                     }
 ```
 
-Same shape for Studios (`OnlyParentStudios`/`IncludeParentStudios`/`IncludeParentSeriesStudios`/`IncludeParentAlbumStudios`) and Genres. Emitting the Include flag alongside `'only'` is what keeps the incoherent `OnlyParent`-with-no-source state unreachable from the UI.
+Same shape for Studios (`OnlyParentStudios`/`IncludeParentStudios`) and Genres. Emitting the Include flag alongside `'only'` is what keeps the incoherent `OnlyParent`-with-no-source state unreachable from the UI.
 
 **Keep** `hasEpisode`/`hasAudio` computed at 2796-2805 — NextUnwatched (2859) and IncludeEpisodesWithinSeries (2891) still use them.
 
@@ -1084,7 +1078,7 @@ cd dev && ./build-local.sh
 
 ```bash
 git add Jellyfin.Plugin.SmartLists/Configuration/
-git commit -m "Offer parent metadata options for all media types; dual-write legacy flags"
+git commit -m "Offer parent metadata options for all media types"
 ```
 
 ---
@@ -1211,7 +1205,7 @@ Grep confirms **zero** of the 20 saved lists under `dev/jellyfin-data/config/dat
 { "MemberName": "Tags", "Operator": "Contains", "TargetValue": "seasontag99", "IncludeParentAlbumTags": true }
 ```
 
-After upgrade: (1) the rule must still match via the fold, and (2) opening the list in the edit form must show the dropdown reading **`Yes`**, not `No`. Save it and confirm the saved JSON now carries `IncludeParentTags` **and** the two legacy keys (dual-write).
+After upgrade: (1) the rule must still match via the fold, and (2) opening the list in the edit form must show the dropdown reading **`Yes`**, not `No`. Save it and confirm the saved JSON now carries `IncludeParentTags` and **no** legacy keys — the legacy keys are read, never written (Amendment 1).
 
 - [ ] **Step F — Negative case (must NOT match)**
 

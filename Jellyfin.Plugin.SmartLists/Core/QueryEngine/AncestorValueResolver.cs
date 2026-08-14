@@ -152,7 +152,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             var node = item.GetParent() ?? item.GetOwner();   // GetOwner() covers extras (empty ParentId, set OwnerId)
             if (node is null || IsWalkBoundary(node))
             {
-                return AncestorValues.Empty;
+                // No walkable ancestors — either the parent could not be resolved at all, or the
+                // item sits directly under the AggregateFolder/UserRootFolder boundary. The library
+                // still counts in both cases: GetCollectionFolders resolves independently of the
+                // parent chain, so returning Empty here would drop library values for these items
+                // exactly the way the old one-level extractors dropped season values in #495.
+                return GetLibraryValues(item, libraryManager, logger);
             }
 
             var chain = new List<BaseItem>();
