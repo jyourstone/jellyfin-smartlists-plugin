@@ -2,7 +2,7 @@
 
 <div align="center">
     <p>
-        <img alt="Logo" src="../images/logo.jpg" style="height: 400px; width: auto;"/><br />
+        <img alt="Logo" src="../images/logo.jpg" style="width: 100%; max-width: 260px; height: auto;"/><br />
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Total GitHub Downloads" src="https://img.shields.io/github/downloads/jyourstone/jellyfin-smartlists-plugin/total"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/issues"><img alt="GitHub Issues or Pull Requests" src="https://img.shields.io/github/issues/jyourstone/jellyfin-smartlists-plugin"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Build and Release" src="https://github.com/jyourstone/jellyfin-smartlists-plugin/actions/workflows/release.yml/badge.svg"/></a> 
