@@ -111,8 +111,18 @@ public class UserDataOrderTests
         };
     }
 
-    private static int PlayCount(Order order, BaseItem item, User user, IUserDataManager? manager, RefreshQueueService.RefreshCache? cache) =>
-        Assert.IsType<int>(order.GetSortKey(item, user, manager, null, null, cache));
+    /// <summary>
+    /// The play count carried by the sort key. The key is a composite (play count, DateCreated)
+    /// so that a FINAL play-count sort breaks ties the same way OrderBy does, while
+    /// SmartList.ApplySortingCore strips it to PrimaryValue in any non-final position and lets
+    /// the user's secondary sort decide instead — so the play count is PrimaryValue, not the key.
+    /// </summary>
+    private static int PlayCount(Order order, BaseItem item, User user, IUserDataManager? manager, RefreshQueueService.RefreshCache? cache)
+    {
+        var key = order.GetSortKey(item, user, manager, null, null, cache);
+        var composite = Assert.IsAssignableFrom<ICompositeSortKey>(key);
+        return Assert.IsType<int>(composite.PrimaryValue);
+    }
 
     private static DateTime LastPlayed(Order order, BaseItem item, User user, IUserDataManager? manager, RefreshQueueService.RefreshCache? cache) =>
         Assert.IsType<DateTime>(order.GetSortKey(item, user, manager, null, null, cache));
@@ -164,10 +174,8 @@ public class UserDataOrderTests
     }
 
     /// <summary>
-    /// Every item here has a DISTINCT PlayCount on purpose: UserDataOrder.OrderBy appends
-    /// <c>.ThenBy(item.DateCreated)</c> as a tie-break (UserDataOrder.cs:62-63) that the GetSortKey
-    /// path (used here to emulate ApplySortingCore) never applies, so tied PlayCounts are a real,
-    /// separately-reported divergence rather than something this agreement check can safely cover.
+    /// Every item here has a DISTINCT PlayCount. The tied case is covered separately by
+    /// <see cref="PlayCount_OrderByAndGetSortKey_AgreeOnTies_ViaTheDateCreatedTiebreaker"/>.
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -190,6 +198,69 @@ public class UserDataOrderTests
         Assert.Equal(
             SortByOrderBy(order, items, TestItems.User, TestItems.ThrowingUserData(), cache),
             SortByKey(order, items, TestItems.User, TestItems.ThrowingUserData(), cache, descending));
+    }
+
+    /// <summary>
+    /// The regression test for the tie divergence. UserDataOrder.OrderBy breaks equal play counts
+    /// with <c>ThenBy(DateCreated)</c>; GetSortKey used to return a bare int with no tiebreaker, so
+    /// a single sort and a multi-sort produced DIFFERENT orders for the same configuration — the
+    /// same class of defect as the four fixed in #490. The key is now a composite carrying
+    /// DateCreated, so both paths agree.
+    ///
+    /// The items are seeded with equal play counts and DateCreated values that run OPPOSITE to
+    /// insertion order, so a key without the tiebreaker returns input order and fails here.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PlayCount_OrderByAndGetSortKey_AgreeOnTies_ViaTheDateCreatedTiebreaker(bool descending)
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var older = TestItems.Mov("Older");
+        var newer = TestItems.Mov("Newer");
+        older.DateCreated = new DateTime(2020, 1, 1);
+        newer.DateCreated = new DateTime(2024, 1, 1);
+        SeedPlayCount(cache, older, TestItems.User, 3);
+        SeedPlayCount(cache, newer, TestItems.User, 3);
+
+        // Insertion order is the reverse of the DateCreated order, so "no tiebreaker" is visible.
+        BaseItem[] items = [newer, older];
+
+        Order order = descending ? new PlayCountOrderDesc() : new PlayCountOrder();
+
+        var viaOrderBy = SortByOrderBy(order, items, TestItems.User, TestItems.ThrowingUserData(), cache);
+        var viaKey = SortByKey(order, items, TestItems.User, TestItems.ThrowingUserData(), cache, descending);
+
+        Assert.Equal(viaOrderBy, viaKey);
+        Assert.Equal(descending ? ["Newer", "Older"] : ["Older", "Newer"], viaOrderBy);
+    }
+
+    /// <summary>
+    /// The tiebreaker must be EMBEDDED, not folded into the primary value: ApplySortingCore strips
+    /// a non-final key down to PrimaryValue precisely so the user's own secondary sort decides
+    /// ties. If DateCreated leaked into PrimaryValue, a secondary sort after PlayCount would
+    /// silently become a no-op.
+    /// </summary>
+    [Fact]
+    public void PlayCount_GetSortKey_PrimaryValue_IsThePlayCountAlone_SoSecondarySortsStillDecideTies()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var older = TestItems.Mov("Older");
+        var newer = TestItems.Mov("Newer");
+        older.DateCreated = new DateTime(2020, 1, 1);
+        newer.DateCreated = new DateTime(2024, 1, 1);
+        SeedPlayCount(cache, older, TestItems.User, 3);
+        SeedPlayCount(cache, newer, TestItems.User, 3);
+
+        var order = new PlayCountOrder();
+        var a = (ICompositeSortKey)order.GetSortKey(older, TestItems.User, TestItems.ThrowingUserData(), null, null, cache);
+        var b = (ICompositeSortKey)order.GetSortKey(newer, TestItems.User, TestItems.ThrowingUserData(), null, null, cache);
+
+        // Equal once reduced, despite different DateCreated - which is what lets a secondary sort win.
+        Assert.Equal(0, Comparer<IComparable>.Default.Compare(a.PrimaryValue, b.PrimaryValue));
+
+        // ...while the full keys still differ, so a FINAL play-count sort is deterministic.
+        Assert.NotEqual(0, ((IComparable)a).CompareTo(b));
     }
 
     [Fact]
