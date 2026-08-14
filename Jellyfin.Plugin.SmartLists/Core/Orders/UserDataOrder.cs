@@ -69,6 +69,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             }
         }
 
+        /// <summary>
+        /// Returns the user-data value with DateCreated embedded as a tiebreaker, matching the
+        /// <c>ThenBy(DateCreated)</c> that <see cref="OrderBy(IEnumerable{BaseItem}, User, IUserDataManager?, ILogger?, RefreshQueueService.RefreshCache?)"/>
+        /// applies. Without it the two paths disagree on ties: a single sort broke equal play
+        /// counts by DateCreated while a multi-sort left them in input order, so the same
+        /// configuration produced different output depending on how many sorts the user added.
+        ///
+        /// The tiebreaker is embedded rather than folded into the primary value, because
+        /// <c>ICompositeSortKey</c> lets SmartList.ApplySortingCore strip it back to
+        /// <c>PrimaryValue</c> for any non-final sort — so a user's secondary sort still decides
+        /// ties, and only a FINAL play-count sort falls back to DateCreated. Same shape as
+        /// ReleaseDateOrder and TrackNumberOrder.
+        /// </summary>
         public override IComparable GetSortKey(
             BaseItem item,
             User user,
@@ -80,12 +93,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             try
             {
                 // Delegate to unified method
-                return GetUserDataValue(item, user, userDataManager, logger, refreshCache);
+                var value = GetUserDataValue(item, user, userDataManager, logger, refreshCache);
+                return new ComparableTuple4<int, DateTime, int, int>(value, item?.DateCreated ?? DateTime.MinValue, 0, 0);
             }
             catch (Exception ex)
             {
                 logger?.LogWarning(ex, "Error getting user data value for item {ItemName} in {OrderType}, returning default value 0", item?.Name ?? "Unknown", GetType().Name);
-                return 0;
+                return new ComparableTuple4<int, DateTime, int, int>(0, DateTime.MinValue, 0, 0);
             }
         }
     }

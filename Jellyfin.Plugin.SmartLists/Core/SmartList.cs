@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
@@ -2597,7 +2598,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <param name="logger">Optional logger for debugging.</param>
         /// <param name="refreshCache">Refresh cache for performance.</param>
         /// <returns>The sorted collection of items.</returns>
-        private IEnumerable<BaseItem> ApplyMultipleOrders(IEnumerable<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        internal IEnumerable<BaseItem> ApplyMultipleOrders(IEnumerable<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
         {
             if (Orders == null || Orders.Count == 0)
             {
@@ -2628,7 +2629,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <summary>
         /// Wraps orders with ChildAggregatingOrder when UseChildValues is enabled in the corresponding SortOption.
         /// </summary>
-        private List<Order> WrapOrdersWithChildAggregation(List<Order> orders, ILogger? logger)
+        internal List<Order> WrapOrdersWithChildAggregation(List<Order> orders, ILogger? logger)
         {
             // If no SortOptions stored, return orders unchanged
             if (SortOptions == null || SortOptions.Count == 0)
@@ -2683,7 +2684,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// Core sorting logic shared by ApplyMultipleOrders and ApplySecondarySorts.
         /// Creates composite sort keys for all items and applies multi-level sorting.
         /// </summary>
-        private static IEnumerable<BaseItem> ApplySortingCore(
+        internal static IEnumerable<BaseItem> ApplySortingCore(
             List<BaseItem> itemsList, 
             List<Order> orders, 
             User user, 
@@ -2796,7 +2797,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <summary>
         /// Determines if an order is descending based on its type.
         /// </summary>
-        private static bool IsDescendingOrder(Order order)
+        internal static bool IsDescendingOrder(Order order)
         {
             // Handle ChildAggregatingOrder wrapper - check its IsDescending property
             if (order is ChildAggregatingOrder childAggOrder)
@@ -3843,7 +3844,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public static readonly NaturalStringComparer SharedNaturalComparer = new(ignoreCase: true);
 
         /// <summary>
-        /// Natural string comparer that sorts strings with leading numbers numerically.
+        /// Natural string comparer: runs of digits compare as numbers, everything else compares
+        /// character by character. So "Season 2" sorts before "Season 10", and "2 Fast" before
+        /// "10 Cloverfield".
+        ///
+        /// It walks both strings in step rather than parsing a number out of the front, because
+        /// only comparing a LEADING number leaves every embedded number sorting as text -
+        /// "Season 10" before "Season 2", which is the order plain string comparison gives.
+        /// Digit runs are compared by trimmed length then digit-by-digit instead of being parsed
+        /// into an int, so a run longer than int.MaxValue still compares correctly rather than
+        /// falling back to text.
         /// </summary>
         public class NaturalStringComparer : IComparer<string>
         {
@@ -3860,60 +3870,96 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (x == null) return -1;
                 if (y == null) return 1;
 
-                // Extract leading numbers
-                var (xNum, xHasNum, xRest) = ExtractLeadingNumber(x);
-                var (yNum, yHasNum, yRest) = ExtractLeadingNumber(y);
+                int i = 0, j = 0;
 
-                // If both have leading numbers, compare them numerically first
-                if (xHasNum && yHasNum)
+                // Zero padding never outranks content ("Season 02" vs "Season 2" are equal as
+                // numbers); remembered here so it can break an otherwise exact tie at the end,
+                // rather than letting two different strings compare equal.
+                int paddingTieBreak = 0;
+
+                while (i < x.Length && j < y.Length)
                 {
-                    var numComparison = xNum.CompareTo(yNum);
-                    if (numComparison != 0)
+                    // char.IsDigit covers every BMP Unicode decimal digit, not just ASCII -
+                    // Arabic-Indic "٢", Devanagari "२" and so on. Everything below therefore works
+                    // on each digit's NUMERIC VALUE rather than its code unit, so a run in any of
+                    // those scripts compares as the number it represents. Comparing code units
+                    // here would order "٢" (2) after "10" and would not recognise "٠" as a
+                    // leading zero.
+                    //
+                    // KNOWN LIMIT: decimal digits outside the BMP (surrogate pairs - mathematical
+                    // alphanumerics like "𝟐", Osage, Chakma) are NOT recognised, because char.IsDigit
+                    // sees only the high surrogate. Those compare as text, as they always have.
+                    // Making this scalar-aware means rebuilding the whole loop - including the
+                    // character comparison and case folding below - around Rune, on a comparer
+                    // that runs for every name sort, to serve titles no metadata provider emits.
+                    // Pinned by NaturalStringComparerTests.SupplementaryPlaneDigits_AreNotRecognised.
+                    if (char.IsDigit(x[i]) && char.IsDigit(y[j]))
                     {
-                        return numComparison;
+                        int xStart = i, yStart = j;
+                        while (i < x.Length && char.IsDigit(x[i])) i++;
+                        while (j < y.Length && char.IsDigit(y[j])) j++;
+
+                        // Skip leading zeros by value, keeping at least one digit so "0" and "000"
+                        // both reduce to a single zero.
+                        int xFirst = xStart, yFirst = yStart;
+                        while (xFirst < i - 1 && CharUnicodeInfo.GetDecimalDigitValue(x[xFirst]) == 0) xFirst++;
+                        while (yFirst < j - 1 && CharUnicodeInfo.GetDecimalDigitValue(y[yFirst]) == 0) yFirst++;
+
+                        // Fewer significant digits means a smaller number.
+                        int xLength = i - xFirst, yLength = j - yFirst;
+                        if (xLength != yLength)
+                        {
+                            return xLength < yLength ? -1 : 1;
+                        }
+
+                        for (int k = 0; k < xLength; k++)
+                        {
+                            var xDigit = CharUnicodeInfo.GetDecimalDigitValue(x[xFirst + k]);
+                            var yDigit = CharUnicodeInfo.GetDecimalDigitValue(y[yFirst + k]);
+                            if (xDigit != yDigit)
+                            {
+                                return xDigit < yDigit ? -1 : 1;
+                            }
+                        }
+
+                        if (paddingTieBreak == 0 && (i - xStart) != (j - yStart))
+                        {
+                            paddingTieBreak = (i - xStart) < (j - yStart) ? -1 : 1;
+                        }
+
+                        continue;
                     }
-                    // Numbers are equal, compare the rest of the string
-                    return CompareStrings(xRest, yRest);
-                }
 
-                // If only one has a leading number, put numbered items first
-                if (xHasNum) return -1;
-                if (yHasNum) return 1;
+                    // Numbers sort ahead of letters in EVERY script. ASCII gets this for free
+                    // ('2' is ordinally below 'A'), but a non-ASCII digit sits far above the Latin
+                    // letters in code-unit order, so "٢ Fast" would sort after "Alpha" while
+                    // "2 Fast" sorts before it - digits we otherwise treat as numbers behaving
+                    // like letters. Deliberately digit-vs-LETTER only: a blanket digits-first rule
+                    // would also lift digits above punctuation and reorder existing ASCII titles.
+                    if (char.IsDigit(x[i]) && char.IsLetter(y[j]))
+                    {
+                        return -1;
+                    }
 
-                // Neither has a leading number, do normal string comparison
-                return CompareStrings(x, y);
-            }
+                    if (char.IsLetter(x[i]) && char.IsDigit(y[j]))
+                    {
+                        return 1;
+                    }
 
-            private static (int number, bool hasNumber, string rest) ExtractLeadingNumber(string str)
-            {
-                int i = 0;
+                    var cx = _ignoreCase ? char.ToUpperInvariant(x[i]) : x[i];
+                    var cy = _ignoreCase ? char.ToUpperInvariant(y[j]) : y[j];
+                    if (cx != cy)
+                    {
+                        return cx < cy ? -1 : 1;
+                    }
 
-                // Skip leading whitespace
-                while (i < str.Length && char.IsWhiteSpace(str[i]))
-                {
                     i++;
+                    j++;
                 }
 
-                if (i >= str.Length || !char.IsDigit(str[i]))
-                {
-                    return (0, false, str);
-                }
-
-                int startDigit = i;
-
-                // Parse the number
-                while (i < str.Length && char.IsDigit(str[i]))
-                {
-                    i++;
-                }
-
-                var numberStr = str.Substring(startDigit, i - startDigit);
-                if (int.TryParse(numberStr, out int number))
-                {
-                    return (number, true, str.Substring(i));
-                }
-
-                return (0, false, str);
+                // One string ran out: the shorter one sorts first ("Rocky" before "Rocky 2").
+                var remaining = (x.Length - i).CompareTo(y.Length - j);
+                return remaining != 0 ? remaining : paddingTieBreak;
             }
 
             private int CompareStrings(string x, string y)

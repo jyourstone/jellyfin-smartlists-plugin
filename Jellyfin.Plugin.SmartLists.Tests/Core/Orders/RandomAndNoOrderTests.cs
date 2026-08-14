@@ -485,15 +485,22 @@ public class RandomAndNoOrderTests
     }
 
     [Fact]
-    public void ComparableTuple4_CompareTo_NaturalComparer_OnlyHandlesLeadingNumbers_NotEmbeddedOnes()
+    public void ComparableTuple4_CompareTo_NaturalComparer_HandlesEmbeddedNumbers_NotJustLeadingOnes()
     {
-        // NaturalStringComparer.ExtractLeadingNumber only looks at the start of the string, so
-        // "Track 2"/"Track 10" get a plain ordinal-ignore-case comparison and "Track 10" wins.
-        // Pinned deliberately: it is easy to assume the comparer is a full natural sort.
+        // Regression guard for issue #493. This test previously asserted the OPPOSITE: the
+        // comparer only parsed a number off the FRONT of the string, so "Track 2"/"Track 10" fell
+        // through to an ordinal comparison and "Track 10" sorted first - the wrong order, and the
+        // same wrong order users saw for "Season 2"/"Season 10" in every name-based sort.
         var natural2 = new ComparableTuple4<int, int, string, string>(1, 1, "Track 2", "", comparer3: OrderUtilities.SharedNaturalComparer);
         var natural10 = new ComparableTuple4<int, int, string, string>(1, 1, "Track 10", "", comparer3: OrderUtilities.SharedNaturalComparer);
 
-        Assert.True(natural2.CompareTo(natural10) > 0);
+        Assert.True(natural2.CompareTo(natural10) < 0);
+
+        // The default (non-natural) comparer still orders them as text, which is what makes the
+        // natural comparer worth passing in.
+        var plain2 = new ComparableTuple4<int, int, string, string>(1, 1, "Track 2", "");
+        var plain10 = new ComparableTuple4<int, int, string, string>(1, 1, "Track 10", "");
+        Assert.True(plain2.CompareTo(plain10) > 0);
     }
 
     [Fact]
