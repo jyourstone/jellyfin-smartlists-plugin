@@ -7,6 +7,7 @@ using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Tests.Support;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Core.QueryEngine;
 
@@ -313,6 +314,50 @@ public class AncestorWalkTests
         var values = Resolve(movie);
 
         Assert.Contains("movielibtag", values.Tags);
+    }
+
+    /// <summary>
+    /// Symlinked and plugin-created virtual libraries: <c>GetCollectionFolders</c> can resolve to the
+    /// SOURCE library rather than the virtual one, so it returns a wrong-but-NON-EMPTY result. That is
+    /// why the path-matching supplement unions rather than falling back — a fallback keyed on "returned
+    /// nothing" would never fire here. Both libraries' values must show up.
+    /// </summary>
+    [Fact]
+    public void Resolve_SymlinkedLibrary_UnionsPathMatchedLibraryWithTheWrongCollectionFolder()
+    {
+        // The anchor is the chain-top folder, and in a real library it has a path under the library
+        // location. The match is made on the anchor rather than the leaf item on purpose: the result
+        // is memoized per ANCESTOR NODE and shared by every item beneath it.
+        var top = TestItems.PhysicalFolder("shows");
+        top.Path = "/virtual/recommended/shows";
+        var movie = TestItems.Under(TestItems.Mov("Symlinked Movie"), top);
+        movie.Path = "/virtual/recommended/shows/Symlinked Movie.mkv";
+
+        // GetCollectionFolders resolves to the SOURCE library - non-empty, but the wrong one.
+        var sourceLibrary = TestItems.PhysicalFolder("Source Library", "sourcelibtag");
+        TestLibraryManager.CollectionFolders[top.Id] = [sourceLibrary];
+
+        // The virtual library is only discoverable by matching the item's path against its locations.
+        var virtualLibrary = TestItems.PhysicalFolder("Recommended", "virtuallibtag");
+        TestLibraryManager.Items[virtualLibrary.Id] = virtualLibrary;
+        TestLibraryManager.VirtualFolders.Add(new VirtualFolderInfo
+        {
+            Name = "Recommended",
+            ItemId = virtualLibrary.Id.ToString("N"),
+            Locations = ["/virtual/recommended"],
+        });
+
+        try
+        {
+            var values = Resolve(movie);
+
+            Assert.Contains("virtuallibtag", values.Tags);   // would be missing before the fix
+            Assert.Contains("sourcelibtag", values.Tags);    // supplement, not replacement
+        }
+        finally
+        {
+            TestLibraryManager.VirtualFolders.Clear();
+        }
     }
 
     /// <summary>

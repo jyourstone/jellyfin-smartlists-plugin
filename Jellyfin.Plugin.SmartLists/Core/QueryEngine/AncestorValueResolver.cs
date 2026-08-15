@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Jellyfin.Extensions;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
@@ -211,6 +212,22 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 var acc = AncestorValues.Empty;
                 foreach (var folder in libraryManager.GetCollectionFolders(anchor)) { acc = acc.Union(folder); }
+
+                // Symlinked and plugin-created virtual libraries: GetCollectionFolders can resolve to the
+                // SOURCE library instead of the virtual one, so it returns a wrong-but-non-empty result and
+                // the library's own tags/studios/genres never appear. Path-matching against the configured
+                // virtual folders catches those. Union rather than fall back, for exactly that reason.
+                // Union de-duplicates, so a library found by both routes contributes once.
+                //
+                // Matched on the ANCHOR, not the leaf item, and that is deliberate: this result is memoized
+                // against ANCESTOR NODE ids and shared by every item under that container, so anything
+                // derived from a single item's path would poison the memo for its siblings. The anchor is
+                // the chain-top folder, which lives under the same library location as its contents.
+                foreach (var folder in LibraryManagerHelper.GetLibraryFoldersForItemPath(libraryManager, anchor))
+                {
+                    acc = acc.Union(folder);
+                }
+
                 return acc;
             }
             catch (Exception ex)

@@ -130,6 +130,54 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 .AsReadOnly();
         }
 
+        /// <summary>
+        /// Resolves the library folder ITEMS containing an item by comparing its file path with configured
+        /// virtual folder locations - the same match <see cref="GetLibraryNamesForItemPath"/> performs, but
+        /// returning the <c>CollectionFolder</c> items so callers can read metadata off them rather than
+        /// just the name.
+        ///
+        /// Supplements (never replaces) <c>GetCollectionFolders</c>: for a symlinked library that call can
+        /// return the SOURCE library rather than the virtual one, so it yields a wrong-but-non-empty result
+        /// that a fallback-only check would never notice.
+        /// </summary>
+        public static IReadOnlyList<BaseItem> GetLibraryFoldersForItemPath(ILibraryManager libraryManager, BaseItem item)
+        {
+            var folders = new List<BaseItem>();
+            var itemPaths = new[]
+            {
+                item.Path,
+                item.ContainingFolderPath,
+            };
+
+            foreach (var vf in libraryManager.GetVirtualFolders())
+            {
+                if (vf.Locations == null || string.IsNullOrWhiteSpace(vf.ItemId))
+                {
+                    continue;
+                }
+
+                if (!vf.Locations.Any(location =>
+                    !string.IsNullOrWhiteSpace(location) &&
+                    itemPaths.Any(itemPath => IsPathInLocation(itemPath, location))))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(vf.ItemId, out var folderId))
+                {
+                    continue;
+                }
+
+                var folder = libraryManager.GetItemById(folderId);
+                if (folder != null)
+                {
+                    folders.Add(folder);
+                }
+            }
+
+            return folders.AsReadOnly();
+        }
+
         public static void ApplyVirtualItemQueryScope(InternalItemsQuery query, bool includeVirtualItems, Guid[] validTopParentIds)
         {
             query.IsVirtualItem = includeVirtualItems ? null : false;

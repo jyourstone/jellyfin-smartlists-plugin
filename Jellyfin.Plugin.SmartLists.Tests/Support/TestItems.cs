@@ -7,6 +7,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
 using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Support;
@@ -48,6 +49,13 @@ public class TestLibraryManager : DispatchProxy
     internal static readonly ConcurrentDictionary<Guid, List<Folder>> CollectionFolders = new();
 
     /// <summary>
+    /// Answers <c>GetVirtualFolders()</c>. Empty by default, so the path-matching supplement in
+    /// <c>LibraryManagerHelper.GetLibraryFoldersForItemPath</c> contributes nothing unless a test
+    /// deliberately configures a virtual folder (the symlinked-library case).
+    /// </summary>
+    internal static readonly List<VirtualFolderInfo> VirtualFolders = [];
+
+    /// <summary>
     /// Per-id <c>GetItemById</c> call counter. Keyed by id rather than being a single total so
     /// it stays meaningful under xUnit's parallel test collections: ids are freshly generated
     /// per test, so no other class can perturb the count for the ids one test cares about.
@@ -69,6 +77,11 @@ public class TestLibraryManager : DispatchProxy
         if (targetMethod?.Name == "GetCollectionFolders" && args is { Length: 1 } && args[0] is BaseItem anchor)
         {
             return CollectionFolders.TryGetValue(anchor.Id, out var folders) ? folders : new List<Folder>();
+        }
+
+        if (targetMethod?.Name == "GetVirtualFolders" && args is null or { Length: 0 })
+        {
+            return VirtualFolders.ToList();
         }
 
         throw new NotSupportedException(
