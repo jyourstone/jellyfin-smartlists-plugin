@@ -200,7 +200,7 @@ Guidelines:
 - Group changes into categories where it makes sense: **Features**, **Bug Fixes**, **Improvements** — but only include categories that have entries.
 - Prefer PR titles over raw commit messages when both refer to the same change (PRs are usually better worded).
 - Skip noise: merge commits, version bumps, "fix typo", "WIP", etc.
-- **Only include application-facing changes**: omit commits that only touch repo infrastructure — `.github/` workflows, `.gitignore`, linter configs, docs-only changes (`docs/`, `README`, `CLAUDE.md`), or other housekeeping that doesn't affect the running plugin.
+- **Only include application-facing changes**: omit commits that only touch repo infrastructure — `.github/` workflows, `.gitignore`, linter configs, docs-only changes (`docs/`, `README`, `CLAUDE.md`), or other housekeeping that doesn't affect the running plugin. This is about what goes in the changelog TEXT; it does not mean skipping step 8a, which writes the changelog page itself.
 - **For stable releases**: omit bug fixes that were fixing issues in the new features added during that same RC cycle. Those are internal RC iteration details, not user-facing changes. Only include the features, improvements, and unrelated bug fixes that matter to users upgrading from the previous stable release.
 - Keep each line short and punchy — this is a tag message, not a novel.
 - Use plain text, not markdown (git tag messages render as plain text).
@@ -220,6 +220,12 @@ Improvements:
 
 Do not include a title line here — that's assembled separately in step 6.
 
+#### Fold in the Unreleased section
+
+`docs/content/changelog.md` opens with an `## Unreleased` section. It is where user-facing notes are written **when the change is made**, not at release time — behaviour changes that commit messages and PR titles cannot express on their own ("your existing lists will return fewer items after this upgrade").
+
+Read it and merge its content into the generated changelog. It is hand-written and describes impact, so **prefer its wording over anything derived from commit messages** where the two overlap. If the section is empty or absent, carry on with the generated changelog alone.
+
 ### 6. Tag message format — critical
 
 The release workflow reads the changelog with `git tag -l --format='%(contents:body)'`, which returns everything **after the first blank line** of the tag message. That body is published verbatim as both the GitHub release body and the Jellyfin plugin-manifest changelog entry.
@@ -230,9 +236,17 @@ This means the tag message must be structured as:
 Release <version>
 
 <changelog body from step 5>
+
+Full changelog: https://jellyfin-smartlists-plugin.dinsten.se/changelog/
 ```
 
-For RCs, use "Release candidate <version>" instead of "Release <version>" as the first line.
+For RCs, use "Release candidate <version>" instead of "Release <version>" as the first line, and link the **preview** site instead, since that is where RC documentation lives:
+
+```text
+Full changelog: https://jellyfin-smartlists-plugin-preview.dinsten.se/changelog/
+```
+
+The link matters because this body becomes the **plugin-manifest changelog**, which Jellyfin renders in a cramped panel in the plugin catalogue. The link gives users somewhere readable to go, and lets them see what earlier versions changed — the manifest only ever shows the entry for one version.
 
 The first line and the blank line beneath it are stripped before publishing — so the changelog body from step 5 must stand alone and make sense without that first line. Do not fold the title into the body, and do not omit the blank line separator.
 
@@ -253,7 +267,13 @@ Changelog:
 Ready to create and push this tag? (yes / no / edit)
 ```
 
-**For `stable` releases**, insert the branch move above the changelog — this is the substantive part of the confirmation, since advancing `12-release` is what decides the release contents *and* what the docs site will serve:
+Add, for every release type:
+
+```text
+Docs:       docs/content/changelog.md entry for <new-version>, committed to main before tagging
+```
+
+**For `stable` releases**, also insert the branch move above the changelog — this is the substantive part of the confirmation, since advancing `12-release` is what decides the release contents *and* what the docs site will serve:
 
 ```text
 Branch:     12-release <old-sha> -> <new-sha> (fast-forward to main, <count> commits)
@@ -266,16 +286,42 @@ Branch:     12-release <old-sha> -> <new-sha> (fast-forward to main, <count> com
 
 ### 8. Create and push the tag
 
-**For `stable` releases, advance and push `12-release` first**, so the tag lands on the released commit and the docs site follows:
+#### Step 8a: Record the entry in the changelog page — BEFORE tagging
+
+The docs sites build from git branches, so an entry written *after* the tag lands in neither site until the following release. It has to be committed first, and onto **`main`** in both cases — `12-release` only ever fast-forwards to `main`, so anything committed directly to it would break the `--ff-only` invariant.
+
+In `docs/content/changelog.md`:
+
+1. Replace the `## Unreleased` heading with `## <new-version>`, and its italic line with `*<YYYY-MM-DD> · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/<new-version>)*`. For an RC, insert ` · **RC**` after the date, matching the existing entries.
+2. Add the rest of the changelog body from step 5 that was not already in Unreleased.
+3. Leave a fresh empty `## Unreleased` section above it, so the next change has somewhere to go.
+
+Then commit and push **on `main`** (switching branches first if the release is a `stable` and you are standing on `12-release`):
 
 ```bash
+git add docs/content/changelog.md
+git commit -m "docs: changelog for <new-version>"
+git push origin main
+```
+
+#### Step 8b: For `stable` releases, advance and push `12-release`
+
+Do this **after** 8a, so the fast-forward carries the changelog entry with it:
+
+```bash
+git checkout 12-release
+git fetch origin main
 git merge --ff-only origin/main     # or the specific <sha> if releasing a subset
 git push origin 12-release
 ```
 
 Pushing the branch is **not optional**. The mkdocs Cloudflare Worker publishes from `12-release`; if the branch moves only locally, the tag ships but the docs site keeps serving the previous release's content with no visible error. If either command fails, stop before tagging — a tag on an unadvanced branch would point at the old tree.
 
-Then write the changelog text to a temporary file and use `-F` — passing a multi-line message with embedded quotes/backticks through `-m "..."` is a shell-quoting accident waiting to happen:
+#### Step 8c: Create and push the tag
+
+Tag the commit the release actually ships: `main` for an RC, `12-release` for a stable. Both now include the changelog entry from 8a.
+
+Write the changelog text to a temporary file and use `-F` — passing a multi-line message with embedded quotes/backticks through `-m "..."` is a shell-quoting accident waiting to happen:
 
 ```bash
 # Write tag message to a temp file
@@ -299,3 +345,5 @@ Confirm success: "✓ Tagged and pushed <new-version>"
 If any command fails, show the error output and stop — do not attempt to clean up automatically. If the tag was created locally but the push failed, tell the user the tag exists locally and can be removed with `git tag -d <new-version>` or pushed manually once the issue is resolved.
 
 For `stable`, if the branch push succeeded but the tag push failed, say so explicitly: `12-release` is already published at the new commit, so the docs site has updated but no release was cut. Re-pushing the tag is all that is needed — do not roll the branch back.
+
+If step 8a committed but a later step failed, the changelog page now lists a version that was never tagged. Say so plainly and leave it in place; the entry becomes correct as soon as the tag is pushed. Do not revert it silently.
