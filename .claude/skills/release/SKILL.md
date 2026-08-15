@@ -294,7 +294,9 @@ In `docs/content/changelog.md`:
 
 1. Replace the `## Unreleased` heading with `## <new-version>`, and its italic line with `*<YYYY-MM-DD> · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/<new-version>)*`. For an RC, insert ` · **RC**` after the date, matching the existing entries.
 2. Add the rest of the changelog body from step 5 that was not already in Unreleased.
-3. Leave a fresh empty `## Unreleased` section above it, so the next change has somewhere to go.
+3. **Remove** the `## Unreleased` heading and its italic line entirely — do not leave an empty one behind. Whoever writes the next user-facing note re-adds the section.
+
+   This is what keeps both sites honest without any build-time switch. `12-release` is fast-forwarded at release time, immediately after this fold, so a leftover empty section would render on the stable site forever as an "Unreleased — nothing here" stub. Removing it means the stable site shows no such section, while the preview site (built from `main`) shows one exactly when there is something in it.
 
 Then commit and push **on `main`** (switching branches first if the release is a `stable` and you are standing on `12-release`):
 
