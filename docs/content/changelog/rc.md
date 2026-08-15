@@ -13,11 +13,9 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
-## Unreleased
+## v12.0.0.16-rc
 
-*Not in any release yet, including release candidates — you cannot install this today. It ships
-in whichever version is tagged next. Wording and scope can still change, and anything here may be
-reworked or pulled before then.*
+*2026-08-15 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.16-rc)*
 
 **Improvements**
 
@@ -28,7 +26,6 @@ reworked or pulled before then.*
 
 - Lists that already had "also check parent" enabled will change contents on their first refresh, because more levels now count. Rules that look for a match (equals, contains, is in) will match **more** items. Rules that exclude (not equals, not contains, is not in) will match **fewer**.
 - Music lists are the most visible case: values from the artist folder and the library now count alongside the album.
-
 ## v12.0.0.15-rc
 
 *2026-08-14 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.15-rc)*
