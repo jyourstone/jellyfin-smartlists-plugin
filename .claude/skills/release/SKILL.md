@@ -298,6 +298,8 @@ In `docs/content/changelog.md`:
 
    This is what keeps both sites honest without any build-time switch. `12-release` is fast-forwarded at release time, immediately after this fold, so a leftover empty section would render on the stable site forever as an "Unreleased — nothing here" stub. Removing it means the stable site shows no such section, while the preview site (built from `main`) shows one exactly when there is something in it.
 
+   Note what the section does **not** mean: its contents are in no release at all, RC included. The fold happens for RC releases too, so anything a user can actually install has already moved into a version entry. The preview site is built from `main` and therefore documents unreleased behaviour throughout — this section is simply the one place that gap is stated outright rather than left implicit.
+
 Then commit and push **on `main`** (switching branches first if the release is a `stable` and you are standing on `12-release`):
 
 ```bash

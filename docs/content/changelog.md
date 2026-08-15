@@ -8,14 +8,16 @@ and their documentation lives on the
 Version numbers are .NET four-part versions (`Major.Minor.Build.Revision`), not SemVer.
 A non-zero final segment means a release candidate; stable releases end in `.0`.
 
-An **Unreleased** section appears below when there are changes that are in the release candidates
-but not yet in a stable release. It is absent when there is nothing pending.
+An **Unreleased** section appears below when changes have landed but are not yet in **any**
+release — not a stable one, and not a release candidate either. It is absent when nothing is
+pending, and each entry moves out of it into a version entry as soon as that version ships.
 
 
 ## Unreleased
 
-*Already in the release candidates — not yet in a stable release. Wording and scope can still
-change before it ships, and anything here may be reworked or pulled.*
+*Not in any release yet, including release candidates — you cannot install this today. It ships
+in whichever version is tagged next. Wording and scope can still change, and anything here may be
+reworked or pulled before then.*
 
 **Improvements**
 
