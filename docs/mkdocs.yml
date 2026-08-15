@@ -53,7 +53,9 @@ nav:
     - Building Locally: development/building-locally.md
     - Debugging: development/debugging.md
     - Contributing: development/contributing.md
-  - Changelog: changelog.md
+  - Changelog:
+    - Stable Releases: changelog/stable.md
+    - Release Candidates: changelog/rc.md
 
 markdown_extensions:
   - pymdownx.highlight:

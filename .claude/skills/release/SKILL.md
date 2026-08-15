@@ -237,13 +237,13 @@ Release <version>
 
 <changelog body from step 5>
 
-Full changelog: https://jellyfin-smartlists-plugin.dinsten.se/changelog/
+Full changelog: https://jellyfin-smartlists-plugin.dinsten.se/changelog/stable/
 ```
 
 For RCs, use "Release candidate <version>" instead of "Release <version>" as the first line, and link the **preview** site instead, since that is where RC documentation lives:
 
 ```text
-Full changelog: https://jellyfin-smartlists-plugin-preview.dinsten.se/changelog/
+Full changelog: https://jellyfin-smartlists-plugin-preview.dinsten.se/changelog/rc/
 ```
 
 The link matters because this body becomes the **plugin-manifest changelog**, which Jellyfin renders in a cramped panel in the plugin catalogue. The link gives users somewhere readable to go, and lets them see what earlier versions changed — the manifest only ever shows the entry for one version.
@@ -270,7 +270,7 @@ Ready to create and push this tag? (yes / no / edit)
 Add, for every release type:
 
 ```text
-Docs:       docs/content/changelog.md entry for <new-version>, committed to main before tagging
+Docs:       changelog/<stable|rc>.md entry for <new-version>, committed to main before tagging
 ```
 
 **For `stable` releases**, also insert the branch move above the changelog — this is the substantive part of the confirmation, since advancing `12-release` is what decides the release contents *and* what the docs site will serve:
@@ -290,11 +290,20 @@ Branch:     12-release <old-sha> -> <new-sha> (fast-forward to main, <count> com
 
 The docs sites build from git branches, so an entry written *after* the tag lands in neither site until the following release. It has to be committed first, and onto **`main`** in both cases — `12-release` only ever fast-forwards to `main`, so anything committed directly to it would break the `--ff-only` invariant.
 
-In `docs/content/changelog.md`:
+The changelog is **two pages**, split by release type so neither repeats the other:
 
-1. Replace the `## Unreleased` heading with `## <new-version>`, and its italic line with `*<YYYY-MM-DD> · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/<new-version>)*`. For an RC, insert ` · **RC**` after the date, matching the existing entries.
-2. Add the rest of the changelog body from step 5 that was not already in Unreleased.
-3. **Remove** the `## Unreleased` heading and its italic line entirely — do not leave an empty one behind. Whoever writes the next user-facing note re-adds the section.
+| Release type | Page | Each entry covers |
+|---|---|---|
+| `rc` | `docs/content/changelog/rc.md` | changes since the previous **RC** |
+| `stable` | `docs/content/changelog/stable.md` | changes since the previous **stable** — the whole RC cycle, restated in one place |
+
+Write the entry to the page matching the release type:
+
+1. Add `## <new-version>` at the top of the entry list (directly below the page intro), with an italic line beneath it: `*<YYYY-MM-DD> · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/<new-version>)*`.
+2. Add the changelog body from step 5, including anything folded in from Unreleased.
+3. **Remove** the `## Unreleased` section from `rc.md` — heading, italic line and content — for **both** release types. Do not leave an empty one behind. Whoever writes the next user-facing note re-adds it.
+
+The `## Unreleased` section always lives on `rc.md`, since RCs are what its contents reach first.
 
    This is what keeps both sites honest without any build-time switch. `12-release` is fast-forwarded at release time, immediately after this fold, so a leftover empty section would render on the stable site forever as an "Unreleased — nothing here" stub. Removing it means the stable site shows no such section, while the preview site (built from `main`) shows one exactly when there is something in it.
 
