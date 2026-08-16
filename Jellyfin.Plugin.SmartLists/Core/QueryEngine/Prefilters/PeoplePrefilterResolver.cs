@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
-using System.Text.RegularExpressions;
 using MediaBrowser.Controller.Entities;
 using Microsoft.Extensions.Logging;
+#if !NET10_0_OR_GREATER
+using System.Reflection;
+#endif
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 {
@@ -167,40 +168,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         {
             ArgumentNullException.ThrowIfNull(storedNames);
 
-            Func<string, bool> matches;
-            switch (ruleOperator)
+            var matches = PrefilterStringMatcher.TryBuildMatcher(ruleOperator, targetValue);
+            if (matches == null)
             {
-                case "Equal":
-                    matches = name => Engine.AnyItemEquals([name], targetValue);
-                    break;
-                case "Contains":
-                    matches = name => Engine.AnyItemContains([name], targetValue);
-                    break;
-                case "IsIn":
-                    matches = name => Engine.AnyItemIsInList([name], targetValue);
-                    break;
-                case "MatchRegex":
-                    try
-                    {
-                        // An empty people list is evaluated against "", so a pattern that
-                        // matches the empty string matches items with no people at all -
-                        // which no name-derived candidate set can bound.
-                        if (Regex.IsMatch(string.Empty, targetValue))
-                        {
-                            return null;
-                        }
-                    }
-                    catch (ArgumentException)
-                    {
-                        // Invalid pattern - the per-item path surfaces the error.
-                        return null;
-                    }
-
-                    matches = name => Engine.AnyRegexMatch([name], targetValue);
-                    break;
-                default:
-                    // Negative operators and anything unexpected stay per-item.
-                    return null;
+                return null;
             }
 
             var matched = new List<string>();

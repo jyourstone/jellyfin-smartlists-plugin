@@ -40,8 +40,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// Gets the list's user. Candidate queries themselves must run USER-NEUTRAL with
         /// GroupByPresentationUniqueKey = false (a user-scoped query collapses alternate
         /// versions and would drop items); visibility is restored by intersecting with the
-        /// already user-scoped pool. The user is provided for resolvers that need the user id
-        /// to resolve user-specific rules (e.g. IsFavorite).
+        /// already user-scoped pool. The user is provided for resolvers that need it to
+        /// resolve user-specific rules (e.g. NextUnwatched, whose IsPlayed query is the one
+        /// mandated exception to user-neutrality).
         /// </summary>
         public User User { get; }
 

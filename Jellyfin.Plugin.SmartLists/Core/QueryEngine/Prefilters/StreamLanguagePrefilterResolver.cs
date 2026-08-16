@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 #if NET10_0_OR_GREATER
 using MediaBrowser.Controller.Entities;
@@ -161,40 +160,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             ArgumentNullException.ThrowIfNull(rawCodes);
             ArgumentNullException.ThrowIfNull(tryNormalize);
 
-            Func<string, bool> matches;
-            switch (ruleOperator)
+            var matches = PrefilterStringMatcher.TryBuildMatcher(ruleOperator, targetValue);
+            if (matches == null)
             {
-                case "Equal":
-                    matches = code => Engine.AnyItemEquals([code], targetValue);
-                    break;
-                case "Contains":
-                    matches = code => Engine.AnyItemContains([code], targetValue);
-                    break;
-                case "IsIn":
-                    matches = code => Engine.AnyItemIsInList([code], targetValue);
-                    break;
-                case "MatchRegex":
-                    try
-                    {
-                        // An empty stream-language list is evaluated against "", so a pattern
-                        // that matches the empty string matches items with no such streams at
-                        // all - which no code-derived candidate set can bound.
-                        if (Regex.IsMatch(string.Empty, targetValue))
-                        {
-                            return null;
-                        }
-                    }
-                    catch (ArgumentException)
-                    {
-                        // Invalid pattern - the per-item path surfaces the error.
-                        return null;
-                    }
-
-                    matches = code => Engine.AnyRegexMatch([code], targetValue);
-                    break;
-                default:
-                    // Negative operators and anything unexpected stay per-item.
-                    return null;
+                return null;
             }
 
             var matched = new List<string>();

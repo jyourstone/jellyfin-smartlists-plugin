@@ -2987,6 +2987,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         {
             var input = items as ICollection<BaseItem> ?? items.ToList();
             var kept = new List<BaseItem>(Math.Min(input.Count, candidateSet.Count + 8));
+            var hasCollectionsRules = HasCollectionsRules();
 
             foreach (var item in input)
             {
@@ -2995,7 +2996,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     continue;
                 }
 
-                if (candidateSet.Contains(item.Id) || IsPrefilterExempt(item))
+                if (candidateSet.Contains(item.Id) || IsPrefilterExempt(item, hasCollectionsRules))
                 {
                     kept.Add(item);
                 }
@@ -3008,7 +3009,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <summary>
         /// Items a prefilter must never shrink away, per the safety contract.
         /// </summary>
-        private bool IsPrefilterExempt(BaseItem item)
+        private static bool IsPrefilterExempt(BaseItem item, bool hasCollectionsRules)
         {
             // Extras are pulled via GetExtras() on their owners (LibraryManagerHelper.FetchExtras);
             // a candidate query over the main library never returns them.
@@ -3019,7 +3020,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             // Series-under-Collections bypass: deliberately broader than
             // ShouldExpandEpisodesForCollections - keeping too much is always safe.
-            if (item is Series && HasCollectionsRules())
+            if (item is Series && hasCollectionsRules)
             {
                 return true;
             }

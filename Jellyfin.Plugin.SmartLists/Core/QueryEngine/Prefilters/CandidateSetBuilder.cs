@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -175,20 +174,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         {
             requiresNegativeSupport = IsNegativeOperator(expression.Operator);
 
-            if (string.Equals(expression.Operator, "MatchRegex", StringComparison.Ordinal))
+            if (string.Equals(expression.Operator, "MatchRegex", StringComparison.Ordinal)
+                && PrefilterStringMatcher.RegexMatchesEmptyOrIsInvalid(expression.TargetValue))
             {
-                try
-                {
-                    if (Regex.IsMatch(string.Empty, expression.TargetValue))
-                    {
-                        return false;
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    // Invalid pattern - leave it to the per-item path.
-                    return false;
-                }
+                return false;
             }
 
             return true;
