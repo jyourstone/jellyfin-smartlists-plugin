@@ -260,7 +260,7 @@ How deep to traverse nested collections (default: 0):
     Higher search depths require more database queries. Start with depth 0 and increase only if needed.
 
 !!! note "Self-Reference Prevention"
-    Smart collections never include themselves in results, even if they match the rule criteria.
+    Smart collections never include themselves in results, even if they match the rule criteria. The collection is recognised by identity, not by name, so a separate collection or playlist that merely shares the name is still matched normally, and renaming the Jellyfin collection does not break the exclusion.
 
 #### Playlist Name
 
@@ -284,7 +284,7 @@ Filter items based on Jellyfin playlist membership.
     Only playlists you own or that are marked as public are accessible.
 
 !!! note "Self-Reference Prevention"
-    Smart playlists never include themselves in results, even if they match the rule criteria.
+    Smart playlists never include themselves in results, even if they match the rule criteria. The playlist is recognised by identity, not by name, so a separate playlist or collection that merely shares the name is still matched normally, and renaming the Jellyfin playlist does not break the exclusion.
 
 #### External List
 

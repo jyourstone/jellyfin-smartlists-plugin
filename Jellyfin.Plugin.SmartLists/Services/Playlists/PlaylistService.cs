@@ -1335,6 +1335,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     MediaTypes = bumpers.MediaTypes ?? [],
                     Order = new OrderDto { SortOptions = [sortOption] },
 
+                    // The bumper pool builds part of the parent playlist, so the parent's Jellyfin
+                    // playlist(s) must stay out of the pool's own Playlists results (self-reference).
+                    JellyfinPlaylistId = dto.JellyfinPlaylistId,
+                    UserPlaylists = dto.UserPlaylists,
+
                     // Extras (trailers, interstitials, etc.) are the archetypal bumper
                     // content, so bumper pools always fetch them; bumper rules still filter.
                     IncludeExtras = true,

@@ -739,10 +739,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<(Guid SeasonId, Guid UserId), BaseItem[]> SeasonEpisodes { get; } = new();
             public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> ItemCollections { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> CollectionMembershipCache { get; } = new();
-            public ConcurrentDictionary<Guid, List<string>> ItemPlaylists { get; } = new();
+
+            /// <summary>
+            /// Playlist names an item belongs to, ALREADY FILTERED for the list being built (a list never
+            /// sees itself). The origin key is therefore part of the key: this cache is per-user and lives
+            /// until the whole refresh queue drains, so without it a later list in the same drain would
+            /// inherit an earlier list's exclusions and silently go blind to that playlist.
+            /// </summary>
+            public ConcurrentDictionary<(Guid ItemId, string OriginKey), List<string>> ItemPlaylists { get; } = new();
+
             public BaseItem[]? AllPlaylists { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> PlaylistMembershipCache { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesNameById { get; } = new();
@@ -782,8 +789,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // Outer key is recursion depth, inner maps Collection ID → set of all member IDs at that depth
             public ConcurrentDictionary<int, Dictionary<Guid, HashSet<Guid>>> CollectionMembershipCacheByDepth { get; } = new();
 
-            // Item membership cache with depth key for collections - maps (ItemId, Depth) → list of collection names
-            public ConcurrentDictionary<(Guid ItemId, int Depth), List<string>> ItemCollectionsWithDepth { get; } = new();
+            // Item membership cache for collections - maps (ItemId, Depth, OriginKey) → list of collection names.
+            // Like ItemPlaylists, the stored names are already filtered for the list being built, so the origin
+            // MUST be part of the key: this cache is per-user and lives until the whole refresh queue drains.
+            public ConcurrentDictionary<(Guid ItemId, int Depth, string OriginKey), List<string>> ItemCollectionsWithDepth { get; } = new();
 
             // Last episode air date cache for Series items - maps SeriesId → Unix timestamp of most recent episode
             public ConcurrentDictionary<Guid, double> LastEpisodeAirDateById { get; } = new();
