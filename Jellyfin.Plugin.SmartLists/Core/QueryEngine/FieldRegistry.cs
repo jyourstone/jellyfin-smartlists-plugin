@@ -252,12 +252,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Ratings/Playback Fields (User-specific)
             AddField(fields, "CommunityRating", "Community Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
             AddField(fields, "CriticRating", "Critic Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators);
+            AddField(fields, "Rating", "User Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "IsFavorite", "Is Favorite", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "PlaybackStatus", "Playback Status", FieldType.UserData, FieldCategory.RatingsPlayback, SimpleOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
             AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
-            AddField(fields, "Rating", "User Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "RuntimeMinutes", "Runtime", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
 
             // File Fields - conditionally extracted via ExtractionGroup.FileInfo
