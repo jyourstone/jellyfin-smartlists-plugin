@@ -294,6 +294,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         logger.LogInformation("Smart playlist '{PlaylistName}' matched no items - deleting Jellyfin playlist (hide when empty)", dto.Name);
                         _libraryManager.DeleteItem(existingPlaylist, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Drop it from this drain's snapshot too, so lists refreshed after this one
+                        // stop seeing a playlist that no longer exists.
+                        refreshCache.OnContainerRemoved(existingPlaylist.Id);
                     }
 
                     // Clear the stored Jellyfin playlist ID so a later refresh with items recreates it
@@ -432,7 +436,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         }
                     }
 
-                    DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id);
+                    DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id, refreshCache);
+
+                    // Keep this drain's membership snapshot current, or a list refreshed later in the
+                    // same drain evaluates its Playlists rules against the contents we just replaced.
+                    refreshCache.OnPlaylistWritten(existingPlaylist, finalItemIds);
 
                     return (true, $"Updated playlist '{existingPlaylist.Name}' with {newLinkedChildren.Length} items", existingPlaylist.Id.ToString("N"));
                 }
@@ -452,7 +460,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     if (Guid.TryParse(newPlaylistId, out var createdPlaylistGuid))
                     {
-                        DeleteOrphanedTetheredPlaylists(dto, user, createdPlaylistGuid);
+                        DeleteOrphanedTetheredPlaylists(dto, user, createdPlaylistGuid, refreshCache);
                     }
 
                     // Update the DTO with the new Jellyfin playlist ID
@@ -503,6 +511,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     logger.LogDebug("Successfully created new playlist: {PlaylistName} with {ItemCount} items",
                         smartPlaylistName, newLinkedChildren.Length);
+
+                    // A playlist created mid-drain is absent from the snapshot entirely, so add it
+                    // for the lists refreshed after this one.
+                    if (Guid.TryParse(newPlaylistId, out var writtenPlaylistId)
+                        && _libraryManager.GetItemById(writtenPlaylistId) is BaseItem createdPlaylist)
+                    {
+                        refreshCache.OnPlaylistWritten(createdPlaylist, finalItemIds);
+                    }
 
                     return (true, $"Created playlist '{smartPlaylistName}' with {newLinkedChildren.Length} items", newPlaylistId);
                 }
@@ -1787,7 +1803,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// tether for this user but are not the tracked playlist. The tether proves the plugin
         /// created them, so deletion cannot hit user-created playlists.
         /// </summary>
-        private void DeleteOrphanedTetheredPlaylists(SmartPlaylistDto dto, User user, Guid canonicalPlaylistId)
+        private void DeleteOrphanedTetheredPlaylists(SmartPlaylistDto dto, User user, Guid canonicalPlaylistId, RefreshQueueService.RefreshCache refreshCache)
         {
             if (string.IsNullOrEmpty(dto.Id))
             {
@@ -1816,6 +1832,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         _logger.LogWarning("Deleting orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}) tethered to smart playlist {SmartListId} for user {UserId}",
                             orphan.Name, orphan.Id, dto.Id, user.Id);
                         _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Deleted here rather than at the call sites so a new caller cannot forget it:
+                        // an orphan left in this drain's snapshot keeps matching by name and membership
+                        // for every list refreshed after this one.
+                        refreshCache.OnContainerRemoved(orphan.Id);
                     }
                     catch (Exception deleteEx)
                     {

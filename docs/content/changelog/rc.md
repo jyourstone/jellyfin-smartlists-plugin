@@ -20,6 +20,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 - Smart collections no longer see themselves when a rule checks **Collection name**. Previously a collection whose own name matched its rule — which the default `[Smart]` suffix makes easy, for example a "not contains smart" rule meant to list uncollected items — flipped between full and empty on every refresh, because its own contents fed back into its own rule. Smart playlists already had this protection; collections did not ([#499](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/499)).
 - A list is now recognised by identity rather than by name, so a separate collection or playlist that merely shares the name is matched normally, and renaming the Jellyfin list does not break the exclusion.
 - Fixed **Collection name** and **Playlist name** rules returning wrong results when several lists were refreshed in one batch. The first list's self-exclusion leaked into the lists refreshed after it, making them blind to that list.
+- Lists that depend on another smart list's contents no longer lag a refresh behind. When several lists refresh together — as scheduled auto-refresh does — a list refreshed later in the batch used to see the earlier lists' contents as they were *before* the batch started. A rule like "not in any smart collection" was therefore always one cycle out of date while the library kept changing.
 
 **Existing lists may change**
 

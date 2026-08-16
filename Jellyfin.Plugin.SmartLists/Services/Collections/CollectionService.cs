@@ -355,6 +355,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     {
                         _logger.LogInformation("Smart collection '{CollectionName}' matched no items - deleting Jellyfin collection (hide when empty)", dto.Name);
                         _libraryManager.DeleteItem(existingCollectionItem, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Drop it from this drain's snapshot too, so lists refreshed after this one
+                        // stop seeing a collection that no longer exists.
+                        refreshCache.OnContainerRemoved(existingCollectionItem.Id);
                     }
 
                     // Clear the stored Jellyfin collection ID so a later refresh with items recreates it
@@ -408,7 +412,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     dto.LastRefreshed = DateTime.UtcNow;
                     _logger.LogDebug("Updated LastRefreshed timestamp for collection: {CollectionName}", dto.Name);
 
-                    DeleteOrphanedTetheredCollections(dto, existingCollection.Id);
+                    DeleteOrphanedTetheredCollections(dto, existingCollection.Id, refreshCache);
+
+                    // Keep this drain's membership snapshot current, or a list refreshed later in the
+                    // same drain evaluates its Collections rules against the contents we just replaced.
+                    refreshCache.OnCollectionWritten(existingCollection, WrittenMembers(newLinkedChildren, mediaLookup));
 
                     return (true, $"Updated collection '{existingCollection.Name}' with {newLinkedChildren.Length} items", existingCollection.Id.ToString("N"));
                 }
@@ -431,7 +439,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     if (Guid.TryParse(newCollectionId, out var createdCollectionGuid))
                     {
-                        DeleteOrphanedTetheredCollections(dto, createdCollectionGuid);
+                        DeleteOrphanedTetheredCollections(dto, createdCollectionGuid, refreshCache);
                     }
 
                     // Update LastRefreshed timestamp for successful refresh
@@ -440,6 +448,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     _logger.LogDebug("Successfully created new collection: {CollectionName} with {ItemCount} items",
                         collectionName, newLinkedChildren.Length);
+
+                    // A collection created mid-drain is absent from the snapshot entirely, so add it
+                    // for the lists refreshed after this one.
+                    if (Guid.TryParse(newCollectionId, out var writtenCollectionId)
+                        && _libraryManager.GetItemById(writtenCollectionId) is BaseItem createdCollection)
+                    {
+                        refreshCache.OnCollectionWritten(createdCollection, WrittenMembers(newLinkedChildren, mediaLookup));
+                    }
 
                     return (true, $"Created collection '{collectionName}' with {newLinkedChildren.Length} items", newCollectionId);
                 }
@@ -450,7 +466,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// tether but are not the tracked collection. The tether proves the plugin created them,
         /// so deletion cannot hit user-created collections.
         /// </summary>
-        private void DeleteOrphanedTetheredCollections(SmartCollectionDto dto, Guid canonicalCollectionId)
+        private void DeleteOrphanedTetheredCollections(SmartCollectionDto dto, Guid canonicalCollectionId, RefreshQueueService.RefreshCache refreshCache)
         {
             if (string.IsNullOrEmpty(dto.Id))
             {
@@ -477,6 +493,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         _logger.LogWarning("Deleting orphaned duplicate collection '{CollectionName}' ({CollectionId}) tethered to smart collection {SmartListId}",
                             orphan.Name, orphan.Id, dto.Id);
                         _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Deleted here rather than at the call sites so a new caller cannot forget it:
+                        // an orphan left in this drain's snapshot keeps matching by name and membership
+                        // for every list refreshed after this one.
+                        refreshCache.OnContainerRemoved(orphan.Id);
                     }
                     catch (Exception deleteEx)
                     {
@@ -2345,6 +2366,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             return false;
         }
+
+        /// <summary>
+        /// The items behind the LinkedChild entries just written to a collection, for refreshing the
+        /// per-drain membership snapshot.
+        /// </summary>
+        /// <param name="linkedChildren">The LinkedChild entries written to the collection.</param>
+        /// <param name="mediaLookup">Id to item lookup covering those entries.</param>
+        /// <returns>The resolved member items.</returns>
+        private static IReadOnlyList<BaseItem> WrittenMembers(LinkedChild[] linkedChildren, Dictionary<Guid, BaseItem> mediaLookup)
+            => [.. linkedChildren
+                .Where(lc => lc.ItemId.HasValue && mediaLookup.ContainsKey(lc.ItemId.Value))
+                .Select(lc => mediaLookup[lc.ItemId!.Value])];
 
         /// <summary>
         /// Queries for items when IncludeOnly option is enabled for a field.
