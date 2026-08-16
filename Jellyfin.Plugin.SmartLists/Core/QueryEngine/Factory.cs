@@ -936,6 +936,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             operand.PlaybackStatusByUser[userId] = playbackStatus;
             operand.PlayCountByUser[userId] = playbackStatus == "Played" ? 1 : 0;
+            operand.RatingByUser[userId] = -1;
             operand.IsFavoriteByUser[userId] = false;
             operand.LastPlayedDateByUser[userId] = -1; // Never played,
         }
@@ -1262,6 +1263,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 }
             }
 
+            // Extract Rating. Jellyfin uses null for unrated items; 0 is a valid rating.
+            var ratingProp = userDataType.GetProperty("Rating");
+            var rating = ExtractDoubleValue(ratingProp?.GetValue(userData));
+            operand.RatingByUser[userId] = rating.GetValueOrDefault(-1);
+
             // Extract IsFavorite
             var isFavoriteProp = userDataType.GetProperty("IsFavorite");
             if (isFavoriteProp != null)
@@ -1394,6 +1400,31 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
             }
             catch
+            {
+                return null;
+            }
+        }
+
+        private static double? ExtractDoubleValue(object? value)
+        {
+            if (value is double doubleValue)
+                return doubleValue;
+            if (value == null)
+                return null;
+
+            try
+            {
+                return Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (FormatException)
+            {
+                return null;
+            }
+            catch (InvalidCastException)
+            {
+                return null;
+            }
+            catch (OverflowException)
             {
                 return null;
             }

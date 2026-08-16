@@ -730,6 +730,49 @@ public class EngineOperatorTests
     }
 
     /// <summary>
+    /// Rating is nullable per user. Zero is a valid rating; an unrated item must not
+    /// satisfy either positive or negative rating comparisons.
+    /// </summary>
+    [Theory]
+    [InlineData(10d, "GreaterThan", "8", true)]
+    [InlineData(8d, "GreaterThan", "8", false)]
+    [InlineData(8d, "GreaterThanOrEqual", "8", true)]
+    [InlineData(7.5, "LessThan", "8", true)]
+    [InlineData(8d, "LessThanOrEqual", "8", true)]
+    [InlineData(8.5, "Equal", "8.5", true)]
+    [InlineData(8d, "NotEqual", "8.5", true)]
+    [InlineData(0d, "Equal", "0", true)]
+    [InlineData(null, "Equal", "0", false)]
+    [InlineData(null, "NotEqual", "8", false)]
+    [InlineData(null, "LessThan", "8", false)]
+    public void CompileRule_Rating_ResolvesPerUserAndExcludesUnratedItems(
+        double? stored,
+        string op,
+        string target,
+        bool expected)
+    {
+        var operand = new Operand("item");
+        if (stored.HasValue)
+        {
+            operand.RatingByUser[UserIdN] = stored.Value;
+        }
+
+        var rule = Compile(new Expression("Rating", op, target) { UserId = UserIdDashed });
+
+        Assert.Equal(expected, rule(operand));
+    }
+
+    [Theory]
+    [InlineData("not-a-number")]
+    [InlineData("NaN")]
+    [InlineData("Infinity")]
+    public void CompileRule_Rating_RejectsInvalidNumericTarget(string target)
+    {
+        Assert.Throws<ArgumentException>(
+            () => Compile(new Expression("Rating", "GreaterThan", target) { UserId = UserIdDashed }));
+    }
+
+    /// <summary>
     /// GetLastPlayedDateByUser returns -1 for "never played", and the engine ANDs a
     /// "!= -1" guard onto every LastPlayedDate rule - so a never-played item fails even Before,
     /// which -1 would otherwise satisfy numerically.

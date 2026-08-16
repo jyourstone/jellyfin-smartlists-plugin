@@ -124,6 +124,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // These will be populated based on which users are referenced in rules
         public Dictionary<string, string> PlaybackStatusByUser { get; set; } = [];
         public Dictionary<string, int> PlayCountByUser { get; set; } = [];
+        public Dictionary<string, double> RatingByUser { get; set; } = [];
         public Dictionary<string, bool> IsFavoriteByUser { get; set; } = [];
         public Dictionary<string, bool> NextUnwatchedByUser { get; set; } = [];
         public Dictionary<string, double> LastPlayedDateByUser { get; set; } = [];
@@ -141,6 +142,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public int GetPlayCountByUser(string userId)
         {
             return PlayCountByUser.TryGetValue(userId, out var value) ? value : 0;
+        }
+
+        public double GetRatingByUser(string userId)
+        {
+            return RatingByUser.TryGetValue(userId, out var value) ? value : -1;
         }
 
         public bool GetIsFavoriteByUser(string userId)
