@@ -1,6 +1,7 @@
 using System.Reflection;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SmartLists.Core;
+using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
@@ -8,6 +9,7 @@ using Jellyfin.Plugin.SmartLists.Tests.Support;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Playlists;
+using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Core.QueryEngine;
 
@@ -285,6 +287,32 @@ public class ListOriginTests
         Assert.True(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, []).Matches(candidate));
         Assert.False(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, [Guid.NewGuid()]).Matches(candidate));
         Assert.True(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, [candidate.Id]).Matches(candidate));
+    }
+
+    /// <summary>
+    /// The SmartLists provider-ID tether identifies the list even when the stored Jellyfin id has
+    /// gone stale. This matters because the recovery that repairs a stale id runs AFTER filtering
+    /// (PlaylistService.ProcessPlaylistRefreshAsync filters at ~line 177 and recovers at ~line 263;
+    /// CollectionService filters at ~line 252 and recovers at ~line 341), so on a recovery refresh
+    /// the id set alone points at a container that no longer exists and the real one - still
+    /// tethered - would be left visible to its own rules for that whole refresh.
+    /// </summary>
+    [Fact]
+    public void ListOrigin_MatchesTheTetheredContainerEvenWhenTheStoredIdIsStale()
+    {
+        var tethered = CollectionNamed("Uncollected [Smart]");
+        tethered.SetProviderId(ProviderKeys.SmartLists, "col-1");
+
+        // Stored id is stale (points at a deleted container) and the name fallback is disarmed by
+        // the non-empty id set, so only the tether can identify this.
+        var origin = new ListOrigin("col-1", "Uncollected", BaseItemKind.BoxSet, [Guid.NewGuid()]);
+
+        Assert.True(origin.Matches(tethered));
+
+        // A container tethered to a DIFFERENT smart list is not this list.
+        var other = CollectionNamed("Uncollected [Smart]");
+        other.SetProviderId(ProviderKeys.SmartLists, "col-2");
+        Assert.False(origin.Matches(other));
     }
 
     /// <summary>

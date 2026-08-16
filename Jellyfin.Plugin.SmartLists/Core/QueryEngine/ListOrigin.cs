@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Jellyfin.Data.Enums;
+using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 {
@@ -55,6 +57,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public bool Matches(BaseItem candidate)
         {
             ArgumentNullException.ThrowIfNull(candidate);
+
+            // The provider-ID tether is the authoritative identity. It is checked first because the
+            // stored Jellyfin id can be stale, and the recovery that repairs it (PlaylistService /
+            // CollectionService) runs *after* filtering - so during a recovery refresh the id set
+            // alone would miss the real container and let the list see itself again.
+            if (!string.IsNullOrEmpty(Key)
+                && string.Equals(candidate.GetProviderId(ProviderKeys.SmartLists), Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
 
             if (_jellyfinItemIds.Count > 0)
             {

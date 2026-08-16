@@ -1924,7 +1924,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Track visited collections to prevent duplicates and circular references
                 var visitedCollectionIds = new HashSet<Guid>();
-                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
 
                 // Prepare the rule groups containing collection-only rules - the whole group
                 // (name rules + sibling rules) must match for a collection to be included
@@ -1937,9 +1936,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     if (collection == null) continue;
 
-                    // Skip if this collection is the same as the one we're currently building (prevent self-reference)
-                    var collectionBaseName = NameFormatter.StripPrefixAndSuffix(collection.Name);
-                    if (collectionBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                    // Skip if this collection is the one we're currently building (prevent self-reference)
+                    if (Origin.Matches(collection))
                     {
                         logger?.LogDebug("Skipping collection '{CollectionName}' - matches current collection being built (preventing self-reference)", collection.Name);
                         continue;
@@ -1977,7 +1975,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             0,  // Start at depth 0 (root level)
                             maxRecursionDepth,
-                            currentListBaseName,
+                            Origin,
                             encounteredIds);
 
                         if (encounteredIds != null)
@@ -2020,7 +2018,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ILogger? logger,
             int currentDepth,
             int maxDepth,
-            string currentListBaseName,
+            ListOrigin origin,
             HashSet<Guid>? encounteredIds = null)
         {
             bool alreadyAdded = visitedCollectionIds.Contains(collection.Id);
@@ -2055,9 +2053,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Check if child is a collection
                     if (child.GetBaseItemKind() == BaseItemKind.BoxSet && allCollectionsById.ContainsKey(child.Id))
                     {
-                        // Skip if matches current list being built
-                        var childBaseName = NameFormatter.StripPrefixAndSuffix(child.Name);
-                        if (childBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                        // Skip if this child is the list being built (prevent self-reference)
+                        if (origin.Matches(child))
                         {
                             continue;
                         }
@@ -2071,7 +2068,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             currentDepth + 1,
                             maxDepth,
-                            currentListBaseName,
+                            origin,
                             encounteredIds);
                     }
                 }
@@ -2243,8 +2240,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var allPlaylists = libraryManager.GetItemsResult(playlistQuery).Items;
                 logger?.LogDebug("Found {Count} total playlists to check against Playlists rules with IncludePlaylistOnly=true", allPlaylists.Count);
 
-                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
-
                 // Prepare the rule groups containing playlist-only rules - the whole group
                 // (name rules + sibling rules) must match for a playlist to be included
                 var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Playlists", user, logger);
@@ -2256,9 +2251,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     if (playlist == null) continue;
 
-                    // Skip if this playlist is the same as the one we're currently building (prevent self-reference)
-                    var playlistBaseName = NameFormatter.StripPrefixAndSuffix(playlist.Name);
-                    if (playlistBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                    // Skip if this playlist is the one we're currently building (prevent self-reference)
+                    if (Origin.Matches(playlist))
                     {
                         logger?.LogDebug("Skipping playlist '{PlaylistName}' - matches current list being built (preventing self-reference)", playlist.Name);
                         continue;
