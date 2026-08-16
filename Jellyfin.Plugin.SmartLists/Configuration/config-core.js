@@ -41,13 +41,13 @@
     // Field type constants to avoid duplication
     SmartLists.FIELD_TYPES = {
         LIST_FIELDS: ['Collections', 'People', 'Actors', 'Directors', 'Writers', 'Producers', 'GuestStars', 'Genres', 'Studios', 'Tags', 'Artists', 'AlbumArtists', 'AudioLanguages', 'SubtitleLanguages', 'ProductionLocations'],
-        NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels'],
+        NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Rating', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels'],
         DATE_FIELDS: ['DateCreated', 'DateLastRefreshed', 'DateLastSaved', 'DateModified', 'ReleaseDate', 'LastPlayedDate', 'LastEpisodeAirDate'],
         BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched'],
         SIMPLE_FIELDS: ['ItemType', 'SeriesStatus'],
         RESOLUTION_FIELDS: ['Resolution'],
         STRING_FIELDS: ['SimilarTo', 'Name', 'Album', 'SeriesName', 'OfficialRating', 'Overview', 'FileName', 'FolderPath', 'AudioCodec', 'AudioProfile', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType', 'PlaybackStatus', 'CustomRating', 'ImdbId', 'TmdbId', 'TvdbId'],
-        USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'NextUnwatched', 'LastPlayedDate']
+        USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'Rating', 'NextUnwatched', 'LastPlayedDate']
     };
 
     // Date fields where metadata can be missing - these get the "unknown date" option
