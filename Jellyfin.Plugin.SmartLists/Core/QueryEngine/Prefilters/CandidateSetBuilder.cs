@@ -36,14 +36,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         }
 
         /// <summary>
-        /// Creates a builder with the production field resolvers. Field support is registered
-        /// here by later stages; with no resolvers <see cref="Build"/> always returns null and
-        /// the filtering pipeline behaves exactly as it did without prefilters.
+        /// Creates a builder with the production field resolvers. Fields without a resolver
+        /// here simply never ride the prefilter - their rules evaluate per-item as before.
         /// </summary>
         /// <returns>The builder with all production resolvers registered.</returns>
         public static CandidateSetBuilder CreateDefault()
         {
-            return new CandidateSetBuilder([]);
+            return new CandidateSetBuilder([new PeoplePrefilterResolver()]);
         }
 
         /// <summary>

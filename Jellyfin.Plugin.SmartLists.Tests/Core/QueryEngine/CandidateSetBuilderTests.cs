@@ -73,9 +73,10 @@ public class CandidateSetBuilderTests
     }
 
     [Fact]
-    public void CreateDefault_HasNoResolversYet_ReturnsNull()
+    public void CreateDefault_WithoutLibraryManager_ReturnsNull()
     {
-        // Foundation stage guarantee: until field resolvers register, the prefilter is a no-op.
+        // The production resolvers all need ILibraryManager for their candidate queries;
+        // without one they must degrade to "no shrink possible", never throw or guess.
         var result = CandidateSetBuilder.CreateDefault().Build([Set(Rule("People"))], Context());
 
         Assert.Null(result);

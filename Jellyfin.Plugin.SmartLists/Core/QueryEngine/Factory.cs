@@ -2330,6 +2330,32 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Cached reflection lookup for the ABI-shared ILibraryManager.GetPeople(InternalPeopleQuery)
+        /// overload. Shared with the prefilter's people name dump so every caller reuses the
+        /// same MethodInfo cache.
+        /// </summary>
+        /// <param name="libraryManager">The library manager whose concrete type carries the method.</param>
+        /// <returns>The GetPeople method, or null when the lookup fails.</returns>
+        internal static System.Reflection.MethodInfo? GetPeopleQueryMethod(ILibraryManager libraryManager)
+        {
+            var getPeopleMethod = _getPeopleMethodCache;
+            if (getPeopleMethod == null)
+            {
+                lock (_getPeopleMethodLock)
+                {
+                    if (_getPeopleMethodCache == null)
+                    {
+                        _getPeopleMethodCache = libraryManager.GetType().GetMethod("GetPeople", [typeof(InternalPeopleQuery)]);
+                    }
+
+                    getPeopleMethod = _getPeopleMethodCache;
+                }
+            }
+
+            return getPeopleMethod;
+        }
+
+        /// <summary>
         /// Preloads people data for all items in parallel to improve performance.
         /// </summary>
         public static void PreloadPeopleCache(ILibraryManager libraryManager, IEnumerable<BaseItem> items, RefreshQueueServiceRefreshCache cache, ILogger? logger)
