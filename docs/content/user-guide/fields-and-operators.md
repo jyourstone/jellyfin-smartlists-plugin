@@ -97,6 +97,7 @@ The following fields track per-user data and support an optional **user selector
 |-------|-----------|-------------|
 | **Is Favorite** | `IsFavorite` | Whether the item is marked as a favorite |
 | **Play Count** | `PlayCount` | Number of times the item has been played |
+| **User Rating** | `Rating` | The personal rating the user gave the item (0-10) |
 | **Last Played** | `LastPlayedDate` | When the item was last played |
 | **Playback Status** | `PlaybackStatus` | Played, In Progress, or Unplayed |
 | **Next Unwatched** | `NextUnwatched` | Shows only the next unwatched episode for each series |
@@ -117,6 +118,10 @@ The following fields track per-user data and support an optional **user selector
 
     - **Playback Status**: Played = all episodes watched, In Progress = some watched, Unplayed = none watched
     - **Last Played**: Uses the most recent episode watch date (excludes season 0 specials)
+
+!!! note "Unrated items"
+    Items the user hasn't rated never match a **User Rating** rule - not even `not equal` or
+    `less than`. A rating of `0` is a real rating and does match.
 
 **Next Unwatched options:**
 
