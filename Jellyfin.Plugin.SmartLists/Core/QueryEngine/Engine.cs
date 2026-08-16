@@ -403,7 +403,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="logger">Optional logger for error reporting</param>
         /// <returns>The parsed boolean value</returns>
         /// <exception cref="ArgumentException">Thrown when the target value is invalid</exception>
-        private static bool ValidateAndParseBooleanValue(string targetValue, string fieldName, ILogger? logger = null)
+        internal static bool ValidateAndParseBooleanValue(string targetValue, string fieldName, ILogger? logger = null)
         {
             // Validate and parse boolean value safely
             if (string.IsNullOrWhiteSpace(targetValue))

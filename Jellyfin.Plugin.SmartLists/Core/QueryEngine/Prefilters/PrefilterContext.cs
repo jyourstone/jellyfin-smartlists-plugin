@@ -55,6 +55,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         public ILogger? Logger { get; }
 
         /// <summary>
+        /// Gets the user manager for resolving rule-referenced additional users, or null when
+        /// unavailable - user-specific resolvers (NextUnwatched) then only bound rules that
+        /// target the list's own user.
+        /// </summary>
+        public IUserManager? UserManager { get; init; }
+
+        /// <summary>
         /// Gets the already-fetched, user-scoped item pool for this filter run, or null when
         /// pool-derived narrowing is unavailable. Only pool-scan resolvers (SeriesName) read it.
         /// </summary>

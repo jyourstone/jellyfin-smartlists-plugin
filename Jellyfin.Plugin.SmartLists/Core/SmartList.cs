@@ -1071,6 +1071,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         candidateSet = CandidateSetBuilder.CreateDefault()
                             .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger)
                             {
+                                UserManager = UserManager,
                                 PoolItems = seriesDumpComplete ? itemsArray : null,
                                 SeriesNamesById = seriesDumpComplete ? refreshCache.SeriesNameById : null,
                                 ExtraOwnerSeriesIds = seriesDumpComplete ? refreshCache.ExtraOwnerSeriesId : null,
