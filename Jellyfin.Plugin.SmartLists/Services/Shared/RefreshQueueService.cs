@@ -756,6 +756,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, string> SeriesSortNameById { get; } = new();
 
             /// <summary>
+            /// SeriesName bulk-warmup state: null = not attempted, true = SeriesNameById and
+            /// SeriesSortNameById cover every in-scope series (dump completed), false = the dump
+            /// failed and only per-miss lazy entries exist. Written only on the sequential refresh
+            /// path (see OperandFactory.WarmSeriesNameCache).
+            /// </summary>
+            public bool? SeriesNameWarmupSucceeded { get; set; }
+
+            /// <summary>
             /// Ancestor-inherited Tags/Studios/Genres, keyed by the ANCESTOR NODE id (season id,
             /// album id, folder id) — never the item id — so every episode of a season is a single
             /// lookup and the walk itself runs once per container. Each entry is the COMPLETE union

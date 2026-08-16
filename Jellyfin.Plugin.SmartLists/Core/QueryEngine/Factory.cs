@@ -1932,8 +1932,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Helper method to safely extract SeriesId as Guid from episode items.
         /// Handles Guid, Guid?, and string representations.
+        /// Internal so SeriesNamePrefilterResolver can mirror the exact per-item resolution order.
         /// </summary>
-        private static bool TryGetEpisodeSeriesGuid(BaseItem baseItem, out Guid seriesGuid)
+        internal static bool TryGetEpisodeSeriesGuid(BaseItem baseItem, out Guid seriesGuid)
         {
             seriesGuid = Guid.Empty;
             if (baseItem is not Episode) return false;
@@ -1977,6 +1978,65 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Bulk-loads every library series' Name and SortName into the refresh cache in ONE
+        /// user-neutral query, replacing the per-distinct-series GetItemById round-trips the
+        /// lazy path would otherwise make (thousands on big TV libraries). Runs at most once
+        /// per refresh cache; the per-miss GetItemById fallback in ResolveAndCacheSeriesName
+        /// stays as-is for series outside the dump scope (virtual/out-of-library).
+        /// Both dictionaries are populated together: a Name-only warmup would permanently
+        /// starve SeriesNameOrder's sort names via the cache-hit early return above.
+        /// </summary>
+        /// <returns>True when the dump completed and the cache covers every in-scope series.</returns>
+        internal static bool WarmSeriesNameCache(ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            if (cache.SeriesNameWarmupSucceeded is bool alreadyAttempted)
+            {
+                return alreadyAttempted;
+            }
+
+            try
+            {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                // User-neutral on purpose: the GetItemById fallback performs no visibility
+                // filtering, so a user-scoped dump would shunt invisible-but-referenced series
+                // onto the slow per-miss path. Grouping is pinned off per prefilter query
+                // hygiene. Recursive is a repository no-op without ParentId and is not set.
+                var series = libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = [BaseItemKind.Series],
+                    TopParentIds = LibraryManagerHelper.GetLibraryTopParentIds(libraryManager),
+                    GroupByPresentationUniqueKey = false,
+                });
+
+                foreach (var item in series)
+                {
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    // Read both BEFORE writing either: a partial pair would hit the cache-hit
+                    // early return on Name and leave the sort name permanently missing.
+                    var name = item.Name ?? string.Empty;
+                    var sortName = item.SortName ?? string.Empty;
+                    cache.SeriesNameById[item.Id] = name;
+                    cache.SeriesSortNameById[item.Id] = sortName;
+                }
+
+                cache.SeriesNameWarmupSucceeded = true;
+                logger?.LogDebug("Series name warmup cached {Count} series in {Ms}ms", series.Count, stopwatch.ElapsedMilliseconds);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                cache.SeriesNameWarmupSucceeded = false;
+                logger?.LogDebug(ex, "Series name warmup failed; falling back to per-series resolution");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Extracts the series name for episodes and extras with per-refresh caching.
         /// For episodes: uses SeriesId property directly.
         /// For extras: walks up the parent chain to find the owning Series.
@@ -1986,6 +2046,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             operand.SeriesName = string.Empty;
             try
             {
+                // Bulk warmup (once per refresh cache) replaces the per-distinct-series
+                // GetItemById round-trips; misses below still fall back per item.
+                WarmSeriesNameCache(libraryManager, cache, logger);
+
                 // Use helper to extract SeriesId safely (episodes only)
                 if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
                 {

@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using Jellyfin.Database.Implementations.Entities;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -51,5 +53,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// Gets the logger for diagnostics.
         /// </summary>
         public ILogger? Logger { get; }
+
+        /// <summary>
+        /// Gets the already-fetched, user-scoped item pool for this filter run, or null when
+        /// pool-derived narrowing is unavailable. Only pool-scan resolvers (SeriesName) read it.
+        /// </summary>
+        public IReadOnlyList<BaseItem>? PoolItems { get; init; }
+
+        /// <summary>
+        /// Gets the bulk-warmed series-name dump (series id → name), or null when the warmup
+        /// did not run or failed - SeriesName narrowing is then disabled. Per-item evaluation
+        /// reads the SAME dictionary, which is what makes dump-based narrowing exact.
+        /// </summary>
+        public IReadOnlyDictionary<Guid, string>? SeriesNamesById { get; init; }
+
+        /// <summary>
+        /// Gets the extra id → owning-series id reverse map (built during media fetch), or
+        /// null when unavailable (the SeriesName resolver then keeps every extra).
+        /// </summary>
+        public IReadOnlyDictionary<Guid, Guid>? ExtraOwnerSeriesIds { get; init; }
     }
 }

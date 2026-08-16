@@ -1061,8 +1061,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     try
                     {
+                        // Mandatory SeriesName bulk warmup: one query replaces the
+                        // per-distinct-series GetItemById round-trips, and a complete dump is
+                        // the precondition for SeriesName candidate narrowing (the resolver
+                        // only narrows when the context carries the pool and the dump).
+                        var seriesDumpComplete = fieldReqs.NeedsSeriesName
+                            && OperandFactory.WarmSeriesNameCache(libraryManager, refreshCache, logger);
+
                         candidateSet = CandidateSetBuilder.CreateDefault()
-                            .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger));
+                            .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger)
+                            {
+                                PoolItems = seriesDumpComplete ? itemsArray : null,
+                                SeriesNamesById = seriesDumpComplete ? refreshCache.SeriesNameById : null,
+                                ExtraOwnerSeriesIds = seriesDumpComplete ? refreshCache.ExtraOwnerSeriesId : null,
+                            });
                     }
                     catch (Exception ex)
                     {
