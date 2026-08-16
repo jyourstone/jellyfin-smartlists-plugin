@@ -28,7 +28,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
     /// without a usable SeriesId).
     ///
     /// Narrowing only happens when the context carries PoolItems + SeriesNamesById (SmartList
-    /// sets them only after a successful warmup); otherwise the rule stays per-item.
+    /// sets the dump only after a successful warmup); otherwise the rule stays per-item.
     /// </summary>
     internal sealed class SeriesNamePrefilterResolver : IRulePrefilterResolver
     {

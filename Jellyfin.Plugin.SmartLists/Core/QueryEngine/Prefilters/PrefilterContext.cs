@@ -63,7 +63,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 
         /// <summary>
         /// Gets the already-fetched, user-scoped item pool for this filter run, or null when
-        /// pool-derived narrowing is unavailable. Only pool-scan resolvers (SeriesName) read it.
+        /// pool-derived narrowing is unavailable. Only pool-scan resolvers read it: SeriesName
+        /// (additionally gated on <see cref="SeriesNamesById"/>) and the LastEpisodeAirDate
+        /// Before/OlderThan complement.
         /// </summary>
         public IReadOnlyList<BaseItem>? PoolItems { get; init; }
 

@@ -1072,7 +1072,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger)
                             {
                                 UserManager = UserManager,
-                                PoolItems = seriesDumpComplete ? itemsArray : null,
+                                PoolItems = itemsArray,
                                 SeriesNamesById = seriesDumpComplete ? refreshCache.SeriesNameById : null,
                                 ExtraOwnerSeriesIds = seriesDumpComplete ? refreshCache.ExtraOwnerSeriesId : null,
                             });
