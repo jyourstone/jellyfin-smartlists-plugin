@@ -262,8 +262,6 @@ How deep to traverse nested collections (default: 0):
 !!! note "Self-Reference Prevention"
     Smart collections never include themselves in results, even if they match the rule criteria. The collection is recognised by identity, not by name, so a separate collection or playlist that merely shares the name is still matched normally, and renaming the Jellyfin collection does not break the exclusion.
 
-    The one exception is a smart collection that has not been created in Jellyfin yet — on that first refresh it has no identity to match on, so it falls back to skipping collections whose name matches its own.
-
 #### Playlist Name
 
 JSON name: `Playlists`
@@ -287,8 +285,6 @@ Filter items based on Jellyfin playlist membership.
 
 !!! note "Self-Reference Prevention"
     Smart playlists never include themselves in results, even if they match the rule criteria. The playlist is recognised by identity, not by name, so a separate playlist or collection that merely shares the name is still matched normally, and renaming the Jellyfin playlist does not break the exclusion.
-
-    The one exception is a smart playlist that has not been created in Jellyfin yet — on that first refresh it has no identity to match on, so it falls back to skipping playlists whose name matches its own.
 
 #### External List
 

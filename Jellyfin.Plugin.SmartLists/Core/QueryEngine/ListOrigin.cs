@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
-using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Entities;
 
@@ -11,37 +9,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// <summary>
     /// Identifies the smart list currently being built, so that list can be kept out of its own
     /// Collections/Playlists results (self-reference prevention).
-    /// Matching is by Jellyfin item id whenever one is known; base-name comparison is only a fallback
-    /// for the very first refresh, before the Jellyfin playlist/collection has been created, and even
-    /// then only against containers of this list's own kind. Matching by id means a separate, manually
-    /// created list that merely shares the name is no longer excluded.
+    /// Matching is by identity only - the SmartLists provider-ID tether, or a stored Jellyfin item
+    /// id - never by name. A separate list that merely shares the name is therefore matched
+    /// normally, and renaming the Jellyfin playlist/collection does not break the exclusion.
     /// </summary>
     public sealed class ListOrigin
     {
         private readonly HashSet<Guid> _jellyfinItemIds;
-        private readonly BaseItemKind _itemKind;
-        private readonly string _baseName;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ListOrigin"/> class describing the list being built.
         /// </summary>
-        /// <param name="key">Stable identifier for this list (the plugin's own list id). Also used as part of the
+        /// <param name="key">The plugin's own list id. This is what the plugin writes into the
+        /// SmartLists provider-ID tether on the Jellyfin item, and it is also used as part of the
         /// per-item extraction cache keys so origin-filtered results are never shared between lists.</param>
-        /// <param name="name">The list name; used only for the base-name fallback.</param>
-        /// <param name="itemKind">What this list is rendered as in Jellyfin: <see cref="BaseItemKind.Playlist"/>
-        /// or <see cref="BaseItemKind.BoxSet"/>. Bounds the base-name fallback to that kind.</param>
         /// <param name="jellyfinItemIds">Every Jellyfin playlist/collection id belonging to this list
-        /// (an AllUsers playlist has one per user).</param>
-        public ListOrigin(string key, string? name, BaseItemKind itemKind, IEnumerable<Guid> jellyfinItemIds)
+        /// (an AllUsers playlist has one per user). Empty until the list has been created in Jellyfin.</param>
+        public ListOrigin(string key, IEnumerable<Guid> jellyfinItemIds)
         {
             ArgumentNullException.ThrowIfNull(jellyfinItemIds);
 
             Key = key;
-            _itemKind = itemKind;
             _jellyfinItemIds = [.. jellyfinItemIds];
-
-            // Stripped once here rather than per candidate inside the extraction loops.
-            _baseName = NameFormatter.StripPrefixAndSuffix(name ?? string.Empty);
         }
 
         /// <summary>
@@ -62,24 +51,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // stored Jellyfin id can be stale, and the recovery that repairs it (PlaylistService /
             // CollectionService) runs *after* filtering - so during a recovery refresh the id set
             // alone would miss the real container and let the list see itself again.
+            // Every list this plugin creates is tethered at creation.
             if (!string.IsNullOrEmpty(Key)
                 && string.Equals(candidate.GetProviderId(ProviderKeys.SmartLists), Key, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            if (_jellyfinItemIds.Count > 0)
-            {
-                return _jellyfinItemIds.Contains(candidate.Id);
-            }
-
-            // No Jellyfin id yet (first refresh): fall back to comparing base names, but only against
-            // candidates of this list's own kind. A playlist never IS a collection, so excluding a
-            // same-named container of the other kind would hide something the user never asked to hide.
-            return _baseName.Length > 0
-                && candidate.GetBaseItemKind() == _itemKind
-                && NameFormatter.StripPrefixAndSuffix(candidate.Name ?? string.Empty)
-                    .Equals(_baseName, StringComparison.OrdinalIgnoreCase);
+            // Before the list exists in Jellyfin this set is empty and nothing matches, which is
+            // correct: there is no container of ours yet for an item to be a member of. Matching on
+            // name instead would only ever hit somebody else's identically named list.
+            return _jellyfinItemIds.Contains(candidate.Id);
         }
     }
 }

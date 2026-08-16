@@ -28,10 +28,9 @@ namespace Jellyfin.Plugin.SmartLists.Tests.Core.QueryEngine;
 ///    whole refresh queue drains, so list B refreshed after list A in one drain inherited A's
 ///    exclusions and went blind to playlist/collection A.
 ///
-/// The fix also changed WHAT counts as "myself": identity is the Jellyfin item id, with base-name
-/// comparison kept only as a fallback for the very first refresh (before the Jellyfin
-/// playlist/collection exists). Name matching alone wrongly excluded an unrelated, manually
-/// created list that merely shared the name - see
+/// The fix also changed WHAT counts as "myself": identity only - the SmartLists provider-ID
+/// tether, or a stored Jellyfin item id - never the name. Name matching wrongly excluded an
+/// unrelated, manually created list that merely shared the name - see
 /// <see cref="ExtractCollections_KeepsAManuallyCreatedCollectionWithTheSameName"/>.
 ///
 /// HARNESS NOTE: neither extractor touches <c>ILibraryManager</c> once its caches are seeded -
@@ -135,7 +134,7 @@ public class ListOriginTests
 
         Assert.Equal(["Movies [Smart]"], ExtractCollections(movie, cache, depth: 1, origin: null));
 
-        var origin = new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, [boxSet.Id]);
+        var origin = new ListOrigin("col-1", [boxSet.Id]);
 
         Assert.Empty(ExtractCollections(movie, cache, depth: 1, origin));
     }
@@ -157,7 +156,7 @@ public class ListOriginTests
         SeedCollection(cache, boxSet, movie);
 
         // Same base name, different Jellyfin item - a smart playlist, not this collection.
-        var origin = new ListOrigin("pl-1", "Movies", BaseItemKind.Playlist, [Guid.NewGuid()]);
+        var origin = new ListOrigin("pl-1", [Guid.NewGuid()]);
 
         Assert.Equal(["Movies [Smart]"], ExtractCollections(movie, cache, depth: 1, origin));
     }
@@ -175,7 +174,7 @@ public class ListOriginTests
         var cache = new RefreshQueueService.RefreshCache();
         SeedPlaylist(cache, namesake, movie);
 
-        var origin = new ListOrigin("pl-1", "Movies", BaseItemKind.Playlist, [Guid.NewGuid()]);
+        var origin = new ListOrigin("pl-1", [Guid.NewGuid()]);
 
         Assert.Equal(["Movies [Smart]"], ExtractPlaylists(movie, cache, origin));
     }
@@ -204,8 +203,8 @@ public class ListOriginTests
         var cache = new RefreshQueueService.RefreshCache();
         SeedPlaylist(cache, alphaPlaylist, movie);
 
-        var alpha = new ListOrigin("alpha", "ZZTest Alpha", BaseItemKind.Playlist, [alphaPlaylist.Id]);
-        var beta = new ListOrigin("beta", "ZZTest Beta", BaseItemKind.Playlist, [Guid.NewGuid()]);
+        var alpha = new ListOrigin("alpha", [alphaPlaylist.Id]);
+        var beta = new ListOrigin("beta", [Guid.NewGuid()]);
 
         Assert.Empty(ExtractPlaylists(movie, cache, alpha));
 
@@ -227,8 +226,8 @@ public class ListOriginTests
         var cache = new RefreshQueueService.RefreshCache();
         SeedCollection(cache, alphaCollection, movie);
 
-        var alpha = new ListOrigin("alpha", "ZZTest Alpha", BaseItemKind.BoxSet, [alphaCollection.Id]);
-        var beta = new ListOrigin("beta", "ZZTest Beta", BaseItemKind.BoxSet, [Guid.NewGuid()]);
+        var alpha = new ListOrigin("alpha", [alphaCollection.Id]);
+        var beta = new ListOrigin("beta", [Guid.NewGuid()]);
 
         Assert.Empty(ExtractCollections(movie, cache, depth: 1, alpha));
 
@@ -256,37 +255,37 @@ public class ListOriginTests
         SeedCollection(cache, inner, movie);
         SeedCollection(cache, outer, inner);
 
-        var unrelated = new ListOrigin("other-list", "Something Else", BaseItemKind.BoxSet, [Guid.NewGuid()]);
+        var unrelated = new ListOrigin("other-list", [Guid.NewGuid()]);
 
         // Depth is part of the key.
         Assert.Equal(["Trilogy [Smart]"], ExtractCollections(movie, cache, depth: 0, unrelated));
         Assert.Equal(["Trilogy [Smart]", "Franchise [Smart]"], ExtractCollections(movie, cache, depth: 1, unrelated));
 
         // Origin is part of the key, at the same depth.
-        var buildingTrilogy = new ListOrigin("trilogy-list", "Trilogy", BaseItemKind.BoxSet, [inner.Id]);
+        var buildingTrilogy = new ListOrigin("trilogy-list", [inner.Id]);
 
         Assert.Equal(["Franchise [Smart]"], ExtractCollections(movie, cache, depth: 1, buildingTrilogy));
         Assert.Equal(["Trilogy [Smart]", "Franchise [Smart]"], ExtractCollections(movie, cache, depth: 1, unrelated));
     }
 
     // ---------------------------------------------------------------------------------------
-    // ListOrigin itself - id first, base name only as a first-refresh fallback
+    // ListOrigin itself - identity only, never name
     // ---------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The fallback rule, with no Jellyfin plumbing at all. Before the very first refresh the
-    /// playlist/collection does not exist yet, so there is no id to match on and the base name is
-    /// all there is - that behaviour has to survive. The moment ANY id is known, the name stops
-    /// counting, which is what stops unrelated namesakes being excluded.
+    /// Identity is the whole rule: the SmartLists provider-ID tether, or a stored Jellyfin item id.
+    /// A name is never consulted, so an identically named container belonging to somebody else is
+    /// always visible - including before this list has been created in Jellyfin, when the id set is
+    /// still empty and there is no container of ours for an item to be a member of anyway.
     /// </summary>
     [Fact]
-    public void ListOrigin_FallsBackToBaseNameOnlyWhenNoJellyfinIdIsKnown()
+    public void ListOrigin_MatchesOnIdentityAndNeverOnName()
     {
         var candidate = CollectionNamed("Movies [Smart]");
 
-        Assert.True(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, []).Matches(candidate));
-        Assert.False(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, [Guid.NewGuid()]).Matches(candidate));
-        Assert.True(new ListOrigin("col-1", "Movies", BaseItemKind.BoxSet, [candidate.Id]).Matches(candidate));
+        Assert.False(new ListOrigin("col-1", []).Matches(candidate));
+        Assert.False(new ListOrigin("col-1", [Guid.NewGuid()]).Matches(candidate));
+        Assert.True(new ListOrigin("col-1", [candidate.Id]).Matches(candidate));
     }
 
     /// <summary>
@@ -303,9 +302,8 @@ public class ListOriginTests
         var tethered = CollectionNamed("Uncollected [Smart]");
         tethered.SetProviderId(ProviderKeys.SmartLists, "col-1");
 
-        // Stored id is stale (points at a deleted container) and the name fallback is disarmed by
-        // the non-empty id set, so only the tether can identify this.
-        var origin = new ListOrigin("col-1", "Uncollected", BaseItemKind.BoxSet, [Guid.NewGuid()]);
+        // Stored id is stale (points at a deleted container), so only the tether can identify this.
+        var origin = new ListOrigin("col-1", [Guid.NewGuid()]);
 
         Assert.True(origin.Matches(tethered));
 
@@ -316,39 +314,23 @@ public class ListOriginTests
     }
 
     /// <summary>
-    /// An unnamed origin with no ids must match NOTHING rather than everything - an empty base
-    /// name compared with <c>string.Equals</c> would otherwise match any candidate that also
-    /// strips to empty.
+    /// A brand-new smart list - no tether match, no stored id - must match NOTHING, of either kind.
+    /// This is the case a base-name fallback used to cover, and covering it by name was the bug:
+    /// a not-yet-created smart PLAYLIST "Marvel" blanked out the hand-made COLLECTION "Marvel" for
+    /// every item, and with "hide when empty" the id was never stored, so it never healed.
+    /// Nothing is lost by matching nothing here: the list does not exist yet, so no item can be in it.
     /// </summary>
     [Fact]
-    public void ListOrigin_WithNeitherIdNorName_MatchesNothing()
+    public void ListOrigin_WithNoIdentityYet_MatchesNothing()
     {
-        Assert.False(new ListOrigin("col-1", null, BaseItemKind.BoxSet, []).Matches(CollectionNamed("Movies [Smart]")));
-        Assert.False(new ListOrigin("col-1", string.Empty, BaseItemKind.BoxSet, []).Matches(CollectionNamed("[Smart]")));
-    }
+        var brandNewPlaylist = new ListOrigin("pl-1", []);
+        var brandNewCollection = new ListOrigin("col-1", []);
 
-    /// <summary>
-    /// The name fallback must never reach across kinds. A smart list that has no Jellyfin id yet is
-    /// still only ever ONE kind of container, so a same-named container of the OTHER kind is a
-    /// different thing entirely - excluding it hides something the user never asked to hide.
-    ///
-    /// This matters most on the collections side, which had no origin filter at all before this
-    /// change: a brand-new smart PLAYLIST "Marvel" would otherwise blank out the hand-made
-    /// collection "Marvel" for every item. It does not heal on the next refresh either - with
-    /// "hide when empty" the empty result deletes the Jellyfin list and clears the stored id
-    /// (PlaylistService/CollectionService), so the fallback stays armed forever.
-    /// </summary>
-    [Fact]
-    public void ListOrigin_NameFallbackIgnoresContainersOfTheOtherKind()
-    {
-        var playlistOrigin = new ListOrigin("pl-1", "Marvel", BaseItemKind.Playlist, []);
-        var collectionOrigin = new ListOrigin("col-1", "Marvel", BaseItemKind.BoxSet, []);
+        Assert.False(brandNewPlaylist.Matches(CollectionNamed("Marvel [Smart]")));
+        Assert.False(brandNewPlaylist.Matches(PlaylistNamed("Marvel [Smart]")));
 
-        Assert.False(playlistOrigin.Matches(CollectionNamed("Marvel [Smart]")));
-        Assert.True(playlistOrigin.Matches(PlaylistNamed("Marvel [Smart]")));
-
-        Assert.False(collectionOrigin.Matches(PlaylistNamed("Marvel [Smart]")));
-        Assert.True(collectionOrigin.Matches(CollectionNamed("Marvel [Smart]")));
+        Assert.False(brandNewCollection.Matches(CollectionNamed("Marvel [Smart]")));
+        Assert.False(brandNewCollection.Matches(PlaylistNamed("Marvel [Smart]")));
     }
 
     /// <summary>
@@ -364,7 +346,8 @@ public class ListOriginTests
         var cache = new RefreshQueueService.RefreshCache();
         SeedCollection(cache, boxSet, movie);
 
-        // No JellyfinPlaylistId: the playlist has never been created, so only the name fallback is left.
+        // No JellyfinPlaylistId and no tether: the playlist has never been created, so this origin
+        // has no identity at all and must not reach across to the same-named collection.
         var list = new SmartList(new SmartPlaylistDto { Id = "pl-1", Name = "Marvel" });
 
         Assert.Equal(["Marvel [Smart]"], ExtractCollections(movie, cache, depth: 1, list.Origin));
@@ -446,8 +429,9 @@ public class ListOriginTests
 
     /// <summary>
     /// The collection companion: a smart collection's origin carries its BoxSet id, and an
-    /// as-yet-uncreated collection (no id on the DTO) falls back to the base name so the very
-    /// first refresh is still self-reference safe.
+    /// as-yet-uncreated collection (no id on the DTO) matches nothing - it has no container yet, so
+    /// there is nothing of its own for an item to be a member of. The tether covers it from the
+    /// moment the collection is created, including when the stored id later goes stale.
     /// </summary>
     [Fact]
     public void SmartList_Origin_UsesTheJellyfinCollectionId()
@@ -466,6 +450,11 @@ public class ListOriginTests
 
         var neverRefreshed = new SmartList(new SmartCollectionDto { Id = "col-2", Name = "Movies" });
 
-        Assert.True(neverRefreshed.Origin.Matches(boxSet));
+        Assert.False(neverRefreshed.Origin.Matches(boxSet));
+
+        // ...but once its collection exists it is tethered, which identifies it by itself.
+        var tethered = CollectionNamed("Movies [Smart]");
+        tethered.SetProviderId(ProviderKeys.SmartLists, "col-2");
+        Assert.True(neverRefreshed.Origin.Matches(tethered));
     }
 }

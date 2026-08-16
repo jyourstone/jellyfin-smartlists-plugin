@@ -81,7 +81,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // DEPRECATED: dto.UserId is for backwards compatibility with old single-user playlists.
             // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
             UserId = Guid.TryParse(dto.UserId, out var userId) ? userId : Guid.Empty;
-            Origin = new ListOrigin(Id, Name, BaseItemKind.Playlist, CollectJellyfinPlaylistIds(dto));
+            Origin = new ListOrigin(Id, CollectJellyfinPlaylistIds(dto));
 
             // Initialize properties before calling InitializeFromDto
             Orders = [];
@@ -101,7 +101,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
             // Note: Collections still use UserId for owner context (IsPlayed, IsFavorite, etc.)
             UserId = Guid.TryParse(dto.UserId, out var userId) ? userId : Guid.Empty; // Owner user for rule context (IsPlayed, IsFavorite, etc.)
-            Origin = new ListOrigin(Id, Name, BaseItemKind.BoxSet, CollectJellyfinCollectionIds(dto));
+            Origin = new ListOrigin(Id, CollectJellyfinCollectionIds(dto));
 
             // Initialize properties before calling InitializeFromDto
             Orders = [];
