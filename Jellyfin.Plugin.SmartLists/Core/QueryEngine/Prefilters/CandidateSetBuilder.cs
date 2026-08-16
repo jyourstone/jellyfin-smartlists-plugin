@@ -42,7 +42,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// <returns>The builder with all production resolvers registered.</returns>
         public static CandidateSetBuilder CreateDefault()
         {
-            return new CandidateSetBuilder([new PeoplePrefilterResolver(), new SeriesNamePrefilterResolver(), new NextUnwatchedPrefilterResolver(), new LastEpisodeAirDatePrefilterResolver(), new ResolutionPrefilterResolver()]);
+            return new CandidateSetBuilder([new PeoplePrefilterResolver(), new SeriesNamePrefilterResolver(), new NextUnwatchedPrefilterResolver(), new LastEpisodeAirDatePrefilterResolver(), new ResolutionPrefilterResolver(), new StreamLanguagePrefilterResolver()]);
         }
 
         /// <summary>
