@@ -380,6 +380,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 return BuildUserSpecificLastPlayedDateExpression(r, methodCall, logger);
             }
+            else if (returnType == typeof(double) && r.MemberName == "Rating")
+            {
+                return BuildUserSpecificRatingExpression(r, methodCall, logger);
+            }
             else if (returnType == typeof(string))
             {
                 return BuildUserSpecificStringExpression(r, methodCall, logger);
@@ -470,6 +474,54 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 var supportedOperators = Operators.GetSupportedOperatorsString(r.MemberName);
                 throw new ArgumentException($"Operator '{r.Operator}' is not supported for integer user-specific field '{r.MemberName}'. Supported operators: {supportedOperators}");
             }
+        }
+
+        /// <summary>
+        /// Builds expressions for the optional per-user rating.
+        /// Unrated items use -1 internally and must not match rating rules.
+        /// </summary>
+        private static BinaryExpression BuildUserSpecificRatingExpression(
+            Expression r,
+            System.Linq.Expressions.Expression methodCall,
+            ILogger? logger)
+        {
+            if (!double.TryParse(
+                    r.TargetValue,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var value) ||
+                double.IsNaN(value) ||
+                double.IsInfinity(value))
+            {
+                logger?.LogError(
+                    "SmartLists numeric comparison failed: Invalid numeric value '{Value}' for field '{Field}'",
+                    r.TargetValue,
+                    r.MemberName);
+                throw new ArgumentException(
+                    $"Invalid numeric value '{r.TargetValue}' for field '{r.MemberName}'. Expected a decimal number.");
+            }
+
+            if (!Enum.TryParse(r.Operator, out ExpressionType binaryOperator))
+            {
+                logger?.LogError(
+                    "SmartLists unsupported operator '{Operator}' for numeric user-specific field '{Field}'",
+                    r.Operator,
+                    r.MemberName);
+                var supportedOperators = Operators.GetSupportedOperatorsString(r.MemberName);
+                throw new ArgumentException(
+                    $"Operator '{r.Operator}' is not supported for numeric user-specific field '{r.MemberName}'. Supported operators: {supportedOperators}");
+            }
+
+            var right = System.Linq.Expressions.Expression.Constant(value);
+            var comparison = System.Linq.Expressions.Expression.MakeBinary(
+                binaryOperator,
+                methodCall,
+                right);
+            var hasRating = System.Linq.Expressions.Expression.GreaterThanOrEqual(
+                methodCall,
+                System.Linq.Expressions.Expression.Constant(0d));
+
+            return System.Linq.Expressions.Expression.AndAlso(hasRating, comparison);
         }
 
         /// <summary>

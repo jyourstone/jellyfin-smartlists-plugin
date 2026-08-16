@@ -326,7 +326,7 @@
         input.style.width = '100%';
 
         // Set appropriate step for decimal fields like Framerate
-        if (fieldValue === 'Framerate' || fieldValue === 'CommunityRating' || fieldValue === 'CriticRating' || fieldValue === 'RuntimeMinutes') {
+        if (fieldValue === 'Framerate' || fieldValue === 'CommunityRating' || fieldValue === 'CriticRating' || fieldValue === 'Rating' || fieldValue === 'RuntimeMinutes') {
             input.step = 'any'; // Allow any decimal precision
         } else {
             input.step = '1'; // Integer fields like ProductionYear and PlayCount

@@ -85,7 +85,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         
         // Optimization Groups: Cheap but Conditional (Tier 1)
         ItemLists = 1 << 17,          // Fields: Genres, Tags, Studios | Array allocations
-        UserData = 1 << 18,           // Fields: IsFavorite, PlayCount, PlaybackStatus, LastPlayedDate | UserDataManager lookup
+        UserData = 1 << 18,           // Fields: IsFavorite, PlayCount, Rating, PlaybackStatus, LastPlayedDate | UserDataManager lookup
         Dates = 1 << 19,              // Fields: PremiereDate, DateCreated, ProductionYear, etc. | Struct copying
     }
 
@@ -257,6 +257,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "LastPlayedDate", "Last Played", FieldType.Date, FieldCategory.RatingsPlayback, DateOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "NextUnwatched", "Next Unwatched", FieldType.Boolean, FieldCategory.RatingsPlayback, BooleanOperators, ExtractionGroup.NextUnwatched, isUserSpecific: true);
             AddField(fields, "PlayCount", "Play Count", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
+            AddField(fields, "Rating", "User Rating", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.UserData, isUserSpecific: true);
             AddField(fields, "RuntimeMinutes", "Runtime", FieldType.Numeric, FieldCategory.RatingsPlayback, NumericOperators, ExtractionGroup.TextContent);
 
             // File Fields - conditionally extracted via ExtractionGroup.FileInfo
