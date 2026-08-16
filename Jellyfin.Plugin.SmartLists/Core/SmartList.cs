@@ -10,6 +10,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.Orders;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
+using Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters;
 using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
@@ -1051,6 +1052,25 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     hasNonExpensiveRules = true; // Conservative assumption,
                 }
 
+                // Build the DB-backed candidate set ONCE per filter run (never per chunk).
+                // Null = no shrink possible; both expensive-field paths then behave exactly as
+                // before. Only those paths consume it - ProcessItemsSimple stays untouched -
+                // so building is skipped entirely when no expensive fields are required.
+                HashSet<Guid>? candidateSet = null;
+                if ((fieldReqs.RequiredGroups & ~FieldRegistry.CheapExtractionGroups) != ExtractionGroup.None)
+                {
+                    try
+                    {
+                        candidateSet = CandidateSetBuilder.CreateDefault()
+                            .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogWarning(ex, "Prefilter candidate set build failed for playlist '{PlaylistName}'. Continuing without prefilter.", Name);
+                        candidateSet = null;
+                    }
+                }
+
                 // Build reference metadata once for SimilarTo queries (before chunking to avoid rebuilding per chunk)
                 OperandFactory.ReferenceMetadata? referenceMetadata = null;
                 if (fieldReqs.NeedsSimilarTo)
@@ -1101,7 +1121,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         // Process chunk
                         var chunkResults = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
-                            fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
+                            fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, candidateSet, refreshCache);
                         results.AddRange(chunkResults);
                         
                         // Report progress after chunk is complete
@@ -2938,9 +2958,65 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return limitedItems;
         }
 
+        /// <summary>
+        /// Intersects a phase's input pool with the DB-backed candidate set. Exempt items are
+        /// always kept regardless of the candidate set: extras never appear in candidate
+        /// queries (they enter pools via the owner chain, not the main library query), and
+        /// Series must survive whenever Collections rules are present so the
+        /// DoesSeriesMatchCollectionsRules bypass can still see them.
+        /// </summary>
+        private List<BaseItem> FilterByCandidateSet(IEnumerable<BaseItem> items, HashSet<Guid> candidateSet, ILogger? logger, string phase)
+        {
+            var input = items as ICollection<BaseItem> ?? items.ToList();
+            var kept = new List<BaseItem>(Math.Min(input.Count, candidateSet.Count + 8));
+
+            foreach (var item in input)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (candidateSet.Contains(item.Id) || IsPrefilterExempt(item))
+                {
+                    kept.Add(item);
+                }
+            }
+
+            logger?.LogDebug("Prefilter shrank {Phase} pool {From} -> {To} items", phase, input.Count, kept.Count);
+            return kept;
+        }
+
+        /// <summary>
+        /// Items a prefilter must never shrink away, per the safety contract.
+        /// </summary>
+        private bool IsPrefilterExempt(BaseItem item)
+        {
+            // Extras are pulled via GetExtras() on their owners (LibraryManagerHelper.FetchExtras);
+            // a candidate query over the main library never returns them.
+            if (OperandFactory.IsExtra(item))
+            {
+                return true;
+            }
+
+            // Series-under-Collections bypass: deliberately broader than
+            // ShouldExpandEpisodesForCollections - keeping too much is always safe.
+            if (item is Series && HasCollectionsRules())
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool HasCollectionsRules()
+        {
+            return ExpressionSets?.Any(set => set?.Expressions?.Any(expr => expr?.MemberName == "Collections") == true) == true;
+        }
+
         private List<BaseItem> ProcessItemChunk(IEnumerable<BaseItem> items, ILibraryManager libraryManager,
             User user, IUserDataManager? userDataManager, ILogger? logger, FieldRequirements fieldReqs,
-            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, RefreshQueueService.RefreshCache refreshCache)
+            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, HashSet<Guid>? candidateSet, RefreshQueueService.RefreshCache refreshCache)
         {
             var results = new List<BaseItem>();
 
@@ -3056,6 +3132,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         // Materialize items to prevent multiple enumerations
                         var itemList = items as IList<BaseItem> ?? items.ToList();
+
+                        // DB-prefilter: shrink the pool before per-item expensive extraction.
+                        // Null candidate set = no shrink possible; behavior is unchanged.
+                        if (candidateSet != null)
+                        {
+                            itemList = FilterByCandidateSet(itemList, candidateSet, logger, "expensive-only");
+                        }
 
                         // Preload People cache in parallel if needed for performance
                         if (fieldReqs.NeedsPeople)
@@ -3266,6 +3349,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         logger?.LogDebug("Phase 1 complete: {Survivors}/{Total} items passed cheap filtering ({SeriesMatches} series matches bypass Phase 2)",
                             phase1Survivors.Count, itemList.Count, phase1SeriesMatches.Count);
+
+                        // DB-prefilter: shrink the Phase 1 survivors before per-item expensive
+                        // extraction in Phase 2. Null candidate set = no shrink possible.
+                        // phase1SeriesMatches already bypassed Phase 2 above and are never filtered.
+                        if (candidateSet != null)
+                        {
+                            phase1Survivors = FilterByCandidateSet(phase1Survivors, candidateSet, logger, "Phase 2");
+                        }
 
                         // Preload People cache for Phase 1 survivors if needed
                         if (fieldReqs.NeedsPeople && phase1Survivors.Count > 0)

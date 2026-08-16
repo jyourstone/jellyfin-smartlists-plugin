@@ -1618,13 +1618,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Extracts framerate from media streams.
         /// </summary>
-        private static void ExtractFramerate(Operand operand, BaseItem baseItem, ILogger? logger)
+        private static void ExtractFramerate(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
             operand.Framerate = null;
             try
             {
-                // Use shared helper to extract media streams
-                var mediaStreams = TryGetAllMediaStreams(baseItem, logger);
+                // Served through the shared MediaStreamsCache like every other stream extractor
+                // (mirrors ExtractResolution) so a Framerate rule doesn't re-read streams that
+                // another stream group already fetched for the same item.
+                var mediaStreams = Utilities.MediaStreamHelper.GetMediaStreams(baseItem, cache, logger);
 
                 // Process found streams to find the first video stream with framerate information
                 foreach (var stream in mediaStreams)
@@ -2827,7 +2829,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 if (MediaTypes.VideoStreamCapableSet.Contains(operand.ItemType))
                 {
                     ExtractResolution(operand, baseItem, cache, logger);
-                    ExtractFramerate(operand, baseItem, logger);
+                    ExtractFramerate(operand, baseItem, cache, logger);
                     ExtractVideoQuality(operand, baseItem, cache, logger);
                 }
                 else
@@ -3092,6 +3094,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         private static System.Reflection.PropertyInfo? _extraTypePropertyCache;
         private static bool _extraTypePropertyResolved;
+
+        /// <summary>
+        /// Returns true when the item is an extra (trailer, behind-the-scenes, ...). Extras
+        /// enter list pools via their owner chain (LibraryManagerHelper.FetchExtras), not the
+        /// main library query, so DB-prefilter candidate queries never see them and must
+        /// always keep them.
+        /// </summary>
+        internal static bool IsExtra(BaseItem item)
+        {
+            return GetExtraTypeName(item).Length > 0;
+        }
 
         /// <summary>
         /// Gets the ExtraType name for a BaseItem, or empty string if not an extra.
