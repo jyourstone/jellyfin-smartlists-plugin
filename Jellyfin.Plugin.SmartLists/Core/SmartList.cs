@@ -42,6 +42,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // UserManager for resolving user-specific queries (Jellyfin 10.11+)
         public IUserManager UserManager { get; set; } = null!;
 
+        // Item repository for the DB prefilter's ItemValues-backed name dumps; optional -
+        // dump-dependent pushdowns degrade conservatively (stay per-item) when absent.
+        public MediaBrowser.Controller.Persistence.IItemRepository? ItemRepository { get; set; }
+
         // Similarity scores for sorting (populated during filtering when SimilarTo rules are active)
         private readonly ConcurrentDictionary<Guid, float> _similarityScores = new();
 
@@ -65,7 +69,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 && !IsParentAwareListExpression(expr);
         }
 
-        private static bool IsParentAwareListExpression(Expression expr)
+        internal static bool IsParentAwareListExpression(Expression expr)
         {
             return (expr.MemberName == "Tags" && (expr.IncludeParentTagsEffective || expr.OnlyParentTags == true)) ||
                    (expr.MemberName == "Studios" && (expr.IncludeParentStudiosEffective || expr.OnlyParentStudios == true)) ||
@@ -1072,6 +1076,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             .Build(ExpressionSets, new PrefilterContext(libraryManager, user, MediaTypes, logger)
                             {
                                 UserManager = UserManager,
+                                ItemRepository = ItemRepository,
                                 PoolItems = itemsArray,
                                 SeriesNamesById = seriesDumpComplete ? refreshCache.SeriesNameById : null,
                                 ExtraOwnerSeriesIds = seriesDumpComplete ? refreshCache.ExtraOwnerSeriesId : null,

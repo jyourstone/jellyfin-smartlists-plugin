@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Persistence;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
@@ -81,5 +82,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// null when unavailable (the SeriesName resolver then keeps every extra).
         /// </summary>
         public IReadOnlyDictionary<Guid, Guid>? ExtraOwnerSeriesIds { get; init; }
+
+        /// <summary>
+        /// Gets the item repository for ItemValues-backed name dumps (GetGenreNames,
+        /// GetStudioNames, ...), or null when unavailable - dump-dependent pushdowns
+        /// (Genres Contains/IsIn, all Studios operators) then stay per-item.
+        /// </summary>
+        public IItemRepository? ItemRepository { get; init; }
     }
 }

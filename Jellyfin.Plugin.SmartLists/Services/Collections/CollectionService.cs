@@ -45,6 +45,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         private readonly IProviderManager _providerManager;
         private readonly SmartListImageService? _imageService;
         private readonly ExternalListService? _externalListService;
+        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository;
 
         public CollectionService(
             ILibraryManager libraryManager,
@@ -54,7 +55,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             ILogger<CollectionService> logger,
             IProviderManager providerManager,
             SmartListImageService? imageService = null,
-            ExternalListService? externalListService = null)
+            ExternalListService? externalListService = null,
+            MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null)
         {
             _libraryManager = libraryManager;
             _collectionManager = collectionManager;
@@ -64,6 +66,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             _providerManager = providerManager;
             _imageService = imageService;
             _externalListService = externalListService;
+            _itemRepository = itemRepository;
         }
 
         /// <summary>
@@ -214,7 +217,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         {
                 var smartCollection = new Core.SmartList(dto)
                 {
-                    UserManager = _userManager // Set UserManager for Jellyfin 10.11+ user resolution
+                    UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution
+                    ItemRepository = _itemRepository, // ItemValues-backed name dumps for DB prefilters
                 };
 
                 // Query for collections if IncludeCollectionOnly is enabled

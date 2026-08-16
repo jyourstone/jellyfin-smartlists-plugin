@@ -66,6 +66,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory;
         private readonly SmartListImageService? _imageService;
         private readonly ExternalListService? _externalListService;
+        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository;
 
         // Queue data structures
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
@@ -96,7 +97,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             RefreshStatusService refreshStatusService,
             Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
             SmartListImageService? imageService = null,
-            ExternalListService? externalListService = null)
+            ExternalListService? externalListService = null,
+            MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null)
         {
             _logger = logger;
             _userManager = userManager;
@@ -110,6 +112,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _loggerFactory = loggerFactory;
             _imageService = imageService;
             _externalListService = externalListService;
+            _itemRepository = itemRepository;
 
             // Start background processing task
             _processingTask = Task.Run(ProcessQueueAsync, _cancellationTokenSource.Token);
@@ -685,7 +688,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userDataManager,
                 playlistServiceLogger,
                 _imageService,
-                _externalListService);
+                _externalListService,
+                _itemRepository);
         }
 
         /// <summary>
@@ -702,7 +706,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 collectionServiceLogger,
                 _providerManager,
                 _imageService,
-                _externalListService);
+                _externalListService,
+                _itemRepository);
         }
 
         public void Dispose()

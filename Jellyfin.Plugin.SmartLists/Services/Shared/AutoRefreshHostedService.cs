@@ -51,14 +51,16 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var playlistServiceLogger = loggerFactory.CreateLogger<PlaylistService>();
 
                 var externalListService = _serviceProvider.GetRequiredService<ExternalListService>();
+                // Optional: DB prefilters degrade conservatively without it.
+                var itemRepository = _serviceProvider.GetService<MediaBrowser.Controller.Persistence.IItemRepository>();
 
                 var fileSystem = new SmartListFileSystem(serverApplicationPaths);
                 var playlistStore = new PlaylistStore(fileSystem);
-                var playlistService = new PlaylistService(userManager, libraryManager, playlistManager, userDataManager, playlistServiceLogger, externalListService: externalListService);
+                var playlistService = new PlaylistService(userManager, libraryManager, playlistManager, userDataManager, playlistServiceLogger, externalListService: externalListService, itemRepository: itemRepository);
 
                 var collectionServiceLogger = loggerFactory.CreateLogger<CollectionService>();
                 var collectionStore = new CollectionStore(fileSystem);
-                var collectionService = new CollectionService(libraryManager, collectionManager, userManager, userDataManager, collectionServiceLogger, providerManager, externalListService: externalListService);
+                var collectionService = new CollectionService(libraryManager, collectionManager, userManager, userDataManager, collectionServiceLogger, providerManager, externalListService: externalListService, itemRepository: itemRepository);
 
                 // Get RefreshStatusService from DI - it should be registered as singleton
                 // Use GetRequiredService to prevent creating duplicate instances that cause split-brain state
