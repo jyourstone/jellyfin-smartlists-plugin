@@ -43,7 +43,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
     /// - AudioQuality: MediaStreamsCache
     /// - VideoQuality: MediaStreamsCache
     /// - People: ItemPeople
-    /// - Collections: ItemCollections, CollectionMembershipCache
+    /// - Collections: ItemCollectionsWithDepth, CollectionMembershipCache
     /// - Playlists: ItemPlaylists, PlaylistMembershipCache
     /// - NextUnwatched: NextUnwatched cache
     /// - SeriesName: SeriesNameById
@@ -64,7 +64,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         AudioQuality = 1 << 1,        // Fields: AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels | Cache: MediaStreamsCache
         VideoQuality = 1 << 2,        // Fields: Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType | Cache: MediaStreamsCache
         People = 1 << 3,              // Fields: All people roles (Actors, Directors, etc.) | Cache: ItemPeople
-        Collections = 1 << 4,         // Fields: Collections | Cache: ItemCollections, CollectionMembershipCache
+        Collections = 1 << 4,         // Fields: Collections | Cache: ItemCollectionsWithDepth, CollectionMembershipCache
         Playlists = 1 << 5,           // Fields: Playlists | Cache: ItemPlaylists, PlaylistMembershipCache
         NextUnwatched = 1 << 6,       // Fields: NextUnwatched | Cache: NextUnwatched
         SeriesName = 1 << 7,          // Fields: SeriesName | Cache: SeriesNameById

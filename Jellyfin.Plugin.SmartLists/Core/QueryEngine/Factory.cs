@@ -170,20 +170,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // Non-flag properties
         public bool IncludeUnwatchedSeries { get; set; } = true;
         public List<string> AdditionalUserIds { get; set; } = [];
-        public string? OriginListName { get; set; } = null; // Name of the playlist/collection being built (to prevent self-reference)
+        public ListOrigin? Origin { get; set; } = null; // The playlist/collection being built (kept out of its own Collections/Playlists results)
         public int CollectionRecursionDepth { get; set; } = 1; // How deep to traverse nested collections (0-10, where 0 = direct members only). Note: Playlists don't support nesting, so no recursion depth for playlists.
 
         /// <summary>
         /// Creates extraction options from FieldRequirements.
         /// </summary>
-        public static MediaTypeExtractionOptions FromRequirements(FieldRequirements requirements, string? originListName = null, int collectionDepth = 1)
+        public static MediaTypeExtractionOptions FromRequirements(FieldRequirements requirements, ListOrigin? origin = null, int collectionDepth = 1)
         {
             return new MediaTypeExtractionOptions
             {
                 RequiredGroups = requirements.RequiredGroups,
                 IncludeUnwatchedSeries = requirements.IncludeUnwatchedSeries,
                 AdditionalUserIds = [.. requirements.AdditionalUserIds], // Defensive copy
-                OriginListName = originListName,
+                Origin = origin,
                 CollectionRecursionDepth = collectionDepth,
             };
         }
@@ -2860,7 +2860,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Extract collections - only when needed for performance
             if (options.ExtractCollections)
             {
-                operand.Collections = ExtractCollections(baseItem, user, libraryManager, cache, logger, options.CollectionRecursionDepth);
+                operand.Collections = ExtractCollections(baseItem, user, libraryManager, cache, logger, options.CollectionRecursionDepth, options.Origin);
             }
             else
             {
@@ -2871,7 +2871,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Note: Playlists don't support nesting (can't contain other playlists), so no recursion depth needed
             if (options.ExtractPlaylists)
             {
-                operand.Playlists = ExtractPlaylists(baseItem, user, libraryManager, cache, logger, options.OriginListName);
+                operand.Playlists = ExtractPlaylists(baseItem, user, libraryManager, cache, logger, options.Origin);
             }
             else
             {
@@ -3309,24 +3309,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="libraryManager">Library manager to query collections</param>
         /// <param name="cache">Per-refresh cache to avoid repeated queries</param>
         /// <param name="logger">Logger for debugging</param>
+        /// <param name="recursionDepth">How deep to traverse nested collections (0 = direct members only)</param>
+        /// <param name="origin">The list being built (kept out of its own results to prevent self-reference)</param>
         /// <returns>List of collection names this item belongs to</returns>
-        private static List<string> ExtractCollections(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, int recursionDepth = 0)
+        private static List<string> ExtractCollections(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, int recursionDepth = 0, ListOrigin? origin = null)
         {
             // Ensure recursion depth is within valid range (0 = no recursion, 1-10 = levels to traverse)
             recursionDepth = Math.Max(0, Math.Min(10, recursionDepth));
 
             // Check if we already have the result cached for this item (with matching depth)
-            // We use a combined key to cache results per depth level
-            var cacheKey = (baseItem.Id, recursionDepth);
+            // We use a combined key to cache results per depth level. The origin is part of the key
+            // because the cached names are already filtered for the list being built.
+            var cacheKey = (baseItem.Id, recursionDepth, origin?.Key ?? string.Empty);
             if (cache.ItemCollectionsWithDepth.TryGetValue(cacheKey, out var cachedCollections))
             {
                 return cachedCollections;
-            }
-
-            // Fallback to legacy cache for depth=1 (backward compatibility)
-            if (recursionDepth == 1 && cache.ItemCollections.TryGetValue(baseItem.Id, out var legacyCachedCollections))
-            {
-                return legacyCachedCollections;
             }
 
             var collections = new List<string>();
@@ -3424,6 +3421,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     if (membershipCacheAtDepth.TryGetValue(collection.Id, out var membershipSet) &&
                         membershipSet.Contains(baseItem.Id))
                     {
+                        // Skip if this collection IS the list being built (prevent self-reference):
+                        // otherwise a rule like Collections NotContains "smart" matches the collection's
+                        // own name and the result oscillates between refreshes.
+                        if (origin?.Matches(collection) == true)
+                        {
+                            logger?.LogDebug("Skipping collection '{CollectionName}' for item '{ItemName}' - it is the list being built (preventing self-reference)",
+                                collection.Name, baseItem.Name);
+                            continue;
+                        }
+
                         collections.Add(collection.Name);
                     }
                 }
@@ -3435,10 +3442,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Cache the result
             cache.ItemCollectionsWithDepth[cacheKey] = collections;
-            if (recursionDepth == 1)
-            {
-                cache.ItemCollections[baseItem.Id] = collections; // Backward compatibility
-            }
             return collections;
         }
 
@@ -3643,12 +3646,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="libraryManager">Library manager to query playlists</param>
         /// <param name="cache">Per-refresh cache to avoid repeated queries</param>
         /// <param name="logger">Logger for debugging</param>
-        /// <param name="originListName">Name of the playlist/collection being built (to prevent self-reference)</param>
+        /// <param name="origin">The list being built (kept out of its own results to prevent self-reference)</param>
         /// <returns>List of playlist names this item belongs to</returns>
-        private static List<string> ExtractPlaylists(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, string? originListName)
+        private static List<string> ExtractPlaylists(BaseItem baseItem, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, ListOrigin? origin)
         {
-            // Check if we already have the result cached for this item
-            if (cache.ItemPlaylists.TryGetValue(baseItem.Id, out var cachedPlaylists))
+            // Check if we already have the result cached for this item. The origin is part of the key
+            // because the cached names are already filtered for the list being built.
+            var originKey = origin?.Key ?? string.Empty;
+            if (cache.ItemPlaylists.TryGetValue((baseItem.Id, originKey), out var cachedPlaylists))
             {
                 return cachedPlaylists;
             }
@@ -3758,17 +3763,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     if (cache.PlaylistMembershipCache.TryGetValue(playlist.Id, out var membershipSet) &&
                         membershipSet.Contains(baseItem.Id))
                     {
-                        // Skip if this playlist matches the origin list (prevent self-reference)
-                        if (!string.IsNullOrEmpty(originListName))
+                        // Skip if this playlist IS the list being built (prevent self-reference)
+                        if (origin?.Matches(playlist) == true)
                         {
-                            var playlistBaseName = NameFormatter.StripPrefixAndSuffix(playlist.Name);
-                            var originBaseName = NameFormatter.StripPrefixAndSuffix(originListName);
-                            if (playlistBaseName.Equals(originBaseName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                logger?.LogDebug("Skipping playlist '{PlaylistName}' for item '{ItemName}' - matches origin list '{OriginName}' (preventing self-reference)",
-                                    playlist.Name, baseItem.Name, originListName);
-                                continue;
-                            }
+                            logger?.LogDebug("Skipping playlist '{PlaylistName}' for item '{ItemName}' - it is the list being built (preventing self-reference)",
+                                playlist.Name, baseItem.Name);
+                            continue;
                         }
 
                         playlists.Add(playlist.Name);
@@ -3788,7 +3788,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
 
             // Cache the result
-            cache.ItemPlaylists[baseItem.Id] = playlists;
+            cache.ItemPlaylists[(baseItem.Id, originKey)] = playlists;
             logger?.LogDebug("Cached {Count} playlists for item '{ItemName}'", playlists.Count, baseItem.Name);
             return playlists;
         }

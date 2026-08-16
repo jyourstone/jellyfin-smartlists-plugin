@@ -25,6 +25,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
     {
         public string Id { get; set; } = null!;
         public string Name { get; set; } = null!;
+        public ListOrigin Origin { get; private set; }  // Identifies this list so it stays out of its own Collections/Playlists results
         public string? FileName { get; set; }
         public Guid UserId { get; set; }
         public List<Order> Orders { get; set; }
@@ -80,6 +81,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // DEPRECATED: dto.UserId is for backwards compatibility with old single-user playlists.
             // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
             UserId = Guid.TryParse(dto.UserId, out var userId) ? userId : Guid.Empty;
+            Origin = new ListOrigin(Id, CollectJellyfinPlaylistIds(dto));
 
             // Initialize properties before calling InitializeFromDto
             Orders = [];
@@ -99,12 +101,48 @@ namespace Jellyfin.Plugin.SmartLists.Core
             // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
             // Note: Collections still use UserId for owner context (IsPlayed, IsFavorite, etc.)
             UserId = Guid.TryParse(dto.UserId, out var userId) ? userId : Guid.Empty; // Owner user for rule context (IsPlayed, IsFavorite, etc.)
+            Origin = new ListOrigin(Id, CollectJellyfinCollectionIds(dto));
 
             // Initialize properties before calling InitializeFromDto
             Orders = [];
             ExpressionSets = [];
 
             InitializeFromDto(dto);
+        }
+
+        /// <summary>
+        /// Every Jellyfin playlist id that IS this smart list. An AllUsers/multi-user playlist has one
+        /// Jellyfin playlist per user, and each of them is a copy of this same list, so all of them must
+        /// be excluded from this list's own Playlists results.
+        /// </summary>
+        private static IEnumerable<Guid> CollectJellyfinPlaylistIds(SmartPlaylistDto dto)
+        {
+            if (Guid.TryParse(dto.JellyfinPlaylistId, out var legacyId) && legacyId != Guid.Empty)
+            {
+                yield return legacyId;
+            }
+
+            if (dto.UserPlaylists != null)
+            {
+                foreach (var mapping in dto.UserPlaylists)
+                {
+                    if (Guid.TryParse(mapping.JellyfinPlaylistId, out var userPlaylistId) && userPlaylistId != Guid.Empty)
+                    {
+                        yield return userPlaylistId;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The Jellyfin collection (BoxSet) id that IS this smart list, if it has been created yet.
+        /// </summary>
+        private static IEnumerable<Guid> CollectJellyfinCollectionIds(SmartCollectionDto dto)
+        {
+            if (Guid.TryParse(dto.JellyfinCollectionId, out var collectionId) && collectionId != Guid.Empty)
+            {
+                yield return collectionId;
+            }
         }
 
         private void InitializeFromDto(SmartListDto dto)
@@ -1253,7 +1291,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     RequiredGroups = requiredGroup,
                     IncludeUnwatchedSeries = true,
-                    OriginListName = Name,
+                    Origin = this.Origin,
                 };
 
                 var groups = new Dictionary<string, List<BaseItem>>(StringComparer.OrdinalIgnoreCase);
@@ -1711,7 +1749,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 CollectionRecursionDepth = Math.Max(1, CollectionSearchDepth),
                 IncludeUnwatchedSeries = fieldReqs.IncludeUnwatchedSeries,
                 AdditionalUserIds = fieldReqs.AdditionalUserIds,
-                OriginListName = Name,
+                Origin = this.Origin,
             };
         }
 
@@ -1886,7 +1924,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Track visited collections to prevent duplicates and circular references
                 var visitedCollectionIds = new HashSet<Guid>();
-                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
 
                 // Prepare the rule groups containing collection-only rules - the whole group
                 // (name rules + sibling rules) must match for a collection to be included
@@ -1899,9 +1936,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     if (collection == null) continue;
 
-                    // Skip if this collection is the same as the one we're currently building (prevent self-reference)
-                    var collectionBaseName = NameFormatter.StripPrefixAndSuffix(collection.Name);
-                    if (collectionBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                    // Skip if this collection is the one we're currently building (prevent self-reference)
+                    if (Origin.Matches(collection))
                     {
                         logger?.LogDebug("Skipping collection '{CollectionName}' - matches current collection being built (preventing self-reference)", collection.Name);
                         continue;
@@ -1939,7 +1975,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             0,  // Start at depth 0 (root level)
                             maxRecursionDepth,
-                            currentListBaseName,
+                            Origin,
                             encounteredIds);
 
                         if (encounteredIds != null)
@@ -1982,7 +2018,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ILogger? logger,
             int currentDepth,
             int maxDepth,
-            string currentListBaseName,
+            ListOrigin origin,
             HashSet<Guid>? encounteredIds = null)
         {
             bool alreadyAdded = visitedCollectionIds.Contains(collection.Id);
@@ -2017,9 +2053,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     // Check if child is a collection
                     if (child.GetBaseItemKind() == BaseItemKind.BoxSet && allCollectionsById.ContainsKey(child.Id))
                     {
-                        // Skip if matches current list being built
-                        var childBaseName = NameFormatter.StripPrefixAndSuffix(child.Name);
-                        if (childBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                        // Skip if this child is the list being built (prevent self-reference)
+                        if (origin.Matches(child))
                         {
                             continue;
                         }
@@ -2033,7 +2068,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             logger,
                             currentDepth + 1,
                             maxDepth,
-                            currentListBaseName,
+                            origin,
                             encounteredIds);
                     }
                 }
@@ -2205,8 +2240,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 var allPlaylists = libraryManager.GetItemsResult(playlistQuery).Items;
                 logger?.LogDebug("Found {Count} total playlists to check against Playlists rules with IncludePlaylistOnly=true", allPlaylists.Count);
 
-                var currentListBaseName = NameFormatter.StripPrefixAndSuffix(Name);
-
                 // Prepare the rule groups containing playlist-only rules - the whole group
                 // (name rules + sibling rules) must match for a playlist to be included
                 var includeOnlyRuleSets = BuildIncludeOnlyRuleSets("Playlists", user, logger);
@@ -2218,9 +2251,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     if (playlist == null) continue;
 
-                    // Skip if this playlist is the same as the one we're currently building (prevent self-reference)
-                    var playlistBaseName = NameFormatter.StripPrefixAndSuffix(playlist.Name);
-                    if (playlistBaseName.Equals(currentListBaseName, StringComparison.OrdinalIgnoreCase))
+                    // Skip if this playlist is the one we're currently building (prevent self-reference)
+                    if (Origin.Matches(playlist))
                     {
                         logger?.LogDebug("Skipping playlist '{PlaylistName}' - matches current list being built (preventing self-reference)", playlist.Name);
                         continue;
@@ -2331,7 +2363,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     ExtractSeriesName = false,
                     IncludeUnwatchedSeries = true,
                     AdditionalUserIds = [],
-                    OriginListName = Name,
+                    Origin = this.Origin,
                 },
                 refreshCache);
                 bool matchesCollectionsRule = DoCollectionsMatchRules(collectionsOperand.Collections);
@@ -2524,7 +2556,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Filtering {EpisodeCount} episodes against playlist rules", episodes.Count);
 
                 // Create extraction options from field requirements (DRY - single source of truth)
-                var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+                var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
 
                 foreach (var episode in episodes)
                 {
@@ -2874,7 +2906,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 ExtractSeriesName = false,
                                 IncludeUnwatchedSeries = true,
                                 AdditionalUserIds = [],
-                                OriginListName = Name,
+                                Origin = this.Origin,
                             },
                             refreshCache);
                             itemMinutes = operand.RuntimeMinutes;
@@ -3038,7 +3070,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         logger?.LogDebug("Processing {Count} items sequentially (expensive-only path)", itemList.Count);
 
                         // Create extraction options from field requirements (DRY - single source of truth)
-                        var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+                        var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
 
                         foreach (var item in itemList)
                         {
@@ -3171,7 +3203,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     RequiredGroups = phase1Groups, // Only cheap extraction groups for Phase 1
                                     IncludeUnwatchedSeries = true,
                                     AdditionalUserIds = [.. fieldReqs.AdditionalUserIds],
-                                    OriginListName = Name,
+                                    Origin = this.Origin,
                                 }, refreshCache);
 
                                 // Check if item passes all non-expensive rules for any rule set that has non-expensive rules
@@ -3249,7 +3281,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         logger?.LogDebug("Processing {Count} Phase 1 survivors sequentially (Phase 2)", phase1Survivors.Count);
 
                         // Create extraction options from field requirements for Phase 2 (DRY - single source of truth)
-                        var phase2Options = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+                        var phase2Options = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
 
                         foreach (var item in phase1Survivors)
                         {
@@ -3415,7 +3447,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             logger?.LogDebug("Processing {Count} items sequentially (simple path)", itemList.Count);
 
             // Create extraction options from field requirements (DRY - single source of truth)
-            var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Name, CollectionSearchDepth);
+            var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
 
             try
             {
