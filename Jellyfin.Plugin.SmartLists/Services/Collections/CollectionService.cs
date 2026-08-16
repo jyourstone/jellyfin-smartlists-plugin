@@ -412,7 +412,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     dto.LastRefreshed = DateTime.UtcNow;
                     _logger.LogDebug("Updated LastRefreshed timestamp for collection: {CollectionName}", dto.Name);
 
-                    DeleteOrphanedTetheredCollections(dto, existingCollection.Id);
+                    DeleteOrphanedTetheredCollections(dto, existingCollection.Id, refreshCache);
 
                     // Keep this drain's membership snapshot current, or a list refreshed later in the
                     // same drain evaluates its Collections rules against the contents we just replaced.
@@ -439,7 +439,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     if (Guid.TryParse(newCollectionId, out var createdCollectionGuid))
                     {
-                        DeleteOrphanedTetheredCollections(dto, createdCollectionGuid);
+                        DeleteOrphanedTetheredCollections(dto, createdCollectionGuid, refreshCache);
                     }
 
                     // Update LastRefreshed timestamp for successful refresh
@@ -466,7 +466,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// tether but are not the tracked collection. The tether proves the plugin created them,
         /// so deletion cannot hit user-created collections.
         /// </summary>
-        private void DeleteOrphanedTetheredCollections(SmartCollectionDto dto, Guid canonicalCollectionId)
+        private void DeleteOrphanedTetheredCollections(SmartCollectionDto dto, Guid canonicalCollectionId, RefreshQueueService.RefreshCache refreshCache)
         {
             if (string.IsNullOrEmpty(dto.Id))
             {
@@ -493,6 +493,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         _logger.LogWarning("Deleting orphaned duplicate collection '{CollectionName}' ({CollectionId}) tethered to smart collection {SmartListId}",
                             orphan.Name, orphan.Id, dto.Id);
                         _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Deleted here rather than at the call sites so a new caller cannot forget it:
+                        // an orphan left in this drain's snapshot keeps matching by name and membership
+                        // for every list refreshed after this one.
+                        refreshCache.OnContainerRemoved(orphan.Id);
                     }
                     catch (Exception deleteEx)
                     {

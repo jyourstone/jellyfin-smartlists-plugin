@@ -436,7 +436,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         }
                     }
 
-                    DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id);
+                    DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id, refreshCache);
 
                     // Keep this drain's membership snapshot current, or a list refreshed later in the
                     // same drain evaluates its Playlists rules against the contents we just replaced.
@@ -460,7 +460,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     if (Guid.TryParse(newPlaylistId, out var createdPlaylistGuid))
                     {
-                        DeleteOrphanedTetheredPlaylists(dto, user, createdPlaylistGuid);
+                        DeleteOrphanedTetheredPlaylists(dto, user, createdPlaylistGuid, refreshCache);
                     }
 
                     // Update the DTO with the new Jellyfin playlist ID
@@ -1803,7 +1803,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// tether for this user but are not the tracked playlist. The tether proves the plugin
         /// created them, so deletion cannot hit user-created playlists.
         /// </summary>
-        private void DeleteOrphanedTetheredPlaylists(SmartPlaylistDto dto, User user, Guid canonicalPlaylistId)
+        private void DeleteOrphanedTetheredPlaylists(SmartPlaylistDto dto, User user, Guid canonicalPlaylistId, RefreshQueueService.RefreshCache refreshCache)
         {
             if (string.IsNullOrEmpty(dto.Id))
             {
@@ -1832,6 +1832,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         _logger.LogWarning("Deleting orphaned duplicate playlist '{PlaylistName}' ({PlaylistId}) tethered to smart playlist {SmartListId} for user {UserId}",
                             orphan.Name, orphan.Id, dto.Id, user.Id);
                         _libraryManager.DeleteItem(orphan, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Deleted here rather than at the call sites so a new caller cannot forget it:
+                        // an orphan left in this drain's snapshot keeps matching by name and membership
+                        // for every list refreshed after this one.
+                        refreshCache.OnContainerRemoved(orphan.Id);
                     }
                     catch (Exception deleteEx)
                     {
