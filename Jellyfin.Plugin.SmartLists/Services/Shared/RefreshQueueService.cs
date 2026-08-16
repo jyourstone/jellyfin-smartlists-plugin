@@ -818,6 +818,97 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Warnings collected during processing (e.g., missing API keys, fetch failures)
             public ConcurrentBag<string> Warnings { get; } = [];
+
+            /// <summary>
+            /// Re-points this drain's view of a collection at the contents just written to it.
+            ///
+            /// AllCollections and the membership caches are built once per queue drain, so without
+            /// this a list refreshed later in the same drain evaluates its Collections rules against
+            /// the membership this collection had BEFORE the drain started - one refresh behind, for
+            /// as long as lists keep refreshing together. Chained lists ("everything not already in
+            /// a smart collection") are the common victim.
+            ///
+            /// Patching costs no queries: the caller already holds the members, and the derived
+            /// caches below rebuild from CollectionDirectChildren in memory.
+            /// </summary>
+            /// <param name="collection">The collection that was just written.</param>
+            /// <param name="members">Its new direct children.</param>
+            public void OnCollectionWritten(BaseItem collection, IReadOnlyList<BaseItem> members)
+            {
+                ArgumentNullException.ThrowIfNull(collection);
+                ArgumentNullException.ThrowIfNull(members);
+
+                // A collection created during this drain is missing from the snapshot entirely.
+                if (AllCollections != null && Array.FindIndex(AllCollections, c => c.Id == collection.Id) < 0)
+                {
+                    AllCollections = [.. AllCollections, collection];
+                }
+
+                // Only patch an already-built cache. Seeding a single entry into an empty one would
+                // make it look built (the builder is guarded on Count == 0) and strand every other
+                // collection with no children.
+                if (!CollectionDirectChildren.IsEmpty)
+                {
+                    CollectionDirectChildren[collection.Id] = [.. members];
+                }
+
+                CollectionChildItems.TryRemove(collection.Id, out _);
+
+                // Derived from the above; cheaper to drop than to patch, and rebuilt without queries.
+                CollectionMembershipCacheByDepth.Clear();
+                ItemCollectionsWithDepth.Clear();
+            }
+
+            /// <summary>
+            /// The playlist counterpart of <see cref="OnCollectionWritten"/>.
+            /// </summary>
+            /// <param name="playlist">The playlist that was just written.</param>
+            /// <param name="memberIds">Ids of its new members.</param>
+            public void OnPlaylistWritten(BaseItem playlist, IReadOnlyList<Guid> memberIds)
+            {
+                ArgumentNullException.ThrowIfNull(playlist);
+                ArgumentNullException.ThrowIfNull(memberIds);
+
+                if (AllPlaylists != null && Array.FindIndex(AllPlaylists, p => p.Id == playlist.Id) < 0)
+                {
+                    AllPlaylists = [.. AllPlaylists, playlist];
+                }
+
+                if (!PlaylistMembershipCache.IsEmpty)
+                {
+                    PlaylistMembershipCache[playlist.Id] = [.. memberIds];
+                }
+
+                PlaylistChildItems.TryRemove(playlist.Id, out _);
+                ItemPlaylists.Clear();
+            }
+
+            /// <summary>
+            /// Drops a collection/playlist that was deleted during this drain (for example by
+            /// "hide when empty"), so lists refreshed after it stop seeing a container that is gone.
+            /// </summary>
+            /// <param name="containerId">The deleted collection or playlist id.</param>
+            public void OnContainerRemoved(Guid containerId)
+            {
+                if (AllCollections != null)
+                {
+                    AllCollections = [.. Array.FindAll(AllCollections, c => c.Id != containerId)];
+                }
+
+                if (AllPlaylists != null)
+                {
+                    AllPlaylists = [.. Array.FindAll(AllPlaylists, p => p.Id != containerId)];
+                }
+
+                CollectionDirectChildren.TryRemove(containerId, out _);
+                PlaylistMembershipCache.TryRemove(containerId, out _);
+                CollectionChildItems.TryRemove(containerId, out _);
+                PlaylistChildItems.TryRemove(containerId, out _);
+
+                CollectionMembershipCacheByDepth.Clear();
+                ItemCollectionsWithDepth.Clear();
+                ItemPlaylists.Clear();
+            }
         }
 
         /// <summary>

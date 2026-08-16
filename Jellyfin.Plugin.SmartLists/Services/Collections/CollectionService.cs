@@ -355,6 +355,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     {
                         _logger.LogInformation("Smart collection '{CollectionName}' matched no items - deleting Jellyfin collection (hide when empty)", dto.Name);
                         _libraryManager.DeleteItem(existingCollectionItem, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Drop it from this drain's snapshot too, so lists refreshed after this one
+                        // stop seeing a collection that no longer exists.
+                        refreshCache.OnContainerRemoved(existingCollectionItem.Id);
                     }
 
                     // Clear the stored Jellyfin collection ID so a later refresh with items recreates it
@@ -410,6 +414,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     DeleteOrphanedTetheredCollections(dto, existingCollection.Id);
 
+                    // Keep this drain's membership snapshot current, or a list refreshed later in the
+                    // same drain evaluates its Collections rules against the contents we just replaced.
+                    refreshCache.OnCollectionWritten(existingCollection, WrittenMembers(newLinkedChildren, mediaLookup));
+
                     return (true, $"Updated collection '{existingCollection.Name}' with {newLinkedChildren.Length} items", existingCollection.Id.ToString("N"));
                 }
                 else
@@ -440,6 +448,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     _logger.LogDebug("Successfully created new collection: {CollectionName} with {ItemCount} items",
                         collectionName, newLinkedChildren.Length);
+
+                    // A collection created mid-drain is absent from the snapshot entirely, so add it
+                    // for the lists refreshed after this one.
+                    if (Guid.TryParse(newCollectionId, out var writtenCollectionId)
+                        && _libraryManager.GetItemById(writtenCollectionId) is BaseItem createdCollection)
+                    {
+                        refreshCache.OnCollectionWritten(createdCollection, WrittenMembers(newLinkedChildren, mediaLookup));
+                    }
 
                     return (true, $"Created collection '{collectionName}' with {newLinkedChildren.Length} items", newCollectionId);
                 }
@@ -2345,6 +2361,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             return false;
         }
+
+        /// <summary>
+        /// The items behind the LinkedChild entries just written to a collection, for refreshing the
+        /// per-drain membership snapshot.
+        /// </summary>
+        /// <param name="linkedChildren">The LinkedChild entries written to the collection.</param>
+        /// <param name="mediaLookup">Id to item lookup covering those entries.</param>
+        /// <returns>The resolved member items.</returns>
+        private static IReadOnlyList<BaseItem> WrittenMembers(LinkedChild[] linkedChildren, Dictionary<Guid, BaseItem> mediaLookup)
+            => [.. linkedChildren
+                .Where(lc => lc.ItemId.HasValue && mediaLookup.ContainsKey(lc.ItemId.Value))
+                .Select(lc => mediaLookup[lc.ItemId!.Value])];
 
         /// <summary>
         /// Queries for items when IncludeOnly option is enabled for a field.

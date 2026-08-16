@@ -294,6 +294,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         logger.LogInformation("Smart playlist '{PlaylistName}' matched no items - deleting Jellyfin playlist (hide when empty)", dto.Name);
                         _libraryManager.DeleteItem(existingPlaylist, new DeleteOptions { DeleteFileLocation = true }, true);
+
+                        // Drop it from this drain's snapshot too, so lists refreshed after this one
+                        // stop seeing a playlist that no longer exists.
+                        refreshCache.OnContainerRemoved(existingPlaylist.Id);
                     }
 
                     // Clear the stored Jellyfin playlist ID so a later refresh with items recreates it
@@ -434,6 +438,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     DeleteOrphanedTetheredPlaylists(dto, user, existingPlaylist.Id);
 
+                    // Keep this drain's membership snapshot current, or a list refreshed later in the
+                    // same drain evaluates its Playlists rules against the contents we just replaced.
+                    refreshCache.OnPlaylistWritten(existingPlaylist, finalItemIds);
+
                     return (true, $"Updated playlist '{existingPlaylist.Name}' with {newLinkedChildren.Length} items", existingPlaylist.Id.ToString("N"));
                 }
                 else
@@ -503,6 +511,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                     logger.LogDebug("Successfully created new playlist: {PlaylistName} with {ItemCount} items",
                         smartPlaylistName, newLinkedChildren.Length);
+
+                    // A playlist created mid-drain is absent from the snapshot entirely, so add it
+                    // for the lists refreshed after this one.
+                    if (Guid.TryParse(newPlaylistId, out var writtenPlaylistId)
+                        && _libraryManager.GetItemById(writtenPlaylistId) is BaseItem createdPlaylist)
+                    {
+                        refreshCache.OnPlaylistWritten(createdPlaylist, finalItemIds);
+                    }
 
                     return (true, $"Created playlist '{smartPlaylistName}' with {newLinkedChildren.Length} items", newPlaylistId);
                 }
