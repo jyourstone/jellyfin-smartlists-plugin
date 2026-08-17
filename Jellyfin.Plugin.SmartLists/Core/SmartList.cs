@@ -2983,7 +2983,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// Series must survive whenever Collections rules are present so the
         /// DoesSeriesMatchCollectionsRules bypass can still see them.
         /// </summary>
-        private List<BaseItem> FilterByCandidateSet(IEnumerable<BaseItem> items, HashSet<Guid> candidateSet, ILogger? logger, string phase)
+        internal List<BaseItem> FilterByCandidateSet(IEnumerable<BaseItem> items, HashSet<Guid> candidateSet, ILogger? logger, string phase)
         {
             var input = items as ICollection<BaseItem> ?? items.ToList();
             var kept = new List<BaseItem>(Math.Min(input.Count, candidateSet.Count + 8));

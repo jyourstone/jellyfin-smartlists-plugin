@@ -41,7 +41,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// <returns>The builder with all production resolvers registered.</returns>
         public static CandidateSetBuilder CreateDefault()
         {
-            return new CandidateSetBuilder([new PeoplePrefilterResolver(), new SeriesNamePrefilterResolver(), new NextUnwatchedPrefilterResolver(), new LastEpisodeAirDatePrefilterResolver(), new ResolutionPrefilterResolver(), new StreamLanguagePrefilterResolver(), new ParentValuesPrefilterResolver()]);
+            return new CandidateSetBuilder(
+            [
+                new PeoplePrefilterResolver(),
+                new SeriesNamePrefilterResolver(),
+                new NextUnwatchedPrefilterResolver(),
+                new LastEpisodeAirDatePrefilterResolver(),
+                new ResolutionPrefilterResolver(),
+                new StreamLanguagePrefilterResolver(),
+                new ParentValuesPrefilterResolver(),
+            ]);
         }
 
         /// <summary>
@@ -157,7 +166,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 {
                     // A failing resolver degrades to "no shrink for this rule" - it must never
                     // break the refresh or, worse, pretend to have bounded the rule.
-                    context.Logger?.LogDebug(ex, "Prefilter resolver {Resolver} failed for {Field} {Operator}; rule stays per-item",
+                    context.Logger?.LogWarning(ex, "Prefilter resolver {Resolver} failed for {Field} {Operator}; rule stays per-item",
                         resolver.GetType().Name, expression.MemberName, expression.Operator);
                 }
             }
