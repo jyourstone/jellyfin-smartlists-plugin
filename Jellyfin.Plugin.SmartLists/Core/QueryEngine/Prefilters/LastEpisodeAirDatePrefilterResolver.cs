@@ -282,25 +282,36 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 
             var reference = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc), TimeSpan.Zero);
             DateTimeOffset cutoffDate;
-            switch (parts[1].ToLowerInvariant())
+            try
             {
-                case "hours":
-                    cutoffDate = reference.AddHours(-num);
-                    break;
-                case "days":
-                    cutoffDate = reference.AddDays(-num);
-                    break;
-                case "weeks":
-                    cutoffDate = reference.AddDays(-num * 7);
-                    break;
-                case "months":
-                    cutoffDate = reference.AddMonths(-num);
-                    break;
-                case "years":
-                    cutoffDate = reference.AddYears(-num);
-                    break;
-                default:
-                    return false;
+                // -(double)num * 7 avoids the int overflow that would silently wrap a huge
+                // week span into a FUTURE cutoff (a NewerThan false negative); the other
+                // units throw ArgumentOutOfRangeException instead, caught below so the
+                // rule degrades to per-item rather than aborting the candidate build.
+                switch (parts[1].ToLowerInvariant())
+                {
+                    case "hours":
+                        cutoffDate = reference.AddHours(-num);
+                        break;
+                    case "days":
+                        cutoffDate = reference.AddDays(-num);
+                        break;
+                    case "weeks":
+                        cutoffDate = reference.AddDays(-(double)num * 7);
+                        break;
+                    case "months":
+                        cutoffDate = reference.AddMonths(-num);
+                        break;
+                    case "years":
+                        cutoffDate = reference.AddYears(-num);
+                        break;
+                    default:
+                        return false;
+                }
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return false;
             }
 
             cutoff = cutoffDate.UtcDateTime;

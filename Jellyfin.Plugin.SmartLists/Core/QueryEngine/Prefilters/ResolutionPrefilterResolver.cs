@@ -75,10 +75,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 return null;
             }
 
+            var kinds = MapToLeafVideoKinds(context.MediaTypes!);
+            if (kinds == null)
+            {
+                return null;
+            }
+
             var stopwatch = Stopwatch.StartNew();
             var query = new InternalItemsQuery
             {
-                IncludeItemTypes = MapToLeafVideoKinds(context.MediaTypes!),
+                IncludeItemTypes = kinds,
                 MinHeight = window.MinHeight,
                 MaxHeight = window.MaxHeight,
                 Recursive = true,
@@ -175,19 +181,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 
         /// <summary>
         /// Maps the (already gate-checked) leaf video media types to their query kinds.
+        /// Null when any media type has no kind mapping: a partially mapped list would
+        /// narrow the query below the pool (false negatives), and an empty kinds array
+        /// would apply no type filter at all.
         /// </summary>
-        private static BaseItemKind[] MapToLeafVideoKinds(IReadOnlyList<string> mediaTypes)
+        private static BaseItemKind[]? MapToLeafVideoKinds(IReadOnlyList<string> mediaTypes)
         {
             var kinds = new HashSet<BaseItemKind>();
             foreach (var mediaType in mediaTypes)
             {
-                if (MediaTypes.MediaTypeToBaseItemKind.TryGetValue(mediaType, out var kind))
+                if (!MediaTypes.MediaTypeToBaseItemKind.TryGetValue(mediaType, out var kind))
                 {
-                    kinds.Add(kind);
+                    return null;
                 }
+
+                kinds.Add(kind);
             }
 
-            return [.. kinds];
+            return kinds.Count == 0 ? null : [.. kinds];
         }
 
         /// <summary>
