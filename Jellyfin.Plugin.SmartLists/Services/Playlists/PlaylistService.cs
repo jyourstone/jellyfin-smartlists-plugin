@@ -41,6 +41,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         private readonly ILogger<PlaylistService> _logger;
         private readonly SmartListImageService? _imageService;
         private readonly ExternalListService? _externalListService;
+        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository;
 
         public PlaylistService(
             IUserManager userManager,
@@ -49,7 +50,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             IUserDataManager userDataManager,
             ILogger<PlaylistService> logger,
             SmartListImageService? imageService = null,
-            ExternalListService? externalListService = null)
+            ExternalListService? externalListService = null,
+            MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null)
         {
             _userManager = userManager;
             _libraryManager = libraryManager;
@@ -58,6 +60,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             _logger = logger;
             _imageService = imageService;
             _externalListService = externalListService;
+            _itemRepository = itemRepository;
         }
 
 
@@ -141,7 +144,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 var smartPlaylist = new Core.SmartList(dto)
                 {
-                    UserManager = _userManager // Set UserManager for Jellyfin 10.11+ user resolution,
+                    UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution
+                    ItemRepository = _itemRepository, // ItemValues-backed name dumps for DB prefilters
                 };
 
                 // Log the playlist rules
@@ -1363,7 +1367,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
 
                 var bumperList = new Core.SmartList(bumperDto)
                 {
-                    UserManager = _userManager // Set UserManager for Jellyfin 10.11+ user resolution,
+                    UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution
+                    ItemRepository = _itemRepository, // ItemValues-backed name dumps for DB prefilters
                 };
                 var bumperMedia = GetAllUserMedia(user, bumperDto.MediaTypes, bumperDto).ToArray();
                 var bumperIds = bumperList.FilterPlaylistItems(bumperMedia, _libraryManager, user, refreshCache, _userDataManager, logger, null);

@@ -66,6 +66,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory;
         private readonly SmartListImageService? _imageService;
         private readonly ExternalListService? _externalListService;
+        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository;
 
         // Queue data structures
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
@@ -96,7 +97,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             RefreshStatusService refreshStatusService,
             Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
             SmartListImageService? imageService = null,
-            ExternalListService? externalListService = null)
+            ExternalListService? externalListService = null,
+            MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null)
         {
             _logger = logger;
             _userManager = userManager;
@@ -110,6 +112,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _loggerFactory = loggerFactory;
             _imageService = imageService;
             _externalListService = externalListService;
+            _itemRepository = itemRepository;
 
             // Start background processing task
             _processingTask = Task.Run(ProcessQueueAsync, _cancellationTokenSource.Token);
@@ -685,7 +688,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userDataManager,
                 playlistServiceLogger,
                 _imageService,
-                _externalListService);
+                _externalListService,
+                _itemRepository);
         }
 
         /// <summary>
@@ -702,7 +706,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 collectionServiceLogger,
                 _providerManager,
                 _imageService,
-                _externalListService);
+                _externalListService,
+                _itemRepository);
         }
 
         public void Dispose()
@@ -754,6 +759,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, HashSet<Guid>> PlaylistMembershipCache { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesNameById { get; } = new();
             public ConcurrentDictionary<Guid, string> SeriesSortNameById { get; } = new();
+
+            /// <summary>
+            /// SeriesName bulk-warmup state: null = not attempted, true = SeriesNameById and
+            /// SeriesSortNameById cover every in-scope series (dump completed), false = the dump
+            /// failed and only per-miss lazy entries exist. Written only on the sequential refresh
+            /// path (see OperandFactory.WarmSeriesNameCache).
+            /// </summary>
+            public bool? SeriesNameWarmupSucceeded { get; set; }
 
             /// <summary>
             /// Ancestor-inherited Tags/Studios/Genres, keyed by the ANCESTOR NODE id (season id,

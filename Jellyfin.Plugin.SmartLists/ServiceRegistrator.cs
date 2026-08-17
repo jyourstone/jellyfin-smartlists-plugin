@@ -77,6 +77,8 @@ namespace Jellyfin.Plugin.SmartLists
                 var loggerFactory = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
                 var imageService = sp.GetRequiredService<SmartListImageService>();
                 var externalListService = sp.GetRequiredService<ExternalListService>();
+                // Optional: DB prefilters degrade conservatively without it.
+                var itemRepository = sp.GetService<MediaBrowser.Controller.Persistence.IItemRepository>();
 
                 var queueService = new RefreshQueueService(
                     logger,
@@ -90,7 +92,8 @@ namespace Jellyfin.Plugin.SmartLists
                     refreshStatusService,
                     loggerFactory,
                     imageService,
-                    externalListService);
+                    externalListService,
+                    itemRepository);
 
                 // Set the reference in RefreshStatusService
                 refreshStatusService.SetRefreshQueueService(queueService);

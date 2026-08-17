@@ -1618,13 +1618,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Extracts framerate from media streams.
         /// </summary>
-        private static void ExtractFramerate(Operand operand, BaseItem baseItem, ILogger? logger)
+        private static void ExtractFramerate(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
         {
             operand.Framerate = null;
             try
             {
-                // Use shared helper to extract media streams
-                var mediaStreams = TryGetAllMediaStreams(baseItem, logger);
+                // Served through the shared MediaStreamsCache like every other stream extractor
+                // (mirrors ExtractResolution) so a Framerate rule doesn't re-read streams that
+                // another stream group already fetched for the same item.
+                var mediaStreams = Utilities.MediaStreamHelper.GetMediaStreams(baseItem, cache, logger);
 
                 // Process found streams to find the first video stream with framerate information
                 foreach (var stream in mediaStreams)
@@ -1930,8 +1932,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Helper method to safely extract SeriesId as Guid from episode items.
         /// Handles Guid, Guid?, and string representations.
+        /// Internal so SeriesNamePrefilterResolver can mirror the exact per-item resolution order.
         /// </summary>
-        private static bool TryGetEpisodeSeriesGuid(BaseItem baseItem, out Guid seriesGuid)
+        internal static bool TryGetEpisodeSeriesGuid(BaseItem baseItem, out Guid seriesGuid)
         {
             seriesGuid = Guid.Empty;
             if (baseItem is not Episode) return false;
@@ -1975,6 +1978,65 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Bulk-loads every library series' Name and SortName into the refresh cache in ONE
+        /// user-neutral query, replacing the per-distinct-series GetItemById round-trips the
+        /// lazy path would otherwise make (thousands on big TV libraries). Runs at most once
+        /// per refresh cache; the per-miss GetItemById fallback in ResolveAndCacheSeriesName
+        /// stays as-is for series outside the dump scope (virtual/out-of-library).
+        /// Both dictionaries are populated together: a Name-only warmup would permanently
+        /// starve SeriesNameOrder's sort names via the cache-hit early return above.
+        /// </summary>
+        /// <returns>True when the dump completed and the cache covers every in-scope series.</returns>
+        internal static bool WarmSeriesNameCache(ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            if (cache.SeriesNameWarmupSucceeded is bool alreadyAttempted)
+            {
+                return alreadyAttempted;
+            }
+
+            try
+            {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                // User-neutral on purpose: the GetItemById fallback performs no visibility
+                // filtering, so a user-scoped dump would shunt invisible-but-referenced series
+                // onto the slow per-miss path. Grouping is pinned off per prefilter query
+                // hygiene. Recursive is a repository no-op without ParentId and is not set.
+                var series = libraryManager.GetItemList(new InternalItemsQuery
+                {
+                    IncludeItemTypes = [BaseItemKind.Series],
+                    TopParentIds = LibraryManagerHelper.GetLibraryTopParentIds(libraryManager),
+                    GroupByPresentationUniqueKey = false,
+                });
+
+                foreach (var item in series)
+                {
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    // Read both BEFORE writing either: a partial pair would hit the cache-hit
+                    // early return on Name and leave the sort name permanently missing.
+                    var name = item.Name ?? string.Empty;
+                    var sortName = item.SortName ?? string.Empty;
+                    cache.SeriesNameById[item.Id] = name;
+                    cache.SeriesSortNameById[item.Id] = sortName;
+                }
+
+                cache.SeriesNameWarmupSucceeded = true;
+                logger?.LogDebug("Series name warmup cached {Count} series in {Ms}ms", series.Count, stopwatch.ElapsedMilliseconds);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                cache.SeriesNameWarmupSucceeded = false;
+                logger?.LogDebug(ex, "Series name warmup failed; falling back to per-series resolution");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Extracts the series name for episodes and extras with per-refresh caching.
         /// For episodes: uses SeriesId property directly.
         /// For extras: walks up the parent chain to find the owning Series.
@@ -1984,6 +2046,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             operand.SeriesName = string.Empty;
             try
             {
+                // Bulk warmup (once per refresh cache) replaces the per-distinct-series
+                // GetItemById round-trips; misses below still fall back per item.
+                WarmSeriesNameCache(libraryManager, cache, logger);
+
                 // Use helper to extract SeriesId safely (episodes only)
                 if (TryGetEpisodeSeriesGuid(baseItem, out var seriesGuid))
                 {
@@ -2225,18 +2291,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             try
             {
                 // Cache the GetPeople method lookup for better performance
-                var getPeopleMethod = _getPeopleMethodCache;
-                if (getPeopleMethod == null)
-                {
-                    lock (_getPeopleMethodLock)
-                    {
-                        if (_getPeopleMethodCache == null)
-                        {
-                            _getPeopleMethodCache = libraryManager.GetType().GetMethod("GetPeople", [typeof(InternalPeopleQuery)]);
-                        }
-                        getPeopleMethod = _getPeopleMethodCache;
-                    }
-                }
+                var getPeopleMethod = GetPeopleQueryMethod(libraryManager);
 
                 if (getPeopleMethod != null)
                 {
@@ -2328,6 +2383,32 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Cached reflection lookup for the ABI-shared ILibraryManager.GetPeople(InternalPeopleQuery)
+        /// overload. Shared by every per-item people extraction path and (on 10.11) the
+        /// prefilter's people name dump so all callers reuse the same MethodInfo cache.
+        /// </summary>
+        /// <param name="libraryManager">The library manager whose concrete type carries the method.</param>
+        /// <returns>The GetPeople method, or null when the lookup fails.</returns>
+        internal static System.Reflection.MethodInfo? GetPeopleQueryMethod(ILibraryManager libraryManager)
+        {
+            var getPeopleMethod = _getPeopleMethodCache;
+            if (getPeopleMethod == null)
+            {
+                lock (_getPeopleMethodLock)
+                {
+                    if (_getPeopleMethodCache == null)
+                    {
+                        _getPeopleMethodCache = libraryManager.GetType().GetMethod("GetPeople", [typeof(InternalPeopleQuery)]);
+                    }
+
+                    getPeopleMethod = _getPeopleMethodCache;
+                }
+            }
+
+            return getPeopleMethod;
+        }
+
+        /// <summary>
         /// Preloads people data for all items in parallel to improve performance.
         /// </summary>
         public static void PreloadPeopleCache(ILibraryManager libraryManager, IEnumerable<BaseItem> items, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -2360,18 +2441,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 try
                 {
                     // Cache the GetPeople method lookup
-                    var getPeopleMethod = _getPeopleMethodCache;
-                    if (getPeopleMethod == null)
-                    {
-                        lock (_getPeopleMethodLock)
-                        {
-                            if (_getPeopleMethodCache == null)
-                            {
-                                _getPeopleMethodCache = libraryManager.GetType().GetMethod("GetPeople", [typeof(InternalPeopleQuery)]);
-                            }
-                            getPeopleMethod = _getPeopleMethodCache;
-                        }
-                    }
+                    var getPeopleMethod = GetPeopleQueryMethod(libraryManager);
 
                     if (getPeopleMethod != null)
                     {
@@ -2827,7 +2897,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 if (MediaTypes.VideoStreamCapableSet.Contains(operand.ItemType))
                 {
                     ExtractResolution(operand, baseItem, cache, logger);
-                    ExtractFramerate(operand, baseItem, logger);
+                    ExtractFramerate(operand, baseItem, cache, logger);
                     ExtractVideoQuality(operand, baseItem, cache, logger);
                 }
                 else
@@ -3092,6 +3162,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// </summary>
         private static System.Reflection.PropertyInfo? _extraTypePropertyCache;
         private static bool _extraTypePropertyResolved;
+
+        /// <summary>
+        /// Returns true when the item is an extra (trailer, behind-the-scenes, ...). Extras
+        /// enter list pools via their owner chain (LibraryManagerHelper.FetchExtras), not the
+        /// main library query, so DB-prefilter candidate queries never see them and must
+        /// always keep them.
+        /// </summary>
+        internal static bool IsExtra(BaseItem item)
+        {
+            return GetExtraTypeName(item).Length > 0;
+        }
 
         /// <summary>
         /// Gets the ExtraType name for a BaseItem, or empty string if not an extra.
@@ -4225,18 +4306,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                         var peopleQuery = new InternalPeopleQuery { ItemId = item.Id };
 
                         // Reuse cached GetPeople method lookup for better performance
-                        var getPeopleMethod = _getPeopleMethodCache;
-                        if (getPeopleMethod == null)
-                        {
-                            lock (_getPeopleMethodLock)
-                            {
-                                if (_getPeopleMethodCache == null)
-                                {
-                                    _getPeopleMethodCache = libraryManager.GetType().GetMethod("GetPeople", new[] { typeof(InternalPeopleQuery) });
-                                }
-                                getPeopleMethod = _getPeopleMethodCache;
-                            }
-                        }
+                        var getPeopleMethod = GetPeopleQueryMethod(libraryManager);
 
                         if (getPeopleMethod != null)
                         {

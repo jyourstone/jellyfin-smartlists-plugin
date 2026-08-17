@@ -110,7 +110,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         ILogger<ManualRefreshService> logger,
         Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
         RefreshQueueService refreshQueueService,
-        ExternalListService externalListService) : IManualRefreshService
+        ExternalListService externalListService,
+        MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null) : IManualRefreshService
     {
         private readonly IUserManager _userManager = userManager;
         private readonly ILibraryManager _libraryManager = libraryManager;
@@ -123,6 +124,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory = loggerFactory;
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
         private readonly ExternalListService _externalListService = externalListService;
+        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository = itemRepository;
 
         /// <summary>
         /// Gets the user for a playlist, handling migration from old User field to new UserId field.
@@ -208,7 +210,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _playlistManager,
                 _userDataManager,
                 playlistServiceLogger,
-                externalListService: _externalListService);
+                externalListService: _externalListService,
+                itemRepository: _itemRepository);
         }
 
         /// <summary>
@@ -226,7 +229,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 _userDataManager,
                 collectionServiceLogger,
                 _providerManager,
-                externalListService: _externalListService);
+                externalListService: _externalListService,
+                itemRepository: _itemRepository);
         }
 
         /// <summary>
