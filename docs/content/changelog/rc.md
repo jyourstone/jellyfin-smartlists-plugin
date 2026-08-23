@@ -22,7 +22,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 
 **Bug Fixes**
 
-- A rule block containing only a **Similar To** rule no longer produces an empty list when that block has a **"Max Items for this OR block"** limit or the list sorts by **Rule Block Order**. The block's matches were never assigned to a block, so the per-block limiter discarded every one of them.
+- A rule block containing only a **Similar To** rule no longer produces an empty list when that block has a **"Max Items for this OR block"** limit or the list sorts by **Rule Block Order**. The block's matches were never assigned to a block, so the per-block limiter discarded every one of them. This covers lists whose blocks are all Similar To-only; a Similar To rule still [filters the whole list](../user-guide/fields-and-operators.md#similar-to) rather than acting as an OR block of its own, so a Similar To-only block mixed with blocks holding other rules contributes no items — unchanged by this fix.
 
 **Existing lists may change**
 
