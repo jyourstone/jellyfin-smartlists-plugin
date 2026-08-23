@@ -507,7 +507,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         private void AddPlaylistToRuleCache(SmartPlaylistDto playlist)
         {
-            var mediaTypes = playlist.MediaTypes?.ToList() ?? [.. MediaTypes.All];
+            // Container types (Collection/Playlist) are collection-only - never trigger playlists on them
+            var mediaTypes = playlist.MediaTypes?.ToList() ?? MediaTypes.All.Where(mt => !MediaTypes.IsContainerType(mt)).ToList();
 
             // Bumper pools select from their own media types - include them so library
             // changes to bumper-relevant items also trigger a refresh

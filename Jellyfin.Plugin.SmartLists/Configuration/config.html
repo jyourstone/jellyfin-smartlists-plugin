@@ -135,6 +135,30 @@
                             <div class="fieldDescription">Include extras (behind the scenes, deleted scenes, featurettes, trailers, etc.) in the item pool. Use the <b>Extra Type</b> rule field to filter specific types.</div>
                         </div>
 
+                        <div id="matchByMembersContainer" class="checkboxList paperList"
+                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 0; display: none;">
+                            <label class="emby-checkbox-label">
+                                <input type="checkbox" is="emby-checkbox" id="matchByMembers"
+                                    data-embycheckbox="true" class="emby-checkbox">
+                                <span class="checkboxLabel">
+                                    Match collections/playlists by the items inside them
+                                    <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/media-types/#match-by-members"
+                                        target="_blank" rel="noopener noreferrer" title="Documentation"
+                                        style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                        <span class="material-icons" aria-hidden="true"
+                                            style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                    </a>
+                                </span>
+                                <span class="checkboxOutline">
+                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                        aria-hidden="true"></span>
+                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                        aria-hidden="true"></span>
+                                </span>
+                            </label>
+                            <div class="fieldDescription">Off: rules match the collection/playlist itself (name, genres, studios, year, parental rating). On: rules match the items inside it &mdash; a collection/playlist is included when at least one of its items matches all rules in a rule group.</div>
+                        </div>
+
                         <div class="inputContainer" style="margin-bottom: 1em;">
                             <label class="inputLabel" style="display: flex; align-items: center;">
                                 Rules

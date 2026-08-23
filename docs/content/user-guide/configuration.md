@@ -38,11 +38,11 @@ Before creating your first list, it's important to understand the differences be
 - **No Max Playtime**: Collections cannot have a playtime limit
 - **User Reference**: While collections don't have an "owner" in the traditional sense, you must select a user whose context will be used when evaluating rules and filtering items. This user's library access permissions and user-specific data (like "Playback Status", "Is Favorite", etc.) are used to determine which items are included in the collection
 - **Automatic Image Generation**: Collections automatically generate cover images based on the media items they contain (see details below)
-- **Can Contain Collections**: Unlike playlists, collections can contain other collection objects (creating "meta-collections") when using the "Include collections only" option with the Collection name field
+- **Can Contain Collections and Playlists**: Unlike playlists, collections can contain other collection and playlist objects (creating "meta-collections") — select the **Collection** or **Playlist** [media types](media-types.md#container-media-types)
 - **Use cases**: Organizing related content for browsing (e.g., "Action Movies", "Holiday Collection", "Director's Collection")
 
 !!! info "Smart collections are metadata-locked"
-    SmartLists creates its collections with Jellyfin's **"Lock this item"** flag enabled, and re-applies it on every refresh. This prevents Jellyfin's metadata fetchers from matching the collection against online databases by name and stamping a foreign TMDB ID on it — a mismatch that causes the TMDbBoxSets plugin to delete the collection as "orphaned". The lock does not affect cover image generation or any metadata set through SmartLists. If you untick the lock manually, it will be re-enabled on the next refresh.
+    SmartLists creates its collections with Jellyfin's **"Lock this item"** flag enabled, and re-applies it on every refresh. This prevents Jellyfin's metadata fetchers from matching the collection against online databases by name and stamping a foreign TMDB ID on it — a mismatch that causes the TMDbBoxSets plugin to delete the collection as "orphaned". The lock does not affect cover image generation or any metadata set through SmartLists — SmartLists itself aggregates **genres, studios, parental rating, and total runtime** from the collection's members on every refresh, so smart collections still display this metadata despite the lock. If you untick the lock manually, it will be re-enabled on the next refresh.
 
 #### Automatic Image Generation
 

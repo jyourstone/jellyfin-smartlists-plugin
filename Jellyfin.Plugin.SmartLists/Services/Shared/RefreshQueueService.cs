@@ -539,6 +539,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 progressCallback,
                 cancellationToken);
 
+            // The refresh wrote (or deleted) this list's Jellyfin playlist, so cached media for
+            // Playlist-typed lists is now stale. Drop those entries so later container lists in
+            // the same drain re-query - matching the per-refresh query the legacy include-only
+            // path performed. No-op when no list uses the Playlist media type.
+            InvalidateContainerMediaCaches(Core.Constants.MediaTypes.Playlist);
+
             if (!success)
             {
                 throw new InvalidOperationException($"Playlist refresh failed for user {user.Username}: {message}");
@@ -617,9 +623,35 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 progressCallback,
                 cancellationToken);
 
+            // The refresh wrote (or deleted) this list's Jellyfin collection, so cached media for
+            // Collection-typed lists is now stale. Drop those entries so later container lists in
+            // the same drain re-query - matching the per-refresh query the legacy include-only
+            // path performed. No-op when no list uses the Collection media type.
+            InvalidateContainerMediaCaches(Core.Constants.MediaTypes.Collection);
+
             if (!success)
             {
                 throw new InvalidOperationException($"Collection refresh failed: {message}");
+            }
+        }
+
+        /// <summary>
+        /// Removes cached base-media entries whose media types include the given container type,
+        /// across every user's cache (a written container is visible to all users' queries).
+        /// The entry lazily re-queries on next use, so the cost is one query per subsequent
+        /// container-typed list refresh, and zero when no such list exists.
+        /// </summary>
+        private void InvalidateContainerMediaCaches(string containerMediaType)
+        {
+            foreach (var userCache in _userCaches.Values)
+            {
+                foreach (var key in userCache.Keys)
+                {
+                    if (key.ContainsType(containerMediaType))
+                    {
+                        userCache.TryRemove(key, out _);
+                    }
+                }
             }
         }
 

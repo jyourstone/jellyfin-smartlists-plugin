@@ -33,20 +33,30 @@ Here are some popular playlist and collection types you can create:
 
 ### Complete Franchise Collection
 - **Collection name** contains "Movie Franchise" (includes all movies in the franchise)
-- **Note**: For Playlists, this fetches all media items from within the collection. For Collections, you can optionally enable "Include collections only" to create a meta-collection that contains the collection object itself
+- **Note**: This fetches the media items from *within* the collection. To include collection objects themselves, use the **Collection** [media type](../user-guide/media-types.md#container-media-types) instead — see the next example
 
 ### Meta-Collection (Collection of Collections)
-- **Collection name** is in "Marvel;DC;Star Wars" with "Include collections only" enabled
 - **List Type**: Collection
-- **Note**: When "Include collections only" is enabled, your selected media types are ignored, and the collection will contain the actual collection objects rather than the media items within them
+- **Media Types**: Collection
+- **Name** is in "Marvel;DC;Star Wars"
 - Creates a single collection that organizes multiple collections together (e.g., a "Superhero Universes" collection containing your Marvel, DC, and other superhero collections)
+- **Note**: The **Collection** media type is only available for smart collections — Jellyfin playlists can only contain media items
 - **Important**: The smart collection will never include itself in the results, even if its name matches the rule. So you can safely name your meta-collection "Superhero Universes" and use rules that match "Marvel" without worrying about it including itself
 
 ### Filtered Meta-Collection (Marvel Collections Only)
-- **Collection name** contains "Collection" with "Include collections only" enabled AND **Studios** contains "Marvel"
 - **List Type**: Collection
-- Includes only the collections whose own metadata lists a Marvel studio — other rules in the same group filter the collections themselves, not the items inside them
-- **Note**: Jellyfin aggregates studios and genres from a collection's items, so fields like Studios and Genres work well here. Fields a collection doesn't have (playback status, resolution, etc.) won't match anything
+- **Media Types**: Collection, with **"Match collections/playlists by the items inside them"** left off
+- **Name** contains "Collection" AND **Studios** contains "Marvel"
+- With the toggle off, rules match the collections' **own** metadata — name, genres, studios, production year, parental rating. Jellyfin aggregates studios and genres from a collection's items, and SmartLists does the same for its own smart collections
+- **Note**: For item-level fields like actors, playback status or resolution, turn the toggle **on** — see the next example
+
+### Collections Containing a Pre-1990 Arnold Movie
+- **List Type**: Collection
+- **Media Types**: Collection, with **"Match collections/playlists by the items inside them"** turned **on**
+- **Actors** contains "Arnold Schwarzenegger" AND **Production Year** less than 1990
+- With the toggle on, rules are checked against the movies *inside* each collection: a collection is included when **at least one** of its items passes **all** rules in a rule group — here, at least one pre-1990 Arnold Schwarzenegger movie
+- A collection holding a 2015 Arnold movie and a 1985 movie without him does **not** match — a single item must satisfy the whole rule group
+- **Tip**: Add **Movie** to the media types to also include the matching movies themselves alongside the collections
 
 ### Combine Multiple Playlists
 - **Playlist name** is in "Favorites;Top Rated;Recent Additions"
@@ -57,9 +67,9 @@ Here are some popular playlist and collection types you can create:
 - **Important**: Only playlists you own or that are marked as public are accessible. The smart playlist will never include itself in the results.
 
 ### Playlist Organization Collection
-- **Playlist name** contains "workout" with "Include playlist only" enabled
 - **List Type**: Collection
-- **Note**: When "Include playlist only" is enabled, the collection contains the actual playlist objects (not the media items within them)
+- **Media Types**: Playlist
+- **Name** contains "workout"
 - Creates a collection that organizes your playlists by category (e.g., a "Workout Playlists" collection containing all your workout-related playlists)
 - Useful for managing large numbers of playlists by grouping them into categories
 - **Important**: The smart collection will never include itself, and only playlists you own or that are public are accessible

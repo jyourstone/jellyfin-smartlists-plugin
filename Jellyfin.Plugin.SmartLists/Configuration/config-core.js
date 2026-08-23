@@ -57,6 +57,15 @@
     SmartLists.AUDIO_CAPABLE_TYPES = ['Movie', 'Episode', 'Audio', 'AudioBook', 'MusicVideo', 'Video'];
     SmartLists.VIDEO_CAPABLE_TYPES = ['Movie', 'Episode', 'MusicVideo', 'Video'];
 
+    // Container media types - the collections/playlists themselves rather than the media
+    // items inside them. Only offered for smart collections (mirrors MediaTypes.ContainerTypes)
+    SmartLists.CONTAINER_MEDIA_TYPES = ['Collection', 'Playlist'];
+
+    // Fields a container (collection/playlist) actually has metadata for. When ONLY container
+    // types are selected and "Match by members" is off, rules evaluate the container itself,
+    // so the rule-field dropdown is restricted to these fields.
+    SmartLists.CONTAINER_METADATA_FIELDS = ['Name', 'Genres', 'Studios', 'ProductionYear', 'OfficialRating', 'DateCreated', 'DateLastRefreshed', 'DateLastSaved', 'ReleaseDate', 'Collections'];
+
     // Audio and video field lists for visibility gating
     SmartLists.AUDIO_FIELD_NAMES = ['AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioCodec', 'AudioProfile', 'AudioChannels', 'AudioLanguages', 'SubtitleLanguages'];
     SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType'];
@@ -155,7 +164,9 @@
         { Value: "Video", Label: "Video" },
         { Value: "Photo", Label: "Photo (Home Photo)" },
         { Value: "Book", Label: "Book" },
-        { Value: "AudioBook", Label: "Audiobook" }
+        { Value: "AudioBook", Label: "Audiobook" },
+        { Value: "Collection", Label: "Collection", CollectionOnly: true }, // Containers can only be added to Collections, not Playlists
+        { Value: "Playlist", Label: "Playlist", CollectionOnly: true } // Containers can only be added to Collections, not Playlists
     ];
 
     // Resolve the rules container for a scope: 'main' (default) or 'bumper'
@@ -170,6 +181,42 @@
             return (bumperSelect && bumperSelect.value) ? [bumperSelect.value] : [];
         }
         return SmartLists.getSelectedItems(page, 'mediaTypesMultiSelect', 'media-type-multi-select-checkbox');
+    };
+
+    // True when at least one container media type (Collection/Playlist) is selected
+    SmartLists.hasContainerMediaType = function (selectedMediaTypes) {
+        if (!selectedMediaTypes) return false;
+        return selectedMediaTypes.some(function (type) {
+            return SmartLists.CONTAINER_MEDIA_TYPES.indexOf(type) !== -1;
+        });
+    };
+
+    // True when the rule-field dropdown should be restricted to container metadata fields:
+    // every selected media type is a container AND "Match by members" is off (rules then
+    // evaluate the container's own metadata, not its member items). Bumper rules never
+    // apply - container types can't be selected as a bumper media type.
+    SmartLists.isContainerMetadataOnlyMode = function (page, scope) {
+        if (!page || scope === 'bumper') return false;
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, 'main');
+        if (!selectedMediaTypes || selectedMediaTypes.length === 0) return false;
+        for (var i = 0; i < selectedMediaTypes.length; i++) {
+            if (SmartLists.CONTAINER_MEDIA_TYPES.indexOf(selectedMediaTypes[i]) === -1) return false;
+        }
+        var matchByMembersCheckbox = page.querySelector('#matchByMembers');
+        return !(matchByMembersCheckbox && matchByMembersCheckbox.checked);
+    };
+
+    // True when a container media type is selected AND "Match by members" is on:
+    // rules then evaluate member items, which can be of any supported kind, so the
+    // rule-field dropdown must offer the full item field set regardless of the
+    // selected media types. Bumper rules never apply - container types can't be
+    // selected as a bumper media type.
+    SmartLists.isMatchByMembersMode = function (page, scope) {
+        if (!page || scope === 'bumper') return false;
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, 'main');
+        if (!SmartLists.hasContainerMediaType(selectedMediaTypes)) return false;
+        var matchByMembersCheckbox = page.querySelector('#matchByMembers');
+        return !!(matchByMembersCheckbox && matchByMembersCheckbox.checked);
     };
 
     // Resolve a rule row's editor scope ('main' or 'bumper') from its logic group's data-rule-scope attribute

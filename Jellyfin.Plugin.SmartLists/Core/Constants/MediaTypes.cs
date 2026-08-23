@@ -42,6 +42,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         public const string Book = nameof(Book);
         public const string AudioBook = nameof(AudioBook);
 
+        // Container Types
+        // Collection media type (BoxSet): Not supported in Playlists (Jellyfin playlists can only
+        // contain media items; containers are silently dropped) but supported in Collections
+        public const string Collection = nameof(Collection);
+
+        // Playlist media type: Not supported in Playlists (same pattern as Collection)
+        // but supported in Collections
+        public const string Playlist = nameof(Playlist);
+
         // Fallback Type
         public const string Unknown = nameof(Unknown);
 
@@ -64,7 +73,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             // Season: Supported in Collections, not in Playlists
             { BaseItemKind.Season, Season },
             // MusicAlbum: Supported in Collections, not in Playlists
-            { BaseItemKind.MusicAlbum, MusicAlbum }
+            { BaseItemKind.MusicAlbum, MusicAlbum },
+            // Collection: Supported in Collections, not in Playlists
+            { BaseItemKind.BoxSet, Collection },
+            // Playlist: Supported in Collections, not in Playlists
+            { BaseItemKind.Playlist, Playlist }
         };
 
         /// <summary>
@@ -85,11 +98,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             // Season: Supported in Collections, not in Playlists
             { Season, BaseItemKind.Season },
             // MusicAlbum: Supported in Collections, not in Playlists
-            { MusicAlbum, BaseItemKind.MusicAlbum }
+            { MusicAlbum, BaseItemKind.MusicAlbum },
+            // Collection: Supported in Collections, not in Playlists
+            { Collection, BaseItemKind.BoxSet },
+            // Playlist: Supported in Collections, not in Playlists
+            { Playlist, BaseItemKind.Playlist }
         };
 
         /// <summary>
-        /// Gets all supported media types as an array (includes Series for Collections support)
+        /// Gets all supported media types as an array (includes Series and container types for Collections support)
         /// </summary>
         public static readonly string[] All = [.. BaseItemKindToMediaType
             .Select(static kvp => kvp.Value)];
@@ -124,6 +141,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// </summary>
         public static readonly string[] VideoStreamCapable = [Movie, Episode, MusicVideo, Video];
 
+        /// <summary>
+        /// Gets container media types (Collection, Playlist) - only valid for smart collections,
+        /// never for smart playlists (Jellyfin playlists can only contain media items)
+        /// </summary>
+        public static readonly string[] ContainerTypes = [Collection, Playlist];
+
         // HashSet variants for O(1) membership checks (performance optimization)
 
         /// <summary>
@@ -150,6 +173,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         /// HashSet variant of VideoStreamCapable for O(1) membership checks
         /// </summary>
         public static readonly HashSet<string> VideoStreamCapableSet = new(VideoStreamCapable, StringComparer.Ordinal);
+
+        /// <summary>
+        /// HashSet variant of ContainerTypes for O(1) membership checks
+        /// </summary>
+        public static readonly HashSet<string> ContainerTypesSet = new(ContainerTypes, StringComparer.Ordinal);
+
+        /// <summary>
+        /// Checks whether a media type is a container type (Collection or Playlist)
+        /// </summary>
+        public static bool IsContainerType(string mediaType) => ContainerTypesSet.Contains(mediaType);
 
         /// <summary>
         /// Gets BaseItemKind array for audio-only content (derived from centralized mapping)

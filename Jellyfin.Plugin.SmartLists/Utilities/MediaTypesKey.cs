@@ -58,6 +58,17 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             return new MediaTypesKey(sortedTypes, collectionsExpansionFlag, includeExtrasFlag);
         }
 
+        /// <summary>
+        /// Whether this key's media types include the given type. Used to invalidate cached
+        /// container (Collection/Playlist) media after a refresh writes a container, so later
+        /// lists in the same drain see it - mirroring the per-refresh query the legacy
+        /// include-only path performed.
+        /// </summary>
+        public bool ContainsType(string mediaType)
+        {
+            return (_sortedTypes ?? []).Contains(mediaType, StringComparer.Ordinal);
+        }
+
         public bool Equals(MediaTypesKey other)
         {
             // Handle null arrays (default struct case) and use SequenceEqual for cleaner comparison

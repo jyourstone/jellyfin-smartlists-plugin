@@ -245,6 +245,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
             playlist.MigrateLegacyFields();
+
+            // Legacy include-only flags never worked for playlists (Jellyfin playlists can only
+            // contain media items; container results were silently dropped) - strip them silently
+            StripIncludeOnlyFlags(playlist);
+
+            // Container media types are collection-only; drop any that slipped into stored JSON
+            playlist.MediaTypes.RemoveAll(Core.Constants.MediaTypes.IsContainerType);
         }
 
         /// <summary>
@@ -264,6 +271,147 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Migrate legacy fields (e.g. IsPlayed -> PlaybackStatus)
             collection.MigrateLegacyFields();
+
+            // Migrate legacy per-rule include-only flags to Collection/Playlist media types
+            MigrateIncludeOnlyRulesToMediaTypes(collection);
+        }
+
+        /// <summary>
+        /// One-time migration of the legacy per-rule IncludeCollectionOnly/IncludePlaylistOnly
+        /// checkboxes to the Collection/Playlist media types. Each include-only Collections/
+        /// Playlists rule becomes a Name rule against the container itself (operator and value
+        /// preserved) - sibling rules already evaluated against the container and carry over
+        /// unchanged. Pure include-only lists (every rule group has an include-only rule) only
+        /// ever produced containers, so their item media types are replaced outright; mixed
+        /// lists keep their item types and gain the container type(s). MatchByMembers stays
+        /// false, preserving the legacy match-against-container-metadata behavior.
+        /// Idempotent: the flags are cleared, so rerunning is a no-op.
+        ///
+        /// A CollectionSearchDepth set on an include-only rule stays on the rewritten Name rule;
+        /// SmartList.ExtractCollectionSearchDepthFromExpressions reads Name rules too, so the
+        /// configured nested-collection walk depth survives migration.
+        ///
+        /// Behavior notes for the rewritten Name rules:
+        /// - Equal: the legacy matcher also matched the container name with the configured
+        ///   prefix/suffix stripped (users target smart lists by base name), so the engine must
+        ///   replicate that fallback when evaluating Name+Equal against container candidates -
+        ///   otherwise migrated pure include-only lists lose members.
+        /// - Negative operators (NotEqual/NotContains/IsNotIn): the legacy matcher's default arm
+        ///   matched nothing, so such rules produced empty groups. After migration they evaluate
+        ///   normally - accepted as a bug-fix, documented under "Existing lists may change".
+        /// </summary>
+        private static void MigrateIncludeOnlyRulesToMediaTypes(SmartCollectionDto collection)
+        {
+            if (collection.ExpressionSets == null || collection.ExpressionSets.Count == 0)
+            {
+                return;
+            }
+
+            // Mirrors the legacy engine's allRulesAreIncludeOnly check: such lists skipped media
+            // item processing entirely and returned only containers
+            var allSetsAreIncludeOnly = collection.ExpressionSets.All(set =>
+                set?.Expressions?.Any(expr =>
+                    (expr.MemberName == "Collections" && expr.IncludeCollectionOnly == true) ||
+                    (expr.MemberName == "Playlists" && expr.IncludePlaylistOnly == true)) == true);
+
+            var needsCollectionType = false;
+            var needsPlaylistType = false;
+
+            foreach (var set in collection.ExpressionSets)
+            {
+                if (set?.Expressions == null)
+                {
+                    continue;
+                }
+
+                foreach (var expression in set.Expressions)
+                {
+                    // The rewrite changes only MemberName - CollectionSearchDepth (when set) is
+                    // deliberately kept, and the depth extractor reads it from Name rules too
+                    if (expression.MemberName == "Collections" && expression.IncludeCollectionOnly == true)
+                    {
+                        expression.MemberName = "Name";
+                        needsCollectionType = true;
+                    }
+                    else if (expression.MemberName == "Playlists" && expression.IncludePlaylistOnly == true)
+                    {
+                        expression.MemberName = "Name";
+                        needsPlaylistType = true;
+                    }
+
+                    expression.IncludeCollectionOnly = null;
+                    expression.IncludePlaylistOnly = null;
+                }
+            }
+
+            if (!needsCollectionType && !needsPlaylistType)
+            {
+                return;
+            }
+
+            if (allSetsAreIncludeOnly)
+            {
+                // Pure include-only list: item media types never contributed results - drop them
+                collection.MediaTypes.Clear();
+            }
+
+            if (needsCollectionType && !collection.MediaTypes.Contains(Core.Constants.MediaTypes.Collection))
+            {
+                collection.MediaTypes.Add(Core.Constants.MediaTypes.Collection);
+            }
+
+            if (needsPlaylistType && !collection.MediaTypes.Contains(Core.Constants.MediaTypes.Playlist))
+            {
+                collection.MediaTypes.Add(Core.Constants.MediaTypes.Playlist);
+            }
+        }
+
+        /// <summary>
+        /// Strips the legacy IncludeCollectionOnly/IncludePlaylistOnly flags from a playlist's
+        /// rules. The include-only feature never worked for playlists (container results were
+        /// silently dropped by Jellyfin), so there is nothing to migrate. Idempotent.
+        /// </summary>
+        private static void StripIncludeOnlyFlags(SmartPlaylistDto playlist)
+        {
+            if (playlist.ExpressionSets == null)
+            {
+                return;
+            }
+
+            // The legacy engine skipped entire groups containing an include-only rule during item
+            // evaluation, so on a playlist such a group contributed nothing. Removing the group is
+            // the behavior-preserving migration - stripping only the flag would turn a dead group
+            // into an active item filter. (The UI never offered these checkboxes on playlist forms,
+            // so this only triggers on hand-edited JSON.)
+            var deadGroups = playlist.ExpressionSets
+                .Where(set => set?.Expressions?.Any(expr =>
+                    expr?.IncludeCollectionOnly == true || expr?.IncludePlaylistOnly == true) == true)
+                .ToList();
+
+            // If every group is include-only the legacy playlist was permanently empty; removing
+            // them all would flip it to "no rules = match everything". Strip just the flags instead
+            // so the groups keep filtering as regular rules - a visible result beats a silent flip.
+            if (deadGroups.Count > 0 && deadGroups.Count < playlist.ExpressionSets.Count)
+            {
+                foreach (var group in deadGroups)
+                {
+                    playlist.ExpressionSets.Remove(group);
+                }
+            }
+
+            foreach (var set in playlist.ExpressionSets)
+            {
+                if (set?.Expressions == null)
+                {
+                    continue;
+                }
+
+                foreach (var expression in set.Expressions)
+                {
+                    expression.IncludeCollectionOnly = null;
+                    expression.IncludePlaylistOnly = null;
+                }
+            }
         }
 
         /// <summary>

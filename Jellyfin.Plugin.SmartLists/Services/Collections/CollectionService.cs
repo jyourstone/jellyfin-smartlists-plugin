@@ -221,12 +221,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     ItemRepository = _itemRepository, // ItemValues-backed name dumps for DB prefilters
                 };
 
-                // Query for collections if IncludeCollectionOnly is enabled
-                var allCollections = QueryIncludeOnlyItems(dto, "Collections", BaseItemKind.BoxSet, ownerUser, "collection");
-
-                // Query for playlists if IncludePlaylistOnly is enabled
-                var allPlaylists = QueryIncludeOnlyItems(dto, "Playlists", BaseItemKind.Playlist, ownerUser, "playlist");
-
                 // Log the collection rules
                 _logger.LogDebug("Processing collection {CollectionName} with {RuleSetCount} rule sets (Owner: {OwnerUser})", 
                     dto.Name, dto.ExpressionSets?.Count ?? 0, ownerUser.Username);
@@ -258,7 +252,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     dto.Name, newItems.Length, allMedia.Length);
 
                 // Create a lookup dictionary for O(1) access while preserving order from newItems
-                // Include both media items and collections (if IncludeCollectionOnly is enabled) and playlists (if IncludePlaylistOnly is enabled)
+                // Container candidates (Collection/Playlist media types) are part of allMedia
                 var groupedMedia = allMedia.GroupBy(m => m.Id).ToList();
                 var duplicateMediaGroups = groupedMedia.Where(g => g.Count() > 1).ToList();
                 if (duplicateMediaGroups.Count > 0 && SmartListUtilities.UsesLibraryNameRule(dto))
@@ -275,8 +269,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 }
 
                 var mediaLookup = groupedMedia.ToDictionary(g => g.Key, g => g.First());
-                AddIncludeOnlyItemsToLookup(mediaLookup, allCollections);
-                AddIncludeOnlyItemsToLookup(mediaLookup, allPlaylists);
                 var distinctNewItems = newItems.Distinct().ToArray();
                 if (distinctNewItems.Length != newItems.Length)
                 {
@@ -373,6 +365,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                 var collectionName = dto.Name;
 
+                // Resolved member items for the written children - shared by the aggregate
+                // metadata roll-up in FinalizeCollectionMetadataAsync and the drain snapshot
+                // patches below, so the lookup is only walked once.
+                var writtenMembers = WrittenMembers(newLinkedChildren, mediaLookup);
+
                 if (existingCollectionItem != null && existingCollectionItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
                     var existingCollection = existingCollectionItem;
@@ -407,7 +404,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     }
 
                     // Update the collection items
-                    await UpdateCollectionItemsAsync(existingCollection, newLinkedChildren, dto, ownerUser, cancellationToken);
+                    await UpdateCollectionItemsAsync(existingCollection, newLinkedChildren, writtenMembers, dto, ownerUser, cancellationToken);
 
                     _logger.LogDebug("Successfully updated existing collection: {CollectionName} with {ItemCount} items",
                         existingCollection.Name, newLinkedChildren.Length);
@@ -420,7 +417,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     // Keep this drain's membership snapshot current, or a list refreshed later in the
                     // same drain evaluates its Collections rules against the contents we just replaced.
-                    refreshCache.OnCollectionWritten(existingCollection, WrittenMembers(newLinkedChildren, mediaLookup));
+                    refreshCache.OnCollectionWritten(existingCollection, writtenMembers);
 
                     return (true, $"Updated collection '{existingCollection.Name}' with {newLinkedChildren.Length} items", existingCollection.Id.ToString("N"));
                 }
@@ -429,7 +426,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // Create new collection
                     _logger.LogDebug("Creating new collection: {CollectionName}", collectionName);
 
-                    var newCollectionId = await CreateNewCollectionAsync(collectionName, newLinkedChildren, dto, ownerUser, cancellationToken);
+                    var newCollectionId = await CreateNewCollectionAsync(collectionName, newLinkedChildren, writtenMembers, dto, ownerUser, cancellationToken);
 
                     // Check if collection creation actually succeeded
                     if (string.IsNullOrEmpty(newCollectionId))
@@ -458,7 +455,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     if (Guid.TryParse(newCollectionId, out var writtenCollectionId)
                         && _libraryManager.GetItemById(writtenCollectionId) is BaseItem createdCollection)
                     {
-                        refreshCache.OnCollectionWritten(createdCollection, WrittenMembers(newLinkedChildren, mediaLookup));
+                        refreshCache.OnCollectionWritten(createdCollection, writtenMembers);
                     }
 
                     return (true, $"Created collection '{collectionName}' with {newLinkedChildren.Length} items", newCollectionId);
@@ -722,7 +719,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
-        private async Task UpdateCollectionItemsAsync(BaseItem collection, LinkedChild[] linkedChildren, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
+        private async Task UpdateCollectionItemsAsync(BaseItem collection, LinkedChild[] linkedChildren, IReadOnlyList<BaseItem> members, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
         {
             // Verify this is a BoxSet using BaseItemKind
             if (collection.GetBaseItemKind() != BaseItemKind.BoxSet)
@@ -774,11 +771,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var collectionAfterRefresh = _libraryManager.GetItemById(collection.Id);
             if (collectionAfterRefresh != null && collectionAfterRefresh.GetBaseItemKind() == BaseItemKind.BoxSet)
             {
-                await FinalizeCollectionMetadataAsync(collectionAfterRefresh, expectedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                await FinalizeCollectionMetadataAsync(collectionAfterRefresh, expectedName, linkedChildren, members, dto, ownerUser, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        private async Task<string> CreateNewCollectionAsync(string collectionName, LinkedChild[] linkedChildren, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
+        private async Task<string> CreateNewCollectionAsync(string collectionName, LinkedChild[] linkedChildren, IReadOnlyList<BaseItem> members, SmartCollectionDto dto, User ownerUser, CancellationToken cancellationToken)
         {
             // Apply prefix/suffix to collection name using the same configuration as playlists
             var formattedName = NameFormatter.FormatPlaylistName(collectionName);
@@ -1025,7 +1022,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 retrievedItem = _libraryManager.GetItemById(collectionId);
                 if (retrievedItem != null && retrievedItem.GetBaseItemKind() == BaseItemKind.BoxSet)
                 {
-                    await FinalizeCollectionMetadataAsync(retrievedItem, formattedName, linkedChildren, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+                    await FinalizeCollectionMetadataAsync(retrievedItem, formattedName, linkedChildren, members, dto, ownerUser, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Stamp the tether so the collection can be recovered if the stored ID goes stale.
@@ -1088,6 +1085,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             BaseItem collection,
             string expectedName,
             LinkedChild[] linkedChildren,
+            IReadOnlyList<BaseItem> members,
             SmartCollectionDto dto,
             User ownerUser,
             CancellationToken cancellationToken)
@@ -1115,6 +1113,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 metadataChanged = true;
             }
 
+            // Roll up member metadata (genres, studios, rating, runtime). The lock enforced
+            // above also suppresses Jellyfin's own child aggregation, so without this smart
+            // collections carry no genres/studios at all - invisible to rules on those fields
+            // and blank in the Jellyfin UI. Change-tracked so a no-op refresh writes nothing.
+            metadataChanged |= UpdateAggregateMetadata(collection, members);
+
             metadataChanged |= SetCollectionDisplayOrder(collection);
             if (metadataChanged)
             {
@@ -1123,6 +1127,66 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             // Apply custom metadata after metadata refresh to prevent providers from overwriting.
             await ApplyCustomMetadataAsync(collection, dto, ownerUser, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Mirrors the child aggregation Jellyfin's provider refresh normally performs
+        /// (MetadataService.UpdateMetadataFromChildren): cumulative runtime, genres, studios,
+        /// and official rating. Counterpart of PlaylistService.UpdateAggregateMetadata.
+        /// Required because smart collections are metadata-locked (#433), which suppresses
+        /// core's own aggregation. Unlike the playlist version this deliberately does not
+        /// gate on IsLocked - the lock is the plugin's own and the plugin writes the item
+        /// directly, so the roll-up must run despite it.
+        /// </summary>
+        /// <param name="collection">The collection whose aggregate metadata to update.</param>
+        /// <param name="children">The resolved member items to aggregate from.</param>
+        /// <returns>True if any aggregate value actually changed, so callers skip the repository write on no-op refreshes.</returns>
+        internal static bool UpdateAggregateMetadata(BaseItem collection, IReadOnlyList<BaseItem> children)
+        {
+            var changed = false;
+
+            long ticks = 0;
+            foreach (var child in children)
+            {
+                if (!child.IsFolder)
+                {
+                    ticks += child.RunTimeTicks ?? 0;
+                }
+            }
+
+            if (collection.RunTimeTicks != ticks)
+            {
+                collection.RunTimeTicks = ticks;
+                changed = true;
+            }
+
+            // Sorted so the result is independent of member order - otherwise a mere reordering
+            // of the list would look like a metadata change and trigger a repository write.
+            var genres = children.SelectMany(c => c.Genres)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (!genres.SequenceEqual(collection.Genres, StringComparer.Ordinal))
+            {
+                collection.Genres = genres;
+                changed = true;
+            }
+
+            var studios = children.SelectMany(c => c.Studios)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (!studios.SequenceEqual(collection.Studios, StringComparer.Ordinal))
+            {
+                collection.Studios = studios;
+                changed = true;
+            }
+
+            var previousRating = collection.OfficialRating;
+            collection.UpdateRatingToItems(children);
+            changed |= !string.Equals(previousRating, collection.OfficialRating, StringComparison.Ordinal);
+
+            return changed;
         }
 
         /// <summary>
@@ -1325,27 +1389,49 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Excludes internal folders like live TV recordings.
             var validTopParentIds = GetLibraryTopParentIds();
 
+            // Container kinds (BoxSet/Playlist) live in Jellyfin's internal collections/playlists
+            // folders, outside the library TopParentIds scope - query them separately without it
+            var containerKinds = baseItemKinds.Where(static k => k is BaseItemKind.BoxSet or BaseItemKind.Playlist).ToArray();
+            var itemKinds = baseItemKinds.Where(static k => k is not (BaseItemKind.BoxSet or BaseItemKind.Playlist)).ToArray();
+
             // Query all items the owner user has access to
             var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
-            var query = new InternalItemsQuery(ownerUser)
+            IReadOnlyList<BaseItem> items = [];
+            if (itemKinds.Length > 0)
             {
-                IncludeItemTypes = baseItemKinds,
-                Recursive = true,
-            };
+                var query = new InternalItemsQuery(ownerUser)
+                {
+                    IncludeItemTypes = itemKinds,
+                    Recursive = true,
+                };
 
-            LibraryManagerHelper.ApplyVirtualItemQueryScope(query, includeVirtualItems, validTopParentIds);
+                LibraryManagerHelper.ApplyVirtualItemQueryScope(query, includeVirtualItems, validTopParentIds);
 
-            var items = _libraryManager.GetItemsResult(query).Items;
+                items = _libraryManager.GetItemsResult(query).Items;
+            }
+
+            IEnumerable<BaseItem> allItems = items;
+            if (containerKinds.Length > 0)
+            {
+                var containerQuery = new InternalItemsQuery(ownerUser)
+                {
+                    IncludeItemTypes = containerKinds,
+                    Recursive = true,
+                };
+
+                allItems = allItems.Concat(_libraryManager.GetItemsResult(containerQuery).Items);
+            }
 
             if (dto?.IncludeExtras != true)
             {
-                return items;
+                return allItems;
             }
 
+            // Extras belong to regular library items only - containers have none
             var extras = LibraryManagerHelper.FetchExtras(
                 _libraryManager, ownerUser, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
 
-            return items.Concat(extras);
+            return allItems.Concat(extras);
         }
 
         private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
@@ -2382,63 +2468,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             => [.. linkedChildren
                 .Where(lc => lc.ItemId.HasValue && mediaLookup.ContainsKey(lc.ItemId.Value))
                 .Select(lc => mediaLookup[lc.ItemId!.Value])];
-
-        /// <summary>
-        /// Queries for items when IncludeOnly option is enabled for a field.
-        /// This is a shared helper for both Collections and Playlists fields.
-        /// </summary>
-        /// <param name="dto">The collection DTO containing expression sets</param>
-        /// <param name="fieldName">The field name to check (e.g., "Collections", "Playlists")</param>
-        /// <param name="itemKind">The item kind to query (e.g., BoxSet, Playlist)</param>
-        /// <param name="user">The user context for the query</param>
-        /// <param name="itemTypeName">Human-readable item type name for logging (e.g., "collection", "playlist")</param>
-        /// <returns>List of items if IncludeOnly is enabled, otherwise empty list</returns>
-        private List<BaseItem> QueryIncludeOnlyItems(
-            SmartCollectionDto dto,
-            string fieldName,
-            BaseItemKind itemKind,
-            User user,
-            string itemTypeName)
-        {
-            var hasIncludeOnly = dto.ExpressionSets?.Any(set =>
-                set.Expressions?.Any(expr =>
-                    expr.MemberName == fieldName && fieldName switch
-                    {
-                        "Collections" => expr.IncludeCollectionOnly == true,
-                        "Playlists" => expr.IncludePlaylistOnly == true,
-                        _ => false
-                    }) == true) == true;
-
-            if (!hasIncludeOnly)
-            {
-                return [];
-            }
-
-            _logger.LogDebug("Include{FieldName}Only is enabled - querying {ItemType}s for lookup", fieldName, itemTypeName);
-            var query = new InternalItemsQuery(user)
-            {
-                IncludeItemTypes = [itemKind],
-                Recursive = true,
-            };
-            var items = _libraryManager.GetItemsResult(query).Items.ToList();
-            _logger.LogDebug("Found {ItemCount} {ItemType}s for lookup", items.Count, itemTypeName);
-            
-            return items;
-        }
-
-        /// <summary>
-        /// Adds IncludeOnly items to the media lookup dictionary.
-        /// This is a shared helper for adding both collections and playlists to the lookup.
-        /// </summary>
-        /// <param name="mediaLookup">The lookup dictionary to add items to</param>
-        /// <param name="items">The items to add</param>
-        private static void AddIncludeOnlyItemsToLookup(Dictionary<Guid, BaseItem> mediaLookup, List<BaseItem> items)
-        {
-            foreach (var item in items)
-            {
-                mediaLookup[item.Id] = item;
-            }
-        }
 
     }
 }

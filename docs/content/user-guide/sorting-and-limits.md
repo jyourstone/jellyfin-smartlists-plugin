@@ -337,7 +337,7 @@ When creating a **smart collection that contains other collections**, you can so
 
 When you have a "collection of collections" (a smart collection containing child collections), you may want to sort by the earliest, most recent, or highest-rated item **within** each child collection, rather than by the collection's own metadata.
 
-This feature is **automatically enabled** when your Collection name rule has a **Collection search depth** greater than 0 and you're sorting by one of the supported fields.
+This feature is **automatically enabled** when the list's **Collection search depth** is greater than 0 and you're sorting by one of the supported fields.
 
 ### Supported Sort Fields
 
@@ -355,9 +355,9 @@ The aggregation method depends on sort direction to ensure consistent, intuitive
 ### Configuration
 
 1. Set the output type to **Collection**
-2. Add a rule using the **Collection name** field
-3. Set **"Include collections only"** to **"Yes"** (to include the collection objects themselves)
-4. Set the **Collection search depth** field to 1 or higher (this controls how deep to look for items to aggregate)
+2. Select the **Collection** [media type](media-types.md#container-media-types), leaving **Match collections/playlists by the items inside them** off
+3. Add a rule matching the collections you want (e.g. **Name** contains "action")
+4. Set the **Collection search depth** to 1 or higher — the field appears under the **Name** rule's options whenever the **Collection** media type is selected (it controls how deep to look for items to aggregate; lists migrated from the old **Include collections only** checkbox keep their configured depth)
 5. Select a supported sort field (e.g., Production Year)
 
 !!! info "See Also"
@@ -402,8 +402,8 @@ When using multiple OR blocks, you can set a **Max Items limit for each individu
 !!! tip "Combining with Global Limits"
     Per-group limits are applied first, then the global Max Items limit. Example: 3 blocks × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
 
-!!! note "Collection-only / playlist-only groups"
-    OR blocks using "collection only" or "playlist only" mode participate like any other block: their matched collections/playlists count toward that block's own limit and are unaffected by limits set on other blocks.
+!!! note "Collection / Playlist media types"
+    Collections and playlists matched via the [Collection/Playlist media types](media-types.md#container-media-types) participate like any other results: they count toward the limit of the OR block that matched them (with **Match by members** on, the block whose rules their member items passed) and are unaffected by limits set on other blocks.
 
 !!! info "See Examples"
     For detailed examples using per-group limits, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).

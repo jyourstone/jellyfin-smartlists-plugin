@@ -318,6 +318,12 @@
     // Batch update function for all media type changes
     // Order matters: repopulate fields first (may invalidate), then sync dependent UI
     SmartLists.applyMediaTypeDependentUpdates = function (page) {
+        // 0) Sync the "Match by members" toggle first - hiding it unchecks the
+        // checkbox, which feeds the container-metadata field gating below
+        if (SmartLists.updateMatchByMembersVisibility) {
+            SmartLists.updateMatchByMembersVisibility(page);
+        }
+
         // 1) Re-populate fields (may invalidate current selections)
         if (SmartLists.updateAllFieldSelects) {
             SmartLists.updateAllFieldSelects(page);
@@ -465,6 +471,7 @@
         // Set default public/enabled/extras checkboxes
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
+        SmartLists.setElementChecked(page, '#matchByMembers', false);
         // Cache the resolved default so template application can read it even
         // after the checkbox has been toggled (e.g. by a previous template)
         page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(config);
@@ -523,6 +530,7 @@
         SmartLists.setElementValue(page, '#autoRefreshMode', 'OnLibraryChanges');
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
+        SmartLists.setElementChecked(page, '#matchByMembers', false);
         page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(null);
         SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);
@@ -988,6 +996,14 @@
         if (listTypeSelect) {
             listTypeSelect.addEventListener('change', function () {
                 SmartLists.handleListTypeChange(page);
+            }, SmartLists.getEventListenerOptions(pageSignal));
+        }
+
+        // Match-by-members toggle changes which rule fields are offered for container-only lists
+        const matchByMembersCheckbox = page.querySelector('#matchByMembers');
+        if (matchByMembersCheckbox) {
+            matchByMembersCheckbox.addEventListener('change', function () {
+                SmartLists.applyMediaTypeDependentUpdates(page);
             }, SmartLists.getEventListenerOptions(pageSignal));
         }
 
@@ -2964,6 +2980,12 @@
         // Update Include Extras checkbox visibility based on media types
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
+        }
+
+        // Update Match by members toggle visibility (container types are collection-only,
+        // so switching to Playlist strips them and this hides + resets the toggle)
+        if (SmartLists.updateMatchByMembersVisibility) {
+            SmartLists.updateMatchByMembersVisibility(page);
         }
 
         // Hide the bumper section for collections (playlists only feature)
