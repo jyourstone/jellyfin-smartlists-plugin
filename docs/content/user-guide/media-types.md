@@ -45,7 +45,7 @@ When a Collection or Playlist media type is selected, a list-level toggle appear
 
 For example, with the **Collection** media type and the toggle on:
 
-```
+```text
 Actors contains "Arnold Schwarzenegger"
 AND Production Year less than 1990
 ```

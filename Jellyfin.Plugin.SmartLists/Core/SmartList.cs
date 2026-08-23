@@ -1075,7 +1075,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // the full rule pipeline; passing members' group indices project onto the container
                 if (containerCandidates.Length > 0)
                 {
-                    var matchedContainers = MatchContainersByMembers(containerCandidates, libraryManager, user, userDataManager,
+                    var matchedContainers = MatchContainersByMembers(containerCandidates, itemsArray, libraryManager, user, userDataManager,
                         logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
                     results.AddRange(matchedContainers);
                 }
@@ -1743,6 +1743,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private List<BaseItem> MatchContainersByMembers(
             BaseItem[] containerCandidates,
+            BaseItem[] poolItems,
             ILibraryManager libraryManager,
             User user,
             IUserDataManager? userDataManager,
@@ -1774,6 +1775,22 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         uniqueMembers.TryAdd(member.Id, member);
                     }
+                }
+
+                // SimilarTo reference items are searched in the candidate pool, but for a
+                // container-only list the pool holds only containers - the reference (e.g. the
+                // movie a rule names) lives INSIDE a candidate. Rebuild the reference metadata
+                // over pool + members so member evaluation can find it; pool-typed candidates in
+                // a mixed list were already evaluated against the pool-built references, which
+                // are a subset of these.
+                if (fieldReqs.NeedsSimilarTo)
+                {
+                    referenceMetadata = OperandFactory.BuildReferenceMetadata(
+                        fieldReqs.SimilarToExpressions,
+                        poolItems.Concat(uniqueMembers.Values),
+                        similarityComparisonFields,
+                        libraryManager,
+                        logger);
                 }
 
                 // Evaluate every unique member exactly once through the same pipeline as regular

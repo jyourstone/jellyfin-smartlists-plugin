@@ -107,6 +107,40 @@ public class ContainerMatchingTests
     }
 
     [Fact]
+    public void MatchByMembers_SimilarToReferenceInsideACandidateContainerIsFound()
+    {
+        // A container-only pool holds no items, so the SimilarTo reference lookup must extend
+        // to the candidates' members - otherwise reference metadata comes back empty and every
+        // container silently fails (PR #508 review finding).
+        var arnoldBox = CollectionNamed("Arnold Movies");
+        var dramaBox = CollectionNamed("Sad Movies");
+
+        var cache = new RefreshQueueService.RefreshCache();
+        // Predator is the reference; Commando shares its full genre profile, so the box passes
+        // on Commando's similarity even if the reference item itself is not counted.
+        SeedMembers(cache, arnoldBox,
+            MovieNamed("Predator", "Action", "Sci-Fi"),
+            MovieNamed("Commando", "Action", "Sci-Fi"));
+        SeedMembers(cache, dramaBox, MovieNamed("The Notebook", "Drama"));
+
+        var dto = new SmartCollectionDto
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Similar To Container List",
+            MediaTypes = [Jellyfin.Plugin.SmartLists.Core.Constants.MediaTypes.Collection],
+            MatchByMembers = true,
+            ExpressionSets =
+            [
+                new ExpressionSet { Expressions = [new Expression("SimilarTo", "Equal", "Predator")] },
+            ],
+        };
+
+        var result = Filter(new SmartList(dto), cache, arnoldBox, dramaBox);
+
+        Assert.Equal([arnoldBox.Id], result);
+    }
+
+    [Fact]
     public void MatchByMembers_NeverIncludesTheListsOwnContainer()
     {
         // Both containers hold a passing member; the first one IS the list being built.
