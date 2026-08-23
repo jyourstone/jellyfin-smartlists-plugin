@@ -1150,18 +1150,6 @@
             '</select>' +
             '</div>' +
             '<div class="rule-collections-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
-            '<div class="rule-collections-collection-only" style="margin-bottom: 0.75em;">' +
-            '<label style="display: flex; align-items: center; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
-            'Include collections only:' +
-            '<a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/fields-and-operators/#collection-name-options" target="_blank" rel="noopener noreferrer" title="Documentation" style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">' +
-            '<span class="material-icons" aria-hidden="true" style="font-size: 1.1em; line-height: 0;">info_outline</span>' +
-            '</a>' +
-            '</label>' +
-            '<select is="emby-select" class="emby-select rule-collections-collection-only-select" style="width: 100%;">' +
-            '<option value="false">No - Include media items from the collections</option>' +
-            '<option value="true">Yes - Only include the actual collections</option>' +
-            '</select>' +
-            '</div>' +
             '<div class="rule-collections-episodes" style="margin-bottom: 0.75em;">' +
             '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
             'Include episodes within series:' +
@@ -1180,17 +1168,6 @@
             '</label>' +
             '<input type="number" class="emby-input rule-collections-depth-input" min="0" max="10" step="1" value="0" style="width: 100%;">' +
             '<div style="font-size: 0.75em; opacity: 0.7; margin-top: 0.25em;">How deep to traverse nested collections (0 = direct members only)</div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rule-playlists-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
-            '<div class="rule-playlists-playlist-only" style="margin-bottom: 0.75em;">' +
-            '<label style="display: block; margin-bottom: 0.25em; font-size: 0.85em; opacity: 0.8; font-weight: 500;">' +
-            'Include playlist only:' +
-            '</label>' +
-            '<select is="emby-select" class="emby-select rule-playlists-playlist-only-select" style="width: 100%;">' +
-            '<option value="false">No - Include media items from the playlist</option>' +
-            '<option value="true">Yes - Only include the playlist itself</option>' +
-            '</select>' +
             '</div>' +
             '</div>' +
             '<div class="rule-externallist-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1303,9 +1280,6 @@
         // Initialize Collections options visibility
         SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
 
-        // Initialize Playlists options visibility
-        SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
-
         // Initialize ExternalList options visibility
         SmartLists.updateExternalListOptionsVisibility(newRuleRow, fieldSelect.value);
 
@@ -1347,7 +1321,6 @@
             SmartLists.updateNextUnwatchedOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateUnknownDateOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldSelect.value, page);
-            SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateExternalListOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateTagsOptionsVisibility(newRuleRow, fieldSelect.value, page);
             SmartLists.updateStudiosOptionsVisibility(newRuleRow, fieldSelect.value, page);
@@ -1373,36 +1346,6 @@
             const fieldValue = fieldSelect.value;
             SmartLists.setValueInput(fieldValue, valueContainer, this.value);
         }, listenerOptions);
-
-        // Add event listener for collection-only select to hide/show episodes field
-        const collectionOnlySelect = newRuleRow.querySelector('.rule-collections-collection-only-select');
-        if (collectionOnlySelect) {
-            collectionOnlySelect.addEventListener('change', function () {
-                // Use the centralized visibility function to ensure consistency
-                const fieldSelect = newRuleRow.querySelector('.rule-field-select');
-                const fieldValue = fieldSelect ? fieldSelect.value : '';
-                SmartLists.updateCollectionsOptionsVisibility(newRuleRow, fieldValue, page);
-                // Update sort "Use Child Values" checkbox visibility when collection-only option changes
-                if (SmartLists.updateUseChildValuesVisibility) {
-                    SmartLists.updateUseChildValuesVisibility(page);
-                }
-            }, listenerOptions);
-        }
-
-        // Add change listener for Playlists playlist-only option
-        const playlistOnlySelect = newRuleRow.querySelector('.rule-playlists-playlist-only-select');
-        if (playlistOnlySelect) {
-            playlistOnlySelect.addEventListener('change', function () {
-                // Use the centralized visibility function to ensure consistency
-                const fieldSelect = newRuleRow.querySelector('.rule-field-select');
-                const fieldValue = fieldSelect ? fieldSelect.value : '';
-                SmartLists.updatePlaylistsOptionsVisibility(newRuleRow, fieldValue, page);
-                // Update sort "Use Child Values" checkbox visibility when playlist-only option changes
-                if (SmartLists.updateUseChildValuesVisibility) {
-                    SmartLists.updateUseChildValuesVisibility(page);
-                }
-            }, listenerOptions);
-        }
 
         // Style the action buttons
         const actionButtons = newRuleRow.querySelectorAll('.rule-action-btn');
@@ -1534,14 +1477,8 @@
         const unknownDateValue = unknownDateSelect ? unknownDateSelect.value : '';
 
         // Extract Collections options
-        const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-        const collectionOnlyValue = collectionOnlySelect ? collectionOnlySelect.value : '';
         const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
         const collectionsValue = collectionsSelect ? collectionsSelect.value : '';
-
-        // Extract Playlists options
-        const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
-        const playlistOnlyValue = playlistOnlySelect ? playlistOnlySelect.value : '';
 
         // Extract Tags, Studios, Genres, AudioLanguages options
         const tagsSelect = ruleRow.querySelector('.rule-tags-select');
@@ -1602,9 +1539,6 @@
             expression.IncludeUnknownDates = true;
         }
         if (fieldValue === 'Collections') {
-            if (collectionOnlyValue === 'true') {
-                expression.IncludeCollectionOnly = true;
-            }
             if (collectionsValue === 'true') {
                 expression.IncludeEpisodesWithinSeries = true;
             }
@@ -1616,10 +1550,19 @@
                     expression.CollectionSearchDepth = Math.min(depthValue, 10);
                 }
             }
-        }
-        if (fieldValue === 'Playlists') {
-            if (playlistOnlyValue === 'true') {
-                expression.IncludePlaylistOnly = true;
+        } else if (fieldValue === 'Name') {
+            // Name rules carry the Collection search depth on container lists; the depth
+            // input is only visible when the Collection media type is selected, so gate
+            // on visibility to emit exactly what collectRulesFromForm emits
+            var collectionsOptionsDiv = ruleRow.querySelector('.rule-collections-options');
+            if (collectionsOptionsDiv && collectionsOptionsDiv.style.display !== 'none') {
+                var nameDepthInput = ruleRow.querySelector('.rule-collections-depth-input');
+                if (nameDepthInput) {
+                    var nameDepthValue = parseInt(nameDepthInput.value, 10);
+                    if (!isNaN(nameDepthValue) && nameDepthValue > 0) {
+                        expression.CollectionSearchDepth = Math.min(nameDepthValue, 10);
+                    }
+                }
             }
         }
         // Must emit exactly what collectRulesFromForm emits, or a cloned rule round-trips
@@ -1945,7 +1888,6 @@
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateUnknownDateOptionsVisibility(ruleRow, currentFieldValue);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, currentFieldValue, page);
-                    SmartLists.updatePlaylistsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, currentFieldValue, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, currentFieldValue, page);
@@ -1976,7 +1918,6 @@
                     SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateUnknownDateOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldSelect.value, page);
-                    SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateTagsOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateStudiosOptionsVisibility(ruleRow, fieldSelect.value, page);
                     SmartLists.updateGenresOptionsVisibility(ruleRow, fieldSelect.value, page);
@@ -2001,36 +1942,6 @@
                     const fieldValue = fieldSelect.value;
                     SmartLists.setValueInput(fieldValue, valueContainer, this.value);
                 }, listenerOptions);
-
-                // Add event listener for collection-only select to hide/show episodes field
-                const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-                if (collectionOnlySelect) {
-                    collectionOnlySelect.addEventListener('change', function () {
-                        // Use the centralized visibility function to ensure consistency
-                        const fieldSelect = ruleRow.querySelector('.rule-field-select');
-                        const fieldValue = fieldSelect ? fieldSelect.value : '';
-                        SmartLists.updateCollectionsOptionsVisibility(ruleRow, fieldValue, page);
-                        // Update sort "Use Child Values" checkbox visibility when collection-only option changes
-                        if (SmartLists.updateUseChildValuesVisibility) {
-                            SmartLists.updateUseChildValuesVisibility(page);
-                        }
-                    }, listenerOptions);
-                }
-
-                // Add event listener for playlist-only select
-                const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
-                if (playlistOnlySelect) {
-                    playlistOnlySelect.addEventListener('change', function () {
-                        // Use the centralized visibility function to ensure consistency
-                        const fieldSelect = ruleRow.querySelector('.rule-field-select');
-                        const fieldValue = fieldSelect ? fieldSelect.value : '';
-                        SmartLists.updatePlaylistsOptionsVisibility(ruleRow, fieldValue, page);
-                        // Update sort "Use Child Values" checkbox visibility when playlist-only option changes
-                        if (SmartLists.updateUseChildValuesVisibility) {
-                            SmartLists.updateUseChildValuesVisibility(page);
-                        }
-                    }, listenerOptions);
-                }
 
                 // Re-style action buttons
                 const actionButtons = ruleRow.querySelectorAll('.rule-action-btn');
@@ -2078,7 +1989,12 @@
         // Get selected media types for filtering
         const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, scope) : [];
         const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
-        const filteredFieldGroups = SmartLists.filterFieldsByMediaType(fieldGroups, selectedMediaTypes, listType);
+        const containerMetadataOnly = SmartLists.isContainerMetadataOnlyMode(page, scope);
+        // Match-by-members mode evaluates rules against member items, which can be of
+        // any supported kind - bypass media-type gating so the full item field set is
+        // offered (listType gating, e.g. SeriesStatus, still applies)
+        const effectiveMediaTypes = SmartLists.isMatchByMembersMode(page, scope) ? [] : selectedMediaTypes;
+        const filteredFieldGroups = SmartLists.filterFieldsByMediaType(fieldGroups, effectiveMediaTypes, listType, containerMetadataOnly);
 
         // Get the current selected value before clearing
         const currentValue = selectElement.value;
@@ -2127,8 +2043,48 @@
             }
         });
 
+        // Preserve a restored field that the container-metadata gate filtered out
+        // (migrated include-only lists may carry item fields on their sibling rules)
+        // so the saved rule is kept selected instead of silently blanked on edit
+        const restoreValue = defaultValue || currentValue;
+        if (containerMetadataOnly && restoreValue && SmartLists.ensurePreservedFieldOption(selectElement, restoreValue, page, scope)) {
+            selectElement.value = restoreValue;
+        }
+
         // Refresh searchable select overlay if initialized
         SmartLists.refreshSearchableSelect(selectElement);
+    };
+
+    // In container-metadata-only mode the field picker is gated to container metadata
+    // fields, but a stored rule may carry an item field (e.g. migrated include-only
+    // lists whose sibling rules kept item fields). Append the saved field as an extra
+    // option so the rule survives editing - new rules still can't pick gated fields.
+    // Returns true when the option exists (already listed or appended here).
+    SmartLists.ensurePreservedFieldOption = function (selectElement, fieldValue, page, scope) {
+        if (!selectElement || !fieldValue) return false;
+        if (!SmartLists.isContainerMetadataOnlyMode(page, scope)) return false;
+        for (var i = 0; i < selectElement.options.length; i++) {
+            if (selectElement.options[i].value === fieldValue) return true;
+        }
+        // Only preserve fields the API actually knows about; look up the display label
+        var fieldLabel = null;
+        var fieldGroups = SmartLists.availableFields || {};
+        Object.keys(fieldGroups).forEach(function (groupKey) {
+            var fields = fieldGroups[groupKey];
+            if (fieldLabel === null && fields && Array.isArray(fields)) {
+                fields.forEach(function (field) {
+                    if (fieldLabel === null && field.Value === fieldValue) {
+                        fieldLabel = field.Label;
+                    }
+                });
+            }
+        });
+        if (fieldLabel === null) return false;
+        var option = document.createElement('option');
+        option.value = fieldValue;
+        option.textContent = fieldLabel;
+        selectElement.appendChild(option);
+        return true;
     };
 
     // Update all field selects across all rules when media types change
@@ -2142,6 +2098,11 @@
         // Hoist the two possible media-type arrays; each row picks by its scope below
         const mainTypes = SmartLists.getSelectedMediaTypes(page, 'main');
         const bumperTypes = SmartLists.getSelectedMediaTypes(page, 'bumper');
+        // Container-only + match-by-members off restricts fields to container metadata (main scope only)
+        const mainContainerMetadataOnly = SmartLists.isContainerMetadataOnlyMode(page, 'main');
+        // Container + match-by-members on evaluates member items of any kind - bypass
+        // media-type gating for main rows so the full item field set stays valid
+        const effectiveMainTypes = SmartLists.isMatchByMembersMode(page, 'main') ? [] : mainTypes;
 
         const allRuleRows = page.querySelectorAll('.rule-row');
         allRuleRows.forEach(function (ruleRow) {
@@ -2149,12 +2110,19 @@
             if (fieldSelect) {
                 // Resolve each row's scope so bumper rows use bumper media types
                 const rowScope = SmartLists.getRowScope(ruleRow);
-                const selectedMediaTypes = rowScope === 'bumper' ? bumperTypes : mainTypes;
+                const selectedMediaTypes = rowScope === 'bumper' ? bumperTypes : effectiveMainTypes;
+                const containerMetadataOnly = rowScope === 'bumper' ? false : mainContainerMetadataOnly;
                 const currentValue = fieldSelect.value;
                 SmartLists.populateFieldSelect(fieldSelect, SmartLists.availableFields, currentValue, page, rowScope);
 
+                // A saved field outside the container-metadata whitelist is preserved as
+                // an appended option by populateFieldSelect (migrated include-only lists
+                // may carry item fields) - treat it as valid instead of clearing the rule
+                const preservedContainerField = containerMetadataOnly && currentValue && fieldSelect.value === currentValue &&
+                    SmartLists.CONTAINER_METADATA_FIELDS.indexOf(currentValue) === -1;
+
                 // If the current field is no longer valid, clear it and reset the rule
-                if (currentValue && !SmartLists.shouldShowField(currentValue, selectedMediaTypes, listType)) {
+                if (currentValue && !preservedContainerField && !SmartLists.shouldShowField(currentValue, selectedMediaTypes, listType, containerMetadataOnly)) {
                     fieldSelect.value = '';
                     const valueContainer = ruleRow.querySelector('.rule-value-container');
                     if (valueContainer) {
@@ -2172,7 +2140,6 @@
                         SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateUnknownDateOptionsVisibility(ruleRow, '');
                         SmartLists.updateCollectionsOptionsVisibility(ruleRow, '', page);
-                        SmartLists.updatePlaylistsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateTagsOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateStudiosOptionsVisibility(ruleRow, '', page);
                         SmartLists.updateGenresOptionsVisibility(ruleRow, '', page);
@@ -2201,7 +2168,7 @@
         });
     };
 
-    SmartLists.filterFieldsByMediaType = function (fieldGroups, selectedMediaTypes, listType) {
+    SmartLists.filterFieldsByMediaType = function (fieldGroups, selectedMediaTypes, listType, containerMetadataOnly) {
         var needsMediaTypeFiltering = selectedMediaTypes && selectedMediaTypes.length > 0;
         var needsListTypeFiltering = listType && listType !== 'Collection';
 
@@ -2217,7 +2184,7 @@
             const fields = fieldGroups[groupKey];
             if (fields && Array.isArray(fields)) {
                 filteredGroups[groupKey] = fields.filter(function (field) {
-                    return SmartLists.shouldShowField(field.Value, selectedMediaTypes, listType);
+                    return SmartLists.shouldShowField(field.Value, selectedMediaTypes, listType, containerMetadataOnly);
                 });
             } else {
                 filteredGroups[groupKey] = fields;
@@ -2228,7 +2195,13 @@
     };
 
     // Field visibility definitions based on media types and list type
-    SmartLists.shouldShowField = function (fieldValue, selectedMediaTypes, listType) {
+    SmartLists.shouldShowField = function (fieldValue, selectedMediaTypes, listType, containerMetadataOnly) {
+        // Container-only selection with "Match by members" off: rules evaluate the
+        // container's own metadata, which only exists for a handful of fields
+        if (containerMetadataOnly && SmartLists.CONTAINER_METADATA_FIELDS.indexOf(fieldValue) === -1) {
+            return false;
+        }
+
         // Collection-only fields — hide regardless of media type selection.
         // Series items only exist in Collections, not Playlists, so SeriesStatus is meaningless there.
         // LastEpisodeAirDate is intentionally NOT restricted here — it applies to Episode items too.
@@ -2361,46 +2334,34 @@
 
     SmartLists.updateCollectionsOptionsVisibility = function (ruleRow, fieldValue, page) {
         const isCollectionsField = fieldValue === 'Collections';
+        // Name rules also carry the Collection search depth on container lists: the
+        // include-only migration stores the depth there, and a new Collection-media-type
+        // list has no Collections rule to hang it on. Offer the depth option on Name
+        // rules whenever the Collection media type is selected (scoped to this row's editor).
+        const ruleScope = SmartLists.getRowScope(ruleRow);
+        const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
+        const isNameWithCollectionType = fieldValue === 'Name' && selectedMediaTypes.indexOf('Collection') !== -1;
         const collectionsOptionsDiv = ruleRow.querySelector('.rule-collections-options');
 
         if (collectionsOptionsDiv) {
-            if (isCollectionsField) {
-                // Get list type to determine visibility
-                const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
-                const isCollection = listType === 'Collection';
-
-                // Show/hide collection-only option based on list type (only for Collections list type)
-                const collectionOnlyDiv = ruleRow.querySelector('.rule-collections-collection-only');
-                if (collectionOnlyDiv) {
-                    collectionOnlyDiv.style.display = isCollection ? 'block' : 'none';
-                }
-
-                // Get collection-only select value (only relevant for Collection list type)
-                const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-                const isCollectionOnly = isCollection && collectionOnlySelect && collectionOnlySelect.value === 'true';
-
-                // Show/hide episodes option (hidden if collection-only is yes OR Episode media type is not selected)
+            if (isCollectionsField || isNameWithCollectionType) {
+                // Show/hide episodes option (hidden if Episode media type is not selected;
+                // never applies to Name rules)
                 const episodesDiv = ruleRow.querySelector('.rule-collections-episodes');
-                let episodesVisible = false;
                 if (episodesDiv) {
-                    // Get selected media types to check if Episode is selected (scoped to this row's editor)
-                    const ruleScope = SmartLists.getRowScope(ruleRow);
-                    const selectedMediaTypes = page ? SmartLists.getSelectedMediaTypes(page, ruleScope) : [];
                     const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
 
-                    // Show only if collection-only is disabled AND Episode media type is selected
-                    episodesVisible = !isCollectionOnly && hasEpisode;
-                    episodesDiv.style.display = episodesVisible ? 'block' : 'none';
+                    episodesDiv.style.display = (isCollectionsField && hasEpisode) ? 'block' : 'none';
                 }
 
-                // Depth option is always visible when Collection name rule is selected
+                // Depth option is always visible when the options panel is shown
                 // It's useful for both Playlist and Collection list types
                 const depthDiv = ruleRow.querySelector('.rule-collections-depth');
                 if (depthDiv) {
                     depthDiv.style.display = 'block';
                 }
 
-                // Show container if any inner option is visible (depth is always visible for Collections rule)
+                // Show container if any inner option is visible (depth is always visible here)
                 collectionsOptionsDiv.style.display = 'block';
             } else {
                 // Hide but preserve user's selection - don't reset value
@@ -2412,38 +2373,6 @@
     // Update visibility of Collections options for all rules when media types change
     SmartLists.updateAllCollectionsOptionsVisibility = function (page) {
         SmartLists.updateAllRules(page, SmartLists.updateCollectionsOptionsVisibility);
-    };
-
-    SmartLists.updatePlaylistsOptionsVisibility = function (ruleRow, fieldValue, page) {
-        const isPlaylistsField = fieldValue === 'Playlists';
-        const playlistsOptionsDiv = ruleRow.querySelector('.rule-playlists-options');
-
-        if (playlistsOptionsDiv) {
-            if (isPlaylistsField) {
-                // Get list type to determine visibility
-                const listType = page ? SmartLists.getElementValue(page, '#listType', 'Playlist') : 'Playlist';
-                const isCollection = listType === 'Collection';
-
-                // Show/hide playlist-only option based on list type (only for Collections)
-                const playlistOnlyDiv = ruleRow.querySelector('.rule-playlists-playlist-only');
-                if (playlistOnlyDiv) {
-                    playlistOnlyDiv.style.display = isCollection ? 'block' : 'none';
-                }
-
-                // Get playlist-only select value
-                // Only show the container if we're creating a collection
-                // Note: Playlists don't support recursion depth - they can only contain media items, not other playlists
-                playlistsOptionsDiv.style.display = isCollection ? 'block' : 'none';
-            } else {
-                // Hide but preserve user's selection - don't reset value
-                playlistsOptionsDiv.style.display = 'none';
-            }
-        }
-    };
-
-    // Update visibility of Playlists options for all rules when media types change
-    SmartLists.updateAllPlaylistsOptionsVisibility = function (page) {
-        SmartLists.updateAllRules(page, SmartLists.updatePlaylistsOptionsVisibility);
     };
 
     SmartLists.updateExternalListOptionsVisibility = function (ruleRow, fieldValue) {
@@ -2676,6 +2605,31 @@
         }
     };
 
+    // ===== MATCH BY MEMBERS VISIBILITY =====
+    // Show/hide the "Match by members" toggle based on selected media types
+    // (only meaningful when a container type - Collection/Playlist - is selected)
+    SmartLists.updateMatchByMembersVisibility = function (page) {
+        if (!page) return;
+        var container = page.querySelector('#matchByMembersContainer');
+        if (!container) return;
+
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes
+            ? SmartLists.getSelectedMediaTypes(page)
+            : [];
+
+        var hasContainerType = SmartLists.hasContainerMediaType(selectedMediaTypes);
+
+        container.style.display = hasContainerType ? '' : 'none';
+
+        // Uncheck if hiding
+        if (!hasContainerType) {
+            var checkbox = page.querySelector('#matchByMembers');
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+        }
+    };
+
     // Generic helper to update all rules using a provided update function
     // Reduces duplication across updateAll* functions
     SmartLists.updateAllRules = function (page, updateFunction) {
@@ -2702,6 +2656,7 @@
         if (!container) { return expressionSets; }
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page, scope);
         const hasEpisode = selectedMediaTypes.indexOf('Episode') !== -1;
+        const hasCollectionType = selectedMediaTypes.indexOf('Collection') !== -1;
         const hasAudioCapable = selectedMediaTypes.some(function (type) {
             return SmartLists.AUDIO_CAPABLE_TYPES.indexOf(type) !== -1;
         });
@@ -2778,30 +2733,15 @@
 
                     // Check for Collections specific options
                     if (memberName === 'Collections') {
-                        // Check for collection-only option (only for Collections type)
-                        const collectionOnlySelect = rule.querySelector('.rule-collections-collection-only-select');
-                        if (collectionOnlySelect) {
-                            const includeCollectionOnly = collectionOnlySelect.value === 'true';
-                            if (includeCollectionOnly) {
-                                expression.IncludeCollectionOnly = true;
-                            }
-                            // If false (default), don't include the parameter to save space
-                        }
-
-                        // Check for episodes option (only if Episode is selected and collection-only is not enabled)
+                        // Check for episodes option (only if Episode is selected)
                         const collectionsSelect = rule.querySelector('.rule-collections-select');
                         if (collectionsSelect && hasEpisode) {
-                            // Only process if collection-only is not enabled
-                            const collectionOnlySelect2 = rule.querySelector('.rule-collections-collection-only-select');
-                            const isCollectionOnly = collectionOnlySelect2 && collectionOnlySelect2.value === 'true';
-                            if (!isCollectionOnly) {
-                                // Convert string to boolean and only include if it's explicitly true
-                                const includeEpisodesWithinSeries = collectionsSelect.value === 'true';
-                                if (includeEpisodesWithinSeries) {
-                                    expression.IncludeEpisodesWithinSeries = true;
-                                }
-                                // If false (default), don't include the parameter to save space
+                            // Convert string to boolean and only include if it's explicitly true
+                            const includeEpisodesWithinSeries = collectionsSelect.value === 'true';
+                            if (includeEpisodesWithinSeries) {
+                                expression.IncludeEpisodesWithinSeries = true;
                             }
+                            // If false (default), don't include the parameter to save space
                         }
 
                         // Check for collection search depth
@@ -2813,18 +2753,17 @@
                             }
                             // If 0 (default), don't include the parameter to save space
                         }
-                    }
-
-                    // Check for Playlists specific options
-                    if (memberName === 'Playlists') {
-                        // Check for playlist-only option (only for Collections type)
-                        const playlistOnlySelect = rule.querySelector('.rule-playlists-playlist-only-select');
-                        if (playlistOnlySelect) {
-                            const includePlaylistOnly = playlistOnlySelect.value === 'true';
-                            if (includePlaylistOnly) {
-                                expression.IncludePlaylistOnly = true;
+                    } else if (memberName === 'Name' && hasCollectionType) {
+                        // Name rules carry the Collection search depth on container lists
+                        // (the include-only migration stores it there, and the depth input
+                        // is shown whenever the Collection media type is selected)
+                        const nameDepthInput = rule.querySelector('.rule-collections-depth-input');
+                        if (nameDepthInput) {
+                            const nameDepthValue = parseInt(nameDepthInput.value, 10);
+                            if (!isNaN(nameDepthValue) && nameDepthValue > 0) {
+                                expression.CollectionSearchDepth = Math.min(nameDepthValue, 10);
                             }
-                            // If false (default), don't include the parameter to save space
+                            // If 0 (default), don't include the parameter to save space
                         }
                     }
 
@@ -2980,6 +2919,10 @@
                 // Check if this is a people sub-field
                 const isPeopleSubFieldValue = SmartLists.isPeopleSubField(expression.MemberName);
 
+                // The field picker may be gated to container metadata fields; make sure
+                // the saved field's option exists so restoring it doesn't blank the rule
+                SmartLists.ensurePreservedFieldOption(fieldSelect, isPeopleSubFieldValue ? 'People' : expression.MemberName, page, SmartLists.getRowScope(ruleRow));
+
                 if (isPeopleSubFieldValue) {
                     // Set field select to "People" and submenu to the actual field
                     fieldSelect.value = 'People';
@@ -3005,7 +2948,6 @@
                 SmartLists.updateNextUnwatchedOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateUnknownDateOptionsVisibility(ruleRow, actualMemberName);
                 SmartLists.updateCollectionsOptionsVisibility(ruleRow, actualMemberName, page);
-                SmartLists.updatePlaylistsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateExternalListOptionsVisibility(ruleRow, actualMemberName);
                 SmartLists.updateTagsOptionsVisibility(ruleRow, actualMemberName, page);
                 SmartLists.updateStudiosOptionsVisibility(ruleRow, actualMemberName, page);
@@ -3060,36 +3002,22 @@
                     unknownDateSelect.value = expression.IncludeUnknownDates === true ? 'true' : 'false';
                 }
             }
-            if (expression.MemberName === 'Collections') {
-                // Restore collection-only option
-                const collectionOnlySelect = ruleRow.querySelector('.rule-collections-collection-only-select');
-                if (collectionOnlySelect) {
-                    const includeCollectionOnlyValue = expression.IncludeCollectionOnly === true ? 'true' : 'false';
-                    collectionOnlySelect.value = includeCollectionOnlyValue;
-                    // Trigger change to update visibility of episodes field and depth field
-                    collectionOnlySelect.dispatchEvent(new Event('change'));
+            if (expression.MemberName === 'Collections' || expression.MemberName === 'Name') {
+                // Restore episodes option (Collections rules only)
+                if (expression.MemberName === 'Collections') {
+                    const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
+                    if (collectionsSelect) {
+                        const includeValue = expression.IncludeEpisodesWithinSeries === true ? 'true' : 'false';
+                        collectionsSelect.value = includeValue;
+                    }
                 }
 
-                // Restore episodes option
-                const collectionsSelect = ruleRow.querySelector('.rule-collections-select');
-                if (collectionsSelect) {
-                    const includeValue = expression.IncludeEpisodesWithinSeries === true ? 'true' : 'false';
-                    collectionsSelect.value = includeValue;
-                }
-
-                // Restore collection search depth
+                // Restore collection search depth (the include-only migration stores it on
+                // the rewritten Name rule, so Name rules must round-trip it too)
                 const depthInput = ruleRow.querySelector('.rule-collections-depth-input');
                 if (depthInput) {
                     const depthValue = expression.CollectionSearchDepth !== undefined && expression.CollectionSearchDepth !== null ? expression.CollectionSearchDepth : 0;
                     depthInput.value = depthValue;
-                }
-            }
-            if (expression.MemberName === 'Playlists') {
-                // Restore playlist-only option
-                const playlistOnlySelect = ruleRow.querySelector('.rule-playlists-playlist-only-select');
-                if (playlistOnlySelect) {
-                    const includePlaylistOnlyValue = expression.IncludePlaylistOnly === true ? 'true' : 'false';
-                    playlistOnlySelect.value = includePlaylistOnlyValue;
                 }
             }
             if (expression.MemberName === 'Tags') {

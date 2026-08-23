@@ -75,6 +75,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public bool IncludeExtras { get; set; } = false;
 
         /// <summary>
+        /// When true, container candidates (Collection/Playlist media types) are matched by their
+        /// member items: a container is included when at least one member passes the full rule
+        /// pipeline. When false (default), containers are matched against their own metadata
+        /// (Name, Genres, Studios, etc.) like any other item.
+        /// Only meaningful when a container media type is selected.
+        /// </summary>
+        public bool MatchByMembers { get; set; } = false;
+
+        /// <summary>
         /// When true, the Jellyfin playlist/collection is not created (and an existing one is
         /// removed) while the list's rules match zero items. It is recreated automatically
         /// once items match again. The smart list configuration itself is never deleted.

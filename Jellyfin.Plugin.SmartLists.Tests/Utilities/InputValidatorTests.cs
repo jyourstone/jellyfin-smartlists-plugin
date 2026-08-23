@@ -701,10 +701,42 @@ public class InputValidatorTests
     [Fact]
     public void ValidateSmartList_EveryKnownMediaType_SurvivesTheDtoFilterAndValidates()
     {
-        var dto = ValidPlaylist();
-        dto.MediaTypes = [.. MediaTypeConstants.All];
+        // Collections accept every known media type, including the container types
+        // (Collection/Playlist) that playlists reject.
+        var dto = new SmartCollectionDto
+        {
+            Name = "Valid List",
+            MediaTypes = [.. MediaTypeConstants.All],
+            ExpressionSets = [Group(Rule())],
+        };
 
         Assert.Equal(MediaTypeConstants.All.Length, dto.MediaTypes.Count);
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Theory]
+    [InlineData(MediaTypeConstants.Collection)]
+    [InlineData(MediaTypeConstants.Playlist)]
+    public void ValidateSmartList_ContainerMediaTypeOnPlaylist_IsRejected(string mediaType)
+    {
+        var dto = ValidPlaylist();
+        dto.MediaTypes = [MediaTypeConstants.Movie, mediaType];
+
+        AssertInvalid(InputValidator.ValidateSmartList(dto), mediaType + " media type is not supported for playlists");
+    }
+
+    [Theory]
+    [InlineData(MediaTypeConstants.Collection)]
+    [InlineData(MediaTypeConstants.Playlist)]
+    public void ValidateSmartList_ContainerMediaTypeOnCollection_IsAccepted(string mediaType)
+    {
+        var dto = new SmartCollectionDto
+        {
+            Name = "Valid List",
+            MediaTypes = [mediaType],
+            ExpressionSets = [Group(Rule())],
+        };
+
         AssertValid(InputValidator.ValidateSmartList(dto));
     }
 
@@ -876,6 +908,8 @@ public class InputValidatorTests
     [InlineData(MediaTypeConstants.Series)]
     [InlineData(MediaTypeConstants.Season)]
     [InlineData(MediaTypeConstants.MusicAlbum)]
+    [InlineData(MediaTypeConstants.Collection)]
+    [InlineData(MediaTypeConstants.Playlist)]
     public void ValidateSmartList_ContainerBumperMediaTypes_AreRejectedBecausePlaylistsCannotHoldThem(string mediaType)
     {
         var dto = PlaylistWithBumpers(b => b.MediaTypes = [mediaType]);

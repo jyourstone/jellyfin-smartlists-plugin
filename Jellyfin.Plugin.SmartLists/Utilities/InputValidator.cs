@@ -279,6 +279,17 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return mediaTypesResult;
             }
 
+            // Container media types (Collection/Playlist) are collection-only: Jellyfin playlists
+            // can only contain media items, so container results would be silently dropped
+            if (list is SmartPlaylistDto)
+            {
+                var containerType = list.MediaTypes?.FirstOrDefault(Core.Constants.MediaTypes.IsContainerType);
+                if (containerType != null)
+                {
+                    return SmartListValidationResult.Failure($"{containerType} media type is not supported for playlists. Jellyfin playlists can only contain media items - use a smart collection instead.");
+                }
+            }
+
             // Validate expression sets
             var ruleGroupsResult = ValidateRuleGroups(list.ExpressionSets, string.Empty);
             if (!ruleGroupsResult.IsValid)
@@ -314,7 +325,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 var unsupportedBumperType = bumpers.MediaTypes?.FirstOrDefault(mt =>
                     mt == Core.Constants.MediaTypes.Series
                     || mt == Core.Constants.MediaTypes.Season
-                    || mt == Core.Constants.MediaTypes.MusicAlbum);
+                    || mt == Core.Constants.MediaTypes.MusicAlbum
+                    || Core.Constants.MediaTypes.IsContainerType(mt));
                 if (unsupportedBumperType != null)
                 {
                     return SmartListValidationResult.Failure($"{unsupportedBumperType} media type is not supported for bumpers. Bumpers are woven into playlists, which cannot contain {unsupportedBumperType} items.");

@@ -20,11 +20,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeEpisodesWithinSeries { get; set; } = null;
 
-        // Collections-specific option - only serialize when meaningful
+        // Legacy - migration input only: SmartListFileSystem.ApplyPostProcessing rewrites this to
+        // the Collection media type on load (collections) or strips it (playlists), then clears it.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeCollectionOnly { get; set; } = null;
 
-        // Playlists-specific option - only serialize when meaningful
+        // Legacy - migration input only: SmartListFileSystem.ApplyPostProcessing rewrites this to
+        // the Playlist media type on load (collections) or strips it (playlists), then clears it.
+        // Do NOT remove: this is an on-disk JSON key older saved lists still carry.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludePlaylistOnly { get; set; } = null;
 

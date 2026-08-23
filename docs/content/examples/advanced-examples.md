@@ -76,8 +76,9 @@ Create a hand-curated collection using IMDb or TMDb IDs — useful for award lis
 - Uses OR logic between rule groups to pull from multiple playlist categories
 
 ## Smart Collection of Music Playlists
-- **Playlist name** matches regex `(?i)(workout|running|gym)` with "Include playlist only" enabled
 - **List Type**: Collection
+- **Media Types**: Playlist
+- **Name** matches regex `(?i)(workout|running|gym)`
 - Creates a collection that contains your exercise-related playlist objects
 - Great for organizing themed playlists without duplicating content
 - Use regex for flexible pattern matching (e.g., case-insensitive matching of multiple keywords)
@@ -95,9 +96,9 @@ Create a collection of collections that automatically sorts by aggregated values
 **Configuration**:
 
 - **List Type**: Collection
-- **Rule**: **Collection name** contains "action" with:
-    - **Include collections only**: Yes
-    - **Collection search depth**: 1
+- **Media Types**: Collection, with **"Match collections/playlists by the items inside them"** left off
+- **Rule**: **Name** contains "action"
+- **Collection search depth** (under the **Name** rule's options): 1
 - **Sort by**: Production Year
 
 **Result with Production Year Ascending**:

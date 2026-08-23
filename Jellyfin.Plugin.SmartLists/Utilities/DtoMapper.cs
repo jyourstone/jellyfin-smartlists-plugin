@@ -117,6 +117,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
                 IncludeExtras = source.IncludeExtras,
+                MatchByMembers = source.MatchByMembers,
                 HideWhenEmpty = source.HideWhenEmpty,
                 
                 // State and limits

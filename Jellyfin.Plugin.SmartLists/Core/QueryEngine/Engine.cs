@@ -88,6 +88,28 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Name equality with a container fallback: container candidates (Collection/Playlist
+        /// media types) also match on their name with the configured prefix/suffix stripped, so
+        /// users can target smart lists by base name (parity with the legacy include-only matcher).
+        /// Non-container items get plain case-insensitive equality.
+        /// </summary>
+        internal static bool NameEqualsWithContainerBaseName(string name, string itemType, string targetValue)
+        {
+            if (name == null || targetValue == null)
+            {
+                return false;
+            }
+
+            if (name.Equals(targetValue, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return MediaTypes.IsContainerType(itemType)
+                && NameFormatter.StripPrefixAndSuffix(name).Equals(targetValue, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Gets or creates a compiled regex pattern from the cache.
         /// </summary>
         /// <param name="pattern">The regex pattern</param>
@@ -171,6 +193,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     return enumerableExpr;
                 }
                 // If BuildEnumerableExpression returns null, fall through to normal flow (shouldn't happen for List<string>)
+            }
+
+            // Name + Equal/NotEqual also matches container candidates (Collection/Playlist media
+            // types) on their name with the configured prefix/suffix stripped, so users can target
+            // smart lists by base name. The legacy include-only matcher had this fallback and the
+            // one-time migration rewrites include-only rules to Name rules, so the engine keeps it.
+            if (r.MemberName == "Name" && (r.Operator == "Equal" || r.Operator == "NotEqual") && !string.IsNullOrEmpty(r.TargetValue))
+            {
+                var nameProperty = System.Linq.Expressions.Expression.PropertyOrField(param, "Name");
+                var itemTypeProperty = System.Linq.Expressions.Expression.PropertyOrField(param, "ItemType");
+                var nameEqualsMethod = typeof(Engine).GetMethod(nameof(NameEqualsWithContainerBaseName), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (nameEqualsMethod == null) throw new InvalidOperationException("Engine.NameEqualsWithContainerBaseName method not found");
+                var nameTargetConstant = System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string));
+                var nameEqualsCall = System.Linq.Expressions.Expression.Call(nameEqualsMethod, nameProperty, itemTypeProperty, nameTargetConstant);
+                return r.Operator == "Equal" ? nameEqualsCall : System.Linq.Expressions.Expression.Not(nameEqualsCall);
             }
 
             // Get the property/field expression for non-user-specific fields

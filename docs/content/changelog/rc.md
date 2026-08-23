@@ -13,6 +13,19 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## Unreleased
+
+**Features**
+
+- New **Collection** and **Playlist** media types for smart collections: build collections *of* collections or playlists, filtered by any rule, and mix them freely with the other media types (see [Media Types](../user-guide/media-types.md#container-media-types)). A new list-level toggle — **"Match collections/playlists by the items inside them"** — chooses what the rules check. Off (default): the collection/playlist's own metadata (name, genres, studios, year, parental rating). On: the items inside it — a collection is included when at least one of its items passes all rules in a rule group, so `Actors contains "Arnold Schwarzenegger" AND Production Year less than 1990` finds exactly the collections containing a pre-1990 Arnold movie. Replaces the per-rule **"Include collections only"** / **"Include playlist only"** checkboxes, whose sibling rules could only see the little metadata a collection carries itself (follow-up to [#479](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/479)).
+- Smart collections now aggregate **genres, studios, parental rating and total runtime** from their members, like smart playlists already did. They now display this metadata in the Jellyfin UI, and other smart lists' rules on those fields can match them.
+
+**Existing lists may change**
+
+- Lists using the old include-only checkboxes are migrated automatically. Lists whose every rule group had the checkbox (the common case) keep their membership: the include-only rule becomes a **Name** rule against the collection/playlist and the matching media type is selected. Lists that *mixed* include-only rule groups with normal item rule groups may change contents, because rule groups now apply to every selected media type — an item group can now also match collections, and the rewritten Name rule also applies to items. One exception applies to any list: include-only rules using a negative operator (**not equals** / **not contains** / **is not in**) previously matched nothing at all; after migration they evaluate normally, so such lists may gain members.
+- Because smart collections now carry aggregated genres/studios/runtime, other lists with rules on those fields may start matching them.
+
+
 ## v12.0.0.17-rc
 
 *2026-08-17 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.17-rc)*

@@ -345,6 +345,9 @@
 
             const isPublic = SmartLists.getElementChecked(page, '#playlistIsPublic', false);
             const includeExtras = SmartLists.getElementChecked(page, '#playlistIncludeExtras', false);
+            // Only meaningful when a container media type is selected; the checkbox is
+            // reset whenever the toggle is hidden, so reading it directly is safe
+            const matchByMembers = SmartLists.getElementChecked(page, '#matchByMembers', false);
             const hideWhenEmpty = SmartLists.getElementChecked(page, '#playlistHideWhenEmpty', false);
             const isEnabled = SmartLists.getElementChecked(page, '#playlistIsEnabled', true); // Default to true
             const autoRefreshMode = SmartLists.getElementValue(page, '#autoRefreshMode', 'Never');
@@ -441,6 +444,7 @@
                 Bumpers: bumperConfig,
                 Enabled: isEnabled,
                 IncludeExtras: includeExtras,
+                MatchByMembers: matchByMembers,
                 HideWhenEmpty: hideWhenEmpty,
                 MediaTypes: selectedMediaTypes,
                 MaxItems: maxItems,
@@ -977,6 +981,7 @@
 
         SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
+        SmartLists.setElementChecked(page, '#matchByMembers', playlist.MatchByMembers || false);
         SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
 
         // Handle AutoRefresh with backward compatibility
@@ -1023,6 +1028,11 @@
         // Update Include Extras visibility based on loaded media types
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
+        }
+
+        // Update Match by members toggle visibility based on loaded media types
+        if (SmartLists.updateMatchByMembersVisibility) {
+            SmartLists.updateMatchByMembersVisibility(page);
         }
         SmartLists.loadRandomGroupSelectionIntoUI(page, playlist);
 
@@ -1630,9 +1640,7 @@
                         let collectionsInfo = '';
                         if (rule.MemberName === 'Collections') {
                             var collectionParts = [];
-                            if (rule.IncludeCollectionOnly === true) {
-                                collectionParts.push('collection only');
-                            } else if (rule.IncludeEpisodesWithinSeries === true) {
+                            if (rule.IncludeEpisodesWithinSeries === true) {
                                 collectionParts.push('including episodes within series');
                             }
                             // Add depth info if set
@@ -1642,12 +1650,6 @@
                             if (collectionParts.length > 0) {
                                 collectionsInfo = ' (' + collectionParts.join(', ') + ')';
                             }
-                        }
-
-                        // Add Playlists configuration info
-                        let playlistsInfo = '';
-                        if (rule.MemberName === 'Playlists' && rule.IncludePlaylistOnly === true) {
-                            playlistsInfo = ' (playlist only)';
                         }
 
                         // Add Tags configuration info. The legacy IncludeParentSeries*/IncludeParentAlbum*
@@ -1699,7 +1701,7 @@
                         }
 
                         rulesHtml += '<span style="font-family: monospace; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); padding: 4px 4px; border-radius: 3px;">';
-                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(unknownDateInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(playlistsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
+                        rulesHtml += SmartLists.escapeHtml(fieldName) + ' ' + SmartLists.escapeHtml(operator) + ' "' + SmartLists.escapeHtml(value) + '"' + SmartLists.escapeHtml(userInfo) + SmartLists.escapeHtml(nextUnwatchedInfo) + SmartLists.escapeHtml(unknownDateInfo) + SmartLists.escapeHtml(collectionsInfo) + SmartLists.escapeHtml(tagsInfo) + SmartLists.escapeHtml(studiosInfo) + SmartLists.escapeHtml(genresInfo) + SmartLists.escapeHtml(audioLanguagesInfo) + SmartLists.escapeHtml(similarityInfo);
                         rulesHtml += '</span>';
                     }
 
