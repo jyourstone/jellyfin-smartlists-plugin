@@ -997,7 +997,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     logger?.LogDebug("Building reference metadata for SimilarTo queries (once per filter run) using fields: {Fields}",
                         string.Join(", ", similarityComparisonFields));
-                    referenceMetadata = OperandFactory.BuildReferenceMetadata(fieldReqs.SimilarToExpressions, itemsArray, similarityComparisonFields, libraryManager, logger);
+
+                    // One reference set for the whole run: the pool plus, in MatchByMembers mode,
+                    // the members of every container candidate. Direct items and container members
+                    // are then scored against identical reference metadata - and a reference living
+                    // inside a candidate container is still found when the pool itself holds only
+                    // containers. Member enumeration here is cache-backed, so the later enumeration
+                    // in MatchContainersByMembers hits the same cache.
+                    IEnumerable<BaseItem> referenceUniverse = itemsArray;
+                    if (containerCandidates.Length > 0)
+                    {
+                        referenceUniverse = referenceUniverse.Concat(
+                            containerCandidates
+                                .SelectMany(c => GetContainerMembers(c, user, refreshCache, logger))
+                                .Where(m => m != null && !IsContainerKind(m)));
+                    }
+
+                    referenceMetadata = OperandFactory.BuildReferenceMetadata(fieldReqs.SimilarToExpressions, referenceUniverse, similarityComparisonFields, libraryManager, logger);
                 }
 
                 // RefreshCache is provided as parameter - shared across multiple playlists/collections for the same user
@@ -1075,7 +1091,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // the full rule pipeline; passing members' group indices project onto the container
                 if (containerCandidates.Length > 0)
                 {
-                    var matchedContainers = MatchContainersByMembers(containerCandidates, itemsArray, libraryManager, user, userDataManager,
+                    var matchedContainers = MatchContainersByMembers(containerCandidates, libraryManager, user, userDataManager,
                         logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
                     results.AddRange(matchedContainers);
                 }
@@ -1743,7 +1759,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private List<BaseItem> MatchContainersByMembers(
             BaseItem[] containerCandidates,
-            BaseItem[] poolItems,
             ILibraryManager libraryManager,
             User user,
             IUserDataManager? userDataManager,
@@ -1777,22 +1792,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                // SimilarTo reference items are searched in the candidate pool, but for a
-                // container-only list the pool holds only containers - the reference (e.g. the
-                // movie a rule names) lives INSIDE a candidate. Rebuild the reference metadata
-                // over pool + members so member evaluation can find it; pool-typed candidates in
-                // a mixed list were already evaluated against the pool-built references, which
-                // are a subset of these.
-                if (fieldReqs.NeedsSimilarTo)
-                {
-                    referenceMetadata = OperandFactory.BuildReferenceMetadata(
-                        fieldReqs.SimilarToExpressions,
-                        poolItems.Concat(uniqueMembers.Values),
-                        similarityComparisonFields,
-                        libraryManager,
-                        logger);
-                }
-
                 // Evaluate every unique member exactly once through the same pipeline as regular
                 // items (two-phase filtering included). The DB-prefilter candidate set is NOT
                 // applied: it was built for the pool's media types, and members can be of any kind.
@@ -1823,11 +1822,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     passedMemberIds.Count, uniqueMembers.Count, containerCandidates.Length);
 
                 bool trackGroups = NeedsGroupTracking();
+                bool trackScores = fieldReqs.NeedsSimilarTo;
                 foreach (var container in containerCandidates)
                 {
                     var members = membersByContainer[container.Id];
                     HashSet<int>? containerGroups = trackGroups ? [] : null;
                     bool anyMemberPassed = false;
+                    float bestScore = 0f;
 
                     foreach (var member in members)
                     {
@@ -1837,14 +1838,19 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         }
 
                         anyMemberPassed = true;
-                        if (containerGroups == null)
+                        if (containerGroups == null && !trackScores)
                         {
-                            break; // No group tracking - the first passing member is enough
+                            break; // Nothing further to aggregate - the first passing member is enough
                         }
 
-                        if (_itemGroupMappings.TryGetValue(member.Id, out var memberGroups))
+                        if (containerGroups != null && _itemGroupMappings.TryGetValue(member.Id, out var memberGroups))
                         {
                             containerGroups.UnionWith(memberGroups);
+                        }
+
+                        if (trackScores && _similarityScores.TryGetValue(member.Id, out var memberScore) && memberScore > bestScore)
+                        {
+                            bestScore = memberScore;
                         }
                     }
 
@@ -1857,6 +1863,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (containerGroups is { Count: > 0 })
                     {
                         TrackContainerGroupMapping(container.Id, [.. containerGroups]);
+                    }
+
+                    // Similarity sorting looks scores up by result-item id, and the container -
+                    // not its members - is the result item. Carry the best passing member's score
+                    // so SimilarityOrder ranks the container by its closest match instead of 0.
+                    if (trackScores)
+                    {
+                        _similarityScores[container.Id] = bestScore;
                     }
 
                     logger?.LogDebug("Container '{ContainerName}' matched via its members", container.Name);
