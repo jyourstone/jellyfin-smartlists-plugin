@@ -141,6 +141,38 @@ public class ContainerMatchingTests
     }
 
     [Fact]
+    public void MatchByMembers_SimilarToBlockAndPlainBlockEachMatchTheirOwnContainers()
+    {
+        // Similarity is scored per rule block, and members project their matched blocks onto the
+        // container: the Arnold box comes in on the SimilarTo block without being a drama, and the
+        // drama box comes in on the Genres block without being similar to Predator. Pre-fix the
+        // global similarity AND cut both, returning nothing.
+        var arnoldBox = CollectionNamed("Arnold Movies");
+        var dramaBox = CollectionNamed("Sad Movies");
+
+        var cache = new RefreshQueueService.RefreshCache();
+        SeedMembers(cache, arnoldBox,
+            MovieNamed("Predator", "Action", "Sci-Fi"),
+            MovieNamed("Commando", "Action", "Sci-Fi"));
+        SeedMembers(cache, dramaBox, MovieNamed("The Notebook", "Drama", "Romance"));
+
+        var list = MakeList(
+            [MediaTypeConstants.Collection],
+            matchByMembers: true,
+            [
+                new ExpressionSet { Expressions = [new Expression("SimilarTo", "Equal", "Predator")] },
+                new ExpressionSet { Expressions = [new Expression("Genres", "Contains", "Drama")] },
+            ],
+            orderName: "Rule Block Order Ascending");
+
+        // Rule Block Order can only produce this sequence from projected group mappings: the
+        // SimilarTo block is block 0, the Genres block is block 1.
+        var result = Filter(list, cache, dramaBox, arnoldBox);
+
+        Assert.Equal([arnoldBox.Id, dramaBox.Id], result);
+    }
+
+    [Fact]
     public void MatchByMembers_NeverIncludesTheListsOwnContainer()
     {
         // Both containers hold a passing member; the first one IS the list being built.

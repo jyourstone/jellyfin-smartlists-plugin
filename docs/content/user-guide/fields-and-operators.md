@@ -48,8 +48,8 @@ Find items similar to a reference item based on metadata.
 
 The more fields selected, the more comprehensive but potentially stricter the matching.
 
-!!! warning "Similar To filters the whole list"
-    A Similar To rule applies to every item in the list, not only to the rule block it sits in: an item must pass the similarity check **and** match the list's other rules. It is not an OR block of its own, so a block containing nothing but Similar To, placed alongside blocks holding other rules, contributes no items — and if none of those other blocks' matches pass the similarity check, the list comes back empty. Put Similar To in the *same* block as the rules it should refine. Several Similar To rules can be used at once: their reference items are blended into a single similarity pool.
+!!! info "Similar To belongs to its rule block"
+    A Similar To rule applies within the OR block it sits in, like any other rule. An item matches the block when it passes the similarity check **and** the block's other rules; other blocks are unaffected. So `[Similar To "Predator"]` in one block and `[Genre is Drama]` in another returns movies similar to Predator *plus* all dramas. Several Similar To rules in the *same* block blend their reference items into one similarity pool for that block; Similar To rules in *different* blocks each score against their own block's references.
 
 ### Video
 
