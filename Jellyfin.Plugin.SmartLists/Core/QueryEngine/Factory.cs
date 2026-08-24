@@ -3289,7 +3289,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <returns>Array of episodes in the series visible to this user</returns>
         internal static BaseItem[] GetCachedSeriesEpisodes(Guid seriesId, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, bool? isVirtualItem = null)
         {
-            var key = (seriesId, user.Id);
+            var key = (seriesId, user.Id, isVirtualItem);
             if (cache.SeriesEpisodes.TryGetValue(key, out var cachedEpisodes))
             {
                 // Get series name for better logging

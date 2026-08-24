@@ -774,12 +774,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             /// <summary>
             /// Cached episode list for a Series, scoped to a SPECIFIC user's current library/parental
-            /// visibility. Used ONLY by the NextUnwatched calculation, where visibility legitimately
-            /// matters (recommending a hidden episode as "next up" makes no sense). Aggregate
-            /// PlayCount/LastPlayedDate/PlaybackStatus scoring must NOT read this -
-            /// see <see cref="SeriesEpisodesForAggregation"/>.
+            /// visibility. Used by NextUnwatched and by the per-user PlaybackStatus/LastPlayedDate
+            /// rule-field calculations, where visibility legitimately matters. Aggregate
+            /// PlayCount/LastPlayedDate scoring must NOT read this - see
+            /// <see cref="SeriesEpisodesForAggregation"/>. Keyed by the query shape
+            /// (<c>IsVirtualItem</c>) as well as series/user id: NextUnwatched fetches with no
+            /// <c>IsVirtualItem</c> filter while the rule-field path excludes virtual episodes, so the
+            /// two shapes must never share an entry.
             /// </summary>
-            public ConcurrentDictionary<(Guid SeriesId, Guid UserId), BaseItem[]> SeriesEpisodes { get; } = new();
+            public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool? IsVirtualItem), BaseItem[]> SeriesEpisodes { get; } = new();
 
             /// <summary>
             /// ALL episodes of a Series, deliberately UNFILTERED by any user's parental-rating/
