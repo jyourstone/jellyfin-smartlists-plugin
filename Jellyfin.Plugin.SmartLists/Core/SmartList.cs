@@ -15,6 +15,7 @@ using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
@@ -1158,6 +1159,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 expandedResults = DedupExternalMusicListMatches(expandedResults, refreshCache, logger);
 
                 expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
+
+                // Configure '(all users)' orders before any sorting runs - ApplyPerGroupLimits below
+                // calls ApplyMultipleOrders per rule group and would otherwise sort with
+                // unconfigured aggregate users.
+                ConfigureAggregateUserOrders(user, logger);
 
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
@@ -2674,6 +2680,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is ReleaseDateOrderDesc ||
                    order is CommunityRatingOrderDesc ||
                    order is PlayCountOrderDesc ||
+                   order is PlayCountTotalOrderDesc ||
+                   order is LastPlayedTotalOrderDesc ||
                    order is LastPlayedOrderDesc ||
                    order is RuntimeOrderDesc ||
                    order is ResolutionOrderDesc ||
@@ -3465,6 +3473,65 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             return null;
         }
+
+        /// <summary>
+        /// Injects the user set that "(all users)" sorts aggregate over. Resolution is every user on
+        /// the server - that is the whole point of the name - not just the users this particular
+        /// list happens to be shared with.
+        ///
+        /// The container child caches those sorts read are NOT warmed here: they populate on the
+        /// read path (<see cref="OperandFactory.GetAggregationChildren"/>), because the sorts that
+        /// use them do not all run at the same point in the refresh pipeline.
+        /// </summary>
+        internal void ConfigureAggregateUserOrders(User currentUser, ILogger? logger)
+        {
+            if (Orders == null || Orders.Count == 0)
+            {
+                return;
+            }
+
+            var aggregateOrders = Orders.OfType<IAggregateUsersOrder>().ToList();
+            if (aggregateOrders.Count == 0)
+            {
+                return;
+            }
+
+            var serverUsers = ResolveAllServerUsers(currentUser, logger);
+            foreach (var order in aggregateOrders)
+            {
+                order.SetAggregateUsers(serverUsers);
+            }
+        }
+
+        /// <summary>
+        /// Resolves every user known to the server. Falls back to the current user if the user
+        /// manager is unavailable or resolution fails, so aggregate sorts degrade to owner-only
+        /// semantics rather than throwing - logged at Warning, because the list still says
+        /// "all users" while ranking by one user's history.
+        /// </summary>
+        private List<User> ResolveAllServerUsers(User currentUser, ILogger? logger)
+        {
+            if (UserManager != null)
+            {
+                try
+                {
+                    var users = PlaylistUserResolver.GetAllUsers(UserManager);
+                    if (users.Count > 0)
+                    {
+                        return users;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "Failed to resolve all server users for the all-users sort in '{PlaylistName}'.", Name);
+                }
+            }
+
+            logger?.LogWarning(
+                "All-users sort in '{PlaylistName}' could not resolve the server's users; falling back to {UserId} only, so the ranking reflects one user's playback rather than everyone's.",
+                Name, currentUser.Id);
+            return [currentUser];
+        }
     }
 
     public static class OrderFactory
@@ -3487,8 +3554,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "CommunityRating Descending", () => new CommunityRatingOrderDesc() },
             { "PlayCount (owner) Ascending", () => new PlayCountOrder() },
             { "PlayCount (owner) Descending", () => new PlayCountOrderDesc() },
+            { "PlayCount (all users) Ascending", () => new PlayCountTotalOrder() },
+            { "PlayCount (all users) Descending", () => new PlayCountTotalOrderDesc() },
             { "LastPlayed (owner) Ascending", () => new LastPlayedOrder() },
             { "LastPlayed (owner) Descending", () => new LastPlayedOrderDesc() },
+            { "LastPlayed (all users) Ascending", () => new LastPlayedTotalOrder() },
+            { "LastPlayed (all users) Descending", () => new LastPlayedTotalOrderDesc() },
             { "Runtime Ascending", () => new RuntimeOrder() },
             { "Runtime Descending", () => new RuntimeOrderDesc() },
             { "Resolution Ascending", () => new ResolutionOrder() },

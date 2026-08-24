@@ -303,7 +303,7 @@ public class RoundRobinLeastRecentlyWatchedTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var series = TestItems.Show("Aggregate Series");
-                cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = children;
+                cache.SeriesEpisodesForAggregation[series.Id] = children;
                 return series;
             })
         };
@@ -312,7 +312,7 @@ public class RoundRobinLeastRecentlyWatchedTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = children;
+                cache.SeasonEpisodesForAggregation[season.Id] = children;
                 return season;
             })
         };
@@ -321,7 +321,7 @@ public class RoundRobinLeastRecentlyWatchedTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[(album.Id, TestItems.User.Id)] = children;
+                cache.AlbumTracksForAggregation[album.Id] = children;
                 return album;
             })
         };
@@ -483,7 +483,7 @@ public class RoundRobinLeastRecentlyWatchedTests
 
         var activeChild = TestItems.Ep("Ignored", 1, 1, name: "Active Child");
         TestItems.SeedUserData(cache, activeChild, TestItems.User, played: false, lastPlayed: new DateTime(2023, 1, 1));
-        cache.SeriesEpisodes[(activeSeries.Id, TestItems.User.Id)] = new BaseItem[] { activeChild };
+        cache.SeriesEpisodesForAggregation[activeSeries.Id] = new BaseItem[] { activeChild };
         // idleSeries has no cached children at all -> no aggregate activity.
 
         var order = new RoundRobinLeastRecentlyWatchedOrder

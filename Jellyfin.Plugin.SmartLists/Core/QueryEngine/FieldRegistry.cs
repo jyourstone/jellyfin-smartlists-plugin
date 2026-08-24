@@ -576,6 +576,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 new { Value = "Similarity Descending", Label = "Similarity Descending" },
                 new { Value = "PlayCount (owner) Ascending", Label = "Play Count (owner) Ascending" },
                 new { Value = "PlayCount (owner) Descending", Label = "Play Count (owner) Descending" },
+                new { Value = "PlayCount (all users) Ascending", Label = "Play Count (all users) Ascending" },
+                new { Value = "PlayCount (all users) Descending", Label = "Play Count (all users) Descending" },
+                new { Value = "LastPlayed (owner) Ascending", Label = "Last Played (owner) Ascending" },
+                new { Value = "LastPlayed (owner) Descending", Label = "Last Played (owner) Descending" },
+                new { Value = "LastPlayed (all users) Ascending", Label = "Last Played (all users) Ascending" },
+                new { Value = "LastPlayed (all users) Descending", Label = "Last Played (all users) Descending" },
                 new { Value = "External List Order Ascending", Label = "External List Order Ascending" },
                 new { Value = "External List Order Descending", Label = "External List Order Descending" },
             ];

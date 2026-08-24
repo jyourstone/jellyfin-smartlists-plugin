@@ -209,7 +209,7 @@
         }
 
         // Always show: Name, ProductionYear, CommunityRating,
-        // DateCreated, ReleaseDate, PlayCount (owner), LastPlayed (owner), Random, Default
+        // DateCreated, ReleaseDate, PlayCount/LastPlayed (owner and all users), Random, Default
         return true;
     };
 

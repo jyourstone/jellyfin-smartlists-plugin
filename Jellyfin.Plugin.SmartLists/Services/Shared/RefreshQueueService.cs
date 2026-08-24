@@ -14,6 +14,8 @@ using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Controller.Collections;
@@ -680,7 +682,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private RefreshCache GetOrCreateRefreshCacheForUser(Guid userId)
         {
-            return _refreshCaches.GetOrAdd(userId, _ => new RefreshCache());
+            return _refreshCaches.GetOrAdd(userId, _ => new RefreshCache { LibraryManager = _libraryManager });
         }
 
         /// <summary>
@@ -767,14 +769,105 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
+        /// Drops the cached child lists of the containers a changed item belongs to, across every
+        /// user's cache.
+        ///
+        /// A <see cref="RefreshCache"/> lives for a whole queue drain - it is only cleared once the
+        /// queue empties - so without this a Series/Season/MusicAlbum that gains or loses a child
+        /// mid-drain keeps being scored against its old child list. That includes the very refresh
+        /// the change itself queued, which is the case most likely to be noticed.
+        ///
+        /// Called from the library Added/Removed events, which are the only ones that change
+        /// membership; Updated fires constantly during metadata scans and would evict for nothing.
+        /// </summary>
+        public void InvalidateContainerChildCaches(BaseItem item)
+        {
+            if (item == null || _refreshCaches.IsEmpty)
+            {
+                return;
+            }
+
+            var invalidated = 0;
+            foreach (var cache in _refreshCaches.Values)
+            {
+                invalidated += cache.InvalidateContainerChildren(item);
+            }
+
+            if (invalidated > 0)
+            {
+                _logger.LogDebug(
+                    "Dropped {EntryCount} cached container child list(s) after '{ItemName}' was added to or removed from the library",
+                    invalidated, item.Name);
+            }
+        }
+
+        /// <summary>
         /// Per-refresh cache for expensive operations within single playlist processing.
         /// Uses ConcurrentDictionary for thread-safety during parallel processing.
         /// </summary>
         public sealed class RefreshCache
         {
-            public ConcurrentDictionary<(Guid SeriesId, Guid UserId), BaseItem[]> SeriesEpisodes { get; } = new();
+            /// <summary>
+            /// Library manager used to populate the *ForAggregation child caches on a miss, set when
+            /// the cache is created. Null in unit tests, which seed those dictionaries directly - a
+            /// miss then stays a miss instead of reaching for a database that isn't there.
+            /// </summary>
+            public ILibraryManager? LibraryManager { get; set; }
+
+            /// <summary>
+            /// Cached episode list for a Series, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used by NextUnwatched and by the per-user PlaybackStatus/LastPlayedDate
+            /// rule-field calculations, where visibility legitimately matters. Aggregate
+            /// PlayCount/LastPlayedDate scoring must NOT read this - see
+            /// <see cref="SeriesEpisodesForAggregation"/>. Keyed by the query shape
+            /// (<c>IsVirtualItem</c>) as well as series/user id: NextUnwatched fetches with no
+            /// <c>IsVirtualItem</c> filter while the rule-field path excludes virtual episodes, so the
+            /// two shapes must never share an entry.
+            /// </summary>
+            public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool? IsVirtualItem), BaseItem[]> SeriesEpisodes { get; } = new();
+
+            /// <summary>
+            /// ALL episodes of a Series, deliberately UNFILTERED by any user's parental-rating/
+            /// library-access restrictions, for aggregate PlayCount/LastPlayedDate/PlaybackStatus
+            /// scoring. A user's stored playback history can outlive their current visibility of an
+            /// item (a restriction added after they watched it, a revoked library grant, ...), so the
+            /// structural child set must be visibility-agnostic - per-user playback is still read
+            /// separately, per child, via <see cref="UserDataCache"/>. Keyed by series id only: the
+            /// result is the same for every user, unlike <see cref="SeriesEpisodes"/>.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> SeriesEpisodesForAggregation { get; } = new();
+
+            /// <summary>
+            /// Cached episode list for a Season, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate rule-field
+            /// calculations, where visibility legitimately matters. Aggregate PlayCount/LastPlayedDate
+            /// scoring must NOT read this - see <see cref="SeasonEpisodesForAggregation"/>.
+            /// </summary>
             public ConcurrentDictionary<(Guid SeasonId, Guid UserId), BaseItem[]> SeasonEpisodes { get; } = new();
+
+            /// <summary>
+            /// ALL episodes of a Season for aggregate PlayCount/LastPlayedDate scoring, deliberately
+            /// unfiltered by any user's parental-rating/library-access restrictions (see
+            /// <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by season id only, unlike
+            /// <see cref="SeasonEpisodes"/>.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> SeasonEpisodesForAggregation { get; } = new();
+
+            /// <summary>
+            /// Cached track list for a MusicAlbum, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate rule-field
+            /// calculations, where visibility legitimately matters. Aggregate PlayCount/LastPlayedDate
+            /// scoring must NOT read this - see <see cref="AlbumTracksForAggregation"/>.
+            /// </summary>
             public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
+
+            /// <summary>
+            /// ALL tracks of a MusicAlbum for aggregate PlayCount/LastPlayedDate scoring, deliberately
+            /// unfiltered by any user's parental-rating/library-access restrictions (see
+            /// <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by album id only, unlike
+            /// <see cref="AlbumTracks"/>.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> AlbumTracksForAggregation { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> CollectionMembershipCache { get; } = new();
@@ -820,6 +913,79 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             
             // Media streams cache - keyed by ItemId only (user-agnostic)
             public ConcurrentDictionary<Guid, IEnumerable<object>> MediaStreamsCache { get; } = new();
+
+            /// <summary>
+            /// Removes every cached child list for the containers <paramref name="item"/> belongs to
+            /// (or, when it is itself a container, for the item), and returns how many entries went.
+            /// Covers both the visibility-unfiltered aggregation caches and their per-user twins,
+            /// plus NextUnwatched, which is derived from the same episode list.
+            /// </summary>
+            internal int InvalidateContainerChildren(BaseItem item)
+            {
+                var removed = 0;
+                foreach (var containerId in GetAffectedContainerIds(item))
+                {
+                    removed += SeriesEpisodesForAggregation.TryRemove(containerId, out _) ? 1 : 0;
+                    removed += SeasonEpisodesForAggregation.TryRemove(containerId, out _) ? 1 : 0;
+                    removed += AlbumTracksForAggregation.TryRemove(containerId, out _) ? 1 : 0;
+
+                    // The per-user twins carry the user id (and, for series, the query shape) in
+                    // their key, so they need a scan rather than a keyed removal.
+                    removed += RemoveByContainerId(SeriesEpisodes, k => k.SeriesId, containerId);
+                    removed += RemoveByContainerId(SeasonEpisodes, k => k.SeasonId, containerId);
+                    removed += RemoveByContainerId(AlbumTracks, k => k.AlbumId, containerId);
+                    removed += RemoveByContainerId(NextUnwatched, k => k.SeriesId, containerId);
+                }
+
+                return removed;
+            }
+
+            /// <summary>
+            /// The containers whose child list a change to <paramref name="item"/> invalidates. Read
+            /// straight off the item - no database round trip in a library event handler.
+            /// </summary>
+            private static IEnumerable<Guid> GetAffectedContainerIds(BaseItem item)
+            {
+                var ids = new List<Guid>(2);
+
+                switch (item)
+                {
+                    case Episode episode:
+                        ids.Add(episode.SeasonId);
+                        ids.Add(episode.SeriesId);
+                        break;
+                    case Audio audio:
+                        // Direct parent is normally the album; AlbumEntity covers tracks nested in a
+                        // sub-folder, which the recursive child query still returns.
+                        ids.Add(audio.ParentId);
+                        ids.Add(audio.AlbumEntity?.Id ?? Guid.Empty);
+                        break;
+                    case Season or Series or MusicAlbum:
+                        // The container itself appeared or disappeared.
+                        ids.Add(item.Id);
+                        break;
+                }
+
+                return ids.Where(id => id != Guid.Empty).Distinct();
+            }
+
+            private static int RemoveByContainerId<TKey, TValue>(
+                ConcurrentDictionary<TKey, TValue> cache,
+                Func<TKey, Guid> containerIdOf,
+                Guid containerId)
+                where TKey : notnull
+            {
+                var removed = 0;
+                foreach (var key in cache.Keys)
+                {
+                    if (containerIdOf(key) == containerId && cache.TryRemove(key, out _))
+                    {
+                        removed++;
+                    }
+                }
+
+                return removed;
+            }
 
             // Child items cache for sorting collections by child values
             // Maps Collection/Playlist ID → array of child BaseItems (with full item data for property access)

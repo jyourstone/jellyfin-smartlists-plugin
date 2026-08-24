@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
@@ -43,26 +44,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 {
                     try
                     {
-                        var aggregateLastPlayedDate = GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
-                        if (aggregateLastPlayedDate.HasValue)
-                        {
-                            sortValueCache[item] = aggregateLastPlayedDate.Value;
-                            continue;
-                        }
-
-                        object? userData = null;
-                        
-                        // Try to get user data from cache if available
-                        if (refreshCache != null)
-                        {
-                            userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
-                        }
-                        else
-                        {
-                            userData = userDataManager.GetUserData(user, item);
-                        }
-                        
-                        sortValueCache[item] = GetLastPlayedDateFromUserData(userData);
+                        sortValueCache[item] = GetLastPlayedValue(item, user, userDataManager, logger, refreshCache);
                     }
                     catch (Exception ex)
                     {
@@ -93,28 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             try
             {
-                if (userDataManager != null)
-                {
-                    var aggregateLastPlayedDate = GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
-                    if (aggregateLastPlayedDate.HasValue)
-                    {
-                        return aggregateLastPlayedDate.Value;
-                    }
-                }
-
-                object? userData = null;
-                
-                // Try to get user data from cache if available
-                if (refreshCache != null && userDataManager != null)
-                {
-                    userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
-                }
-                else if (userDataManager != null)
-                {
-                    userData = userDataManager.GetUserData(user, item);
-                }
-                
-                return GetLastPlayedDateFromUserData(userData);
+                return GetLastPlayedValue(item, user, userDataManager, logger, refreshCache);
             }
             catch (Exception ex)
             {
@@ -124,7 +85,57 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Gets aggregate LastPlayedDate for container items when their children are already cached.
+        /// The sort value for a single item. Owner-scoped orders use the refresh's own user; the
+        /// all-users variant overrides this to take the most recent date across every configured
+        /// user - see <see cref="LastPlayedTotalOrderBase"/>.
+        /// </summary>
+        protected virtual DateTime GetLastPlayedValue(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache)
+        {
+            return GetLastPlayedForUser(item, user, userDataManager, refreshCache);
+        }
+
+        /// <summary>
+        /// LastPlayedDate for one user: the aggregate across a container's children when the item is
+        /// a container, otherwise that user's own row for the item itself.
+        /// </summary>
+        internal static DateTime GetLastPlayedForUser(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            RefreshQueueService.RefreshCache? refreshCache)
+        {
+            if (userDataManager != null)
+            {
+                var aggregateLastPlayedDate = GetAggregateLastPlayedDate(item, user, userDataManager, refreshCache);
+                if (aggregateLastPlayedDate.HasValue)
+                {
+                    return aggregateLastPlayedDate.Value;
+                }
+            }
+
+            object? userData = null;
+
+            // Try to get user data from cache if available
+            if (refreshCache != null && userDataManager != null)
+            {
+                userData = UserDataCacheHelper.GetCachedUserData(user, item, refreshCache, userDataManager);
+            }
+            else if (userDataManager != null)
+            {
+                userData = userDataManager.GetUserData(user, item);
+            }
+
+            return GetLastPlayedDateFromUserData(userData);
+        }
+
+        /// <summary>
+        /// Gets aggregate LastPlayedDate for container items from their children, which
+        /// <see cref="OperandFactory.GetAggregationChildren"/> fetches and caches on demand.
         /// </summary>
         internal static DateTime? GetAggregateLastPlayedDate(
             BaseItem item,
@@ -137,13 +148,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 return null;
             }
 
-            BaseItem[]? children = item switch
-            {
-                Season => refreshCache.SeasonEpisodes.TryGetValue((item.Id, user.Id), out var seasonEpisodes) ? seasonEpisodes : null,
-                Series => refreshCache.SeriesEpisodes.TryGetValue((item.Id, user.Id), out var seriesEpisodes) ? seriesEpisodes : null,
-                MusicAlbum => refreshCache.AlbumTracks.TryGetValue((item.Id, user.Id), out var tracks) ? tracks : null,
-                _ => null
-            };
+            var children = OperandFactory.GetAggregationChildren(item, refreshCache);
 
             if (children == null || children.Length == 0)
             {

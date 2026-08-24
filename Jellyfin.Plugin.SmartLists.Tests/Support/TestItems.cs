@@ -62,6 +62,14 @@ public class TestLibraryManager : DispatchProxy
     /// </summary>
     internal static readonly ConcurrentDictionary<Guid, int> GetItemByIdCalls = new();
 
+    /// <summary>
+    /// Answers <c>GetItemList(InternalItemsQuery)</c>, keyed by the query's <c>ParentId</c>.
+    /// Used to test proactive container-cache warming (SmartList's aggregate-user cache warm-up)
+    /// without needing a live Jellyfin: tests register the children a container "has" here, then
+    /// assert the refresh cache picks them up for every configured aggregate user.
+    /// </summary>
+    internal static readonly ConcurrentDictionary<Guid, List<BaseItem>> ItemListByParentId = new();
+
     /// <summary>Total <c>GetItemById</c> calls recorded for the given ids.</summary>
     internal static int CallsFor(params Guid[] ids)
         => ids.Sum(id => GetItemByIdCalls.TryGetValue(id, out var count) ? count : 0);
@@ -82,6 +90,16 @@ public class TestLibraryManager : DispatchProxy
         if (targetMethod?.Name == "GetVirtualFolders" && args is null or { Length: 0 })
         {
             return VirtualFolders.ToList();
+        }
+
+        if (targetMethod?.Name == "GetItemList" && args is { Length: 1 } && args[0] is InternalItemsQuery query && query.ParentId != Guid.Empty)
+        {
+            // Fail loudly rather than answering []: an unregistered parent means the test reached a
+            // query it never set up, and a silent empty result would be asserted against as if real.
+            return ItemListByParentId.TryGetValue(query.ParentId, out var children)
+                ? children
+                : throw new NotSupportedException(
+                    $"TestLibraryManager: GetItemList called for unregistered ParentId {query.ParentId}. Seed ItemListByParentId first.");
         }
 
         throw new NotSupportedException(
@@ -113,6 +131,33 @@ public class ThrowingUserDataManager : DispatchProxy
 }
 
 /// <summary>
+/// A minimal <see cref="IUserManager"/> backed by a fixed user list, for testing that "all users"
+/// aggregate sorts resolve EVERY server user (via <c>PlaylistUserResolver.GetAllUsers</c>) rather
+/// than only the users a list happens to be shared with. Answers <c>GetUsers()</c> and
+/// <c>GetUserById(Guid)</c>; everything else throws so an unexpected dependency fails loudly.
+/// </summary>
+public class TestUserManager : DispatchProxy
+{
+    public List<User> Users { get; set; } = [];
+
+    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+    {
+        if (targetMethod?.Name == "GetUsers" && args is null or { Length: 0 })
+        {
+            return Users.ToList();
+        }
+
+        if (targetMethod?.Name == "GetUserById" && args is { Length: 1 } && args[0] is Guid id)
+        {
+            return Users.FirstOrDefault(u => u.Id == id);
+        }
+
+        throw new NotSupportedException(
+            $"TestUserManager: {targetMethod?.Name} is not stubbed. Add it deliberately - see Support/TestItems.cs.");
+    }
+}
+
+/// <summary>
 /// Builders for the item shapes the round-robin orders group and interleave.
 ///
 /// Two Jellyfin traps these builders exist to close, both of which throw
@@ -138,6 +183,14 @@ public static class TestItems
     public static readonly User OtherUser = new("other", "authProviderId", "pwResetProviderId");
 
     public static IUserDataManager ThrowingUserData() => DispatchProxy.Create<IUserDataManager, ThrowingUserDataManager>();
+
+    /// <summary>An <see cref="IUserManager"/> that knows only the given users - see <see cref="TestUserManager"/>.</summary>
+    public static IUserManager UserManagerWithUsers(params User[] users)
+    {
+        var proxy = DispatchProxy.Create<IUserManager, TestUserManager>();
+        ((TestUserManager)proxy).Users = [.. users];
+        return proxy;
+    }
 
     /// <summary>
     /// A Series registered with the library manager stub, so episodes pointing at it can resolve

@@ -429,7 +429,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             try
             {
-                // Get valid episodes (excluding season 0 specials)
+                // Get valid episodes visible to this user (excluding season 0 specials)
                 var validEpisodes = GetValidSeriesEpisodes(series.Id, user, libraryManager, cache, logger);
 
                 // Exclude series with 0 valid episodes (invalid data or only season 0 specials)
@@ -469,14 +469,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Gets valid episodes for a series, excluding season 0 specials and episodes without valid metadata.
+        /// Gets valid episodes for a series, visible to the given user, excluding season 0 specials
+        /// and episodes without valid metadata. Used for per-user PlaybackStatus/LastPlayedDate
+        /// rule-field calculations, where a user's current library/parental visibility legitimately
+        /// matters. Aggregate (all-users) sorting must NOT use this - it reads the unfiltered
+        /// <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/> cache directly.
         /// </summary>
         /// <param name="seriesId">The series ID</param>
-        /// <param name="user">The user</param>
+        /// <param name="user">The user whose visibility the episode list should respect</param>
         /// <param name="libraryManager">Library manager to query episodes</param>
         /// <param name="cache">Cache for performance</param>
         /// <param name="logger">Logger</param>
-        /// <returns>List of valid episodes (season 1+, with valid episode numbers)</returns>
+        /// <returns>List of valid episodes (season 1+, with valid episode numbers) visible to the user</returns>
         private static List<BaseItem> GetValidSeriesEpisodes(
             Guid seriesId,
             User user,
@@ -484,7 +488,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             RefreshQueueServiceRefreshCache cache,
             ILogger? logger)
         {
-            // Get all episodes in the series using cache
+            // Get episodes visible to this user (respects current library/parental restrictions)
             var episodes = GetCachedSeriesEpisodes(seriesId, user, libraryManager, cache, logger, isVirtualItem: false);
 
             var validEpisodes = new List<BaseItem>();
@@ -530,7 +534,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             try
             {
-                // Get valid episodes (excluding season 0 specials)
+                // Get valid episodes visible to this user (excluding season 0 specials)
                 var validEpisodes = GetValidSeriesEpisodes(series.Id, user, libraryManager, cache, logger);
 
                 // If no valid episodes, return null
@@ -852,9 +856,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Gets cached audio tracks for a MusicAlbum, fetching from library manager on cache miss.
+        /// Gets cached audio tracks for a MusicAlbum, visible to a SPECIFIC user, using cache to avoid
+        /// redundant database queries. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate
+        /// rule-field calculations, where visibility legitimately matters. Aggregate (all-users)
+        /// scoring must NOT use this - see <see cref="GetAggregationChildren"/>.
         /// </summary>
-        private static BaseItem[] GetCachedAlbumTracks(
+        internal static BaseItem[] GetCachedAlbumTracks(
             Guid albumId,
             User user,
             ILibraryManager libraryManager,
@@ -876,16 +883,89 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }).ToArray();
 
             var albumName = libraryManager.GetItemById(albumId)?.Name ?? "Unknown";
-            logger?.LogDebug("Fetched {TrackCount} audio tracks for album '{AlbumName}' ({AlbumId})", tracks.Length, albumName, albumId);
+            logger?.LogDebug("Fetched {TrackCount} audio tracks for album '{AlbumName}' ({AlbumId}), user {UserId}", tracks.Length, albumName, albumId, user.Id);
 
             cache.AlbumTracks[key] = tracks;
             return tracks;
         }
 
         /// <summary>
-        /// Gets cached episodes for a Season, fetching from library manager on cache miss.
+        /// Returns the children a container item aggregates over (Series/Season -> episodes,
+        /// MusicAlbum -> tracks), or null when the item is not a container type.
+        ///
+        /// These lists are deliberately UNFILTERED by any user's parental-rating/library-access
+        /// restrictions and keyed by container id only - see
+        /// <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/> for why - so a
+        /// single entry serves every user being scored.
+        ///
+        /// Population happens here, on the read path, rather than in a warm-up pass owned by one
+        /// caller. Every container-aggregating sort funnels through this method - LastPlayed and
+        /// PlayCount (owner and all-users) plus Round Robin "Least Recently Watched" - and they do
+        /// not all run at the same point in the refresh pipeline, so a warm-up placed to suit one of
+        /// them leaves the others reading a cold cache.
         /// </summary>
-        private static BaseItem[] GetCachedSeasonEpisodes(
+        internal static BaseItem[]? GetAggregationChildren(
+            BaseItem item,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger = null)
+        {
+            return item switch
+            {
+                // IsVirtualItem/User filters mirror each type's per-user twin above, so the two
+                // cache families only ever differ in the visibility filter they deliberately drop.
+                Series => GetOrFetchAggregationChildren(cache.SeriesEpisodesForAggregation, item, BaseItemKind.Episode, excludeVirtual: true, cache, logger),
+                Season => GetOrFetchAggregationChildren(cache.SeasonEpisodesForAggregation, item, BaseItemKind.Episode, excludeVirtual: true, cache, logger),
+                MusicAlbum => GetOrFetchAggregationChildren(cache.AlbumTracksForAggregation, item, BaseItemKind.Audio, excludeVirtual: false, cache, logger),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Cache-or-fetch for one container's aggregation children. With no library manager on the
+        /// cache (unit tests, which seed the dictionaries directly) a miss stays a miss rather than
+        /// hitting a database that isn't there.
+        /// </summary>
+        private static BaseItem[] GetOrFetchAggregationChildren(
+            ConcurrentDictionary<Guid, BaseItem[]> store,
+            BaseItem container,
+            BaseItemKind childKind,
+            bool excludeVirtual,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger)
+        {
+            if (store.TryGetValue(container.Id, out var cached))
+            {
+                return cached;
+            }
+
+            if (cache.LibraryManager == null)
+            {
+                return [];
+            }
+
+            var children = cache.LibraryManager.GetItemList(new InternalItemsQuery
+            {
+                ParentId = container.Id,
+                IncludeItemTypes = [childKind],
+                Recursive = true,
+                IsVirtualItem = excludeVirtual ? false : null,
+            }).ToArray();
+
+            logger?.LogDebug(
+                "Fetched {ChildCount} {ChildKind} children for '{ContainerName}' ({ContainerId}) for aggregate scoring (unfiltered by user visibility)",
+                children.Length, childKind, container.Name, container.Id);
+
+            store[container.Id] = children;
+            return children;
+        }
+
+        /// <summary>
+        /// Gets cached episodes for a Season, visible to a SPECIFIC user, using cache to avoid
+        /// redundant database queries. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate
+        /// rule-field calculations, where visibility legitimately matters. Aggregate (all-users)
+        /// scoring must NOT use this - see <see cref="GetAggregationChildren"/>.
+        /// </summary>
+        internal static BaseItem[] GetCachedSeasonEpisodes(
             Guid seasonId,
             User user,
             ILibraryManager libraryManager,
@@ -908,7 +988,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }).ToArray();
 
             var seasonName = libraryManager.GetItemById(seasonId)?.Name ?? "Unknown";
-            logger?.LogDebug("Fetched {EpisodeCount} episodes for season '{SeasonName}' ({SeasonId})", episodes.Length, seasonName, seasonId);
+            logger?.LogDebug("Fetched {EpisodeCount} episodes for season '{SeasonName}' ({SeasonId}), user {UserId}", episodes.Length, seasonName, seasonId, user.Id);
 
             cache.SeasonEpisodes[key] = episodes;
             return episodes;
@@ -3201,18 +3281,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Gets all episodes for a series, using cache to avoid redundant database queries.
+        /// Gets episodes for a series visible to a SPECIFIC user, using cache to avoid redundant
+        /// database queries. Used both by NextUnwatched and by the per-user PlaybackStatus/
+        /// LastPlayedDate rule-field calculations (via <see cref="GetValidSeriesEpisodes"/>), where a
+        /// user's current parental-rating/library-access restrictions legitimately matter.
+        /// Aggregate (all-users) PlayCount/LastPlayedDate scoring must NOT use this method - see
+        /// <see cref="GetAggregationChildren"/>, which is deliberately unfiltered and cached
+        /// separately so the two purposes can never collide.
         /// </summary>
         /// <param name="seriesId">The series ID to get episodes for</param>
         /// <param name="user">User for the query context</param>
         /// <param name="libraryManager">Library manager for database queries</param>
         /// <param name="cache">Per-refresh cache to store results</param>
         /// <param name="logger">Logger for debugging</param>
-        /// <param name="isVirtualItem">Optional filter for virtual items. If null, uses GetItemsResult. If specified, uses GetItemList with this value.</param>
-        /// <returns>Array of all episodes in the series</returns>
-        private static BaseItem[] GetCachedSeriesEpisodes(Guid seriesId, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, bool? isVirtualItem = null)
+        /// <param name="isVirtualItem">Optional filter for virtual items. If null, uses GetItemsResult (NextUnwatched shape). If specified, uses GetItemList with this value (valid-episodes shape).</param>
+        /// <returns>Array of episodes in the series visible to this user</returns>
+        internal static BaseItem[] GetCachedSeriesEpisodes(Guid seriesId, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, bool? isVirtualItem = null)
         {
-            var key = (seriesId, user.Id);
+            var key = (seriesId, user.Id, isVirtualItem);
             if (cache.SeriesEpisodes.TryGetValue(key, out var cachedEpisodes))
             {
                 // Get series name for better logging
