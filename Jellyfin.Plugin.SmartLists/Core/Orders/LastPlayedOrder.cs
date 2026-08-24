@@ -148,13 +148,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    public class LastPlayedTotalOrder : LastPlayedTotalOrderBase
+    public class LastPlayedTotalOrder : LastPlayedTotalOrderBase, IAllUsersScopeOrder
     {
         public override string Name => "LastPlayed (all users) Ascending";
         protected override bool IsDescending => false;
     }
 
-    public class LastPlayedTotalOrderDesc : LastPlayedTotalOrderBase
+    public class LastPlayedTotalOrderDesc : LastPlayedTotalOrderBase, IAllUsersScopeOrder
     {
         public override string Name => "LastPlayed (all users) Descending";
         protected override bool IsDescending => true;

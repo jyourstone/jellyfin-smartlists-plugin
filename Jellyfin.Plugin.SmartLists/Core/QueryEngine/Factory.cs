@@ -854,7 +854,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Gets cached audio tracks for a MusicAlbum, fetching from library manager on cache miss.
         /// </summary>
-        private static BaseItem[] GetCachedAlbumTracks(
+        internal static BaseItem[] GetCachedAlbumTracks(
             Guid albumId,
             User user,
             ILibraryManager libraryManager,
@@ -885,7 +885,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <summary>
         /// Gets cached episodes for a Season, fetching from library manager on cache miss.
         /// </summary>
-        private static BaseItem[] GetCachedSeasonEpisodes(
+        internal static BaseItem[] GetCachedSeasonEpisodes(
             Guid seasonId,
             User user,
             ILibraryManager libraryManager,
@@ -3210,7 +3210,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// <param name="logger">Logger for debugging</param>
         /// <param name="isVirtualItem">Optional filter for virtual items. If null, uses GetItemsResult. If specified, uses GetItemList with this value.</param>
         /// <returns>Array of all episodes in the series</returns>
-        private static BaseItem[] GetCachedSeriesEpisodes(Guid seriesId, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, bool? isVirtualItem = null)
+        internal static BaseItem[] GetCachedSeriesEpisodes(Guid seriesId, User user, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger, bool? isVirtualItem = null)
         {
             var key = (seriesId, user.Id);
             if (cache.SeriesEpisodes.TryGetValue(key, out var cachedEpisodes))

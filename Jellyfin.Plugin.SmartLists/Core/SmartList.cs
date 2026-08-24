@@ -15,6 +15,7 @@ using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
@@ -1003,7 +1004,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     ExpressionSets?.Any(set => set?.Expressions?.Any(expr =>
                         expr?.MemberName == "SimilarTo") == true) == true;
 
-                ConfigureAggregateUserOrders(user, logger);
+                ConfigureAggregateUserOrders(itemsArray, libraryManager, user, refreshCache, logger);
 
                 // Check if there are any non-expensive rules for two-phase filtering optimization
                 bool hasNonExpensiveRules = false;
@@ -2710,6 +2711,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is CommunityRatingOrderDesc ||
                    order is PlayCountOrderDesc ||
                    order is PlayCountTotalOrderDesc ||
+                   order is PlayCountSelectedUsersTotalOrderDesc ||
                    order is LastPlayedTotalOrderDesc ||
                    order is LastPlayedOrderDesc ||
                    order is RuntimeOrderDesc ||
@@ -3503,7 +3505,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return null;
         }
 
-        private void ConfigureAggregateUserOrders(User currentUser, ILogger? logger)
+        private void ConfigureAggregateUserOrders(
+            IReadOnlyCollection<BaseItem> items,
+            ILibraryManager libraryManager,
+            User currentUser,
+            RefreshQueueService.RefreshCache refreshCache,
+            ILogger? logger)
         {
             if (Orders == null || Orders.Count == 0)
             {
@@ -3516,6 +3523,82 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return;
             }
 
+            // "(all users)" sorts must aggregate over EVERY user on the server - that's the whole
+            // point of the name - not just the users this particular list happens to be shared
+            // with. Legacy "(selected users total)" aliases keep the original, narrower
+            // playlist-scoped resolution so previously-saved lists don't silently change behavior.
+            var allUsersOrders = aggregateOrders.OfType<IAllUsersScopeOrder>().ToList();
+            var selectedUsersOrders = aggregateOrders.Where(o => o is not IAllUsersScopeOrder).ToList();
+
+            var allAggregateUsers = new List<User> { currentUser };
+
+            if (allUsersOrders.Count > 0)
+            {
+                var serverUsers = ResolveAllServerUsers(currentUser, logger);
+                foreach (var order in allUsersOrders)
+                {
+                    order.SetAggregateUsers(serverUsers);
+                }
+
+                allAggregateUsers.AddRange(serverUsers);
+            }
+
+            if (selectedUsersOrders.Count > 0)
+            {
+                var resolvedUsers = ResolvePlaylistScopedUsers(currentUser, logger);
+                foreach (var order in selectedUsersOrders)
+                {
+                    order.SetAggregateUsers(resolvedUsers);
+                }
+
+                allAggregateUsers.AddRange(resolvedUsers);
+            }
+
+            // Container aggregation (Series/Season/MusicAlbum -> children) reads per-(item,user)
+            // child caches that are otherwise only ever warmed for whichever single user happens
+            // to trigger extraction of an unrelated rule field. Aggregate sorts need those caches
+            // warm for EVERY configured aggregate user, or per-user lookups silently miss and fall
+            // back to 0 / DateTime.MinValue for anyone but that one user.
+            WarmAggregateUserContainerCaches(items, allAggregateUsers, libraryManager, refreshCache, logger);
+        }
+
+        /// <summary>
+        /// Resolves every user known to the server, for orders scoped to literally "all users"
+        /// (as opposed to only the users a list is shared with). Falls back to the current user if
+        /// the user manager is unavailable or resolution fails, so aggregate sorts degrade to
+        /// owner-only semantics rather than throwing.
+        /// </summary>
+        private List<User> ResolveAllServerUsers(User currentUser, ILogger? logger)
+        {
+            if (UserManager == null)
+            {
+                logger?.LogDebug("Aggregate all-users sort fallback in '{PlaylistName}': UserManager unavailable, using current user {UserId}", Name, currentUser.Id);
+                return [currentUser];
+            }
+
+            try
+            {
+                var users = PlaylistUserResolver.GetAllUsers(UserManager);
+                if (users.Count > 0)
+                {
+                    return users;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Failed to resolve all server users for aggregate sort in '{PlaylistName}'. Falling back to current user.", Name);
+            }
+
+            return [currentUser];
+        }
+
+        /// <summary>
+        /// Resolves the users this list is assigned to (its playlist mappings, or the collection
+        /// owner) - the original, narrower resolution preserved for the legacy "(selected users
+        /// total)" sort aliases.
+        /// </summary>
+        private List<User> ResolvePlaylistScopedUsers(User currentUser, ILogger? logger)
+        {
             var resolvedUsers = new List<User>();
             foreach (var userId in _playlistUserIds)
             {
@@ -3537,9 +3620,68 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Aggregate user sort fallback in '{PlaylistName}': no playlist users resolved, using current user {UserId}", Name, currentUser.Id);
             }
 
-            foreach (var order in aggregateOrders)
+            return resolvedUsers;
+        }
+
+        /// <summary>
+        /// Proactively populates the per-(item,user) container child caches (Series -> episodes,
+        /// Season -> episodes, MusicAlbum -> tracks) for every configured aggregate user, for every
+        /// container candidate in the item pool. Without this, PlayCount/LastPlayed aggregate sorts
+        /// only ever see a warm cache for whichever user happened to trigger an unrelated rule's
+        /// extraction - every OTHER aggregate user gets a cache miss and silently falls back to
+        /// 0 / DateTime.MinValue. Reuses the exact same cache-population helpers the normal
+        /// extraction pipeline uses (<see cref="OperandFactory"/>), so a hit here or there is a
+        /// no-op dictionary lookup, not a duplicated query path.
+        /// </summary>
+        private static void WarmAggregateUserContainerCaches(
+            IReadOnlyCollection<BaseItem> items,
+            List<User> aggregateUsers,
+            ILibraryManager libraryManager,
+            RefreshQueueService.RefreshCache refreshCache,
+            ILogger? logger)
+        {
+            if (items.Count == 0 || aggregateUsers.Count == 0)
             {
-                order.SetAggregateUsers(resolvedUsers);
+                return;
+            }
+
+            var usersToWarm = aggregateUsers
+                .Where(u => u != null && u.Id != Guid.Empty)
+                .GroupBy(u => u.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            if (usersToWarm.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in items)
+            {
+                switch (item)
+                {
+                    case Series series:
+                        foreach (var targetUser in usersToWarm)
+                        {
+                            OperandFactory.GetCachedSeriesEpisodes(series.Id, targetUser, libraryManager, refreshCache, logger, isVirtualItem: false);
+                        }
+
+                        break;
+                    case Season season:
+                        foreach (var targetUser in usersToWarm)
+                        {
+                            OperandFactory.GetCachedSeasonEpisodes(season.Id, targetUser, libraryManager, refreshCache, logger);
+                        }
+
+                        break;
+                    case MusicAlbum album:
+                        foreach (var targetUser in usersToWarm)
+                        {
+                            OperandFactory.GetCachedAlbumTracks(album.Id, targetUser, libraryManager, refreshCache, logger);
+                        }
+
+                        break;
+                }
             }
         }
     }

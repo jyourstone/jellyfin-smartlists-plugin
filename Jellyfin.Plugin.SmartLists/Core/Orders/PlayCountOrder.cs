@@ -18,6 +18,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         void SetAggregateUsers(IEnumerable<User> users);
     }
 
+    /// <summary>
+    /// Marks an <see cref="IAggregateUsersOrder"/> as scoped to EVERY user on the server ("all
+    /// users"), as opposed to only the users a list happens to be shared with. SmartList uses this
+    /// to decide whether to resolve aggregate users via <see cref="Utilities.PlaylistUserResolver.GetAllUsers"/>
+    /// or via the list's own playlist-scoped user set. Legacy "(selected users total)" aliases
+    /// deliberately do NOT implement this - they keep the original, narrower resolution.
+    /// </summary>
+    public interface IAllUsersScopeOrder : IAggregateUsersOrder
+    {
+    }
+
     public abstract class PlayCountTotalOrderBase : UserDataOrder, IAggregateUsersOrder
     {
         private List<User> _aggregateUsers = [];
@@ -206,7 +217,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    public class PlayCountTotalOrder : PlayCountTotalOrderBase
+    public class PlayCountTotalOrder : PlayCountTotalOrderBase, IAllUsersScopeOrder
     {
         public override string Name => "PlayCount (all users) Ascending";
         protected override bool IsDescending => false;
@@ -222,7 +233,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    public class PlayCountTotalOrderDesc : PlayCountTotalOrderBase
+    public class PlayCountTotalOrderDesc : PlayCountTotalOrderBase, IAllUsersScopeOrder
     {
         public override string Name => "PlayCount (all users) Descending";
         protected override bool IsDescending => true;
@@ -238,14 +249,39 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    // Backward-compat aliases for previously saved sort names.
-    public class PlayCountSelectedUsersTotalOrder : PlayCountTotalOrder
+    // Backward-compat aliases for previously saved sort names. These deliberately inherit from
+    // PlayCountTotalOrderBase directly (NOT from PlayCountTotalOrder/Desc above) so they do not
+    // pick up IAllUsersScopeOrder - they keep the original playlist-scoped ("selected users")
+    // resolution rather than expanding to every server user.
+    public class PlayCountSelectedUsersTotalOrder : PlayCountTotalOrderBase
     {
         public override string Name => "PlayCount (selected users total) Ascending";
+        protected override bool IsDescending => false;
+
+        protected override int GetUserDataValue(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
+        }
     }
 
-    public class PlayCountSelectedUsersTotalOrderDesc : PlayCountTotalOrderDesc
+    public class PlayCountSelectedUsersTotalOrderDesc : PlayCountTotalOrderBase
     {
         public override string Name => "PlayCount (selected users total) Descending";
+        protected override bool IsDescending => true;
+
+        protected override int GetUserDataValue(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
+        }
     }
 }
