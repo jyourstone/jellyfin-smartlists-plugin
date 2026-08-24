@@ -49,8 +49,21 @@ Sort by user ratings. Higher ratings first when descending.
 ### Play Count (owner)
 Sort by how many times the playlist/collection owner has played each item. Useful for finding least-played or most-played content.
 
+### Play Count (all users)
+Sort by the combined play count of **every user on the server**, not just the users the list is shared with. Useful for "most popular in this household" lists.
+
+For containers (series, seasons, albums) each user's contribution is the number of times they have played the container *all the way through* — the lowest play count among its episodes or tracks — and those per-user figures are then added together. A series where every user has left a few episodes unwatched therefore scores 0, the same way **Play Count (owner)** already does for a single user.
+
 ### Last Played (owner)
 Sort by when the playlist/collection owner last played each item. Great for rediscovering content or finding recently watched items. Like Date Created, uses day-level precision when combined with secondary sorts.
+
+### Last Played (all users)
+Sort by the most recent time **any user on the server** played each item. Same day-level precision rule as Last Played (owner) when combined with secondary sorts.
+
+!!! note "How the all-users sorts read your library"
+    Both all-users sorts look up playback for every user on the server, so they do more work per refresh than their owner-scoped counterparts — noticeable on servers with many users and very large lists.
+
+    Playback history outlives visibility: a user keeps their play count for an item even after a library grant is revoked or a parental rating starts hiding it. The all-users sorts count that history, so a container's score can include children that not every user can currently see. The owner-scoped sorts behave the same way.
 
 ### Runtime
 Sort by the duration or runtime of items in minutes.
@@ -315,6 +328,10 @@ Use the same settings as above, but set **Sort By** to **Play Count (owner)** an
 **Example: most-listened tracks from one random artist**
 
 Use the same settings as above, but set **Sort By** to **Play Count (owner)** and **Sort Order** to **Descending**.
+
+**Example: the household's most-played tracks from one random artist**
+
+Use the same settings as above, but set **Sort By** to **Play Count (all users)** and **Sort Order** to **Descending**, so the ranking reflects everyone's listening rather than only your own.
 
 **Other examples**:
 

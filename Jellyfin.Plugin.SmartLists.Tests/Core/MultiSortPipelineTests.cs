@@ -468,8 +468,6 @@ public class MultiSortPipelineTests
         "PlayCount (owner) Descending",
         "PlayCount (all users) Ascending",
         "PlayCount (all users) Descending",
-        "PlayCount (selected users total) Ascending",
-        "PlayCount (selected users total) Descending",
         "LastPlayed (owner) Ascending",
         "LastPlayed (owner) Descending",
         "LastPlayed (all users) Ascending",

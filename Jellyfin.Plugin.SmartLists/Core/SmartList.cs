@@ -54,9 +54,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // Item-to-group mappings for per-group limiting (populated during filtering when per-group MaxItems are set)
         private readonly ConcurrentDictionary<Guid, List<int>> _itemGroupMappings = new();
 
-        // Playlist user IDs (normalized GUID strings), used by aggregate user-based sorts.
-        private readonly List<string> _playlistUserIds = [];
-
         // OPTIMIZATION: Static cache for compiled rules to avoid recompilation
         private static readonly ConcurrentDictionary<string, List<List<Func<Operand, bool>>>> _ruleCache = new();
 
@@ -98,8 +95,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ExpressionSets = [];
 
             InitializeFromDto(dto);
-
-            _playlistUserIds = CollectPlaylistUserIds(dto);
         }
 
         public SmartList(SmartCollectionDto dto)
@@ -120,34 +115,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ExpressionSets = [];
 
             InitializeFromDto(dto);
-
-            if (Guid.TryParse(dto.UserId, out var ownerUserId) && ownerUserId != Guid.Empty)
-            {
-                _playlistUserIds = [ownerUserId.ToString("N")];
-            }
-        }
-
-        private static List<string> CollectPlaylistUserIds(SmartPlaylistDto dto)
-        {
-            var userIds = new List<string>();
-
-            if (dto.UserPlaylists != null)
-            {
-                foreach (var mapping in dto.UserPlaylists)
-                {
-                    if (!string.IsNullOrEmpty(mapping.UserId) && Guid.TryParse(mapping.UserId, out var userId) && userId != Guid.Empty)
-                    {
-                        userIds.Add(userId.ToString("N"));
-                    }
-                }
-            }
-
-            if (userIds.Count == 0 && !string.IsNullOrEmpty(dto.UserId) && Guid.TryParse(dto.UserId, out var legacyUserId) && legacyUserId != Guid.Empty)
-            {
-                userIds.Add(legacyUserId.ToString("N"));
-            }
-
-            return [.. userIds.Distinct(StringComparer.OrdinalIgnoreCase)];
         }
 
         /// <summary>
@@ -794,7 +761,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             // Clear similarity scores from any previous runs
             _similarityScores.Clear();
-
+            
             // Clear item-group mappings from any previous runs
             _itemGroupMappings.Clear();
 
@@ -1108,7 +1075,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     batchSize = 300; // Default to 300 if invalid
                 }
                 var chunkSize = batchSize;
-
+                
                 // itemsArray already materialized above to avoid double enumeration
                 var totalItems = itemsArray.Length;
 
@@ -1140,7 +1107,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         var chunkResults = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
                             fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, candidateSet, refreshCache);
                         results.AddRange(chunkResults);
-
+                        
                         // Report progress after chunk is complete
                         progressCallback?.Invoke(chunkEnd, totalItems);
 
@@ -1193,14 +1160,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
 
-                // Configure aggregate-user ('(all users)'/'(selected users total)') orders and warm
-                // their container child caches against the FINAL filtered/expanded item set, not the
-                // raw (media-type-only-filtered) candidate pool - warming every Series/Season/
-                // MusicAlbum in an unfiltered pool would issue DB queries for containers the list's
-                // own rules are about to discard anyway. This must still run before
-                // ApplyPerGroupLimits below, since it calls ApplyMultipleOrders per rule group and
-                // would otherwise sort with unconfigured aggregate users.
-                ConfigureAggregateUserOrders(expandedResults, libraryManager, user, refreshCache, logger);
+                // Configure '(all users)' orders before any sorting runs - ApplyPerGroupLimits below
+                // calls ApplyMultipleOrders per rule group and would otherwise sort with
+                // unconfigured aggregate users.
+                ConfigureAggregateUserOrders(user, logger);
 
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
@@ -1308,8 +1271,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         private bool UsesRuleBlockOrdering()
         {
-            return Orders?.Any(order =>
-                order is Orders.RuleBlockOrder ||
+            return Orders?.Any(order => 
+                order is Orders.RuleBlockOrder || 
                 order is Orders.RuleBlockOrderDesc) == true;
         }
 
@@ -1446,7 +1409,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Group items by their matching rule groups
                 var itemsByGroup = new Dictionary<int, List<BaseItem>>();
-
+                
                 // Initialize all groups (even empty ones)
                 for (int i = 0; i < ExpressionSets.Count; i++)
                 {
@@ -1509,7 +1472,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (groupMaxItems > 0 && availableItems.Count > groupMaxItems)
                     {
                         selectedItems = availableItems.Take(groupMaxItems).ToList();
-                        logger?.LogDebug("Rule group {GroupIndex} limited from {Available} to {Limited} items",
+                        logger?.LogDebug("Rule group {GroupIndex} limited from {Available} to {Limited} items", 
                             groupIndex, availableItems.Count, selectedItems.Count);
                     }
                     else
@@ -1524,7 +1487,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         consumedItems.Add(item.Id);
                         resultList.Add(item);
-
+                        
                         // Update the group mapping to show this item was contributed by this specific block
                         // This overrides the original multi-group mapping (e.g., item matching both "crowd" and "german")
                         _itemGroupMappings[item.Id] = new List<int> { groupIndex };
@@ -1698,8 +1661,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 case "Equal":
                     // Check both exact name match and name without prefix/suffix
                     // This handles cases where collections have prefix/suffix applied but users enter base name
-                    return collections.Any(c =>
-                        c != null &&
+                    return collections.Any(c => 
+                        c != null && 
                         (c.Equals(expr.TargetValue, StringComparison.OrdinalIgnoreCase) ||
                          NameFormatter.StripPrefixAndSuffix(c).Equals(expr.TargetValue, StringComparison.OrdinalIgnoreCase)));
 
@@ -2590,11 +2553,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// Creates composite sort keys for all items and applies multi-level sorting.
         /// </summary>
         internal static IEnumerable<BaseItem> ApplySortingCore(
-            List<BaseItem> itemsList,
-            List<Order> orders,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
+            List<BaseItem> itemsList, 
+            List<Order> orders, 
+            User user, 
+            IUserDataManager? userDataManager, 
+            ILogger? logger, 
             RefreshQueueService.RefreshCache refreshCache)
         {
             if (orders == null || orders.Count == 0 || itemsList.Count == 0)
@@ -2718,7 +2681,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is CommunityRatingOrderDesc ||
                    order is PlayCountOrderDesc ||
                    order is PlayCountTotalOrderDesc ||
-                   order is PlayCountSelectedUsersTotalOrderDesc ||
                    order is LastPlayedTotalOrderDesc ||
                    order is LastPlayedOrderDesc ||
                    order is RuntimeOrderDesc ||
@@ -2903,7 +2865,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Cheap groups (FileInfo, LibraryInfo, AudioMetadata, TextContent, ItemLists, UserData, Dates) don't require two-phase filtering
                 // Use the centralized definition from FieldRegistry to ensure consistency
                 var cheapGroups = FieldRegistry.CheapExtractionGroups;
-
+                
                 var expensiveGroups = fieldReqs.RequiredGroups & ~cheapGroups;
                 var needsExpensiveFields = expensiveGroups != ExtractionGroup.None;
 
@@ -3512,12 +3474,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return null;
         }
 
-        private void ConfigureAggregateUserOrders(
-            IReadOnlyCollection<BaseItem> items,
-            ILibraryManager libraryManager,
-            User currentUser,
-            RefreshQueueService.RefreshCache refreshCache,
-            ILogger? logger)
+        /// <summary>
+        /// Injects the user set that "(all users)" sorts aggregate over. Resolution is every user on
+        /// the server - that is the whole point of the name - not just the users this particular
+        /// list happens to be shared with.
+        ///
+        /// The container child caches those sorts read are NOT warmed here: they populate on the
+        /// read path (<see cref="OperandFactory.GetAggregationChildren"/>), because the sorts that
+        /// use them do not all run at the same point in the refresh pipeline.
+        /// </summary>
+        internal void ConfigureAggregateUserOrders(User currentUser, ILogger? logger)
         {
             if (Orders == null || Orders.Count == 0)
             {
@@ -3530,135 +3496,41 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 return;
             }
 
-            // "(all users)" sorts must aggregate over EVERY user on the server - that's the whole
-            // point of the name - not just the users this particular list happens to be shared
-            // with. Legacy "(selected users total)" aliases keep the original, narrower
-            // playlist-scoped resolution so previously-saved lists don't silently change behavior.
-            var allUsersOrders = aggregateOrders.OfType<IAllUsersScopeOrder>().ToList();
-            var selectedUsersOrders = aggregateOrders.Where(o => o is not IAllUsersScopeOrder).ToList();
-
-            if (allUsersOrders.Count > 0)
+            var serverUsers = ResolveAllServerUsers(currentUser, logger);
+            foreach (var order in aggregateOrders)
             {
-                var serverUsers = ResolveAllServerUsers(currentUser, logger);
-                foreach (var order in allUsersOrders)
-                {
-                    order.SetAggregateUsers(serverUsers);
-                }
+                order.SetAggregateUsers(serverUsers);
             }
-
-            if (selectedUsersOrders.Count > 0)
-            {
-                var resolvedUsers = ResolvePlaylistScopedUsers(currentUser, logger);
-                foreach (var order in selectedUsersOrders)
-                {
-                    order.SetAggregateUsers(resolvedUsers);
-                }
-            }
-
-            // Container aggregation (Series/Season/MusicAlbum -> children) reads per-container
-            // child caches that are otherwise only ever warmed for whichever single user happens
-            // to trigger extraction of an unrelated rule field. These caches are unfiltered by user
-            // visibility and keyed by container id only, so a single warm-up covers every aggregate
-            // user - see WarmAggregateUserContainerCaches for why.
-            WarmAggregateUserContainerCaches(items, libraryManager, refreshCache, logger);
         }
 
         /// <summary>
-        /// Resolves every user known to the server, for orders scoped to literally "all users"
-        /// (as opposed to only the users a list is shared with). Falls back to the current user if
-        /// the user manager is unavailable or resolution fails, so aggregate sorts degrade to
-        /// owner-only semantics rather than throwing.
+        /// Resolves every user known to the server. Falls back to the current user if the user
+        /// manager is unavailable or resolution fails, so aggregate sorts degrade to owner-only
+        /// semantics rather than throwing - logged at Warning, because the list still says
+        /// "all users" while ranking by one user's history.
         /// </summary>
         private List<User> ResolveAllServerUsers(User currentUser, ILogger? logger)
         {
-            if (UserManager == null)
+            if (UserManager != null)
             {
-                logger?.LogDebug("Aggregate all-users sort fallback in '{PlaylistName}': UserManager unavailable, using current user {UserId}", Name, currentUser.Id);
-                return [currentUser];
-            }
-
-            try
-            {
-                var users = PlaylistUserResolver.GetAllUsers(UserManager);
-                if (users.Count > 0)
+                try
                 {
-                    return users;
+                    var users = PlaylistUserResolver.GetAllUsers(UserManager);
+                    if (users.Count > 0)
+                    {
+                        return users;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "Failed to resolve all server users for the all-users sort in '{PlaylistName}'.", Name);
                 }
             }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "Failed to resolve all server users for aggregate sort in '{PlaylistName}'. Falling back to current user.", Name);
-            }
 
+            logger?.LogWarning(
+                "All-users sort in '{PlaylistName}' could not resolve the server's users; falling back to {UserId} only, so the ranking reflects one user's playback rather than everyone's.",
+                Name, currentUser.Id);
             return [currentUser];
-        }
-
-        /// <summary>
-        /// Resolves the users this list is assigned to (its playlist mappings, or the collection
-        /// owner) - the original, narrower resolution preserved for the legacy "(selected users
-        /// total)" sort aliases.
-        /// </summary>
-        private List<User> ResolvePlaylistScopedUsers(User currentUser, ILogger? logger)
-        {
-            var resolvedUsers = new List<User>();
-            foreach (var userId in _playlistUserIds)
-            {
-                if (!Guid.TryParse(userId, out var parsedId) || parsedId == Guid.Empty)
-                {
-                    continue;
-                }
-
-                var targetUser = UserManager?.GetUserById(parsedId);
-                if (targetUser != null)
-                {
-                    resolvedUsers.Add(targetUser);
-                }
-            }
-
-            if (resolvedUsers.Count == 0)
-            {
-                resolvedUsers.Add(currentUser);
-                logger?.LogDebug("Aggregate user sort fallback in '{PlaylistName}': no playlist users resolved, using current user {UserId}", Name, currentUser.Id);
-            }
-
-            return resolvedUsers;
-        }
-
-        /// <summary>
-        /// Proactively populates the per-container aggregation child caches (Series -> episodes,
-        /// Season -> episodes, MusicAlbum -> tracks) for every container candidate in the item pool.
-        /// Without this, PlayCount/LastPlayed aggregate sorts only ever see a warm cache for
-        /// whichever user happened to trigger an unrelated rule's extraction - every OTHER aggregate
-        /// user gets a cache miss and silently falls back to 0 / DateTime.MinValue. These caches are
-        /// deliberately unfiltered by any user's parental-rating/library-access restrictions and
-        /// keyed by container id only (not per-user) - see
-        /// <see cref="RefreshQueueService.RefreshCache.SeriesEpisodesForAggregation"/> - so a single
-        /// warm-up per container covers every aggregate user, not one query per user. Reuses the
-        /// exact same cache-population helpers the normal extraction pipeline uses
-        /// (<see cref="OperandFactory"/>), so a hit here or there is a no-op dictionary lookup, not a
-        /// duplicated query path.
-        /// </summary>
-        private static void WarmAggregateUserContainerCaches(
-            IReadOnlyCollection<BaseItem> items,
-            ILibraryManager libraryManager,
-            RefreshQueueService.RefreshCache refreshCache,
-            ILogger? logger)
-        {
-            foreach (var item in items)
-            {
-                switch (item)
-                {
-                    case Series series:
-                        OperandFactory.GetCachedSeriesEpisodesForAggregation(series.Id, libraryManager, refreshCache, logger);
-                        break;
-                    case Season season:
-                        OperandFactory.GetCachedSeasonEpisodesForAggregation(season.Id, libraryManager, refreshCache, logger);
-                        break;
-                    case MusicAlbum album:
-                        OperandFactory.GetCachedAlbumTracksForAggregation(album.Id, libraryManager, refreshCache, logger);
-                        break;
-                }
-            }
         }
     }
 
@@ -3684,8 +3556,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "PlayCount (owner) Descending", () => new PlayCountOrderDesc() },
             { "PlayCount (all users) Ascending", () => new PlayCountTotalOrder() },
             { "PlayCount (all users) Descending", () => new PlayCountTotalOrderDesc() },
-            { "PlayCount (selected users total) Ascending", () => new PlayCountSelectedUsersTotalOrder() },
-            { "PlayCount (selected users total) Descending", () => new PlayCountSelectedUsersTotalOrderDesc() },
             { "LastPlayed (owner) Ascending", () => new LastPlayedOrder() },
             { "LastPlayed (owner) Descending", () => new LastPlayedOrderDesc() },
             { "LastPlayed (all users) Ascending", () => new LastPlayedTotalOrder() },
@@ -3856,9 +3726,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Only add each parent group when the folded IncludeParent*Effective flag is true.
                 // OnlyParent* alone does NOT trigger extraction: with no source it compiles to
                 // constant-false (Engine), so requesting the walk would be wasted work.
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags", expr.IncludeParentTagsEffective, ExtractionGroup.ParentTags);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentTagsEffective,    ExtractionGroup.ParentTags);
                 AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentStudiosEffective, ExtractionGroup.ParentStudios);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres", expr.IncludeParentGenresEffective, ExtractionGroup.ParentGenres);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentGenresEffective,  ExtractionGroup.ParentGenres);
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")

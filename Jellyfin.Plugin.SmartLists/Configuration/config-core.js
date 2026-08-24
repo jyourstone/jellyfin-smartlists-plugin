@@ -3,7 +3,7 @@
 
     // Constants
     SmartLists.PLUGIN_ID = "A0A2A7B2-747A-4113-8B39-757A9D267C79";
-
+    
     // Determine if we're in user mode (set by user-playlists.html before loading this script).
     // This value is refreshed for each page in setPageContext() to avoid SPA navigation leaks.
     SmartLists.IS_USER_PAGE = SmartLists.IS_USER_PAGE || false;
@@ -936,12 +936,12 @@
     // Helper function to create a link to the status page (or just text for user pages)
     SmartLists.createStatusPageLink = function (linkText) {
         linkText = linkText || 'status page';
-
+        
         // On user pages, users can't access the status tab, so just return plain text
         if (SmartLists.IS_USER_PAGE) {
             return '';  // Return empty string to remove the reference entirely
         }
-
+        
         // Create a unique ID for the link to attach event listener
         var linkId = 'status-link-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
         var linkHtml = '<a href="#" id="' + linkId + '">' + linkText + '</a>';

@@ -859,7 +859,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// Gets cached audio tracks for a MusicAlbum, visible to a SPECIFIC user, using cache to avoid
         /// redundant database queries. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate
         /// rule-field calculations, where visibility legitimately matters. Aggregate (all-users)
-        /// scoring must NOT use this - see <see cref="GetCachedAlbumTracksForAggregation"/>.
+        /// scoring must NOT use this - see <see cref="GetAggregationChildren"/>.
         /// </summary>
         internal static BaseItem[] GetCachedAlbumTracks(
             Guid albumId,
@@ -890,40 +890,80 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Gets ALL audio tracks for a MusicAlbum for aggregate PlayCount/LastPlayedDate scoring,
-        /// deliberately UNFILTERED by any user's parental-rating/library-access restrictions - see
-        /// <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/> for why.
+        /// Returns the children a container item aggregates over (Series/Season -> episodes,
+        /// MusicAlbum -> tracks), or null when the item is not a container type.
+        ///
+        /// These lists are deliberately UNFILTERED by any user's parental-rating/library-access
+        /// restrictions and keyed by container id only - see
+        /// <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/> for why - so a
+        /// single entry serves every user being scored.
+        ///
+        /// Population happens here, on the read path, rather than in a warm-up pass owned by one
+        /// caller. Every container-aggregating sort funnels through this method - LastPlayed and
+        /// PlayCount (owner and all-users) plus Round Robin "Least Recently Watched" - and they do
+        /// not all run at the same point in the refresh pipeline, so a warm-up placed to suit one of
+        /// them leaves the others reading a cold cache.
         /// </summary>
-        internal static BaseItem[] GetCachedAlbumTracksForAggregation(
-            Guid albumId,
-            ILibraryManager libraryManager,
+        internal static BaseItem[]? GetAggregationChildren(
+            BaseItem item,
+            RefreshQueueServiceRefreshCache cache,
+            ILogger? logger = null)
+        {
+            return item switch
+            {
+                // IsVirtualItem/User filters mirror each type's per-user twin above, so the two
+                // cache families only ever differ in the visibility filter they deliberately drop.
+                Series => GetOrFetchAggregationChildren(cache.SeriesEpisodesForAggregation, item, BaseItemKind.Episode, excludeVirtual: true, cache, logger),
+                Season => GetOrFetchAggregationChildren(cache.SeasonEpisodesForAggregation, item, BaseItemKind.Episode, excludeVirtual: true, cache, logger),
+                MusicAlbum => GetOrFetchAggregationChildren(cache.AlbumTracksForAggregation, item, BaseItemKind.Audio, excludeVirtual: false, cache, logger),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Cache-or-fetch for one container's aggregation children. With no library manager on the
+        /// cache (unit tests, which seed the dictionaries directly) a miss stays a miss rather than
+        /// hitting a database that isn't there.
+        /// </summary>
+        private static BaseItem[] GetOrFetchAggregationChildren(
+            ConcurrentDictionary<Guid, BaseItem[]> store,
+            BaseItem container,
+            BaseItemKind childKind,
+            bool excludeVirtual,
             RefreshQueueServiceRefreshCache cache,
             ILogger? logger)
         {
-            if (cache.AlbumTracksForAggregation.TryGetValue(albumId, out var cachedTracks))
+            if (store.TryGetValue(container.Id, out var cached))
             {
-                return cachedTracks;
+                return cached;
             }
 
-            var tracks = libraryManager.GetItemList(new InternalItemsQuery
+            if (cache.LibraryManager == null)
             {
-                ParentId = albumId,
-                IncludeItemTypes = [BaseItemKind.Audio],
+                return [];
+            }
+
+            var children = cache.LibraryManager.GetItemList(new InternalItemsQuery
+            {
+                ParentId = container.Id,
+                IncludeItemTypes = [childKind],
                 Recursive = true,
+                IsVirtualItem = excludeVirtual ? false : null,
             }).ToArray();
 
-            var albumName = libraryManager.GetItemById(albumId)?.Name ?? "Unknown";
-            logger?.LogDebug("Fetched {TrackCount} audio tracks for album '{AlbumName}' ({AlbumId}) for aggregate scoring (unfiltered by user visibility)", tracks.Length, albumName, albumId);
+            logger?.LogDebug(
+                "Fetched {ChildCount} {ChildKind} children for '{ContainerName}' ({ContainerId}) for aggregate scoring (unfiltered by user visibility)",
+                children.Length, childKind, container.Name, container.Id);
 
-            cache.AlbumTracksForAggregation[albumId] = tracks;
-            return tracks;
+            store[container.Id] = children;
+            return children;
         }
 
         /// <summary>
         /// Gets cached episodes for a Season, visible to a SPECIFIC user, using cache to avoid
         /// redundant database queries. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate
         /// rule-field calculations, where visibility legitimately matters. Aggregate (all-users)
-        /// scoring must NOT use this - see <see cref="GetCachedSeasonEpisodesForAggregation"/>.
+        /// scoring must NOT use this - see <see cref="GetAggregationChildren"/>.
         /// </summary>
         internal static BaseItem[] GetCachedSeasonEpisodes(
             Guid seasonId,
@@ -951,37 +991,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             logger?.LogDebug("Fetched {EpisodeCount} episodes for season '{SeasonName}' ({SeasonId}), user {UserId}", episodes.Length, seasonName, seasonId, user.Id);
 
             cache.SeasonEpisodes[key] = episodes;
-            return episodes;
-        }
-
-        /// <summary>
-        /// Gets ALL episodes of a Season for aggregate PlayCount/LastPlayedDate scoring, deliberately
-        /// UNFILTERED by any user's parental-rating/library-access restrictions - see
-        /// <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/> for why.
-        /// </summary>
-        internal static BaseItem[] GetCachedSeasonEpisodesForAggregation(
-            Guid seasonId,
-            ILibraryManager libraryManager,
-            RefreshQueueServiceRefreshCache cache,
-            ILogger? logger)
-        {
-            if (cache.SeasonEpisodesForAggregation.TryGetValue(seasonId, out var cachedEpisodes))
-            {
-                return cachedEpisodes;
-            }
-
-            var episodes = libraryManager.GetItemList(new InternalItemsQuery
-            {
-                ParentId = seasonId,
-                IncludeItemTypes = [BaseItemKind.Episode],
-                Recursive = true,
-                IsVirtualItem = false,
-            }).ToArray();
-
-            var seasonName = libraryManager.GetItemById(seasonId)?.Name ?? "Unknown";
-            logger?.LogDebug("Fetched {EpisodeCount} episodes for season '{SeasonName}' ({SeasonId}) for aggregate scoring (unfiltered by user visibility)", episodes.Length, seasonName, seasonId);
-
-            cache.SeasonEpisodesForAggregation[seasonId] = episodes;
             return episodes;
         }
 
@@ -1279,12 +1288,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             categorized.AllPeople = allPeopleNames.ToList();
             categorized.ActorRoles = actorRolesSet.ToList();
-
+            
             if (logger != null && actorRolesSet.Count > 0)
             {
                 logger.LogDebug("SmartLists extracted {RoleCount} unique actor roles from cast", actorRolesSet.Count);
             }
-
+            
             return categorized;
         }
 
@@ -1352,7 +1361,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     {
                         isFavorite = boolValue;
                     }
-                    else if (isFavoriteValue.GetType().IsGenericType &&
+                    else if (isFavoriteValue.GetType().IsGenericType && 
                              isFavoriteValue.GetType().GetGenericTypeDefinition() == typeof(Nullable<>) &&
                              isFavoriteValue.GetType().GetGenericArguments()[0] == typeof(bool))
                     {
@@ -2491,7 +2500,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var itemList = items.ToList();
-
+            
             // Skip if cache already has entries for these items
             var itemsToProcess = itemList.Where(item => !cache.ItemPeople.ContainsKey(item.Id)).ToList();
             if (itemsToProcess.Count == 0)
@@ -2697,13 +2706,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 Genres = extractItemLists && baseItem.Genres is not null ? [.. baseItem.Genres] : [],
                 Studios = extractItemLists && baseItem.Studios is not null ? [.. baseItem.Studios] : [],
                 Tags = extractItemLists && baseItem.Tags is not null ? [.. baseItem.Tags] : [],
-
+                
                 ProductionYear = extractDates ? baseItem.ProductionYear.GetValueOrDefault() : 0,
                 DateCreated = extractDates ? SafeToUnixTimeSeconds(baseItem.DateCreated) : 0,
                 DateLastRefreshed = extractDates ? SafeToUnixTimeSeconds(baseItem.DateLastRefreshed) : 0,
                 DateLastSaved = extractDates ? SafeToUnixTimeSeconds(baseItem.DateLastSaved) : 0,
                 ReleaseDate = extractDates ? DateUtils.GetReleaseDateUnixTimestamp(baseItem) : 0,
-
+                
                 OfficialRating = baseItem.OfficialRating ?? "",
                 CustomRating = baseItem.CustomRating ?? "",
 
@@ -2766,7 +2775,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                                 // The initial playbackStatus was calculated with null userData, so it's "Unplayed"
                                 // but reflectedUserData might have actual playback information
                                 var recalculatedPlaybackStatus = CalculatePlaybackStatusFromReflected(reflectedUserData);
-
+                                
                                 // Use our helper method to populate user data consistently
                                 // Normalize to "N" format (no dashes) to match UserPlaylists format
                                 PopulateUserData(operand, user.Id.ToString("N"), recalculatedPlaybackStatus, reflectedUserData, baseItem, user, libraryManager, userDataManager, cache, logger);
@@ -2794,8 +2803,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             }
             else
             {
-                // Fast path: Just set empty/default values without logic
-                SetUserDataFallbacks(operand, user.Id.ToString("N"), "Unplayed");
+                 // Fast path: Just set empty/default values without logic
+                 SetUserDataFallbacks(operand, user.Id.ToString("N"), "Unplayed");
             }
 
             // Extract user-specific data for additional users
@@ -2809,7 +2818,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                         {
                             // Normalize the userId for dictionary keys
                             var normalizedUserId = userGuid.ToString("N");
-
+                            
                             // Try to get user by ID
                             try
                             {
@@ -2929,7 +2938,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 {
                     operand.AudioLanguages = [];
                 }
-
+                
                 // Extract subtitle languages when needed (same media stream data source)
                 if (extractSubtitleLanguages)
                 {
@@ -3277,8 +3286,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// LastPlayedDate rule-field calculations (via <see cref="GetValidSeriesEpisodes"/>), where a
         /// user's current parental-rating/library-access restrictions legitimately matter.
         /// Aggregate (all-users) PlayCount/LastPlayedDate scoring must NOT use this method - see
-        /// <see cref="GetCachedSeriesEpisodesForAggregation"/>, which is deliberately unfiltered and
-        /// cached separately so the two purposes can never collide.
+        /// <see cref="GetAggregationChildren"/>, which is deliberately unfiltered and cached
+        /// separately so the two purposes can never collide.
         /// </summary>
         /// <param name="seriesId">The series ID to get episodes for</param>
         /// <param name="user">User for the query context</param>
@@ -3302,7 +3311,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             logger?.LogDebug("[GetCachedSeriesEpisodes] Fetching episodes for series {SeriesId}, user {UserId} from database (cache miss)", seriesId, user.Id);
 
             BaseItem[] episodes;
-
+            
             if (isVirtualItem.HasValue)
             {
                 // Use GetItemList when IsVirtualItem filter is specified (preserves IsVirtualItem semantics)
@@ -3334,35 +3343,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 episodes.Length, seriesNameForLog, seriesId, user.Id);
 
             cache.SeriesEpisodes[key] = episodes;
-            return episodes;
-        }
-
-        /// <summary>
-        /// Gets ALL episodes of a series for aggregate PlayCount/LastPlayedDate/PlaybackStatus
-        /// scoring, deliberately UNFILTERED by any user's parental-rating/library-access
-        /// restrictions - see <see cref="RefreshQueueServiceRefreshCache.SeriesEpisodesForAggregation"/>
-        /// for why. Keyed by series id only, so it is populated (and warmed) once regardless of how
-        /// many aggregate users a sort needs to score.
-        /// </summary>
-        internal static BaseItem[] GetCachedSeriesEpisodesForAggregation(Guid seriesId, ILibraryManager libraryManager, RefreshQueueServiceRefreshCache cache, ILogger? logger)
-        {
-            if (cache.SeriesEpisodesForAggregation.TryGetValue(seriesId, out var cachedEpisodes))
-            {
-                return cachedEpisodes;
-            }
-
-            var episodes = libraryManager.GetItemList(new InternalItemsQuery
-            {
-                ParentId = seriesId,
-                IncludeItemTypes = [BaseItemKind.Episode],
-                Recursive = true,
-                IsVirtualItem = false,
-            }).ToArray();
-
-            var seriesName = libraryManager.GetItemById(seriesId)?.Name ?? "Unknown";
-            logger?.LogDebug("Fetched {EpisodeCount} episodes for series '{SeriesName}' ({SeriesId}) for aggregate scoring (unfiltered by user visibility)", episodes.Length, seriesName, seriesId);
-
-            cache.SeriesEpisodesForAggregation[seriesId] = episodes;
             return episodes;
         }
 

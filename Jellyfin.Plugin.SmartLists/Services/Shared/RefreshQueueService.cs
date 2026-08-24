@@ -75,7 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         // Cache management - per-user caches to avoid rebuilding when switching between users
         private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<MediaTypesKey, Lazy<BaseItem[]>>> _userCaches = new();
-
+        
         // Per-user RefreshCache for expensive operations (People, Collections, Series metadata, UserData, MediaStreams)
         private readonly ConcurrentDictionary<Guid, RefreshCache> _refreshCaches = new();
 
@@ -431,7 +431,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             if (userPlaylists != null && userPlaylists.Count > 0)
             {
                 _logger.LogDebug("Processing multi-user playlist '{PlaylistName}' with {UserCount} users", dto.Name, userPlaylists.Count);
-
+                
                 var validUserCount = 0;
                 foreach (var userMapping in userPlaylists)
                 {
@@ -456,7 +456,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Warn if no valid users were processed
                 if (validUserCount == 0)
                 {
-                    _logger.LogWarning("Playlist '{PlaylistName}' had no valid users to refresh (all {UserCount} users were invalid or missing)",
+                    _logger.LogWarning("Playlist '{PlaylistName}' had no valid users to refresh (all {UserCount} users were invalid or missing)", 
                         dto.Name, userPlaylists.Count);
                 }
             }
@@ -680,7 +680,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         private RefreshCache GetOrCreateRefreshCacheForUser(Guid userId)
         {
-            return _refreshCaches.GetOrAdd(userId, _ => new RefreshCache());
+            return _refreshCaches.GetOrAdd(userId, _ => new RefreshCache { LibraryManager = _libraryManager });
         }
 
         /// <summary>
@@ -773,6 +773,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public sealed class RefreshCache
         {
             /// <summary>
+            /// Library manager used to populate the *ForAggregation child caches on a miss, set when
+            /// the cache is created. Null in unit tests, which seed those dictionaries directly - a
+            /// miss then stays a miss instead of reaching for a database that isn't there.
+            /// </summary>
+            public ILibraryManager? LibraryManager { get; set; }
+
+            /// <summary>
             /// Cached episode list for a Series, scoped to a SPECIFIC user's current library/parental
             /// visibility. Used by NextUnwatched and by the per-user PlaybackStatus/LastPlayedDate
             /// rule-field calculations, where visibility legitimately matters. Aggregate
@@ -863,12 +870,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, AncestorValues> AncestorValuesById { get; } = new();
 
             public ConcurrentDictionary<Guid, CategorizedPeople> ItemPeople { get; } = new();
-
+            
             // User-specific data cache - keyed by (ItemId, UserId) to support playlist user + additional users in rules
             public ConcurrentDictionary<(Guid ItemId, Guid UserId), MediaBrowser.Controller.Entities.UserItemData> UserDataCache { get; } = new();
             // Tracks (ItemId, UserId) pairs for which GetUserData returned null, to avoid repeated DB calls.
             public ConcurrentDictionary<(Guid ItemId, Guid UserId), byte> UserDataNegativeCache { get; } = new();
-
+            
             // Media streams cache - keyed by ItemId only (user-agnostic)
             public ConcurrentDictionary<Guid, IEnumerable<object>> MediaStreamsCache { get; } = new();
 

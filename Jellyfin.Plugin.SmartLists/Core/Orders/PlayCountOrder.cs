@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
@@ -13,20 +14,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SmartLists.Core.Orders
 {
+    /// <summary>
+    /// An order whose sort key aggregates over a set of users rather than the single user the
+    /// refresh is running for. SmartList resolves every user on the server and injects them via
+    /// <see cref="SetAggregateUsers"/> before sorting; an order that is never configured falls back
+    /// to owner-only semantics rather than scoring everything as zero.
+    /// </summary>
     public interface IAggregateUsersOrder
     {
         void SetAggregateUsers(IEnumerable<User> users);
-    }
 
-    /// <summary>
-    /// Marks an <see cref="IAggregateUsersOrder"/> as scoped to EVERY user on the server ("all
-    /// users"), as opposed to only the users a list happens to be shared with. SmartList uses this
-    /// to decide whether to resolve aggregate users via <see cref="Utilities.PlaylistUserResolver.GetAllUsers"/>
-    /// or via the list's own playlist-scoped user set. Legacy "(selected users total)" aliases
-    /// deliberately do NOT implement this - they keep the original, narrower resolution.
-    /// </summary>
-    public interface IAllUsersScopeOrder : IAggregateUsersOrder
-    {
+        /// <summary>Deduplicates and drops invalid users, shared by every implementation.</summary>
+        static List<User> NormalizeUsers(IEnumerable<User> users)
+        {
+            ArgumentNullException.ThrowIfNull(users);
+
+            return users
+                .Where(u => u != null && u.Id != Guid.Empty)
+                .GroupBy(u => u.Id)
+                .Select(g => g.First())
+                .ToList();
+        }
     }
 
     public abstract class PlayCountTotalOrderBase : UserDataOrder, IAggregateUsersOrder
@@ -34,15 +42,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         private List<User> _aggregateUsers = [];
 
         public void SetAggregateUsers(IEnumerable<User> users)
-        {
-            ArgumentNullException.ThrowIfNull(users);
-
-            _aggregateUsers = users
-                .Where(u => u != null && u.Id != Guid.Empty)
-                .GroupBy(u => u.Id)
-                .Select(g => g.First())
-                .ToList();
-        }
+            => _aggregateUsers = IAggregateUsersOrder.NormalizeUsers(users);
 
         protected int GetTotalPlayCountAcrossUsers(
             BaseItem item,
@@ -140,12 +140,13 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
 
         /// <summary>
-        /// Returns the cached child array for aggregate items (Series → episodes, Season → episodes,
-        /// MusicAlbum → tracks), or null if the item is not an aggregate type or the cache has no
-        /// entry for it. These caches are deliberately unfiltered by any user's parental-rating/
-        /// library-access restrictions (see <c>RefreshCache.SeriesEpisodesForAggregation</c>), and
-        /// keyed by container id only - the child list is the same regardless of which aggregate
-        /// user is being scored.
+        /// Returns the child array for aggregate items (Series → episodes, Season → episodes,
+        /// MusicAlbum → tracks), or null if the item is not an aggregate type or has no children.
+        /// <see cref="OperandFactory.GetAggregationChildren"/> fetches and caches the list on
+        /// demand; it is deliberately unfiltered by any user's parental-rating/library-access
+        /// restrictions (see <c>RefreshCache.SeriesEpisodesForAggregation</c>) and keyed by
+        /// container id only - the child list is the same regardless of which aggregate user is
+        /// being scored.
         ///
         /// All three container types aggregate, matching
         /// <see cref="LastPlayedOrderBase.GetAggregateLastPlayedDate"/>. Series was previously
@@ -156,19 +157,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             BaseItem item,
             RefreshQueueService.RefreshCache refreshCache)
         {
-            if (item is Series && refreshCache.SeriesEpisodesForAggregation.TryGetValue(item.Id, out var seriesEpisodes) && seriesEpisodes.Length > 0)
-            {
-                return seriesEpisodes;
-            }
-            if (item is Season && refreshCache.SeasonEpisodesForAggregation.TryGetValue(item.Id, out var episodes) && episodes.Length > 0)
-            {
-                return episodes;
-            }
-            if (item is MusicAlbum && refreshCache.AlbumTracksForAggregation.TryGetValue(item.Id, out var tracks) && tracks.Length > 0)
-            {
-                return tracks;
-            }
-            return null;
+            var children = OperandFactory.GetAggregationChildren(item, refreshCache);
+            return children is { Length: > 0 } ? children : null;
         }
 
         /// <summary>
@@ -218,7 +208,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    public class PlayCountTotalOrder : PlayCountTotalOrderBase, IAllUsersScopeOrder
+    public class PlayCountTotalOrder : PlayCountTotalOrderBase
     {
         public override string Name => "PlayCount (all users) Ascending";
         protected override bool IsDescending => false;
@@ -234,45 +224,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         }
     }
 
-    public class PlayCountTotalOrderDesc : PlayCountTotalOrderBase, IAllUsersScopeOrder
+    public class PlayCountTotalOrderDesc : PlayCountTotalOrderBase
     {
         public override string Name => "PlayCount (all users) Descending";
-        protected override bool IsDescending => true;
-
-        protected override int GetUserDataValue(
-            BaseItem item,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
-        }
-    }
-
-    // Backward-compat aliases for previously saved sort names. These deliberately inherit from
-    // PlayCountTotalOrderBase directly (NOT from PlayCountTotalOrder/Desc above) so they do not
-    // pick up IAllUsersScopeOrder - they keep the original playlist-scoped ("selected users")
-    // resolution rather than expanding to every server user.
-    public class PlayCountSelectedUsersTotalOrder : PlayCountTotalOrderBase
-    {
-        public override string Name => "PlayCount (selected users total) Ascending";
-        protected override bool IsDescending => false;
-
-        protected override int GetUserDataValue(
-            BaseItem item,
-            User user,
-            IUserDataManager? userDataManager,
-            ILogger? logger,
-            RefreshQueueService.RefreshCache? refreshCache = null)
-        {
-            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
-        }
-    }
-
-    public class PlayCountSelectedUsersTotalOrderDesc : PlayCountTotalOrderBase
-    {
-        public override string Name => "PlayCount (selected users total) Descending";
         protected override bool IsDescending => true;
 
         protected override int GetUserDataValue(

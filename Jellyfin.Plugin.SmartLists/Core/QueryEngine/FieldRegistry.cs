@@ -82,7 +82,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         LibraryInfo = 1 << 14,        // Fields: LibraryName | Cache: LibraryNameById
         AudioMetadata = 1 << 15,      // Fields: Album, Artists, AlbumArtists | No cache (reflection, fast)
         TextContent = 1 << 16,        // Fields: Overview, ProductionLocations, RuntimeMinutes | No cache (property/reflection)
-
+        
         // Optimization Groups: Cheap but Conditional (Tier 1)
         ItemLists = 1 << 17,          // Fields: Genres, Tags, Studios | Array allocations
         UserData = 1 << 18,           // Fields: IsFavorite, PlayCount, Rating, PlaybackStatus, LastPlayedDate | UserDataManager lookup

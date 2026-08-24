@@ -94,7 +94,12 @@ public class TestLibraryManager : DispatchProxy
 
         if (targetMethod?.Name == "GetItemList" && args is { Length: 1 } && args[0] is InternalItemsQuery query && query.ParentId != Guid.Empty)
         {
-            return ItemListByParentId.TryGetValue(query.ParentId, out var children) ? children : new List<BaseItem>();
+            // Fail loudly rather than answering []: an unregistered parent means the test reached a
+            // query it never set up, and a silent empty result would be asserted against as if real.
+            return ItemListByParentId.TryGetValue(query.ParentId, out var children)
+                ? children
+                : throw new NotSupportedException(
+                    $"TestLibraryManager: GetItemList called for unregistered ParentId {query.ParentId}. Seed ItemListByParentId first.");
         }
 
         throw new NotSupportedException(

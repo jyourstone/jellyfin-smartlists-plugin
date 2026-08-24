@@ -13,6 +13,17 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## Unreleased
+
+**Features**
+
+- New **Play Count (all users)** and **Last Played (all users)** sort options. Play Count (all users) adds up every server user's play count; Last Played (all users) takes the most recent date any of them played the item. Useful for "most popular in this household" lists, where the owner-scoped sorts only see one person's viewing ([Sorting](../user-guide/sorting-and-limits.md#play-count-all-users)).
+
+**Bug Fixes**
+
+- Series, seasons and albums now resolve their episodes/tracks whenever a playback sort needs them. Previously **Play Count (owner)**, **Last Played (owner)** and **Least Recently Watched Round Robin** only aggregated a container's children if some unrelated rule on the list happened to have loaded them first; otherwise the container fell back to its own (usually empty) playback row and sorted as never-played.
+
+
 ## v12.0.0.18-rc
 
 *2026-08-24 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.18-rc)*
