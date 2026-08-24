@@ -619,6 +619,37 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return matchingGroups;
         }
 
+        /// <summary>
+        /// Returns the indices of rule groups holding nothing but SimilarTo rules.
+        /// Similarity is scored once per item against the blended reference metadata of every
+        /// SimilarTo rule in the list, so there is no per-group score to tell these groups apart:
+        /// an item that passes the similarity filter belongs to all of them. Callers tag matched
+        /// items with these indices so ApplyPerGroupLimits - which rebuilds the result purely from
+        /// the group mappings - doesn't drop them, and Rule Block Order can place them. The
+        /// consumed-item tracking in ApplyPerGroupLimits then hands each block a different slice
+        /// of the shared pool, the same way it handles two identical rule blocks.
+        /// </summary>
+        private List<int> GetSimilarityOnlyGroupIndices()
+        {
+            var indices = new List<int>();
+
+            if (ExpressionSets == null)
+            {
+                return indices;
+            }
+
+            for (int groupIndex = 0; groupIndex < ExpressionSets.Count; groupIndex++)
+            {
+                if (ExpressionSets[groupIndex]?.Expressions is { Count: > 0 } expressions &&
+                    expressions.All(expr => expr?.MemberName == "SimilarTo"))
+                {
+                    indices.Add(groupIndex);
+                }
+            }
+
+            return indices;
+        }
+
         private bool EvaluateLogicGroups(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
         {
             // For backward compatibility and simple OR logic, check if any group matches
@@ -2957,6 +2988,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     // Special case: Only SimilarTo rules (no compiled rules)
                                     // In this case, start with matches = true and let similarity filter decide
                                     matches = true;
+
+                                    // Similarity-only blocks still have to be tagged when per-group
+                                    // tracking is on - ApplyPerGroupLimits rebuilds the result from
+                                    // the mappings and drops whatever is untagged.
+                                    if (NeedsGroupTracking())
+                                    {
+                                        matchingGroups = GetSimilarityOnlyGroupIndices();
+                                    }
                                 }
                                 else
                                 {
@@ -3205,6 +3244,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     // Special case: Only SimilarTo rules (no compiled rules)
                                     // In this case, start with matches = true and let similarity filter decide
                                     matches = true;
+
+                                    // Similarity-only blocks still have to be tagged when per-group
+                                    // tracking is on - ApplyPerGroupLimits rebuilds the result from
+                                    // the mappings and drops whatever is untagged.
+                                    if (NeedsGroupTracking())
+                                    {
+                                        matchingGroups = GetSimilarityOnlyGroupIndices();
+                                    }
                                 }
                                 else
                                 {
@@ -3342,6 +3389,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             // Special case: Only SimilarTo rules (no compiled rules)
                             // In this case, start with matches = true and let similarity filter decide
                             matches = true;
+
+                            // Similarity-only blocks still have to be tagged when per-group
+                            // tracking is on - ApplyPerGroupLimits rebuilds the result from
+                            // the mappings and drops whatever is untagged.
+                            if (NeedsGroupTracking())
+                            {
+                                matchingGroups = GetSimilarityOnlyGroupIndices();
+                            }
                         }
                         else
                         {
