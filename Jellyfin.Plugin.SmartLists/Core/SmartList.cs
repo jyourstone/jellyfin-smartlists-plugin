@@ -3652,10 +3652,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         OperandFactory.GetCachedSeriesEpisodesForAggregation(series.Id, libraryManager, refreshCache, logger);
                         break;
                     case Season season:
-                        OperandFactory.GetCachedSeasonEpisodes(season.Id, libraryManager, refreshCache, logger);
+                        OperandFactory.GetCachedSeasonEpisodesForAggregation(season.Id, libraryManager, refreshCache, logger);
                         break;
                     case MusicAlbum album:
-                        OperandFactory.GetCachedAlbumTracks(album.Id, libraryManager, refreshCache, logger);
+                        OperandFactory.GetCachedAlbumTracksForAggregation(album.Id, libraryManager, refreshCache, logger);
                         break;
                 }
             }

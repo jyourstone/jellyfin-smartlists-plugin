@@ -423,7 +423,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[season.Id] = children;
+                cache.SeasonEpisodesForAggregation[season.Id] = children;
                 return season;
             })
         };
@@ -432,7 +432,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[album.Id] = children;
+                cache.AlbumTracksForAggregation[album.Id] = children;
                 return album;
             })
         };
@@ -508,7 +508,7 @@ public class UserDataOrderTests
     {
         var cache = new RefreshQueueService.RefreshCache();
         var season = TestItems.SeasonOf("Empty Season");
-        cache.SeasonEpisodes[season.Id] = [];
+        cache.SeasonEpisodesForAggregation[season.Id] = [];
         SeedPlayCount(cache, season, TestItems.User, 3);
 
         var result = PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
@@ -525,7 +525,7 @@ public class UserDataOrderTests
         SeedPlayCount(cache, watchedChild, TestItems.User, 5);
         TestItems.SeedNoUserData(cache, neverPlayedChild, TestItems.User);
         var season = TestItems.SeasonOf("Mixed Season");
-        cache.SeasonEpisodes[season.Id] = [watchedChild, neverPlayedChild];
+        cache.SeasonEpisodesForAggregation[season.Id] = [watchedChild, neverPlayedChild];
 
         var result = PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
 
@@ -533,7 +533,8 @@ public class UserDataOrderTests
     }
 
     /// <summary>Aggregate child lists are shared/unfiltered across every user (see
-    /// RefreshCache.SeriesEpisodesForAggregation and the analogous SeasonEpisodes/AlbumTracks), but
+    /// RefreshCache.SeriesEpisodesForAggregation and the analogous SeasonEpisodesForAggregation/
+    /// AlbumTracksForAggregation), but
     /// each child's playback still comes from that user's own UserItemData row, so the same season
     /// can still report different minimum play counts for different users.</summary>
     [Fact]
@@ -547,7 +548,7 @@ public class UserDataOrderTests
         SeedPlayCount(cache, childA, TestItems.OtherUser, 9);
         SeedPlayCount(cache, childB, TestItems.OtherUser, 9);
         var season = TestItems.SeasonOf("PerUser Season");
-        cache.SeasonEpisodes[season.Id] = [childA, childB];
+        cache.SeasonEpisodesForAggregation[season.Id] = [childA, childB];
 
         Assert.Equal(4, PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), null, cache));
         Assert.Equal(9, PlayCountOrder.GetPlayCountFromUserData(season, TestItems.OtherUser, TestItems.ThrowingUserData(), null, cache));
@@ -892,7 +893,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[season.Id] = children;
+                cache.SeasonEpisodesForAggregation[season.Id] = children;
                 return season;
             })
         };
@@ -901,7 +902,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[album.Id] = children;
+                cache.AlbumTracksForAggregation[album.Id] = children;
                 return album;
             })
         };

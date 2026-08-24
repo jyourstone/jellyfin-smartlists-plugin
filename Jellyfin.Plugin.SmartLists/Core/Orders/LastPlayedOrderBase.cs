@@ -139,9 +139,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             BaseItem[]? children = item switch
             {
-                Season => refreshCache.SeasonEpisodes.TryGetValue(item.Id, out var seasonEpisodes) ? seasonEpisodes : null,
+                Season => refreshCache.SeasonEpisodesForAggregation.TryGetValue(item.Id, out var seasonEpisodes) ? seasonEpisodes : null,
                 Series => refreshCache.SeriesEpisodesForAggregation.TryGetValue(item.Id, out var seriesEpisodes) ? seriesEpisodes : null,
-                MusicAlbum => refreshCache.AlbumTracks.TryGetValue(item.Id, out var tracks) ? tracks : null,
+                MusicAlbum => refreshCache.AlbumTracksForAggregation.TryGetValue(item.Id, out var tracks) ? tracks : null,
                 _ => null
             };
 

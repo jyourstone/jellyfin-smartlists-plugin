@@ -312,7 +312,7 @@ public class RoundRobinLeastRecentlyWatchedTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[season.Id] = children;
+                cache.SeasonEpisodesForAggregation[season.Id] = children;
                 return season;
             })
         };
@@ -321,7 +321,7 @@ public class RoundRobinLeastRecentlyWatchedTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[album.Id] = children;
+                cache.AlbumTracksForAggregation[album.Id] = children;
                 return album;
             })
         };

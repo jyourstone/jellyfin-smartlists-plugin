@@ -793,21 +793,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, BaseItem[]> SeriesEpisodesForAggregation { get; } = new();
 
             /// <summary>
-            /// ALL episodes of a Season for aggregate PlayCount/LastPlayedDate/PlaybackStatus scoring,
-            /// deliberately unfiltered by any user's parental-rating/library-access restrictions (see
-            /// <see cref="SeriesEpisodesForAggregation"/> for why). Season has no NextUnwatched-style
-            /// per-user visibility consumer to collide with, so there is only ever this one cache.
-            /// Keyed by season id only.
+            /// Cached episode list for a Season, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate rule-field
+            /// calculations, where visibility legitimately matters. Aggregate PlayCount/LastPlayedDate
+            /// scoring must NOT read this - see <see cref="SeasonEpisodesForAggregation"/>.
             /// </summary>
-            public ConcurrentDictionary<Guid, BaseItem[]> SeasonEpisodes { get; } = new();
+            public ConcurrentDictionary<(Guid SeasonId, Guid UserId), BaseItem[]> SeasonEpisodes { get; } = new();
 
             /// <summary>
-            /// ALL tracks of a MusicAlbum for aggregate PlayCount/LastPlayedDate/PlaybackStatus
-            /// scoring, deliberately unfiltered by any user's parental-rating/library-access
-            /// restrictions (see <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by
-            /// album id only.
+            /// ALL episodes of a Season for aggregate PlayCount/LastPlayedDate scoring, deliberately
+            /// unfiltered by any user's parental-rating/library-access restrictions (see
+            /// <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by season id only, unlike
+            /// <see cref="SeasonEpisodes"/>.
             /// </summary>
-            public ConcurrentDictionary<Guid, BaseItem[]> AlbumTracks { get; } = new();
+            public ConcurrentDictionary<Guid, BaseItem[]> SeasonEpisodesForAggregation { get; } = new();
+
+            /// <summary>
+            /// Cached track list for a MusicAlbum, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used by the per-user PlaybackStatus/PlayCount/LastPlayedDate rule-field
+            /// calculations, where visibility legitimately matters. Aggregate PlayCount/LastPlayedDate
+            /// scoring must NOT read this - see <see cref="AlbumTracksForAggregation"/>.
+            /// </summary>
+            public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
+
+            /// <summary>
+            /// ALL tracks of a MusicAlbum for aggregate PlayCount/LastPlayedDate scoring, deliberately
+            /// unfiltered by any user's parental-rating/library-access restrictions (see
+            /// <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by album id only, unlike
+            /// <see cref="AlbumTracks"/>.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> AlbumTracksForAggregation { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> CollectionMembershipCache { get; } = new();

@@ -160,11 +160,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
             {
                 return seriesEpisodes;
             }
-            if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(item.Id, out var episodes) && episodes.Length > 0)
+            if (item is Season && refreshCache.SeasonEpisodesForAggregation.TryGetValue(item.Id, out var episodes) && episodes.Length > 0)
             {
                 return episodes;
             }
-            if (item is MusicAlbum && refreshCache.AlbumTracks.TryGetValue(item.Id, out var tracks) && tracks.Length > 0)
+            if (item is MusicAlbum && refreshCache.AlbumTracksForAggregation.TryGetValue(item.Id, out var tracks) && tracks.Length > 0)
             {
                 return tracks;
             }
