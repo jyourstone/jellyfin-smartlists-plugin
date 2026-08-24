@@ -1,18 +1,18 @@
-(function(SmartLists) {
+(function (SmartLists) {
     'use strict';
-    
+
     // Initialize namespace if it doesn't exist
     if (!SmartLists) {
         window.SmartLists = {};
         SmartLists = window.SmartLists;
     }
-    
-    SmartLists.initializeSortSystem = function(page) {
+
+    SmartLists.initializeSortSystem = function (page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
 
         // Abort event listeners of any existing sort boxes before clearing
-        sortsContainer.querySelectorAll('.sort-box').forEach(function(box) {
+        sortsContainer.querySelectorAll('.sort-box').forEach(function (box) {
             if (box._abortController) {
                 box._abortController.abort();
                 box._abortController = null;
@@ -21,27 +21,27 @@
 
         // Clear any existing content
         sortsContainer.innerHTML = '';
-        
+
         // Don't add any sort boxes by default - start empty (will be added with defaults)
         // Just add the "Add Sort" button
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'emby-button raised add-sort-btn';
         addBtn.textContent = '+ Add Sort';
-        addBtn.addEventListener('click', function() {
+        addBtn.addEventListener('click', function () {
             SmartLists.addSortBox(page, null);
         });
         sortsContainer.appendChild(addBtn);
     };
-    
-    SmartLists.createSortField = function(labelText, fieldId, fieldType, options) {
+
+    SmartLists.createSortField = function (labelText, fieldId, fieldType, options) {
         const container = SmartLists.createStyledElement('div', 'sort-field-container', SmartLists.STYLES.sortField);
-        
+
         const label = SmartLists.createStyledElement('label', '', SmartLists.STYLES.sortFieldLabel);
         label.textContent = labelText;
         label.setAttribute('for', fieldId);
         container.appendChild(label);
-        
+
         let input;
         if (fieldType === 'select') {
             input = document.createElement('select');
@@ -59,11 +59,11 @@
 
         input.id = fieldId;
         container.appendChild(input);
-        
+
         return { container: container, input: input };
     };
-    
-    SmartLists.createSortSeparator = function() {
+
+    SmartLists.createSortSeparator = function () {
         const separator = document.createElement('div');
         separator.className = 'sort-separator';
         separator.style.textAlign = 'center';
@@ -74,15 +74,15 @@
         separator.textContent = 'AND THEN';
         return separator;
     };
-    
+
     // Helper function to create "Ignore Article" checkbox
-    SmartLists.createIgnoreArticleCheckbox = function(sortId, checked) {
+    SmartLists.createIgnoreArticleCheckbox = function (sortId, checked) {
         const container = document.createElement('div');
         container.className = 'sort-field-container ignore-article-container';
         container.style.minWidth = '200px';
         container.style.alignItems = 'center';
         container.style.flexDirection = 'column';
-        
+
         // Create checkbox with label
         const checkboxLabel = document.createElement('label');
         checkboxLabel.className = 'emby-checkbox-label';
@@ -90,52 +90,52 @@
         checkboxLabel.style.alignItems = 'center';
         checkboxLabel.style.cursor = 'pointer';
         checkboxLabel.style.marginTop = '0.5em';
-        
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = 'sort-ignore-articles-' + sortId;
         checkbox.className = 'emby-checkbox';
         checkbox.checked = checked || false;
-        
+
         const checkboxText = document.createElement('span');
         checkboxText.className = 'checkboxLabel';
         checkboxText.textContent = 'Ignore Article \'The\'';
         checkboxText.style.fontSize = '0.9em';
         checkboxText.style.paddingLeft = '0.1em';
-        
+
         const checkboxOutline = document.createElement('span');
         checkboxOutline.className = 'checkboxOutline';
-        
+
         const checkedIcon = document.createElement('span');
         checkedIcon.className = 'material-icons checkboxIcon checkboxIcon-checked check';
         checkedIcon.setAttribute('aria-hidden', 'true');
-        
+
         const uncheckedIcon = document.createElement('span');
         uncheckedIcon.className = 'material-icons checkboxIcon checkboxIcon-unchecked';
         uncheckedIcon.setAttribute('aria-hidden', 'true');
-        
+
         checkboxOutline.appendChild(checkedIcon);
         checkboxOutline.appendChild(uncheckedIcon);
-        
+
         checkboxLabel.appendChild(checkbox);
         checkboxLabel.appendChild(checkboxText);
         checkboxLabel.appendChild(checkboxOutline);
-        
+
         container.appendChild(checkboxLabel);
-        
+
         return { container: container, checkbox: checkbox };
     };
 
     // Helper function to sync Sort Order UI based on Sort By value
-    SmartLists.syncSortOrderUI = function(sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer, withinGroupContainer) {
+    SmartLists.syncSortOrderUI = function (sortByValue, sortOrderContainer, sortOrderSelect, groupByContainer, withinGroupContainer) {
         if (!sortOrderContainer || !sortOrderSelect) return;
-        
+
         // Hide Sort Order for Random, Random Round Robin, and Default (they don't use ordering)
         if (SmartLists.isOrderlessSort(sortByValue)) {
             sortOrderContainer.style.display = 'none';
         } else {
             sortOrderContainer.style.display = '';
-            
+
             // Auto-set to Descending when Similarity is selected (most similar first)
             if (sortByValue === 'Similarity') {
                 sortOrderSelect.value = 'Descending';
@@ -153,8 +153,8 @@
             withinGroupContainer.style.display = showWithinGroup ? '' : 'none';
         }
     };
-    
-    SmartLists.shouldShowSortOption = function(sortValue, selectedMediaTypes, hasSimilarToRule, hasExternalListRule) {
+
+    SmartLists.shouldShowSortOption = function (sortValue, selectedMediaTypes, hasSimilarToRule, hasExternalListRule) {
         // If no media types selected, show all options
         if (!selectedMediaTypes || selectedMediaTypes.length === 0) {
             return true;
@@ -209,17 +209,17 @@
         }
 
         // Always show: Name, ProductionYear, CommunityRating,
-        // DateCreated, ReleaseDate, PlayCount (owner), LastPlayed (owner), Random, Default
+        // DateCreated, ReleaseDate, PlayCount/LastPlayed owner/all-users, Random, Default
         return true;
     };
 
     // Filter sort options based on current context
-    SmartLists.getFilteredSortOptions = function(page) {
+    SmartLists.getFilteredSortOptions = function (page) {
         const selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
         const hasSimilarTo = SmartLists.hasSimilarToRuleInForm(page);
         const hasExternalList = SmartLists.hasExternalListRuleInForm(page);
 
-        return SmartLists.SORT_OPTIONS.filter(function(opt) {
+        return SmartLists.SORT_OPTIONS.filter(function (opt) {
             return SmartLists.shouldShowSortOption(opt.value, selectedMediaTypes, hasSimilarTo, hasExternalList);
         });
     };
@@ -227,13 +227,13 @@
     // Populate a Sort By select with <optgroup> sections based on each option's group.
     // Options must be ordered by group (SORT_OPTIONS is, and filtering preserves order);
     // a new optgroup opens when the group changes, so empty groups are never emitted.
-    SmartLists.populateSortBySelect = function(selectElement, options, selectedValue) {
+    SmartLists.populateSortBySelect = function (selectElement, options, selectedValue) {
         selectElement.innerHTML = '';
 
         let currentGroup = null;
         let currentGroupElement = null;
 
-        options.forEach(function(opt) {
+        options.forEach(function (opt) {
             const option = document.createElement('option');
             option.value = opt.value;
             option.textContent = opt.label;
@@ -258,9 +258,9 @@
     };
 
     // Get Round Robin group-by fields filtered by current media types
-    SmartLists.getFilteredRoundRobinFields = function(page) {
+    SmartLists.getFilteredRoundRobinFields = function (page) {
         var selectedMediaTypes = SmartLists.getSelectedMediaTypes(page);
-        return SmartLists.ROUND_ROBIN_GROUP_FIELDS.filter(function(field) {
+        return SmartLists.ROUND_ROBIN_GROUP_FIELDS.filter(function (field) {
             // Fields with null mediaTypes are always shown (e.g., Genres, Studios)
             if (!field.mediaTypes) return true;
             // If no media types selected, show all
@@ -272,11 +272,11 @@
             return false;
         });
     };
-    
-    SmartLists.createSortBox = function(page, sortData) {
+
+    SmartLists.createSortBox = function (page, sortData) {
         const sortId = 'sort-' + Date.now() + '-' + Math.random();
 
-        // Parse sortData to handle "Name (Ignore Articles)" and "SeriesName (Ignore Articles)" backwards compatibility
+        // Parse sortData to handle legacy sort names.
         let actualSortBy = sortData ? sortData.SortBy : 'Name';
         let ignoreArticles = false;
 
@@ -286,6 +286,8 @@
         } else if (actualSortBy === 'SeriesName (Ignore Articles)') {
             actualSortBy = 'SeriesName';
             ignoreArticles = true;
+        } else if (actualSortBy === 'PlayCount (selected users total)') {
+            actualSortBy = 'PlayCount (all users)';
         }
 
         // Create box container with paperList class for theme-aware background
@@ -320,7 +322,7 @@
 
         // Sort Order field
         const sortOrderField = SmartLists.createSortField('Sort Order', 'sort-order-' + sortId, 'select');
-        const sortOrderOptions = SmartLists.SORT_ORDER_OPTIONS.map(function(opt) {
+        const sortOrderOptions = SmartLists.SORT_ORDER_OPTIONS.map(function (opt) {
             return {
                 value: opt.value,
                 label: opt.label,
@@ -342,7 +344,7 @@
         groupByField.container.style.maxWidth = '200px';
         var filteredGroupFields = SmartLists.getFilteredRoundRobinFields(page);
         var savedGroupBy = sortData ? sortData.GroupByField : null;
-        var groupByOptions = filteredGroupFields.map(function(f) {
+        var groupByOptions = filteredGroupFields.map(function (f) {
             return { value: f.value, label: f.label, selected: f.value === savedGroupBy };
         });
         SmartLists.populateSelectElement(groupByField.input, groupByOptions);
@@ -394,13 +396,13 @@
         removeBtn.type = 'button';
         removeBtn.textContent = '\u00D7'; // × symbol
         removeBtn.title = 'Remove this sort';
-        removeBtn.addEventListener('click', function() {
+        removeBtn.addEventListener('click', function () {
             SmartLists.removeSortBox(page, box);
         });
         box.appendChild(removeBtn);
 
         // Add event listener to sync Sort Order UI and checkbox visibility when Sort By changes
-        sortByField.input.addEventListener('change', function() {
+        sortByField.input.addEventListener('change', function () {
             SmartLists.syncSortOrderUI(this.value, sortOrderField.container, sortOrderField.input, groupByField.container, withinGroupField.container);
             // Show/hide ignore articles checkbox based on Sort By value
             const showIgnoreArticles = (this.value === 'Name' || this.value === 'SeriesName');
@@ -418,35 +420,35 @@
 
         return box;
     };
-    
-    SmartLists.addSortBox = function(page, sortData) {
+
+    SmartLists.addSortBox = function (page, sortData) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
-        
+
         // Check if we already have 3 sort boxes (max limit)
         const existingBoxes = sortsContainer.querySelectorAll('.sort-box');
         if (existingBoxes.length >= 3) {
             SmartLists.showNotification('You can add a maximum of 3 sorting options.', 'warning');
             return;
         }
-        
+
         // Add "AND THEN" separator before new box (if not first box)
         if (existingBoxes.length > 0) {
             const separator = SmartLists.createSortSeparator();
-            
+
             // Find the add button and insert separator before it
             const addBtn = sortsContainer.querySelector('.add-sort-btn');
             if (addBtn) {
                 sortsContainer.insertBefore(separator, addBtn);
             }
         }
-        
+
         // Find the add button (it's always the last child)
         const addBtn = sortsContainer.querySelector('.add-sort-btn');
-        
+
         // Create and insert the new box before the add button
         const newBox = SmartLists.createSortBox(page, sortData);
-        
+
         // Hide remove button for the first sort box
         if (existingBoxes.length === 0) {
             const removeBtn = newBox.querySelector('.sort-remove-btn');
@@ -454,7 +456,7 @@
                 removeBtn.style.display = 'none';
             }
         }
-        
+
         if (addBtn) {
             sortsContainer.insertBefore(newBox, addBtn);
             // Update button text
@@ -469,19 +471,19 @@
             sortsContainer.appendChild(newBox);
         }
     };
-    
-    SmartLists.removeSortBox = function(page, box) {
+
+    SmartLists.removeSortBox = function (page, box) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
-        
+
         const boxes = sortsContainer.querySelectorAll('.sort-box');
-        
+
         // Don't allow removing the last/only sort box
         if (boxes.length <= 1) {
             SmartLists.showNotification('You must have at least one sort option.', 'warning');
             return;
         }
-        
+
         // Find and remove the separator before this box (if it exists)
         let prevSibling = box.previousElementSibling;
         if (prevSibling && prevSibling.classList.contains('sort-separator')) {
@@ -493,7 +495,7 @@
             box._abortController = null;
         }
         box.remove();
-        
+
         // Update button state
         const remainingBoxes = sortsContainer.querySelectorAll('.sort-box');
         const addBtn = sortsContainer.querySelector('.add-sort-btn');
@@ -509,15 +511,15 @@
             }
         }
     };
-    
-    SmartLists.collectSortsFromForm = function(page) {
+
+    SmartLists.collectSortsFromForm = function (page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return [];
 
         const boxes = sortsContainer.querySelectorAll('.sort-box');
         const sorts = [];
 
-        boxes.forEach(function(box) {
+        boxes.forEach(function (box) {
             const sortBySelect = box.querySelector('[id^="sort-by-"]');
             const sortOrderSelect = box.querySelector('[id^="sort-order-"]');
             const ignoreArticlesCheckbox = box.querySelector('[id^="sort-ignore-articles-"]');
@@ -560,19 +562,19 @@
 
             sorts.push(sortEntry);
         });
-        
+
         return sorts;
     };
-    
+
     // Update all sort dropdowns based on current context (media types and rules)
-    SmartLists.updateAllSortOptionsVisibility = function(page) {
+    SmartLists.updateAllSortOptionsVisibility = function (page) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
 
         const sortBoxes = sortsContainer.querySelectorAll('.sort-box');
         const filteredOptions = SmartLists.getFilteredSortOptions(page);
 
-        sortBoxes.forEach(function(box) {
+        sortBoxes.forEach(function (box) {
             const sortBySelect = box.querySelector('select[id^="sort-by-"]');
             const sortOrderSelect = box.querySelector('select[id^="sort-order-"]');
             const sortOrderContainer = sortOrderSelect ? sortOrderSelect.closest('.sort-field-container') : null;
@@ -582,7 +584,7 @@
             const currentValue = sortBySelect.value;
 
             // Check if current value is still valid
-            const isCurrentValueValid = filteredOptions.some(function(opt) {
+            const isCurrentValueValid = filteredOptions.some(function (opt) {
                 return opt.value === currentValue;
             });
 
@@ -612,7 +614,7 @@
                 if (groupBySelect) {
                     var currentGroupBy = groupBySelect.value;
                     var filteredGroupFields = SmartLists.getFilteredRoundRobinFields(page);
-                    var groupByOptions = filteredGroupFields.map(function(f) {
+                    var groupByOptions = filteredGroupFields.map(function (f) {
                         return { value: f.value, label: f.label, selected: f.value === currentGroupBy };
                     });
                     SmartLists.populateSelectElement(groupBySelect, groupByOptions);
@@ -638,7 +640,7 @@
 
     // Auto-resolve "Default" sort to a specific sort based on rules.
     // Mirrors the backend ResolveDefaultOrder logic so the UI reflects what will actually happen.
-    SmartLists.resolveDefaultSortForRules = function(page) {
+    SmartLists.resolveDefaultSortForRules = function (page) {
         var sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
 
@@ -674,21 +676,21 @@
         }
     };
 
-    SmartLists.parseSortOptions = function(playlist) {
+    SmartLists.parseSortOptions = function (playlist) {
         if (!playlist.Order) {
             return [{ SortBy: 'NoOrder', SortOrder: 'Ascending' }];
         }
-        
+
         // New format: SortOptions array
         if (playlist.Order.SortOptions && playlist.Order.SortOptions.length > 0) {
             return playlist.Order.SortOptions;
         }
-        
+
         // Legacy format: Order.Name string
         if (playlist.Order.Name) {
             const orderName = playlist.Order.Name;
             let sortBy, sortOrder;
-            
+
             if (SmartLists.isOrderlessSort(orderName) || orderName === 'No Order' || orderName === 'Default') {
                 sortBy = (orderName === 'No Order' || orderName === 'Default') ? 'NoOrder' : orderName;
                 sortOrder = 'Ascending';
@@ -698,22 +700,22 @@
                 sortBy = parts.slice(0, -1).join(' ') || 'Name';
                 sortOrder = parts[parts.length - 1] || 'Ascending';
             }
-            
+
             return [{ SortBy: sortBy, SortOrder: sortOrder }];
         }
-        
+
         // Fallback
         return [{ SortBy: 'NoOrder', SortOrder: 'Ascending' }];
     };
-    
+
     // Helper function to load sort options into the UI
-    SmartLists.loadSortOptionsIntoUI = function(page, playlist) {
+    SmartLists.loadSortOptionsIntoUI = function (page, playlist) {
         const sortsContainer = page.querySelector('#sorts-container');
         if (!sortsContainer) return;
-        
+
         // Clear existing sort boxes and separators
         const existingBoxes = sortsContainer.querySelectorAll('.sort-box');
-        existingBoxes.forEach(function(box) {
+        existingBoxes.forEach(function (box) {
             if (box._abortController) {
                 box._abortController.abort();
                 box._abortController = null;
@@ -721,17 +723,17 @@
             box.remove();
         });
         const existingSeparators = sortsContainer.querySelectorAll('.sort-separator');
-        existingSeparators.forEach(function(sep) {
+        existingSeparators.forEach(function (sep) {
             sep.remove();
         });
-        
+
         // Parse sort options from playlist
         const sortOptions = SmartLists.parseSortOptions(playlist);
-        
+
         // Add sort boxes for each sort option WITHOUT adding separators
-        sortOptions.forEach(function(sortOption, index) {
+        sortOptions.forEach(function (sortOption, index) {
             const sortBox = SmartLists.createSortBox(page, sortOption);
-            
+
             // Hide remove button for the first sort box
             if (index === 0) {
                 const removeBtn = sortBox.querySelector('.sort-remove-btn');
@@ -739,7 +741,7 @@
                     removeBtn.style.display = 'none';
                 }
             }
-            
+
             // Insert before add button
             const addBtn = sortsContainer.querySelector('.add-sort-btn');
             if (addBtn) {
@@ -748,30 +750,30 @@
                 sortsContainer.appendChild(sortBox);
             }
         });
-        
+
         // Now add separators between boxes
         let boxes = sortsContainer.querySelectorAll('.sort-box');
-        boxes.forEach(function(box, index) {
+        boxes.forEach(function (box, index) {
             if (index > 0) { // Skip first box
                 const separator = SmartLists.createSortSeparator();
-                
+
                 // Insert separator before this box
                 box.parentNode.insertBefore(separator, box);
             }
         });
-        
+
         // Re-add the "Add Sort" button if it doesn't exist
         let addBtn = sortsContainer.querySelector('.add-sort-btn');
         if (!addBtn) {
             addBtn = document.createElement('button');
             addBtn.type = 'button';
             addBtn.className = 'emby-button raised add-sort-btn';
-            addBtn.addEventListener('click', function() {
+            addBtn.addEventListener('click', function () {
                 SmartLists.addSortBox(page, null);
             });
             sortsContainer.appendChild(addBtn);
         }
-        
+
         // Update button text and visibility
         boxes = sortsContainer.querySelectorAll('.sort-box');
         if (boxes.length === 0) {
@@ -785,59 +787,59 @@
             addBtn.style.display = 'none';
         }
     };
-    
-    SmartLists.sortPlaylists = function(playlists, sortBy) {
+
+    SmartLists.sortPlaylists = function (playlists, sortBy) {
         if (!sortBy || !playlists) return playlists || [];
-        
+
         // Ensure playlists is an array
         if (!Array.isArray(playlists)) {
             console.error('sortPlaylists: playlists is not an array:', typeof playlists, playlists);
             return [];
         }
-        
+
         if (playlists.length === 0) return playlists;
-        
+
         // Create a copy to avoid mutating original (ES5 compatible)
         const sortedPlaylists = playlists.slice();
-        
+
         if (sortBy === 'name-asc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const nameA = (a.Name || '').toLowerCase();
                 const nameB = (b.Name || '').toLowerCase();
                 return nameA.localeCompare(nameB);
             });
         } else if (sortBy === 'name-desc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const nameA = (a.Name || '').toLowerCase();
                 const nameB = (b.Name || '').toLowerCase();
                 return nameB.localeCompare(nameA);
             });
         } else if (sortBy === 'created-desc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const dateA = a.DateCreated ? new Date(a.DateCreated) : new Date(0);
                 const dateB = b.DateCreated ? new Date(b.DateCreated) : new Date(0);
                 return dateB - dateA;
             });
         } else if (sortBy === 'created-asc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const dateA = a.DateCreated ? new Date(a.DateCreated) : new Date(0);
                 const dateB = b.DateCreated ? new Date(b.DateCreated) : new Date(0);
                 return dateA - dateB;
             });
         } else if (sortBy === 'refreshed-desc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const dateA = a.LastRefreshed ? new Date(a.LastRefreshed) : new Date(0);
                 const dateB = b.LastRefreshed ? new Date(b.LastRefreshed) : new Date(0);
                 return dateB - dateA;
             });
         } else if (sortBy === 'refreshed-asc') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const dateA = a.LastRefreshed ? new Date(a.LastRefreshed) : new Date(0);
                 const dateB = b.LastRefreshed ? new Date(b.LastRefreshed) : new Date(0);
                 return dateA - dateB;
             });
         } else if (sortBy === 'enabled-first') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const enabledA = a.Enabled !== false ? 1 : 0;
                 const enabledB = b.Enabled !== false ? 1 : 0;
                 if (enabledA !== enabledB) return enabledB - enabledA;
@@ -845,7 +847,7 @@
                 return (a.Name || '').toLowerCase().localeCompare((b.Name || '').toLowerCase());
             });
         } else if (sortBy === 'disabled-first') {
-            return sortedPlaylists.sort(function(a, b) {
+            return sortedPlaylists.sort(function (a, b) {
                 const enabledA = a.Enabled !== false ? 1 : 0;
                 const enabledB = b.Enabled !== false ? 1 : 0;
                 if (enabledA !== enabledB) return enabledA - enabledB;
@@ -853,37 +855,37 @@
                 return (a.Name || '').toLowerCase().localeCompare((b.Name || '').toLowerCase());
             });
         }
-        
+
         return sortedPlaylists;
     };
-    
-    SmartLists.applyAllFiltersAndSort = function(page, playlists) {
+
+    SmartLists.applyAllFiltersAndSort = function (page, playlists) {
         if (!playlists) return [];
-        
+
         // Ensure playlists is an array
         if (!Array.isArray(playlists)) {
             console.error('applyAllFiltersAndSort: playlists is not an array:', typeof playlists, playlists);
             return [];
         }
-        
+
         // Create a copy (ES5 compatible)
         let filteredPlaylists = playlists.slice();
-        
+
         // Apply all filters using the generic system
         const filterOrder = ['search', 'type', 'mediaType', 'user'];
-        
+
         for (var i = 0; i < filterOrder.length; i++) {
             const filterKey = filterOrder[i];
             const filterValue = SmartLists.getFilterValue(page, filterKey);
             filteredPlaylists = SmartLists.applyFilter(filteredPlaylists, filterKey, filterValue, page);
         }
-        
+
         // Apply sorting
         const sortValue = SmartLists.getFilterValue(page, 'sort') || 'name-asc';
         filteredPlaylists = SmartLists.sortPlaylists(filteredPlaylists, sortValue);
-        
+
         return filteredPlaylists;
     };
-    
+
 })(window.SmartLists = window.SmartLists || {});
 

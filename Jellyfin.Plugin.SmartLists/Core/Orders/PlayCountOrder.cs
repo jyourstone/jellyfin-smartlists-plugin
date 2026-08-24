@@ -13,6 +13,49 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SmartLists.Core.Orders
 {
+    public interface IAggregateUsersOrder
+    {
+        void SetAggregateUsers(IEnumerable<User> users);
+    }
+
+    public abstract class PlayCountTotalOrderBase : UserDataOrder, IAggregateUsersOrder
+    {
+        private List<User> _aggregateUsers = [];
+
+        public void SetAggregateUsers(IEnumerable<User> users)
+        {
+            ArgumentNullException.ThrowIfNull(users);
+
+            _aggregateUsers = users
+                .Where(u => u != null && u.Id != Guid.Empty)
+                .GroupBy(u => u.Id)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        protected int GetTotalPlayCountAcrossUsers(
+            BaseItem item,
+            User currentUser,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache)
+        {
+            // Safe fallback: if no aggregate users were configured, preserve owner semantics.
+            if (_aggregateUsers.Count == 0)
+            {
+                return PlayCountOrder.GetPlayCountFromUserData(item, currentUser, userDataManager, logger, refreshCache);
+            }
+
+            int total = 0;
+            foreach (var targetUser in _aggregateUsers)
+            {
+                total += PlayCountOrder.GetPlayCountFromUserData(item, targetUser, userDataManager, logger, refreshCache);
+            }
+
+            return total;
+        }
+    }
+
     public class PlayCountOrder : UserDataOrder
     {
         public override string Name => "PlayCount (owner) Ascending";
@@ -54,7 +97,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 }
 
                 object? userData = null;
-                
+
                 // Try to get user data from cache if available
                 if (refreshCache != null && userDataManager != null)
                 {
@@ -161,5 +204,48 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             return PlayCountOrder.GetPlayCountFromUserData(item, user, userDataManager, logger, refreshCache);
         }
+    }
+
+    public class PlayCountTotalOrder : PlayCountTotalOrderBase
+    {
+        public override string Name => "PlayCount (all users) Ascending";
+        protected override bool IsDescending => false;
+
+        protected override int GetUserDataValue(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
+        }
+    }
+
+    public class PlayCountTotalOrderDesc : PlayCountTotalOrderBase
+    {
+        public override string Name => "PlayCount (all users) Descending";
+        protected override bool IsDescending => true;
+
+        protected override int GetUserDataValue(
+            BaseItem item,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
+            RefreshQueueService.RefreshCache? refreshCache = null)
+        {
+            return GetTotalPlayCountAcrossUsers(item, user, userDataManager, logger, refreshCache);
+        }
+    }
+
+    // Backward-compat aliases for previously saved sort names.
+    public class PlayCountSelectedUsersTotalOrder : PlayCountTotalOrder
+    {
+        public override string Name => "PlayCount (selected users total) Ascending";
+    }
+
+    public class PlayCountSelectedUsersTotalOrderDesc : PlayCountTotalOrderDesc
+    {
+        public override string Name => "PlayCount (selected users total) Descending";
     }
 }

@@ -53,6 +53,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // Item-to-group mappings for per-group limiting (populated during filtering when per-group MaxItems are set)
         private readonly ConcurrentDictionary<Guid, List<int>> _itemGroupMappings = new();
 
+        // Playlist user IDs (normalized GUID strings), used by aggregate user-based sorts.
+        private readonly List<string> _playlistUserIds = [];
+
         // OPTIMIZATION: Static cache for compiled rules to avoid recompilation
         private static readonly ConcurrentDictionary<string, List<List<Func<Operand, bool>>>> _ruleCache = new();
 
@@ -94,6 +97,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ExpressionSets = [];
 
             InitializeFromDto(dto);
+
+            _playlistUserIds = CollectPlaylistUserIds(dto);
         }
 
         public SmartList(SmartCollectionDto dto)
@@ -114,6 +119,34 @@ namespace Jellyfin.Plugin.SmartLists.Core
             ExpressionSets = [];
 
             InitializeFromDto(dto);
+
+            if (Guid.TryParse(dto.UserId, out var ownerUserId) && ownerUserId != Guid.Empty)
+            {
+                _playlistUserIds = [ownerUserId.ToString("N")];
+            }
+        }
+
+        private static List<string> CollectPlaylistUserIds(SmartPlaylistDto dto)
+        {
+            var userIds = new List<string>();
+
+            if (dto.UserPlaylists != null)
+            {
+                foreach (var mapping in dto.UserPlaylists)
+                {
+                    if (!string.IsNullOrEmpty(mapping.UserId) && Guid.TryParse(mapping.UserId, out var userId) && userId != Guid.Empty)
+                    {
+                        userIds.Add(userId.ToString("N"));
+                    }
+                }
+            }
+
+            if (userIds.Count == 0 && !string.IsNullOrEmpty(dto.UserId) && Guid.TryParse(dto.UserId, out var legacyUserId) && legacyUserId != Guid.Empty)
+            {
+                userIds.Add(legacyUserId.ToString("N"));
+            }
+
+            return [.. userIds.Distinct(StringComparer.OrdinalIgnoreCase)];
         }
 
         /// <summary>
@@ -760,7 +793,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             // Clear similarity scores from any previous runs
             _similarityScores.Clear();
-            
+
             // Clear item-group mappings from any previous runs
             _itemGroupMappings.Clear();
 
@@ -970,6 +1003,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     ExpressionSets?.Any(set => set?.Expressions?.Any(expr =>
                         expr?.MemberName == "SimilarTo") == true) == true;
 
+                ConfigureAggregateUserOrders(user, logger);
+
                 // Check if there are any non-expensive rules for two-phase filtering optimization
                 bool hasNonExpensiveRules = false;
                 try
@@ -1074,7 +1109,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     batchSize = 300; // Default to 300 if invalid
                 }
                 var chunkSize = batchSize;
-                
+
                 // itemsArray already materialized above to avoid double enumeration
                 var totalItems = itemsArray.Length;
 
@@ -1106,7 +1141,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         var chunkResults = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
                             fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, candidateSet, refreshCache);
                         results.AddRange(chunkResults);
-                        
+
                         // Report progress after chunk is complete
                         progressCallback?.Invoke(chunkEnd, totalItems);
 
@@ -1265,8 +1300,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         private bool UsesRuleBlockOrdering()
         {
-            return Orders?.Any(order => 
-                order is Orders.RuleBlockOrder || 
+            return Orders?.Any(order =>
+                order is Orders.RuleBlockOrder ||
                 order is Orders.RuleBlockOrderDesc) == true;
         }
 
@@ -1403,7 +1438,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Group items by their matching rule groups
                 var itemsByGroup = new Dictionary<int, List<BaseItem>>();
-                
+
                 // Initialize all groups (even empty ones)
                 for (int i = 0; i < ExpressionSets.Count; i++)
                 {
@@ -1466,7 +1501,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (groupMaxItems > 0 && availableItems.Count > groupMaxItems)
                     {
                         selectedItems = availableItems.Take(groupMaxItems).ToList();
-                        logger?.LogDebug("Rule group {GroupIndex} limited from {Available} to {Limited} items", 
+                        logger?.LogDebug("Rule group {GroupIndex} limited from {Available} to {Limited} items",
                             groupIndex, availableItems.Count, selectedItems.Count);
                     }
                     else
@@ -1481,7 +1516,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         consumedItems.Add(item.Id);
                         resultList.Add(item);
-                        
+
                         // Update the group mapping to show this item was contributed by this specific block
                         // This overrides the original multi-group mapping (e.g., item matching both "crowd" and "german")
                         _itemGroupMappings[item.Id] = new List<int> { groupIndex };
@@ -1655,8 +1690,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 case "Equal":
                     // Check both exact name match and name without prefix/suffix
                     // This handles cases where collections have prefix/suffix applied but users enter base name
-                    return collections.Any(c => 
-                        c != null && 
+                    return collections.Any(c =>
+                        c != null &&
                         (c.Equals(expr.TargetValue, StringComparison.OrdinalIgnoreCase) ||
                          NameFormatter.StripPrefixAndSuffix(c).Equals(expr.TargetValue, StringComparison.OrdinalIgnoreCase)));
 
@@ -2547,11 +2582,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// Creates composite sort keys for all items and applies multi-level sorting.
         /// </summary>
         internal static IEnumerable<BaseItem> ApplySortingCore(
-            List<BaseItem> itemsList, 
-            List<Order> orders, 
-            User user, 
-            IUserDataManager? userDataManager, 
-            ILogger? logger, 
+            List<BaseItem> itemsList,
+            List<Order> orders,
+            User user,
+            IUserDataManager? userDataManager,
+            ILogger? logger,
             RefreshQueueService.RefreshCache refreshCache)
         {
             if (orders == null || orders.Count == 0 || itemsList.Count == 0)
@@ -2674,6 +2709,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is ReleaseDateOrderDesc ||
                    order is CommunityRatingOrderDesc ||
                    order is PlayCountOrderDesc ||
+                   order is PlayCountTotalOrderDesc ||
+                   order is LastPlayedTotalOrderDesc ||
                    order is LastPlayedOrderDesc ||
                    order is RuntimeOrderDesc ||
                    order is ResolutionOrderDesc ||
@@ -2857,7 +2894,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Cheap groups (FileInfo, LibraryInfo, AudioMetadata, TextContent, ItemLists, UserData, Dates) don't require two-phase filtering
                 // Use the centralized definition from FieldRegistry to ensure consistency
                 var cheapGroups = FieldRegistry.CheapExtractionGroups;
-                
+
                 var expensiveGroups = fieldReqs.RequiredGroups & ~cheapGroups;
                 var needsExpensiveFields = expensiveGroups != ExtractionGroup.None;
 
@@ -3465,6 +3502,46 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             return null;
         }
+
+        private void ConfigureAggregateUserOrders(User currentUser, ILogger? logger)
+        {
+            if (Orders == null || Orders.Count == 0)
+            {
+                return;
+            }
+
+            var aggregateOrders = Orders.OfType<IAggregateUsersOrder>().ToList();
+            if (aggregateOrders.Count == 0)
+            {
+                return;
+            }
+
+            var resolvedUsers = new List<User>();
+            foreach (var userId in _playlistUserIds)
+            {
+                if (!Guid.TryParse(userId, out var parsedId) || parsedId == Guid.Empty)
+                {
+                    continue;
+                }
+
+                var targetUser = UserManager?.GetUserById(parsedId);
+                if (targetUser != null)
+                {
+                    resolvedUsers.Add(targetUser);
+                }
+            }
+
+            if (resolvedUsers.Count == 0)
+            {
+                resolvedUsers.Add(currentUser);
+                logger?.LogDebug("Aggregate user sort fallback in '{PlaylistName}': no playlist users resolved, using current user {UserId}", Name, currentUser.Id);
+            }
+
+            foreach (var order in aggregateOrders)
+            {
+                order.SetAggregateUsers(resolvedUsers);
+            }
+        }
     }
 
     public static class OrderFactory
@@ -3487,8 +3564,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
             { "CommunityRating Descending", () => new CommunityRatingOrderDesc() },
             { "PlayCount (owner) Ascending", () => new PlayCountOrder() },
             { "PlayCount (owner) Descending", () => new PlayCountOrderDesc() },
+            { "PlayCount (all users) Ascending", () => new PlayCountTotalOrder() },
+            { "PlayCount (all users) Descending", () => new PlayCountTotalOrderDesc() },
+            { "PlayCount (selected users total) Ascending", () => new PlayCountSelectedUsersTotalOrder() },
+            { "PlayCount (selected users total) Descending", () => new PlayCountSelectedUsersTotalOrderDesc() },
             { "LastPlayed (owner) Ascending", () => new LastPlayedOrder() },
             { "LastPlayed (owner) Descending", () => new LastPlayedOrderDesc() },
+            { "LastPlayed (all users) Ascending", () => new LastPlayedTotalOrder() },
+            { "LastPlayed (all users) Descending", () => new LastPlayedTotalOrderDesc() },
             { "Runtime Ascending", () => new RuntimeOrder() },
             { "Runtime Descending", () => new RuntimeOrderDesc() },
             { "Resolution Ascending", () => new ResolutionOrder() },
@@ -3655,9 +3738,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Only add each parent group when the folded IncludeParent*Effective flag is true.
                 // OnlyParent* alone does NOT trigger extraction: with no source it compiles to
                 // constant-false (Engine), so requesting the walk would be wasted work.
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentTagsEffective,    ExtractionGroup.ParentTags);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags", expr.IncludeParentTagsEffective, ExtractionGroup.ParentTags);
                 AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentStudiosEffective, ExtractionGroup.ParentStudios);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentGenresEffective,  ExtractionGroup.ParentGenres);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres", expr.IncludeParentGenresEffective, ExtractionGroup.ParentGenres);
 
                 // Collect SimilarTo expressions for reference item lookup
                 if (expr.MemberName == "SimilarTo")

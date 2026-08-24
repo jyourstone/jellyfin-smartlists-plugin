@@ -3,7 +3,7 @@
 
     // Constants
     SmartLists.PLUGIN_ID = "A0A2A7B2-747A-4113-8B39-757A9D267C79";
-    
+
     // Determine if we're in user mode (set by user-playlists.html before loading this script).
     // This value is refreshed for each page in setPageContext() to avoid SPA navigation leaks.
     SmartLists.IS_USER_PAGE = SmartLists.IS_USER_PAGE || false;
@@ -83,7 +83,9 @@
         { value: 'ProductionYear', label: 'Production Year', group: 'Dates' },
         { value: 'CommunityRating', label: 'Community Rating', group: 'Ratings & Playback' },
         { value: 'PlayCount (owner)', label: 'Play Count (owner)', group: 'Ratings & Playback' },
+        { value: 'PlayCount (all users)', label: 'Play Count (all users)', group: 'Ratings & Playback' },
         { value: 'LastPlayed (owner)', label: 'Last Played (owner)', group: 'Ratings & Playback' },
+        { value: 'LastPlayed (all users)', label: 'Last Played (all users)', group: 'Ratings & Playback' },
         { value: 'SeriesName', label: 'Series Name', group: 'TV' },
         { value: 'SeasonNumber', label: 'Season Number', group: 'TV' },
         { value: 'EpisodeNumber', label: 'Episode Number', group: 'TV' },
@@ -934,12 +936,12 @@
     // Helper function to create a link to the status page (or just text for user pages)
     SmartLists.createStatusPageLink = function (linkText) {
         linkText = linkText || 'status page';
-        
+
         // On user pages, users can't access the status tab, so just return plain text
         if (SmartLists.IS_USER_PAGE) {
             return '';  // Return empty string to remove the reference entirely
         }
-        
+
         // Create a unique ID for the link to attach event listener
         var linkId = 'status-link-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
         var linkHtml = '<a href="#" id="' + linkId + '">' + linkText + '</a>';

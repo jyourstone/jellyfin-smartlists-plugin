@@ -307,6 +307,33 @@ public class UserDataOrderTests
         Assert.Equal(9, PlayCount(order, movie, TestItems.OtherUser, TestItems.ThrowingUserData(), cache));
     }
 
+    [Fact]
+    public void PlayCountTotal_GetSortKey_SumsPlayCountAcrossConfiguredUsers()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var movie = TestItems.Mov("Shared");
+        SeedPlayCount(cache, movie, TestItems.User, 3);
+        SeedPlayCount(cache, movie, TestItems.OtherUser, 8);
+
+        var order = new PlayCountTotalOrder();
+        order.SetAggregateUsers([TestItems.User, TestItems.OtherUser]);
+
+        Assert.Equal(11, PlayCount(order, movie, TestItems.User, TestItems.ThrowingUserData(), cache));
+    }
+
+    [Fact]
+    public void PlayCountTotal_GetSortKey_WithoutConfiguredUsers_FallsBackToOwnerSemantics()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var movie = TestItems.Mov("Fallback");
+        SeedPlayCount(cache, movie, TestItems.User, 4);
+        SeedPlayCount(cache, movie, TestItems.OtherUser, 20);
+
+        var order = new PlayCountTotalOrder();
+
+        Assert.Equal(4, PlayCount(order, movie, TestItems.User, TestItems.ThrowingUserData(), cache));
+    }
+
     // -------------------------------------------------------- PlayCount: missing-data states
 
     [Fact]
@@ -690,6 +717,36 @@ public class UserDataOrderTests
 
         Assert.Equal(new DateTime(2020, 1, 1), LastPlayed(order, movie, TestItems.User, TestItems.ThrowingUserData(), cache));
         Assert.Equal(new DateTime(2024, 1, 1), LastPlayed(order, movie, TestItems.OtherUser, TestItems.ThrowingUserData(), cache));
+    }
+
+    [Fact]
+    public void LastPlayedTotal_GetSortKey_UsesMostRecentDateAcrossConfiguredUsers()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var movie = TestItems.Mov("Shared");
+        var ownerDate = new DateTime(2021, 5, 1);
+        var otherDate = new DateTime(2024, 2, 1);
+        TestItems.SeedUserData(cache, movie, TestItems.User, played: true, lastPlayed: ownerDate);
+        TestItems.SeedUserData(cache, movie, TestItems.OtherUser, played: true, lastPlayed: otherDate);
+
+        var order = new LastPlayedTotalOrder();
+        order.SetAggregateUsers([TestItems.User, TestItems.OtherUser]);
+
+        Assert.Equal(otherDate, LastPlayed(order, movie, TestItems.User, TestItems.ThrowingUserData(), cache));
+    }
+
+    [Fact]
+    public void LastPlayedTotal_GetSortKey_WithoutConfiguredUsers_FallsBackToOwnerSemantics()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var movie = TestItems.Mov("Fallback");
+        var ownerDate = new DateTime(2022, 7, 1);
+        TestItems.SeedUserData(cache, movie, TestItems.User, played: true, lastPlayed: ownerDate);
+        TestItems.SeedUserData(cache, movie, TestItems.OtherUser, played: true, lastPlayed: new DateTime(2025, 1, 1));
+
+        var order = new LastPlayedTotalOrder();
+
+        Assert.Equal(ownerDate, LastPlayed(order, movie, TestItems.User, TestItems.ThrowingUserData(), cache));
     }
 
     // -------------------------------------------------------- LastPlayed: missing-data states
