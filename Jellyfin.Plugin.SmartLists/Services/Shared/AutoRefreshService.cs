@@ -202,6 +202,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             if (_disposed) return;
             if (e.Item == null) return;
+
+            // Synchronous and before the refresh is queued: a Series/Season/MusicAlbum that just
+            // gained or lost a child must not be scored from its old child list by a refresh later
+            // in the current queue drain - including the one this change is about to trigger.
+            _refreshQueueService.InvalidateContainerChildCaches(e.Item);
+
             _ = Task.Run(async () =>
             {
                 try
@@ -219,6 +225,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         {
             if (_disposed) return;
             if (e.Item == null) return;
+
+            // Synchronous and before the refresh is queued: a Series/Season/MusicAlbum that just
+            // gained or lost a child must not be scored from its old child list by a refresh later
+            // in the current queue drain - including the one this change is about to trigger.
+            _refreshQueueService.InvalidateContainerChildCaches(e.Item);
+
             _ = Task.Run(async () =>
             {
                 try
