@@ -423,7 +423,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = children;
+                cache.SeasonEpisodes[season.Id] = children;
                 return season;
             })
         };
@@ -432,7 +432,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[(album.Id, TestItems.User.Id)] = children;
+                cache.AlbumTracks[album.Id] = children;
                 return album;
             })
         };
@@ -453,7 +453,7 @@ public class UserDataOrderTests
         var series = TestItems.Show("Aggregate Series");
         var child = TestItems.Ep("Aggregate Series", 1, 1);
         SeedPlayCount(cache, child, TestItems.User, 7);
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [child];
+        cache.SeriesEpisodesForAggregation[series.Id] = [child];
         TestItems.SeedNoUserData(cache, series, TestItems.User);
 
         var result = PlayCountOrder.GetPlayCountFromUserData(series, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
@@ -475,7 +475,7 @@ public class UserDataOrderTests
         var unwatched = TestItems.Ep("Partly Watched Series", 1, 2);
         SeedPlayCount(cache, watched, TestItems.User, 4);
         SeedPlayCount(cache, unwatched, TestItems.User, 0);
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [watched, unwatched];
+        cache.SeriesEpisodesForAggregation[series.Id] = [watched, unwatched];
         TestItems.SeedNoUserData(cache, series, TestItems.User);
 
         var result = PlayCountOrder.GetPlayCountFromUserData(series, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
@@ -483,8 +483,10 @@ public class UserDataOrderTests
         Assert.Equal(0, result);
     }
 
-    /// <summary>Aggregation is per-user: the cache key carries the user id, so two users with
-    /// different watch histories over the same series get different counts.</summary>
+    /// <summary>Aggregation is still per-user: the CHILD LIST is shared/unfiltered across every
+    /// user (see RefreshCache.SeriesEpisodesForAggregation), but each child's playback still comes
+    /// from that user's own UserItemData row, so two users with different watch histories over the
+    /// same series still get different counts.</summary>
     [Fact]
     public void PlayCount_SeriesAggregation_IsPerUser()
     {
@@ -493,8 +495,7 @@ public class UserDataOrderTests
         var child = TestItems.Ep("Shared Series", 1, 1);
         SeedPlayCount(cache, child, TestItems.User, 5);
         SeedPlayCount(cache, child, TestItems.OtherUser, 1);
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [child];
-        cache.SeriesEpisodes[(series.Id, TestItems.OtherUser.Id)] = [child];
+        cache.SeriesEpisodesForAggregation[series.Id] = [child];
         TestItems.SeedNoUserData(cache, series, TestItems.User);
         TestItems.SeedNoUserData(cache, series, TestItems.OtherUser);
 
@@ -507,7 +508,7 @@ public class UserDataOrderTests
     {
         var cache = new RefreshQueueService.RefreshCache();
         var season = TestItems.SeasonOf("Empty Season");
-        cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = [];
+        cache.SeasonEpisodes[season.Id] = [];
         SeedPlayCount(cache, season, TestItems.User, 3);
 
         var result = PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
@@ -524,13 +525,17 @@ public class UserDataOrderTests
         SeedPlayCount(cache, watchedChild, TestItems.User, 5);
         TestItems.SeedNoUserData(cache, neverPlayedChild, TestItems.User);
         var season = TestItems.SeasonOf("Mixed Season");
-        cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = [watchedChild, neverPlayedChild];
+        cache.SeasonEpisodes[season.Id] = [watchedChild, neverPlayedChild];
 
         var result = PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), logger: null, cache);
 
         Assert.Equal(0, result);
     }
 
+    /// <summary>Aggregate child lists are shared/unfiltered across every user (see
+    /// RefreshCache.SeriesEpisodesForAggregation and the analogous SeasonEpisodes/AlbumTracks), but
+    /// each child's playback still comes from that user's own UserItemData row, so the same season
+    /// can still report different minimum play counts for different users.</summary>
     [Fact]
     public void PlayCount_AggregateChildren_ArePerUser()
     {
@@ -538,10 +543,11 @@ public class UserDataOrderTests
         var childA = TestItems.Ep("Ignored", 1, 1, name: "ChildA");
         var childB = TestItems.Ep("Ignored", 1, 2, name: "ChildB");
         SeedPlayCount(cache, childA, TestItems.User, 4);
+        SeedPlayCount(cache, childB, TestItems.User, 4);
+        SeedPlayCount(cache, childA, TestItems.OtherUser, 9);
         SeedPlayCount(cache, childB, TestItems.OtherUser, 9);
         var season = TestItems.SeasonOf("PerUser Season");
-        cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = [childA];
-        cache.SeasonEpisodes[(season.Id, TestItems.OtherUser.Id)] = [childB];
+        cache.SeasonEpisodes[season.Id] = [childA, childB];
 
         Assert.Equal(4, PlayCountOrder.GetPlayCountFromUserData(season, TestItems.User, TestItems.ThrowingUserData(), null, cache));
         Assert.Equal(9, PlayCountOrder.GetPlayCountFromUserData(season, TestItems.OtherUser, TestItems.ThrowingUserData(), null, cache));
@@ -877,7 +883,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var series = TestItems.Show("Aggregate Series");
-                cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = children;
+                cache.SeriesEpisodesForAggregation[series.Id] = children;
                 return series;
             })
         };
@@ -886,7 +892,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var season = TestItems.SeasonOf("Aggregate Season");
-                cache.SeasonEpisodes[(season.Id, TestItems.User.Id)] = children;
+                cache.SeasonEpisodes[season.Id] = children;
                 return season;
             })
         };
@@ -895,7 +901,7 @@ public class UserDataOrderTests
             (Func<RefreshQueueService.RefreshCache, BaseItem[], BaseItem>)((cache, children) =>
             {
                 var album = TestItems.Album("Aggregate Album");
-                cache.AlbumTracks[(album.Id, TestItems.User.Id)] = children;
+                cache.AlbumTracks[album.Id] = children;
                 return album;
             })
         };
@@ -904,7 +910,7 @@ public class UserDataOrderTests
     /// <summary>
     /// Proves the switch in GetAggregateLastPlayedDate gates on TYPE, not on whether a cache entry
     /// happens to exist under the item's id: a Movie is never a Series/Season/MusicAlbum, so even a
-    /// SeriesEpisodes entry seeded under the exact same id must be ignored.
+    /// SeriesEpisodesForAggregation entry seeded under the exact same id must be ignored.
     /// </summary>
     [Fact]
     public void GetAggregateLastPlayedDate_NonContainerItem_NeverAggregates_EvenWithAMatchingCacheEntry()
@@ -913,24 +919,26 @@ public class UserDataOrderTests
         var movie = TestItems.Mov("Movie");
         var child = TestItems.Ep("Ignored", 1, 1);
         TestItems.SeedUserData(cache, child, TestItems.User, played: true, lastPlayed: new DateTime(2024, 1, 1));
-        cache.SeriesEpisodes[(movie.Id, TestItems.User.Id)] = [child];
+        cache.SeriesEpisodesForAggregation[movie.Id] = [child];
 
         var result = LastPlayedOrderBase.GetAggregateLastPlayedDate(movie, TestItems.User, TestItems.ThrowingUserData(), cache);
 
         Assert.Null(result);
     }
 
+    /// <summary>Aggregate child lists are shared/unfiltered across every user (see
+    /// RefreshCache.SeriesEpisodesForAggregation), but each child's playback still comes from that
+    /// user's own UserItemData row, so the same series can still produce different aggregate
+    /// LastPlayedDates for different users.</summary>
     [Fact]
     public void GetAggregateLastPlayedDate_CachedChildrenArePerUser()
     {
         var cache = new RefreshQueueService.RefreshCache();
         var series = TestItems.Show("Series");
-        var childForUser = TestItems.Ep("Series", 1, 1, name: "ForUser");
-        var childForOther = TestItems.Ep("Series", 1, 2, name: "ForOther");
-        TestItems.SeedUserData(cache, childForUser, TestItems.User, played: true, lastPlayed: new DateTime(2020, 1, 1));
-        TestItems.SeedUserData(cache, childForOther, TestItems.OtherUser, played: true, lastPlayed: new DateTime(2024, 1, 1));
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [childForUser];
-        cache.SeriesEpisodes[(series.Id, TestItems.OtherUser.Id)] = [childForOther];
+        var child = TestItems.Ep("Series", 1, 1);
+        TestItems.SeedUserData(cache, child, TestItems.User, played: true, lastPlayed: new DateTime(2020, 1, 1));
+        TestItems.SeedUserData(cache, child, TestItems.OtherUser, played: true, lastPlayed: new DateTime(2024, 1, 1));
+        cache.SeriesEpisodesForAggregation[series.Id] = [child];
 
         Assert.Equal(new DateTime(2020, 1, 1), LastPlayedOrderBase.GetAggregateLastPlayedDate(series, TestItems.User, TestItems.ThrowingUserData(), cache));
         Assert.Equal(new DateTime(2024, 1, 1), LastPlayedOrderBase.GetAggregateLastPlayedDate(series, TestItems.OtherUser, TestItems.ThrowingUserData(), cache));
@@ -948,7 +956,7 @@ public class UserDataOrderTests
         TestItems.SeedUserData(cache, series, TestItems.User, played: true, lastPlayed: new DateTime(2020, 1, 1)); // own row: OLD
         var child = TestItems.Ep("Series", 1, 1);
         TestItems.SeedUserData(cache, child, TestItems.User, played: false, lastPlayed: new DateTime(2024, 1, 1)); // child: RECENT
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [child];
+        cache.SeriesEpisodesForAggregation[series.Id] = [child];
 
         var key = LastPlayed(new LastPlayedOrder(), series, TestItems.User, TestItems.ThrowingUserData(), cache);
 
@@ -961,7 +969,7 @@ public class UserDataOrderTests
         var cache = new RefreshQueueService.RefreshCache();
         var series = TestItems.Show("Series");
         TestItems.SeedUserData(cache, series, TestItems.User, played: true, lastPlayed: new DateTime(2020, 1, 1));
-        // No SeriesEpisodes entry seeded at all.
+        // No SeriesEpisodesForAggregation entry seeded at all.
 
         var key = LastPlayed(new LastPlayedOrder(), series, TestItems.User, TestItems.ThrowingUserData(), cache);
 
@@ -974,7 +982,7 @@ public class UserDataOrderTests
         var cache = new RefreshQueueService.RefreshCache();
         var series = TestItems.Show("Series");
         TestItems.SeedUserData(cache, series, TestItems.User, played: true, lastPlayed: new DateTime(2020, 1, 1));
-        cache.SeriesEpisodes[(series.Id, TestItems.User.Id)] = [];
+        cache.SeriesEpisodesForAggregation[series.Id] = [];
 
         var key = LastPlayed(new LastPlayedOrder(), series, TestItems.User, TestItems.ThrowingUserData(), cache);
 

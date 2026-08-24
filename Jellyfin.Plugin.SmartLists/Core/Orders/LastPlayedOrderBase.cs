@@ -51,7 +51,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         }
 
                         object? userData = null;
-                        
+
                         // Try to get user data from cache if available
                         if (refreshCache != null)
                         {
@@ -61,7 +61,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                         {
                             userData = userDataManager.GetUserData(user, item);
                         }
-                        
+
                         sortValueCache[item] = GetLastPlayedDateFromUserData(userData);
                     }
                     catch (Exception ex)
@@ -103,7 +103,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 }
 
                 object? userData = null;
-                
+
                 // Try to get user data from cache if available
                 if (refreshCache != null && userDataManager != null)
                 {
@@ -113,7 +113,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 {
                     userData = userDataManager.GetUserData(user, item);
                 }
-                
+
                 return GetLastPlayedDateFromUserData(userData);
             }
             catch (Exception ex)
@@ -139,9 +139,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
             BaseItem[]? children = item switch
             {
-                Season => refreshCache.SeasonEpisodes.TryGetValue((item.Id, user.Id), out var seasonEpisodes) ? seasonEpisodes : null,
-                Series => refreshCache.SeriesEpisodes.TryGetValue((item.Id, user.Id), out var seriesEpisodes) ? seriesEpisodes : null,
-                MusicAlbum => refreshCache.AlbumTracks.TryGetValue((item.Id, user.Id), out var tracks) ? tracks : null,
+                Season => refreshCache.SeasonEpisodes.TryGetValue(item.Id, out var seasonEpisodes) ? seasonEpisodes : null,
+                Series => refreshCache.SeriesEpisodesForAggregation.TryGetValue(item.Id, out var seriesEpisodes) ? seriesEpisodes : null,
+                MusicAlbum => refreshCache.AlbumTracks.TryGetValue(item.Id, out var tracks) ? tracks : null,
                 _ => null
             };
 

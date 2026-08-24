@@ -100,7 +100,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
                 // For aggregate items, calculate from child media when a prior filter populated the cache.
                 if (userDataManager != null && refreshCache != null)
                 {
-                    var children = TryGetAggregateChildren(item, user, refreshCache);
+                    var children = TryGetAggregateChildren(item, refreshCache);
                     if (children != null)
                     {
                         return CalculateMinPlayCountFromTracks(children, user, userDataManager, refreshCache);
@@ -142,7 +142,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// <summary>
         /// Returns the cached child array for aggregate items (Series → episodes, Season → episodes,
         /// MusicAlbum → tracks), or null if the item is not an aggregate type or the cache has no
-        /// entry for it.
+        /// entry for it. These caches are deliberately unfiltered by any user's parental-rating/
+        /// library-access restrictions (see <c>RefreshCache.SeriesEpisodesForAggregation</c>), and
+        /// keyed by container id only - the child list is the same regardless of which aggregate
+        /// user is being scored.
         ///
         /// All three container types aggregate, matching
         /// <see cref="LastPlayedOrderBase.GetAggregateLastPlayedDate"/>. Series was previously
@@ -151,19 +154,17 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         private static BaseItem[]? TryGetAggregateChildren(
             BaseItem item,
-            User user,
             RefreshQueueService.RefreshCache refreshCache)
         {
-            var key = (item.Id, user.Id);
-            if (item is Series && refreshCache.SeriesEpisodes.TryGetValue(key, out var seriesEpisodes) && seriesEpisodes.Length > 0)
+            if (item is Series && refreshCache.SeriesEpisodesForAggregation.TryGetValue(item.Id, out var seriesEpisodes) && seriesEpisodes.Length > 0)
             {
                 return seriesEpisodes;
             }
-            if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(key, out var episodes) && episodes.Length > 0)
+            if (item is Season && refreshCache.SeasonEpisodes.TryGetValue(item.Id, out var episodes) && episodes.Length > 0)
             {
                 return episodes;
             }
-            if (item is MusicAlbum && refreshCache.AlbumTracks.TryGetValue(key, out var tracks) && tracks.Length > 0)
+            if (item is MusicAlbum && refreshCache.AlbumTracks.TryGetValue(item.Id, out var tracks) && tracks.Length > 0)
             {
                 return tracks;
             }

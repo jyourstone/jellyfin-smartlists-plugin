@@ -132,16 +132,15 @@ public class AggregateUserScopeTests
         var list = ListMappedOnlyTo(TestItems.User, TestItems.User, TestItems.OtherUser);
         list.Orders = [order];
 
-        // Before this call, refreshCache.SeriesEpisodes has NO entry for either user - nothing
-        // else warms it for a list whose only rule/sort is an aggregate PlayCount sort.
-        Assert.False(cache.SeriesEpisodes.ContainsKey((series.Id, TestItems.User.Id)));
-        Assert.False(cache.SeriesEpisodes.ContainsKey((series.Id, TestItems.OtherUser.Id)));
+        // Before this call, refreshCache.SeriesEpisodesForAggregation has NO entry for the series -
+        // nothing else warms it for a list whose only rule/sort is an aggregate PlayCount sort.
+        Assert.False(cache.SeriesEpisodesForAggregation.ContainsKey(series.Id));
 
         ConfigureAggregateUserOrders(list, [series], BaseItem.LibraryManager, TestItems.User, cache);
 
-        // Both the current user AND the other aggregate user must now be warm...
-        Assert.True(cache.SeriesEpisodes.ContainsKey((series.Id, TestItems.User.Id)));
-        Assert.True(cache.SeriesEpisodes.ContainsKey((series.Id, TestItems.OtherUser.Id)));
+        // The child cache is keyed by container id only (unfiltered by user visibility), so a
+        // single warm-up covers every aggregate user - not one entry per user.
+        Assert.True(cache.SeriesEpisodesForAggregation.ContainsKey(series.Id));
 
         // ...and the aggregate sort must actually see both users' data (2 + 4 = 6), not silently
         // fall back to 0 for the user whose cache would otherwise have been cold.

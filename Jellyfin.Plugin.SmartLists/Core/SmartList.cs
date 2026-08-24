@@ -1004,8 +1004,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     ExpressionSets?.Any(set => set?.Expressions?.Any(expr =>
                         expr?.MemberName == "SimilarTo") == true) == true;
 
-                ConfigureAggregateUserOrders(itemsArray, libraryManager, user, refreshCache, logger);
-
                 // Check if there are any non-expensive rules for two-phase filtering optimization
                 bool hasNonExpensiveRules = false;
                 try
@@ -1194,6 +1192,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 expandedResults = DedupExternalMusicListMatches(expandedResults, refreshCache, logger);
 
                 expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
+
+                // Configure aggregate-user ('(all users)'/'(selected users total)') orders and warm
+                // their container child caches against the FINAL filtered/expanded item set, not the
+                // raw (media-type-only-filtered) candidate pool - warming every Series/Season/
+                // MusicAlbum in an unfiltered pool would issue DB queries for containers the list's
+                // own rules are about to discard anyway. This must still run before
+                // ApplyPerGroupLimits below, since it calls ApplyMultipleOrders per rule group and
+                // would otherwise sort with unconfigured aggregate users.
+                ConfigureAggregateUserOrders(expandedResults, libraryManager, user, refreshCache, logger);
 
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
@@ -3530,8 +3537,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
             var allUsersOrders = aggregateOrders.OfType<IAllUsersScopeOrder>().ToList();
             var selectedUsersOrders = aggregateOrders.Where(o => o is not IAllUsersScopeOrder).ToList();
 
-            var allAggregateUsers = new List<User> { currentUser };
-
             if (allUsersOrders.Count > 0)
             {
                 var serverUsers = ResolveAllServerUsers(currentUser, logger);
@@ -3539,8 +3544,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     order.SetAggregateUsers(serverUsers);
                 }
-
-                allAggregateUsers.AddRange(serverUsers);
             }
 
             if (selectedUsersOrders.Count > 0)
@@ -3550,16 +3553,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 {
                     order.SetAggregateUsers(resolvedUsers);
                 }
-
-                allAggregateUsers.AddRange(resolvedUsers);
             }
 
-            // Container aggregation (Series/Season/MusicAlbum -> children) reads per-(item,user)
+            // Container aggregation (Series/Season/MusicAlbum -> children) reads per-container
             // child caches that are otherwise only ever warmed for whichever single user happens
-            // to trigger extraction of an unrelated rule field. Aggregate sorts need those caches
-            // warm for EVERY configured aggregate user, or per-user lookups silently miss and fall
-            // back to 0 / DateTime.MinValue for anyone but that one user.
-            WarmAggregateUserContainerCaches(items, allAggregateUsers, libraryManager, refreshCache, logger);
+            // to trigger extraction of an unrelated rule field. These caches are unfiltered by user
+            // visibility and keyed by container id only, so a single warm-up covers every aggregate
+            // user - see WarmAggregateUserContainerCaches for why.
+            WarmAggregateUserContainerCaches(items, libraryManager, refreshCache, logger);
         }
 
         /// <summary>
@@ -3624,62 +3625,37 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Proactively populates the per-(item,user) container child caches (Series -> episodes,
-        /// Season -> episodes, MusicAlbum -> tracks) for every configured aggregate user, for every
-        /// container candidate in the item pool. Without this, PlayCount/LastPlayed aggregate sorts
-        /// only ever see a warm cache for whichever user happened to trigger an unrelated rule's
-        /// extraction - every OTHER aggregate user gets a cache miss and silently falls back to
-        /// 0 / DateTime.MinValue. Reuses the exact same cache-population helpers the normal
-        /// extraction pipeline uses (<see cref="OperandFactory"/>), so a hit here or there is a
-        /// no-op dictionary lookup, not a duplicated query path.
+        /// Proactively populates the per-container aggregation child caches (Series -> episodes,
+        /// Season -> episodes, MusicAlbum -> tracks) for every container candidate in the item pool.
+        /// Without this, PlayCount/LastPlayed aggregate sorts only ever see a warm cache for
+        /// whichever user happened to trigger an unrelated rule's extraction - every OTHER aggregate
+        /// user gets a cache miss and silently falls back to 0 / DateTime.MinValue. These caches are
+        /// deliberately unfiltered by any user's parental-rating/library-access restrictions and
+        /// keyed by container id only (not per-user) - see
+        /// <see cref="RefreshQueueService.RefreshCache.SeriesEpisodesForAggregation"/> - so a single
+        /// warm-up per container covers every aggregate user, not one query per user. Reuses the
+        /// exact same cache-population helpers the normal extraction pipeline uses
+        /// (<see cref="OperandFactory"/>), so a hit here or there is a no-op dictionary lookup, not a
+        /// duplicated query path.
         /// </summary>
         private static void WarmAggregateUserContainerCaches(
             IReadOnlyCollection<BaseItem> items,
-            List<User> aggregateUsers,
             ILibraryManager libraryManager,
             RefreshQueueService.RefreshCache refreshCache,
             ILogger? logger)
         {
-            if (items.Count == 0 || aggregateUsers.Count == 0)
-            {
-                return;
-            }
-
-            var usersToWarm = aggregateUsers
-                .Where(u => u != null && u.Id != Guid.Empty)
-                .GroupBy(u => u.Id)
-                .Select(g => g.First())
-                .ToList();
-
-            if (usersToWarm.Count == 0)
-            {
-                return;
-            }
-
             foreach (var item in items)
             {
                 switch (item)
                 {
                     case Series series:
-                        foreach (var targetUser in usersToWarm)
-                        {
-                            OperandFactory.GetCachedSeriesEpisodes(series.Id, targetUser, libraryManager, refreshCache, logger, isVirtualItem: false);
-                        }
-
+                        OperandFactory.GetCachedSeriesEpisodesForAggregation(series.Id, libraryManager, refreshCache, logger);
                         break;
                     case Season season:
-                        foreach (var targetUser in usersToWarm)
-                        {
-                            OperandFactory.GetCachedSeasonEpisodes(season.Id, targetUser, libraryManager, refreshCache, logger);
-                        }
-
+                        OperandFactory.GetCachedSeasonEpisodes(season.Id, libraryManager, refreshCache, logger);
                         break;
                     case MusicAlbum album:
-                        foreach (var targetUser in usersToWarm)
-                        {
-                            OperandFactory.GetCachedAlbumTracks(album.Id, targetUser, libraryManager, refreshCache, logger);
-                        }
-
+                        OperandFactory.GetCachedAlbumTracks(album.Id, libraryManager, refreshCache, logger);
                         break;
                 }
             }

@@ -75,7 +75,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
         // Cache management - per-user caches to avoid rebuilding when switching between users
         private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<MediaTypesKey, Lazy<BaseItem[]>>> _userCaches = new();
-        
+
         // Per-user RefreshCache for expensive operations (People, Collections, Series metadata, UserData, MediaStreams)
         private readonly ConcurrentDictionary<Guid, RefreshCache> _refreshCaches = new();
 
@@ -431,7 +431,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             if (userPlaylists != null && userPlaylists.Count > 0)
             {
                 _logger.LogDebug("Processing multi-user playlist '{PlaylistName}' with {UserCount} users", dto.Name, userPlaylists.Count);
-                
+
                 var validUserCount = 0;
                 foreach (var userMapping in userPlaylists)
                 {
@@ -456,7 +456,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // Warn if no valid users were processed
                 if (validUserCount == 0)
                 {
-                    _logger.LogWarning("Playlist '{PlaylistName}' had no valid users to refresh (all {UserCount} users were invalid or missing)", 
+                    _logger.LogWarning("Playlist '{PlaylistName}' had no valid users to refresh (all {UserCount} users were invalid or missing)",
                         dto.Name, userPlaylists.Count);
                 }
             }
@@ -772,9 +772,42 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// </summary>
         public sealed class RefreshCache
         {
+            /// <summary>
+            /// Cached episode list for a Series, scoped to a SPECIFIC user's current library/parental
+            /// visibility. Used ONLY by the NextUnwatched calculation, where visibility legitimately
+            /// matters (recommending a hidden episode as "next up" makes no sense). Aggregate
+            /// PlayCount/LastPlayedDate/PlaybackStatus scoring must NOT read this -
+            /// see <see cref="SeriesEpisodesForAggregation"/>.
+            /// </summary>
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId), BaseItem[]> SeriesEpisodes { get; } = new();
-            public ConcurrentDictionary<(Guid SeasonId, Guid UserId), BaseItem[]> SeasonEpisodes { get; } = new();
-            public ConcurrentDictionary<(Guid AlbumId, Guid UserId), BaseItem[]> AlbumTracks { get; } = new();
+
+            /// <summary>
+            /// ALL episodes of a Series, deliberately UNFILTERED by any user's parental-rating/
+            /// library-access restrictions, for aggregate PlayCount/LastPlayedDate/PlaybackStatus
+            /// scoring. A user's stored playback history can outlive their current visibility of an
+            /// item (a restriction added after they watched it, a revoked library grant, ...), so the
+            /// structural child set must be visibility-agnostic - per-user playback is still read
+            /// separately, per child, via <see cref="UserDataCache"/>. Keyed by series id only: the
+            /// result is the same for every user, unlike <see cref="SeriesEpisodes"/>.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> SeriesEpisodesForAggregation { get; } = new();
+
+            /// <summary>
+            /// ALL episodes of a Season for aggregate PlayCount/LastPlayedDate/PlaybackStatus scoring,
+            /// deliberately unfiltered by any user's parental-rating/library-access restrictions (see
+            /// <see cref="SeriesEpisodesForAggregation"/> for why). Season has no NextUnwatched-style
+            /// per-user visibility consumer to collide with, so there is only ever this one cache.
+            /// Keyed by season id only.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> SeasonEpisodes { get; } = new();
+
+            /// <summary>
+            /// ALL tracks of a MusicAlbum for aggregate PlayCount/LastPlayedDate/PlaybackStatus
+            /// scoring, deliberately unfiltered by any user's parental-rating/library-access
+            /// restrictions (see <see cref="SeriesEpisodesForAggregation"/> for why). Keyed by
+            /// album id only.
+            /// </summary>
+            public ConcurrentDictionary<Guid, BaseItem[]> AlbumTracks { get; } = new();
             public ConcurrentDictionary<(Guid SeriesId, Guid UserId, bool IncludeUnwatchedSeries), (Guid? NextEpisodeId, int Season, int Episode)> NextUnwatched { get; } = new();
             public BaseItem[]? AllCollections { get; set; } = null;
             public ConcurrentDictionary<Guid, HashSet<Guid>> CollectionMembershipCache { get; } = new();
@@ -812,12 +845,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<Guid, AncestorValues> AncestorValuesById { get; } = new();
 
             public ConcurrentDictionary<Guid, CategorizedPeople> ItemPeople { get; } = new();
-            
+
             // User-specific data cache - keyed by (ItemId, UserId) to support playlist user + additional users in rules
             public ConcurrentDictionary<(Guid ItemId, Guid UserId), MediaBrowser.Controller.Entities.UserItemData> UserDataCache { get; } = new();
             // Tracks (ItemId, UserId) pairs for which GetUserData returned null, to avoid repeated DB calls.
             public ConcurrentDictionary<(Guid ItemId, Guid UserId), byte> UserDataNegativeCache { get; } = new();
-            
+
             // Media streams cache - keyed by ItemId only (user-agnostic)
             public ConcurrentDictionary<Guid, IEnumerable<object>> MediaStreamsCache { get; } = new();
 
