@@ -548,10 +548,23 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <summary>
         /// Returns all rule group indices that match the given operand.
         /// Used for per-group limiting - allows tracking which groups each item matches.
+        ///
+        /// Similarity is part of a group's own AND, not a filter over the whole list: a group
+        /// carrying SimilarTo rules matches only when its compiled rules pass AND the item is
+        /// similar to THAT group's references. A group holding nothing but SimilarTo rules has no
+        /// compiled rules, so similarity alone decides it. <paramref name="bestSimilarityScore"/>
+        /// returns the highest score among the groups that matched - the score the item is sorted by.
         /// </summary>
-        private List<int> GetMatchingGroupIndices(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
+        private List<int> GetMatchingGroupIndices(
+            List<List<Func<Operand, bool>>> compiledRules,
+            Operand operand,
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata,
+            List<string> similarityComparisonFields,
+            ILogger? logger,
+            out float bestSimilarityScore)
         {
             var matchingGroups = new List<int>();
+            bestSimilarityScore = 0f;
 
             try
             {
@@ -570,21 +583,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     if (group == null)
                         continue; // Skip null groups
 
-                    // Groups with only SimilarTo rules are handled separately by similarity filtering.
-                    bool hasOnlySkippedRules = group.Expressions != null &&
-                        group.Expressions.All(expr => expr?.MemberName == "SimilarTo");
-
-                    if (hasOnlySkippedRules)
+                    OperandFactory.ReferenceMetadata? groupMetadata = null;
+                    if (groupReferenceMetadata != null && groupReferenceMetadata.TryGetValue(groupIndex, out var metadata))
                     {
-                        continue; // Handled separately - these groups don't match items
+                        groupMetadata = metadata;
                     }
 
-                    if (groupRules == null || groupRules.Count == 0)
+                    if ((groupRules == null || groupRules.Count == 0) && groupMetadata == null)
                         continue; // Skip empty rule groups
 
                     try
                     {
-                        bool groupMatches = groupRules.All(rule =>
+                        bool groupMatches = groupRules == null || groupRules.All(rule =>
                         {
                             try
                             {
@@ -597,6 +607,19 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                 return false;
                             }
                         });
+
+                        // Similarity runs last: it is the expensive half of the group's AND.
+                        if (groupMatches && groupMetadata != null)
+                        {
+                            groupMatches = OperandFactory.CalculateSimilarityScore(operand, groupMetadata, similarityComparisonFields, logger);
+
+                            // CalculateSimilarityScore overwrites operand.SimilarityScore on every
+                            // call, so the max is accumulated here rather than read back afterwards.
+                            if (groupMatches && operand.SimilarityScore > bestSimilarityScore)
+                            {
+                                bestSimilarityScore = operand.SimilarityScore.Value;
+                            }
+                        }
 
                         if (groupMatches)
                         {
@@ -619,41 +642,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return matchingGroups;
         }
 
-        /// <summary>
-        /// Returns the indices of rule groups holding nothing but SimilarTo rules.
-        /// Similarity is scored once per item against the blended reference metadata of every
-        /// SimilarTo rule in the list, so there is no per-group score to tell these groups apart:
-        /// an item that passes the similarity filter belongs to all of them. Callers tag matched
-        /// items with these indices so ApplyPerGroupLimits - which rebuilds the result purely from
-        /// the group mappings - doesn't drop them, and Rule Block Order can place them. The
-        /// consumed-item tracking in ApplyPerGroupLimits then hands each block a different slice
-        /// of the shared pool, the same way it handles two identical rule blocks.
-        /// </summary>
-        private List<int> GetSimilarityOnlyGroupIndices()
-        {
-            var indices = new List<int>();
-
-            if (ExpressionSets == null)
-            {
-                return indices;
-            }
-
-            for (int groupIndex = 0; groupIndex < ExpressionSets.Count; groupIndex++)
-            {
-                if (ExpressionSets[groupIndex]?.Expressions is { Count: > 0 } expressions &&
-                    expressions.All(expr => expr?.MemberName == "SimilarTo"))
-                {
-                    indices.Add(groupIndex);
-                }
-            }
-
-            return indices;
-        }
-
-        private bool EvaluateLogicGroups(List<List<Func<Operand, bool>>> compiledRules, Operand operand)
+        private bool EvaluateLogicGroups(
+            List<List<Func<Operand, bool>>> compiledRules,
+            Operand operand,
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata,
+            List<string> similarityComparisonFields,
+            ILogger? logger,
+            out float bestSimilarityScore)
         {
             // For backward compatibility and simple OR logic, check if any group matches
-            var matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+            var matchingGroups = GetMatchingGroupIndices(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out bestSimilarityScore);
             return matchingGroups.Count > 0;
         }
 
@@ -1022,29 +1020,47 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                // Build reference metadata once for SimilarTo queries (before chunking to avoid rebuilding per chunk)
-                OperandFactory.ReferenceMetadata? referenceMetadata = null;
+                // Build reference metadata for SimilarTo queries (before chunking to avoid rebuilding per chunk)
+                Dictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata = null;
                 if (fieldReqs.NeedsSimilarTo)
                 {
                     logger?.LogDebug("Building reference metadata for SimilarTo queries (once per filter run) using fields: {Fields}",
                         string.Join(", ", similarityComparisonFields));
 
-                    // One reference set for the whole run: the pool plus, in MatchByMembers mode,
-                    // the members of every container candidate. Direct items and container members
-                    // are then scored against identical reference metadata - and a reference living
-                    // inside a candidate container is still found when the pool itself holds only
-                    // containers. Member enumeration here is cache-backed, so the later enumeration
-                    // in MatchContainersByMembers hits the same cache.
-                    IEnumerable<BaseItem> referenceUniverse = itemsArray;
+                    // One reference universe for the whole run: the pool plus, in MatchByMembers
+                    // mode, the members of every container candidate. Direct items and container
+                    // members are then scored against identical reference metadata - and a
+                    // reference living inside a candidate container is still found when the pool
+                    // itself holds only containers. Member enumeration here is cache-backed, so the
+                    // later enumeration in MatchContainersByMembers hits the same cache. It is
+                    // materialized because every SimilarTo block resolves against it in turn.
+                    List<BaseItem> referenceUniverse = [.. itemsArray];
                     if (containerCandidates.Length > 0)
                     {
-                        referenceUniverse = referenceUniverse.Concat(
+                        referenceUniverse.AddRange(
                             containerCandidates
                                 .SelectMany(c => GetContainerMembers(c, user, refreshCache, logger))
                                 .Where(m => m != null && !IsContainerKind(m)));
                     }
 
-                    referenceMetadata = OperandFactory.BuildReferenceMetadata(fieldReqs.SimilarToExpressions, referenceUniverse, similarityComparisonFields, libraryManager, logger);
+                    // Each rule block scores against its OWN references, so a block without
+                    // SimilarTo is never filtered by another block's reference.
+                    groupReferenceMetadata = [];
+                    for (int groupIndex = 0; groupIndex < (ExpressionSets?.Count ?? 0); groupIndex++)
+                    {
+                        var groupSimilarTo = ExpressionSets![groupIndex]?.Expressions?
+                            .Where(expr => expr?.MemberName == "SimilarTo")
+                            .ToList();
+
+                        if (groupSimilarTo is not { Count: > 0 })
+                        {
+                            continue;
+                        }
+
+                        var groupReferenceItems = OperandFactory.ResolveReferenceItems(groupSimilarTo, referenceUniverse, logger);
+                        groupReferenceMetadata[groupIndex] = OperandFactory.BuildReferenceMetadataFromItems(
+                            groupReferenceItems, similarityComparisonFields, libraryManager, logger);
+                    }
                 }
 
                 // RefreshCache is provided as parameter - shared across multiple playlists/collections for the same user
@@ -1088,7 +1104,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         // Process chunk
                         var chunkResults = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
-                            fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, candidateSet, refreshCache);
+                            fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, candidateSet, refreshCache);
                         results.AddRange(chunkResults);
                         
                         // Report progress after chunk is complete
@@ -1123,7 +1139,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (containerCandidates.Length > 0)
                 {
                     var matchedContainers = MatchContainersByMembers(containerCandidates, libraryManager, user, userDataManager,
-                        logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
+                        logger, fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, refreshCache);
                     results.AddRange(matchedContainers);
                 }
 
@@ -1795,7 +1811,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
             IUserDataManager? userDataManager,
             ILogger? logger,
             FieldRequirements fieldReqs,
-            OperandFactory.ReferenceMetadata? referenceMetadata,
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata,
             List<string> similarityComparisonFields,
             List<List<Func<Operand, bool>>> compiledRules,
             bool hasAnyRules,
@@ -1841,7 +1857,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         var chunk = memberList.Skip(chunkStart).Take(batchSize);
                         var passingMembers = ProcessItemChunk(chunk, libraryManager, user, userDataManager, logger,
-                            fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, null, refreshCache);
+                            fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, hasNonExpensiveRules, null, refreshCache);
                         foreach (var member in passingMembers)
                         {
                             passedMemberIds.Add(member.Id);
@@ -2825,7 +2841,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         private List<BaseItem> ProcessItemChunk(IEnumerable<BaseItem> items, ILibraryManager libraryManager,
             User user, IUserDataManager? userDataManager, ILogger? logger, FieldRequirements fieldReqs,
-            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, HashSet<Guid>? candidateSet, RefreshQueueService.RefreshCache refreshCache)
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata, List<string> similarityComparisonFields, List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, bool hasNonExpensiveRules, HashSet<Guid>? candidateSet, RefreshQueueService.RefreshCache refreshCache)
         {
             var results = new List<BaseItem>();
 
@@ -2848,7 +2864,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 if (needsExpensiveFields)
                 {
                     // Use the shared RefreshCache passed from FilterPlaylistItems for optimal performance across chunks
-                    // referenceMetadata is also provided by caller (built once per filter run, not per chunk)
+                    // groupReferenceMetadata is also provided by caller (built once per filter run, not per chunk)
 
                     // Optimization: Separate rules into cheap and expensive categories
                     var cheapCompiledRules = new List<List<Func<Operand, bool>>>();
@@ -2922,7 +2938,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     catch (Exception ex)
                     {
                         logger?.LogWarning(ex, "Error separating rules into cheap and expensive categories. Falling back to simple processing.");
-                        return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
+                        return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
                     }
 
                     if (!hasNonExpensiveRules)
@@ -2963,63 +2979,40 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             {
                                 var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
-                                // Calculate similarity score if SimilarTo is active
-                                bool passesSimilarity = true;
-                                if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
-                                {
-                                    passesSimilarity = OperandFactory.CalculateSimilarityScore(operand, referenceMetadata, similarityComparisonFields, logger);
-
-                                    // Store similarity score for potential sorting
-                                    if (operand.SimilarityScore.HasValue)
-                                    {
-                                        _similarityScores[item.Id] = operand.SimilarityScore.Value;
-                                    }
-                                }
-
                                 bool matches = false;
                                 List<int>? matchingGroups = null;
-                                
+                                float similarityScore = 0f;
+
                                 if (!hasAnyRules)
                                 {
                                     matches = true;
-                                }
-                                else if (compiledRules.All(set => set?.Count == 0))
-                                {
-                                    // Special case: Only SimilarTo rules (no compiled rules)
-                                    // In this case, start with matches = true and let similarity filter decide
-                                    matches = true;
-
-                                    // Similarity-only blocks still have to be tagged when per-group
-                                    // tracking is on - ApplyPerGroupLimits rebuilds the result from
-                                    // the mappings and drops whatever is untagged.
-                                    if (NeedsGroupTracking())
-                                    {
-                                        matchingGroups = GetSimilarityOnlyGroupIndices();
-                                    }
                                 }
                                 else
                                 {
                                     // Check if we need per-group tracking for limits or Rule Block Order sorting
                                     bool needsGroupTracking = NeedsGroupTracking();
-                                    
+
                                     if (needsGroupTracking)
                                     {
-                                        matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+                                        matchingGroups = GetMatchingGroupIndices(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                                         matches = matchingGroups.Count > 0;
                                     }
                                     else
                                     {
-                                        matches = EvaluateLogicGroups(compiledRules, operand);
+                                        matches = EvaluateLogicGroups(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                                     }
                                 }
-
-                                // Apply similarity filter
-                                matches = matches && passesSimilarity;
 
                                 if (matches)
                                 {
                                     results.Add(item);
-                                    
+
+                                    // Store similarity score for potential sorting
+                                    if (groupReferenceMetadata != null)
+                                    {
+                                        _similarityScores[item.Id] = similarityScore;
+                                    }
+
                                     // Track which groups this item matched for per-group limiting
                                     if (matchingGroups != null && matchingGroups.Count > 0)
                                     {
@@ -3219,63 +3212,40 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     }
                                 }
 
-                                // Calculate similarity score if SimilarTo is active
-                                bool passesSimilarity = true;
-                                if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
-                                {
-                                    passesSimilarity = OperandFactory.CalculateSimilarityScore(fullOperand, referenceMetadata, similarityComparisonFields, logger);
-
-                                    // Store similarity score for potential sorting
-                                    if (fullOperand.SimilarityScore.HasValue)
-                                    {
-                                        _similarityScores[item.Id] = fullOperand.SimilarityScore.Value;
-                                    }
-                                }
-
                                 bool matches = false;
                                 List<int>? matchingGroups = null;
-                                
+                                float similarityScore = 0f;
+
                                 if (!hasAnyRules)
                                 {
                                     matches = true;
-                                }
-                                else if (compiledRules.All(set => set?.Count == 0))
-                                {
-                                    // Special case: Only SimilarTo rules (no compiled rules)
-                                    // In this case, start with matches = true and let similarity filter decide
-                                    matches = true;
-
-                                    // Similarity-only blocks still have to be tagged when per-group
-                                    // tracking is on - ApplyPerGroupLimits rebuilds the result from
-                                    // the mappings and drops whatever is untagged.
-                                    if (NeedsGroupTracking())
-                                    {
-                                        matchingGroups = GetSimilarityOnlyGroupIndices();
-                                    }
                                 }
                                 else
                                 {
                                     // Check if we need per-group tracking for limits or Rule Block Order sorting
                                     bool needsGroupTracking = NeedsGroupTracking();
-                                    
+
                                     if (needsGroupTracking)
                                     {
-                                        matchingGroups = GetMatchingGroupIndices(compiledRules, fullOperand);
+                                        matchingGroups = GetMatchingGroupIndices(compiledRules, fullOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                                         matches = matchingGroups.Count > 0;
                                     }
                                     else
                                     {
-                                        matches = EvaluateLogicGroups(compiledRules, fullOperand);
+                                        matches = EvaluateLogicGroups(compiledRules, fullOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                                     }
                                 }
-
-                                // Apply similarity filter
-                                matches = matches && passesSimilarity;
 
                                 if (matches)
                                 {
                                     results.Add(item);
-                                    
+
+                                    // Store similarity score for potential sorting
+                                    if (groupReferenceMetadata != null)
+                                    {
+                                        _similarityScores[item.Id] = similarityScore;
+                                    }
+
                                     // Track which groups this item matched for per-group limiting
                                     if (matchingGroups != null && matchingGroups.Count > 0)
                                     {
@@ -3310,7 +3280,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 else
                 {
                     // No expensive fields needed - use simple filtering
-                    return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, referenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
+                    return ProcessItemsSimple(items, libraryManager, user, userDataManager, logger, fieldReqs, groupReferenceMetadata, similarityComparisonFields, compiledRules, hasAnyRules, refreshCache);
                 }
 
                 return results;
@@ -3333,7 +3303,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         private List<BaseItem> ProcessItemsSimple(IEnumerable<BaseItem> items, ILibraryManager libraryManager,
             User user, IUserDataManager? userDataManager, ILogger? logger, FieldRequirements fieldReqs,
-            OperandFactory.ReferenceMetadata? referenceMetadata, List<string> similarityComparisonFields,
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata, List<string> similarityComparisonFields,
             List<List<Func<Operand, bool>>> compiledRules, bool hasAnyRules, RefreshQueueService.RefreshCache refreshCache)
         {
             var results = new List<BaseItem>();
@@ -3366,61 +3336,40 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
-                        // Check similarity first if SimilarTo is active
-                        bool passesSimilarity = true;
-                        if (fieldReqs.NeedsSimilarTo && referenceMetadata != null)
-                        {
-                            passesSimilarity = OperandFactory.CalculateSimilarityScore(operand, referenceMetadata, similarityComparisonFields, logger);
-                            if (operand.SimilarityScore.HasValue)
-                            {
-                                _similarityScores[item.Id] = operand.SimilarityScore.Value;
-                            }
-                        }
-
                         bool matches = false;
                         List<int>? matchingGroups = null;
-                        
+                        float similarityScore = 0f;
+
                         if (!hasAnyRules)
                         {
                             matches = true;
-                        }
-                        else if (compiledRules.All(set => set?.Count == 0))
-                        {
-                            // Special case: Only SimilarTo rules (no compiled rules)
-                            // In this case, start with matches = true and let similarity filter decide
-                            matches = true;
-
-                            // Similarity-only blocks still have to be tagged when per-group
-                            // tracking is on - ApplyPerGroupLimits rebuilds the result from
-                            // the mappings and drops whatever is untagged.
-                            if (NeedsGroupTracking())
-                            {
-                                matchingGroups = GetSimilarityOnlyGroupIndices();
-                            }
                         }
                         else
                         {
                             // Check if we need per-group tracking for limits or Rule Block Order sorting
                             bool needsGroupTracking = NeedsGroupTracking();
-                            
+
                             if (needsGroupTracking)
                             {
-                                matchingGroups = GetMatchingGroupIndices(compiledRules, operand);
+                                matchingGroups = GetMatchingGroupIndices(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                                 matches = matchingGroups.Count > 0;
                             }
                             else
                             {
-                                matches = EvaluateLogicGroups(compiledRules, operand);
+                                matches = EvaluateLogicGroups(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
                             }
                         }
-
-                        // Apply similarity filter
-                        matches = matches && passesSimilarity;
 
                         if (matches)
                         {
                             results.Add(item);
-                            
+
+                            // Store similarity score for potential sorting
+                            if (groupReferenceMetadata != null)
+                            {
+                                _similarityScores[item.Id] = similarityScore;
+                            }
+
                             // Track which groups this item matched for per-group limiting
                             if (matchingGroups != null && matchingGroups.Count > 0)
                             {

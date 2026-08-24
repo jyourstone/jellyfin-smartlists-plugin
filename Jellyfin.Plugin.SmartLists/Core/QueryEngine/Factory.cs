@@ -4211,15 +4211,31 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             ILibraryManager libraryManager,
             ILogger? logger)
         {
-            var referenceMetadata = new ReferenceMetadata();
+            var referenceItems = ResolveReferenceItems(similarToExpressions, allItems, logger);
+            return BuildReferenceMetadataFromItems(referenceItems, comparisonFields, libraryManager, logger);
+        }
+
+        /// <summary>
+        /// Resolves the items a set of SimilarTo expressions names. Callers that score similarity
+        /// per rule block resolve each block's expressions separately, so the two halves of
+        /// reference-metadata construction are exposed on their own.
+        /// </summary>
+        /// <param name="similarToExpressions">List of SimilarTo expressions to process</param>
+        /// <param name="allItems">All items to search through for matches</param>
+        /// <param name="logger">Logger for debugging</param>
+        /// <returns>Matching items, deduplicated by id</returns>
+        public static List<BaseItem> ResolveReferenceItems(
+            List<Expression> similarToExpressions,
+            IEnumerable<BaseItem> allItems,
+            ILogger? logger)
+        {
+            var referenceItems = new List<BaseItem>();
 
             if (similarToExpressions == null || similarToExpressions.Count == 0)
             {
                 logger?.LogDebug("No SimilarTo expressions to process");
-                return referenceMetadata;
+                return referenceItems;
             }
-
-            var referenceItems = new List<BaseItem>();
 
             // Find all items matching the SimilarTo expressions
             foreach (var expr in similarToExpressions)
@@ -4264,7 +4280,26 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             logger?.LogDebug("Total reference items after deduplication: {Count}", referenceItems.Count);
 
-            if (referenceItems.Count == 0)
+            return referenceItems;
+        }
+
+        /// <summary>
+        /// Extracts and aggregates the comparison-field metadata of already-resolved reference items.
+        /// </summary>
+        /// <param name="referenceItems">Reference items resolved from SimilarTo expressions</param>
+        /// <param name="comparisonFields">List of fields to extract for comparison (e.g., ["Genre", "Tags"])</param>
+        /// <param name="libraryManager">Library manager for accessing expensive fields like People</param>
+        /// <param name="logger">Logger for debugging</param>
+        /// <returns>Aggregated reference metadata</returns>
+        public static ReferenceMetadata BuildReferenceMetadataFromItems(
+            List<BaseItem> referenceItems,
+            List<string> comparisonFields,
+            ILibraryManager libraryManager,
+            ILogger? logger)
+        {
+            var referenceMetadata = new ReferenceMetadata();
+
+            if (referenceItems == null || referenceItems.Count == 0)
             {
                 logger?.LogWarning("No reference items found for SimilarTo queries");
                 return referenceMetadata;
