@@ -13,7 +13,9 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
-## Unreleased
+## v12.0.0.18-rc
+
+*2026-08-24 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.18-rc)*
 
 **Features**
 
