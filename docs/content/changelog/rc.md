@@ -13,7 +13,9 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
-## Unreleased
+## v12.0.0.19-rc
+
+*2026-08-24 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.19-rc)*
 
 **Features**
 
@@ -23,6 +25,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 
 - Series, seasons and albums now resolve their episodes/tracks whenever a playback sort needs them. Previously **Play Count (owner)**, **Last Played (owner)** and **Least Recently Watched Round Robin** only aggregated a container's children if some unrelated rule on the list happened to have loaded them first; otherwise the container fell back to its own (usually empty) playback row and sorted as never-played.
 - A series, season or album that gains or loses an item while lists are refreshing no longer sorts from its old contents. The cached child list is now dropped as soon as the library reports the change, instead of surviving until the whole refresh queue drains — which previously meant even the refresh triggered *by* that change could still see the stale list.
+- A fully watched series is no longer reported as **In Progress**, which could place it on the wrong side of a **Playback Status** rule.
 
 
 ## v12.0.0.18-rc
