@@ -13,6 +13,20 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.0.0.20-rc
+
+*2026-08-26 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.20-rc)*
+
+**Features**
+
+- New **Group results into collections** toggle for smart collections. Every matched item that sits in a Jellyfin collection is replaced by that collection, turning an item search into a collection of collections — "every collection holding a highly-rated action movie" instead of the movies themselves. Items that aren't in any collection are kept as-is, duplicates collapse into one entry, and grouping runs before sorting and Max Items so the limit counts collections ([Media types](../user-guide/media-types.md#group-into-collections)).
+
+**Bug Fixes**
+
+- Creating a smart **collection** with the **Collection** or **Playlist** media type from the user configuration page failed with *"media type is not supported for playlists"*. The user page sends every new list in the playlist shape and only converts it afterwards, so the check saw a playlist no matter what the list type was set to.
+- Smart collections no longer inherit the server-wide **Default Max Playtime**. Max Playtime applies to playlists only and its input is hidden for collections, but the default was written into every new list and sent anyway — so an admin with a non-zero default got collections quietly truncated by a limit their form never showed. Existing collections carrying a leaked value have it cleared on load, and **Convert to Collection** no longer carries the playlist's limit across.
+
+
 ## v12.0.0.19-rc
 
 *2026-08-24 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.19-rc)*

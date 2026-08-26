@@ -35,6 +35,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public List<string>? MediaTypes { get; set; }
         public int CollectionSearchDepth { get; set; }  // Depth for traversing nested collections/playlists (0 = no recursion, 1-10 = levels)
         public bool MatchByMembers { get; set; }  // Container candidates (Collection/Playlist media types) match when at least one member item passes the rules
+        public bool GroupIntoCollections { get; set; }  // Collections only: matched items are replaced by the collections that directly contain them
         public List<ExpressionSet> ExpressionSets { get; set; }
         public int MaxItems { get; set; }
         public int MaxPlayTimeMinutes { get; set; }
@@ -198,6 +199,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             MediaTypes = dto.MediaTypes != null ? new List<string>(dto.MediaTypes) : null; // Create defensive copy to prevent corruption
             MatchByMembers = dto.MatchByMembers;
+            GroupIntoCollections = dto.GroupIntoCollections;
             MaxItems = dto.MaxItems ?? 0; // Default to 0 (unlimited) for backwards compatibility
             MaxPlayTimeMinutes = dto.MaxPlayTimeMinutes ?? 0; // Default to 0 (unlimited) for backwards compatibility
             RandomGroupSelection = dto.RandomGroupSelection;
@@ -1160,6 +1162,13 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 expandedResults = ApplyRandomGroupSelection(expandedResults, libraryManager, user, userDataManager, logger, refreshCache);
 
+                // Group matched items into the collections that contain them, before any sorting
+                // or limits so grouped entries are what MaxItems counts
+                if (GroupIntoCollections)
+                {
+                    expandedResults = GroupResultsIntoCollections(expandedResults, user, libraryManager, refreshCache, fieldReqs.NeedsSimilarTo, logger);
+                }
+
                 // Configure '(all users)' orders before any sorting runs - ApplyPerGroupLimits below
                 // calls ApplyMultipleOrders per rule group and would otherwise sort with
                 // unconfigured aggregate users.
@@ -1938,6 +1947,151 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
+        /// Resolves the collections an item groups into: its own direct collections first, falling
+        /// back to its series' collections for Episodes and Seasons - TV collections hold Series
+        /// items, so an episode is never a direct member of one.
+        /// </summary>
+        private bool TryGetGroupingParents(
+            BaseItem item,
+            Dictionary<Guid, List<BaseItem>> membership,
+            out List<BaseItem> parents)
+        {
+            if (TryGetEmittableParents(item.Id, membership, out parents))
+            {
+                return true;
+            }
+
+            var seriesId = item switch
+            {
+                Episode episode => episode.SeriesId,
+                Season season => season.SeriesId,
+                _ => Guid.Empty,
+            };
+
+            return seriesId != Guid.Empty && TryGetEmittableParents(seriesId, membership, out parents);
+        }
+
+        /// <summary>
+        /// Grouping only emits collections a user actually curated. A collection this plugin
+        /// generates is skipped: its own list (self-reference guard), and equally any OTHER smart
+        /// collection, because those are rebuilt on every refresh - grouping into one would make
+        /// results depend on refresh order and fill the list with unrelated smart lists that merely
+        /// happen to hold a matched item. Identified by the SmartLists provider-ID tether, the same
+        /// identity <see cref="ListOrigin"/> uses.
+        /// </summary>
+        private bool IsEmittableParent(BaseItem parent) =>
+            !Origin.Matches(parent)
+            && string.IsNullOrEmpty(parent.GetProviderId(Constants.ProviderKeys.SmartLists));
+
+        /// <summary>
+        /// The collections directly containing <paramref name="itemId"/> that this list is allowed to
+        /// emit. Returns false when nothing is left, so the caller falls through to the series lookup
+        /// instead of stopping here: once a refresh has written the list, its members ARE direct
+        /// children of it, and treating that as a real hit would freeze an Episodes list in whatever
+        /// state it was first written in.
+        /// </summary>
+        private bool TryGetEmittableParents(
+            Guid itemId,
+            Dictionary<Guid, List<BaseItem>> membership,
+            out List<BaseItem> parents)
+        {
+            if (!membership.TryGetValue(itemId, out var all))
+            {
+                parents = [];
+                return false;
+            }
+
+            // The shared list is reused across items, so filter into a copy rather than mutating it
+            parents = all.TrueForAll(IsEmittableParent) ? all : [.. all.Where(IsEmittableParent)];
+            return parents.Count > 0;
+        }
+
+        /// <summary>
+        /// GroupIntoCollections: replaces every matched non-container item that is a direct member of
+        /// one or more Jellyfin collections with those collections; Episodes and Seasons resolve
+        /// through their series. Items in no collection - and results that are themselves containers
+        /// (matched via the Collection/Playlist media types) - pass through unchanged. Results are
+        /// de-duplicated by id and no plugin-generated smart collection is ever emitted, this list's
+        /// own included (self-reference guard).
+        /// Direct membership only: CollectionSearchDepth is deliberately not consulted. Runs before
+        /// sorting and before both limit kinds, so grouped entries are what per-block MaxItems and
+        /// global MaxItems count.
+        /// When group tracking is active, an emitted collection inherits the union of the rule groups
+        /// of the items that collapsed into it; with SimilarTo it inherits their best similarity
+        /// score - the same projection MatchContainersByMembers performs for member matches.
+        /// </summary>
+        private List<BaseItem> GroupResultsIntoCollections(
+            List<BaseItem> items,
+            User user,
+            ILibraryManager libraryManager,
+            RefreshQueueService.RefreshCache refreshCache,
+            bool trackScores,
+            ILogger? logger)
+        {
+            if (items.Count == 0)
+            {
+                return items;
+            }
+
+            try
+            {
+                var membership = BuildDirectCollectionMembershipIndex(user, libraryManager, refreshCache, logger);
+                if (membership.Count == 0)
+                {
+                    return items;
+                }
+
+                bool trackGroups = NeedsGroupTracking();
+                var emittedIds = new HashSet<Guid>();
+                var grouped = new List<BaseItem>();
+                var collapsedCount = 0;
+
+                foreach (var item in items)
+                {
+                    // Containers, items in no collection, and items whose only collection is this
+                    // list's own all stay themselves rather than vanishing
+                    if (IsContainerKind(item) || !TryGetGroupingParents(item, membership, out var parents))
+                    {
+                        if (emittedIds.Add(item.Id))
+                        {
+                            grouped.Add(item);
+                        }
+
+                        continue;
+                    }
+
+                    collapsedCount++;
+                    foreach (var parent in parents)
+                    {
+                        if (emittedIds.Add(parent.Id))
+                        {
+                            grouped.Add(parent);
+                        }
+
+                        if (trackGroups && _itemGroupMappings.TryGetValue(item.Id, out var itemGroups) && itemGroups.Count > 0)
+                        {
+                            TrackContainerGroupMapping(parent.Id, itemGroups);
+                        }
+
+                        if (trackScores && _similarityScores.TryGetValue(item.Id, out var itemScore))
+                        {
+                            _similarityScores.AddOrUpdate(parent.Id, itemScore, (_, existing) => Math.Max(existing, itemScore));
+                        }
+                    }
+                }
+
+                logger?.LogDebug("GroupIntoCollections for '{ListName}': {Collapsed} of {Input} matched items collapsed into collections, {Output} results",
+                    Name, collapsedCount, items.Count, grouped.Count);
+                return grouped;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Error grouping results into collections for '{ListName}'. Returning ungrouped results.", Name);
+                return items;
+            }
+        }
+
+        /// <summary>
         /// Gets the direct member items of a container candidate, preferring the RefreshCache
         /// (CollectionDirectChildren / CollectionChildItems / PlaylistChildItems) before falling
         /// back to reflection. Uncached lookups are stored in the child-items caches; the
@@ -2079,21 +2233,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Builds an item id → collection name map for Round Robin "Collections" grouping.
-        /// TV collections contain Series items, so episodes resolve membership through their
-        /// parent series; movies (and any direct members) resolve by their own id.
-        /// When an item belongs to multiple collections, the alphabetically-first collection
-        /// name wins (consistent with the Genres/Studios "first value" convention).
+        /// Inverts the per-drain collection caches into memberId → the collections that directly
+        /// contain it, ordered by collection name so callers needing a single winner take the first.
+        /// Ensures RefreshCache.AllCollections and CollectionDirectChildren are populated; the
+        /// children cache is seeded all-or-nothing once the walk has completed, because
+        /// OperandFactory.ExtractCollections treats a non-empty cache as fully built and a partial
+        /// seed would leave every collection not reached with permanently empty children.
         /// Direct members only — nested collections are not flattened.
         /// </summary>
-        private static Dictionary<Guid, string> BuildCollectionGroupKeyMap(
-            IReadOnlyList<BaseItem> pool,
+        private static Dictionary<Guid, List<BaseItem>> BuildDirectCollectionMembershipIndex(
             User user,
             ILibraryManager libraryManager,
             RefreshQueueService.RefreshCache? refreshCache,
             ILogger? logger)
         {
-            var map = new Dictionary<Guid, string>();
+            var index = new Dictionary<Guid, List<BaseItem>>();
 
             try
             {
@@ -2116,8 +2270,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                // memberId -> collection name; alphabetically-first collection wins
-                var memberToCollection = new Dictionary<Guid, string>();
+                // memberId -> collections, walked in name order so index[memberId][0] is the
+                // alphabetically-first collection the member belongs to
+                var uncachedChildren = new List<(Guid CollectionId, BaseItem[] Children)>();
                 foreach (var collection in allCollections.OrderBy(c => c.Name ?? string.Empty, OrderUtilities.SharedNaturalComparer))
                 {
                     BaseItem[] children;
@@ -2128,33 +2283,79 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     else
                     {
                         children = GetCollectionChildren(collection, user, logger);
-                        refreshCache?.CollectionDirectChildren.TryAdd(collection.Id, children);
+                        uncachedChildren.Add((collection.Id, children));
                     }
 
                     foreach (var child in children)
                     {
-                        if (!memberToCollection.ContainsKey(child.Id))
+                        if (!index.TryGetValue(child.Id, out var parents))
                         {
-                            memberToCollection[child.Id] = collection.Name ?? string.Empty;
+                            parents = [];
+                            index[child.Id] = parents;
                         }
+
+                        parents.Add(collection);
                     }
                 }
+
+                // Seeded only after the whole walk succeeded - a partial cache would be read as
+                // complete by every later consumer
+                if (refreshCache != null)
+                {
+                    foreach (var (collectionId, children) in uncachedChildren)
+                    {
+                        refreshCache.CollectionDirectChildren.TryAdd(collectionId, children);
+                    }
+                }
+
+                logger?.LogDebug("Direct collection membership index: {MemberCount} members across {CollectionCount} collections",
+                    index.Count, allCollections.Length);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Error building direct collection membership index - collection membership will be treated as empty");
+            }
+
+            return index;
+        }
+
+        /// <summary>
+        /// Builds an item id → collection name map for Round Robin "Collections" grouping.
+        /// TV collections contain Series items, so episodes resolve membership through their
+        /// parent series; movies (and any direct members) resolve by their own id.
+        /// When an item belongs to multiple collections, the alphabetically-first collection
+        /// name wins (consistent with the Genres/Studios "first value" convention).
+        /// Direct members only — nested collections are not flattened.
+        /// </summary>
+        private static Dictionary<Guid, string> BuildCollectionGroupKeyMap(
+            IReadOnlyList<BaseItem> pool,
+            User user,
+            ILibraryManager libraryManager,
+            RefreshQueueService.RefreshCache? refreshCache,
+            ILogger? logger)
+        {
+            var map = new Dictionary<Guid, string>();
+
+            try
+            {
+                // Name-ordered, so the first collection of each member is the alphabetical winner
+                var membership = BuildDirectCollectionMembershipIndex(user, libraryManager, refreshCache, logger);
 
                 foreach (var item in pool)
                 {
-                    if (memberToCollection.TryGetValue(item.Id, out var directName))
+                    if (membership.TryGetValue(item.Id, out var direct))
                     {
-                        map[item.Id] = directName;
+                        map[item.Id] = direct[0].Name ?? string.Empty;
                     }
                     else if (item is Episode episode && episode.SeriesId != Guid.Empty &&
-                             memberToCollection.TryGetValue(episode.SeriesId, out var seriesCollectionName))
+                             membership.TryGetValue(episode.SeriesId, out var seriesParents))
                     {
-                        map[item.Id] = seriesCollectionName;
+                        map[item.Id] = seriesParents[0].Name ?? string.Empty;
                     }
                 }
 
-                logger?.LogDebug("Collection group map: {MappedCount} of {PoolCount} items belong to a collection ({CollectionCount} collections checked)",
-                    map.Count, pool.Count, allCollections.Length);
+                logger?.LogDebug("Collection group map: {MappedCount} of {PoolCount} items belong to a collection",
+                    map.Count, pool.Count);
             }
             catch (Exception ex)
             {

@@ -349,6 +349,8 @@
             // reset whenever the toggle is hidden, so reading it directly is safe
             const matchByMembers = SmartLists.getElementChecked(page, '#matchByMembers', false);
             const hideWhenEmpty = SmartLists.getElementChecked(page, '#playlistHideWhenEmpty', false);
+            // Collection-only: the flag is never sent for a playlist regardless of UI state
+            const groupIntoCollections = isCollection && SmartLists.getElementChecked(page, '#groupIntoCollections', false);
             const isEnabled = SmartLists.getElementChecked(page, '#playlistIsEnabled', true); // Default to true
             const autoRefreshMode = SmartLists.getElementValue(page, '#autoRefreshMode', 'Never');
 
@@ -369,10 +371,13 @@
                 maxItems = (isNaN(parsedValue) || parsedValue < 0) ? 0 : parsedValue;
             }
 
-            // Handle maxPlayTimeMinutes with helper function
+            // Handle maxPlayTimeMinutes with helper function. Playlist-only: the input is hidden
+            // for collections, so never send whatever it happens to hold (the server-wide default
+            // is seeded into it regardless of list type) - a collection would be silently
+            // truncated by a limit its form never showed.
             const maxPlayTimeMinutesInput = SmartLists.getElementValue(page, '#playlistMaxPlayTimeMinutes');
             let maxPlayTimeMinutes;
-            if (maxPlayTimeMinutesInput === '') {
+            if (isCollection || maxPlayTimeMinutesInput === '') {
                 maxPlayTimeMinutes = 0;
             } else {
                 const parsedValue = parseInt(maxPlayTimeMinutesInput, 10);
@@ -445,6 +450,7 @@
                 Enabled: isEnabled,
                 IncludeExtras: includeExtras,
                 MatchByMembers: matchByMembers,
+                GroupIntoCollections: groupIntoCollections,
                 HideWhenEmpty: hideWhenEmpty,
                 MediaTypes: selectedMediaTypes,
                 MaxItems: maxItems,
@@ -748,6 +754,9 @@
         if (playlist.HideWhenEmpty) {
             chips.push('Hide when empty');
         }
+        if (playlist.GroupIntoCollections) {
+            chips.push('Group into collections');
+        }
         if (playlist.SortTitle || playlist.Overview || playlist.Favorite === true || playlist.Favorite === false ||
             (playlist.Tags && playlist.Tags.length > 0)) {
             chips.push('Metadata');
@@ -982,6 +991,7 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
         SmartLists.setElementChecked(page, '#matchByMembers', playlist.MatchByMembers || false);
+        SmartLists.setElementChecked(page, '#groupIntoCollections', playlist.GroupIntoCollections || false);
         SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
 
         // Handle AutoRefresh with backward compatibility
@@ -2068,6 +2078,13 @@
             (playlist.HideWhenEmpty ?
                 '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Hide When Empty</td>' +
+                '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
+                '</tr>' :
+                ''
+            ) +
+            (playlist.GroupIntoCollections ?
+                '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Group Into Collections</td>' +
                 '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
                 '</tr>' :
                 ''

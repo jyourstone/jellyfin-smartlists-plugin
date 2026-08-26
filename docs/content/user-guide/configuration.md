@@ -215,6 +215,7 @@ The remaining fields live inside the collapsed **More options** section, grouped
 - **Presentation**
   - Upload custom images and set metadata such as sort title, overview, tags and favorite (see [Custom Images](#custom-images) and [Metadata](#metadata) above)
   - Hide the Jellyfin playlist/collection while the list matches no items (see [Hide When Empty](#hide-when-empty))
+  - Replace matched items with the collections that contain them (collections only, see [Group results into collections](media-types.md#group-into-collections))
 
 !!! info "User Page Differences"
     On the **User Page**, you can only select yourself for playlists and must use your own account as the reference user for collections. Admins can select any user(s) from the dropdown.

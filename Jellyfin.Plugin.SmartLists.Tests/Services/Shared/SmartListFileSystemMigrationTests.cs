@@ -3,6 +3,7 @@ using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaTypeConstants = Jellyfin.Plugin.SmartLists.Core.Constants.MediaTypes;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Services.Shared;
@@ -79,6 +80,29 @@ public class SmartListFileSystemMigrationTests
 
         // Toggle stays off: migrated lists keep matching containers by their own metadata
         Assert.False(dto.MatchByMembers);
+    }
+
+    [Fact]
+    public void LegacyCollectionJson_LoadsWithGroupIntoCollectionsOff()
+    {
+        // Goes through the real load path (Deserialize -> ApplyPostProcessing) rather than building
+        // the DTO in C#, because the risk is on the JSON side: legacy files predate the
+        // GroupIntoCollections key entirely, and anything that made it load true would silently turn
+        // every existing smart collection into a collection-of-collections on first start.
+        const string LegacyJson = """
+            {
+              "Name": "Legacy",
+              "MediaTypes": ["Movie"],
+              "ExpressionSets": [
+                { "Expressions": [ { "MemberName": "Genres", "Operator": "Contains", "TargetValue": "Action" } ] }
+              ]
+            }
+            """;
+
+        var dto = JsonSerializer.Deserialize<SmartCollectionDto>(LegacyJson, SmartListFileSystem.SharedJsonOptions)!;
+        SmartListFileSystem.ApplyPostProcessing(dto);
+
+        Assert.False(dto.GroupIntoCollections);
     }
 
     [Fact]
@@ -272,6 +296,63 @@ public class SmartListFileSystemMigrationTests
         SmartListFileSystem.ApplyPostProcessing(dto);
 
         Assert.Equal([MediaTypeConstants.Movie], dto.MediaTypes);
+    }
+
+    [Fact]
+    public void PlaylistWithGroupIntoCollections_HasTheFlagCleared()
+    {
+        // Same shape as the container-media-type sanitizer above: the flag lives on the shared base
+        // DTO, so hand-edited (or converted) playlist JSON can carry it. Left set, the list would
+        // fail validation on every save; cleared at load, it just saves as a normal playlist.
+        var dto = new SmartPlaylistDto
+        {
+            Name = "Hand-edited",
+            MediaTypes = [MediaTypeConstants.Movie],
+            GroupIntoCollections = true,
+            ExpressionSets = [Group(new Expression("Genres", "Contains", "Action"))],
+        };
+
+        SmartListFileSystem.ApplyPostProcessing(dto);
+
+        Assert.False(dto.GroupIntoCollections);
+    }
+
+    [Fact]
+    public void CollectionWithMaxPlayTime_HasTheLimitCleared()
+    {
+        // Max Playtime is playlist-only and its input is hidden for collections - but the config
+        // page seeded the server-wide Default Max Playtime into every new list regardless of type
+        // and sent it, so collections created by an admin with a non-zero default are silently
+        // truncated by a limit their form never showed. Clearing it at load repairs those lists.
+        var dto = new SmartCollectionDto
+        {
+            Name = "Truncated By A Hidden Limit",
+            MediaTypes = [MediaTypeConstants.Movie],
+            MaxPlayTimeMinutes = 120,
+            ExpressionSets = [Group(new Expression("Genres", "Contains", "Action"))],
+        };
+
+        SmartListFileSystem.ApplyPostProcessing(dto);
+
+        Assert.Null(dto.MaxPlayTimeMinutes);
+    }
+
+    [Fact]
+    public void ConvertingAPlaylistToACollection_DropsMaxPlayTime()
+    {
+        // The other half of the same leak: Convert to Collection would otherwise carry the
+        // playlist's Max Playtime onto a list whose form has no way to see or clear it.
+        var playlist = new SmartPlaylistDto
+        {
+            Name = "Two Hours Of Action",
+            MediaTypes = [MediaTypeConstants.Movie],
+            MaxPlayTimeMinutes = 120,
+            ExpressionSets = [Group(new Expression("Genres", "Contains", "Action"))],
+        };
+
+        var collection = DtoMapper.ToCollectionDto(playlist);
+
+        Assert.Null(collection.MaxPlayTimeMinutes);
     }
 
     // ---------------------------------------------------------------------------------

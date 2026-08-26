@@ -118,12 +118,16 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 MediaTypes = source.MediaTypes,
                 IncludeExtras = source.IncludeExtras,
                 MatchByMembers = source.MatchByMembers,
+                GroupIntoCollections = source.GroupIntoCollections,
                 HideWhenEmpty = source.HideWhenEmpty,
-                
+
                 // State and limits
                 Enabled = source.Enabled,
                 MaxItems = source.MaxItems,
-                MaxPlayTimeMinutes = source.MaxPlayTimeMinutes,
+
+                // MaxPlayTimeMinutes is deliberately NOT mapped: Max Playtime is a playlist-only
+                // limit and its input is hidden for collections, so carrying a value across would
+                // truncate a collection by a limit its form never showed.
                 RandomGroupSelection = source.RandomGroupSelection,
                 
                 // Auto-refresh

@@ -472,6 +472,7 @@
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#matchByMembers', false);
+        SmartLists.setElementChecked(page, '#groupIntoCollections', false);
         // Cache the resolved default so template application can read it even
         // after the checkbox has been toggled (e.g. by a previous template)
         page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(config);
@@ -531,6 +532,7 @@
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#matchByMembers', false);
+        SmartLists.setElementChecked(page, '#groupIntoCollections', false);
         page._defaultHideWhenEmpty = SmartLists.getDefaultHideWhenEmpty(null);
         SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', page._defaultHideWhenEmpty);
         SmartLists.setElementChecked(page, '#playlistIsEnabled', true);

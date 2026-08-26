@@ -252,6 +252,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Container media types are collection-only; drop any that slipped into stored JSON
             playlist.MediaTypes.RemoveAll(Core.Constants.MediaTypes.IsContainerType);
+
+            // Collection-only flag; drop it if it slipped into stored JSON so the list still saves
+            playlist.GroupIntoCollections = false;
         }
 
         /// <summary>
@@ -274,6 +277,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
 
             // Migrate legacy per-rule include-only flags to Collection/Playlist media types
             MigrateIncludeOnlyRulesToMediaTypes(collection);
+
+            // Max Playtime is playlist-only and its input is hidden for collections, but the
+            // server-wide Default Max Playtime used to be written into new collections anyway -
+            // clear it so those lists stop being truncated by a limit their form never showed.
+            // Back to unset rather than 0, so a collection that never carried one is untouched.
+            if (collection.MaxPlayTimeMinutes is > 0)
+            {
+                collection.MaxPlayTimeMinutes = null;
+            }
         }
 
         /// <summary>
