@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Jellyfin.Plugin.SmartLists.Core.Constants;
+using Jellyfin.Plugin.SmartLists.Core.Enums;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Utilities;
@@ -728,6 +729,22 @@ public class InputValidatorTests
     [Theory]
     [InlineData(MediaTypeConstants.Collection)]
     [InlineData(MediaTypeConstants.Playlist)]
+    public void ValidateSmartList_ContainerMediaTypeOnCollectionBoundAsPlaylistDto_IsAccepted(string mediaType)
+    {
+        // The user page binds EVERY create body as a SmartPlaylistDto and only converts to a
+        // collection DTO after validation has run, so the CLR type says "playlist" for a list the
+        // user is creating as a collection. Gating on the Type discriminator is what keeps this
+        // legal; a `list is SmartPlaylistDto` check rejects it with the playlist error instead.
+        var dto = ValidPlaylist();
+        dto.Type = SmartListType.Collection;
+        dto.MediaTypes = [MediaTypeConstants.Movie, mediaType];
+
+        Assert.True(InputValidator.ValidateSmartList(dto).IsValid);
+    }
+
+    [Theory]
+    [InlineData(MediaTypeConstants.Collection)]
+    [InlineData(MediaTypeConstants.Playlist)]
     public void ValidateSmartList_ContainerMediaTypeOnCollection_IsAccepted(string mediaType)
     {
         var dto = new SmartCollectionDto
@@ -736,6 +753,52 @@ public class InputValidatorTests
             MediaTypes = [mediaType],
             ExpressionSets = [Group(Rule())],
         };
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Fact]
+    public void ValidateSmartList_GroupIntoCollectionsOnPlaylist_IsRejected()
+    {
+        // Grouping emits BoxSets, and PlaylistService dereferences its media lookup unguarded, so
+        // a BoxSet id reaching the playlist write path throws. Unlike the container media types
+        // there is no natural gate on the flag - this rule IS the gate.
+        var dto = ValidPlaylist();
+        dto.GroupIntoCollections = true;
+
+        AssertInvalid(
+            InputValidator.ValidateSmartList(dto),
+            "Group results into collections is not supported for playlists");
+    }
+
+    [Fact]
+    public void ValidateSmartList_GroupIntoCollectionsOnCollection_IsAccepted()
+    {
+        // The mirror case, and the reason the rejection has to test the list type rather than the
+        // flag: the identical flag is the whole point of the feature on a smart collection. No
+        // container media type is required for it, either.
+        var dto = new SmartCollectionDto
+        {
+            Name = "Valid List",
+            MediaTypes = [MediaTypeConstants.Movie],
+            GroupIntoCollections = true,
+            ExpressionSets = [Group(Rule())],
+        };
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Fact]
+    public void ValidateSmartList_GroupIntoCollectionsOnCollectionBoundAsPlaylistDto_IsAccepted()
+    {
+        // The shape the user page actually posts: UserSmartListController.CreateUserSmartList binds
+        // EVERY create body as a SmartPlaylistDto and only calls DtoMapper.ToCollectionDto after
+        // validation has run. Keying the rejection off the CLR type instead of Type would therefore
+        // make a grouped collection impossible to create from the user page - it could only be added
+        // by editing an existing collection, which binds the abstract DTO and converts up front.
+        var dto = ValidPlaylist();
+        dto.Type = SmartListType.Collection;
+        dto.GroupIntoCollections = true;
 
         AssertValid(InputValidator.ValidateSmartList(dto));
     }

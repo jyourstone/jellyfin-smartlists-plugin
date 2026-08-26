@@ -284,6 +284,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         string.Join(", ", duplicateIds));
                 }
 
+                // Grouped results are collections projected onto the matched items' parents - they were never
+                // part of allMedia (which only queries BoxSets when a container media type is selected), so
+                // hydrate them or the ContainsKey guard below would silently drop every grouped entry.
+                if (dto.GroupIntoCollections)
+                {
+                    foreach (var itemId in distinctNewItems)
+                    {
+                        if (mediaLookup.ContainsKey(itemId))
+                        {
+                            continue;
+                        }
+
+                        var groupedItem = _libraryManager.GetItemById(itemId);
+                        if (groupedItem != null)
+                        {
+                            mediaLookup[itemId] = groupedItem;
+                        }
+                    }
+                }
+
                 var newLinkedChildren = distinctNewItems
                     .Where(itemId => mediaLookup.ContainsKey(itemId))
                     .Select(itemId => LinkedChildFactory.Create(itemId, mediaLookup[itemId]))

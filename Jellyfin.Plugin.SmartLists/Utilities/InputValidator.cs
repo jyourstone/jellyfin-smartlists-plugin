@@ -280,14 +280,25 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             // Container media types (Collection/Playlist) are collection-only: Jellyfin playlists
-            // can only contain media items, so container results would be silently dropped
-            if (list is SmartPlaylistDto)
+            // can only contain media items, so container results would be silently dropped.
+            // Gated on the Type discriminator rather than the CLR type: the user page binds every
+            // create body as a SmartPlaylistDto and only converts to a collection DTO after
+            // validation has run, so a CLR-type check rejects legitimate smart collections there.
+            if (list.Type != Core.Enums.SmartListType.Collection)
             {
                 var containerType = list.MediaTypes?.FirstOrDefault(Core.Constants.MediaTypes.IsContainerType);
                 if (containerType != null)
                 {
                     return SmartListValidationResult.Failure($"{containerType} media type is not supported for playlists. Jellyfin playlists can only contain media items - use a smart collection instead.");
                 }
+            }
+
+            // Grouping emits BoxSets, which Jellyfin playlists cannot contain. Gated on the Type
+            // discriminator rather than the CLR type: the user page binds every create body as a
+            // SmartPlaylistDto and only converts to a collection DTO after validation has run.
+            if (list.Type != Core.Enums.SmartListType.Collection && list.GroupIntoCollections)
+            {
+                return SmartListValidationResult.Failure("Group results into collections is not supported for playlists. Jellyfin playlists can only contain media items - use a smart collection instead.");
             }
 
             // Validate expression sets

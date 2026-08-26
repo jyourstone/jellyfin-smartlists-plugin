@@ -422,6 +422,8 @@ When using multiple OR blocks, you can set a **Max Items limit for each individu
 !!! note "Collection / Playlist media types"
     Collections and playlists matched via the [Collection/Playlist media types](media-types.md#container-media-types) participate like any other results: they count toward the limit of the OR block that matched them (with **Match by members** on, the block whose rules their member items passed) and are unaffected by limits set on other blocks.
 
+    The same holds with **[Group results into collections](media-types.md#group-into-collections)** on: grouping runs before both limits, so it is the grouped collection that counts toward the per-block and global limits, never the items that collapsed into it. It inherits the rule blocks of those items, so it survives a limit set on their block.
+
 !!! note "Similar To blocks"
     A block containing a **Similar To** rule scores similarity against [its own block's reference items](fields-and-operators.md#similar-to), so per-block limits behave as expected: each block's limit is filled from the items similar to *that block's* reference. An item similar to several blocks' references counts toward the first of those blocks with a free slot, never twice.
 

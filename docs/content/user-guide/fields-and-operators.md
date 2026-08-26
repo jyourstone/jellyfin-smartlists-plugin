@@ -263,6 +263,8 @@ How deep to traverse nested collections (default: 0). The option appears under a
 - 1 = Items in collection + one level of sub-collections
 - 2+ = Continue traversing nested collections
 
+**[Group results into collections](media-types.md#group-into-collections)** never uses this setting to decide which collections a matched item is replaced by — that is always direct membership. It does still apply to the *results* of grouping in the usual way: at depth 1 or higher, sorts like Community Rating or Production Year [aggregate over each collection's children](sorting-and-limits.md#child-item-sorting) instead of reading the collection's own (usually empty) value.
+
 !!! warning "Performance"
     Higher search depths require more database queries. Start with depth 0 and increase only if needed.
 

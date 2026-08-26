@@ -58,6 +58,15 @@ Here are some popular playlist and collection types you can create:
 - A collection holding a 2015 Arnold movie and a 1985 movie without him does **not** match — a single item must satisfy the whole rule group
 - **Tip**: Add **Movie** to the media types to also include the matching movies themselves alongside the collections
 
+### Collections of Your Best Action Movies
+- **List Type**: Collection
+- **Media Types**: Movie, with **["Group results into collections"](../user-guide/media-types.md#group-into-collections)** turned **on**
+- **Genres** contains "Action" AND **Community Rating** greater than 8
+- The rules still match movies, but every matched movie is replaced by the collections it belongs to — the result is a collection of every collection holding a highly-rated action movie
+- Duplicates collapse, so ten matching movies from the same franchise produce that one collection rather than ten entries. Movies that aren't in any collection are kept as they are
+- **Note**: Only direct membership counts, and grouping happens before sorting and Max Items, so the limit counts collections rather than the movies inside them
+- **Tip**: The two collection toggles are opposites — use **Match by members** to match *against* a collection's contents, and **Group results into collections** to *produce* collections from item matches
+
 ### Combine Multiple Playlists
 - **Playlist name** is in "Favorites;Top Rated;Recent Additions"
 - **List Type**: Playlist

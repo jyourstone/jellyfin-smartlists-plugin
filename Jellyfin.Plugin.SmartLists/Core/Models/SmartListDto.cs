@@ -84,6 +84,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public bool MatchByMembers { get; set; } = false;
 
         /// <summary>
+        /// Collections only. When true, every matched item that is a direct member of one or more
+        /// Jellyfin collections is replaced by those collections. Items in no collection - and results
+        /// that are themselves collections/playlists - pass through unchanged. Grouping runs before
+        /// sorting and before both limit kinds, so grouped entries are what MaxItems counts.
+        /// Direct membership only: the Collection search depth setting is not used.
+        /// </summary>
+        public bool GroupIntoCollections { get; set; } = false;
+
+        /// <summary>
         /// When true, the Jellyfin playlist/collection is not created (and an existing one is
         /// removed) while the list's rules match zero items. It is recreated automatically
         /// once items match again. The smart list configuration itself is never deleted.

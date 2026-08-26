@@ -63,6 +63,33 @@ In a mixed selection like `Movie + Collection`, item candidates are still evalua
 !!! info "Replaces the old include-only checkboxes"
     Older versions used per-rule **"Include collections only"** / **"Include playlist only"** checkboxes on the **Collection name** and **Playlist name** fields. Existing lists are migrated automatically on load: the include-only rule becomes a **Name** rule, the matching media type is selected, and the toggle stays off. See the [changelog](../changelog/rc.md) for details on lists that mixed include-only rules with normal item rules.
 
+### Group results into collections {#group-into-collections}
+
+Smart collections have a second list-level toggle, **"Group results into collections"**, under **More options → Presentation**. Where [Match by members](#match-by-members) checks a collection by the items *inside* it, this one works the other way round — it turns an ordinary item search *into* collections. It is available on every smart collection and, unlike Match by members, needs no container media type.
+
+With the toggle on, every matched item that is a direct member of one or more Jellyfin collections is replaced by those collections. Items that are in no collection are kept as they are, and results that already *are* collections or playlists pass through unchanged. Results are de-duplicated, so ten matched Marvel movies produce a single Marvel collection rather than ten copies of it — while an item sitting in several collections is replaced by all of them.
+
+For example, on a smart collection with the **Movie** media type and the toggle on:
+
+```text
+Genres contains "Action"
+AND Community Rating greater than 8
+```
+
+produces a collection of every collection holding a highly-rated action movie, instead of a collection of the movies themselves.
+
+!!! note "Direct membership only"
+    Only the collections that contain a matched item **directly** are used — nested collections are not traversed, and the [Collection search depth](fields-and-operators.md#collection-search-depth) setting has no say in which collections are emitted (it still affects how they are *sorted*, see below). Episodes and seasons are never direct collection members themselves, so they are grouped through their **series**: an episode is replaced by the collections holding its show.
+
+!!! note "Which collections are used"
+    Grouping uses the Jellyfin collections the [reference user](user-selection.md#collections-reference-user) can see: manually created ones and the collections Jellyfin creates automatically for movie franchises. **Smart collections are never emitted** — neither the list's own (the self-reference prevention described above) nor any other one this plugin manages. They are regenerated on every refresh, so grouping into one would make a list's contents depend on refresh order, and any smart collection that happened to hold a matched item would crowd out the real collections. To build a list *of* smart collections, use the [Collection media type](#container-media-types) instead.
+
+!!! note "Grouping runs before sorting and limits"
+    Items are grouped before the list is sorted and before **Max Items** is applied, so that limit — global and [per OR block](sorting-and-limits.md#per-group-max-items) — counts collections, not the items that collapsed into them. A grouped collection inherits the rule blocks of the items it replaced, so it counts toward those blocks' limits. Sorting by **Round Robin** grouped by *Collection* adds nothing here: every result is already a collection, so each one forms a group of its own.
+
+!!! tip "Sorting grouped results by a member value"
+    Grouped results are collections, and a collection usually carries no community rating, year or release date of its own — so sorting by one of those fields leaves every entry at zero unless [Collection search depth](fields-and-operators.md#collection-search-depth) is set to **1 or higher**, which is what switches those sorts over to [aggregating the values of a collection's children](sorting-and-limits.md#child-item-sorting). The depth setting never changes *which* collections grouping emits.
+
 ## Extras (Special Features)
 
 Jellyfin supports "extras" — behind the scenes, deleted scenes, featurettes, trailers, and other bonus content attached to movies and TV shows. By default, extras are **not included** in smart lists because they are owned by their parent items and excluded from standard library queries.
