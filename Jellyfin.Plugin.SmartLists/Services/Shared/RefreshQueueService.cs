@@ -341,11 +341,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     var latestDto = await playlistStore.GetByIdAsync(listGuid);
                     if (latestDto == null)
                     {
-                        // The list was deleted after this operation was queued. Falling back to the DTO captured at
-                        // enqueue time would re-create the playlist and rewrite its config.json, resurrecting
-                        // a list the user deleted.
-                        _logger.LogInformation("Skipping {OperationType} operation for playlist '{ListName}' ({ListId}) - it no longer exists in the store.",
-                            item.OperationType, item.ListName, item.ListId);
+                        // GetByIdAsync returns null both for a list that was deleted and for one whose config
+                        // file cannot be read or deserialized, so ask the file system which case this is.
+                        if (fileSystem.GetSmartListFilePath(item.ListId) == null)
+                        {
+                            // Genuinely deleted after this operation was queued. Falling back to the DTO captured
+                            // at enqueue time would rebuild the playlist and rewrite its config.json, resurrecting
+                            // a list the user deleted.
+                            _logger.LogInformation("Skipping {OperationType} operation for playlist '{ListName}' ({ListId}) - it no longer exists in the store.",
+                                item.OperationType, item.ListName, item.ListId);
+                            return;
+                        }
+
+                        // The config file is still there but could not be loaded. Refresh from the queued copy
+                        // rather than silently skipping, and surface the storage failure.
+                        _logger.LogWarning("Could not load playlist '{ListName}' ({ListId}) from its config file; refreshing from the copy captured when the operation was queued.",
+                            item.ListName, item.ListId);
+                        await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, item.TriggeringUserIds, cancellationToken);
                         return;
                     }
                     _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
@@ -364,11 +376,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     var latestDto = await collectionStore.GetByIdAsync(listGuid);
                     if (latestDto == null)
                     {
-                        // The list was deleted after this operation was queued. Falling back to the DTO captured at
-                        // enqueue time would re-create the collection folder and rewrite its config.json, resurrecting
-                        // a list the user deleted.
-                        _logger.LogInformation("Skipping {OperationType} operation for collection '{ListName}' ({ListId}) - it no longer exists in the store.",
-                            item.OperationType, item.ListName, item.ListId);
+                        // GetByIdAsync returns null both for a list that was deleted and for one whose config
+                        // file cannot be read or deserialized, so ask the file system which case this is.
+                        if (fileSystem.GetSmartListFilePath(item.ListId) == null)
+                        {
+                            // Genuinely deleted after this operation was queued. Falling back to the DTO captured
+                            // at enqueue time would rebuild the collection and rewrite its config.json, resurrecting
+                            // a list the user deleted.
+                            _logger.LogInformation("Skipping {OperationType} operation for collection '{ListName}' ({ListId}) - it no longer exists in the store.",
+                                item.OperationType, item.ListName, item.ListId);
+                            return;
+                        }
+
+                        // The config file is still there but could not be loaded. Refresh from the queued copy
+                        // rather than silently skipping, and surface the storage failure.
+                        _logger.LogWarning("Could not load collection '{ListName}' ({ListId}) from its config file; refreshing from the copy captured when the operation was queued.",
+                            item.ListName, item.ListId);
+                        await ProcessCollectionRefreshAsync((SmartCollectionDto)item.ListData, cancellationToken);
                         return;
                     }
                     _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
