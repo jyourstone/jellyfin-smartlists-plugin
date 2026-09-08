@@ -96,7 +96,7 @@
         { value: 'Runtime', label: 'Runtime', group: 'Media Info' },
         { value: 'Resolution', label: 'Resolution', group: 'Media Info' },
         { value: 'Similarity', label: 'Similarity (requires Similar To rule)', group: 'Rule-Based' },
-        { value: 'Rule Block Order', label: 'Rule Block Order', group: 'Rule-Based' },
+        { value: 'Rule Block Order', label: 'Rule Group Order', group: 'Rule-Based' },
         { value: 'External List Order', label: 'External List Order', group: 'Rule-Based' },
         { value: 'Round Robin', label: 'Round Robin (Interleave)', group: 'Round Robin' },
         { value: 'Random Round Robin', label: 'Random Round Robin (Interleave)', group: 'Round Robin' },

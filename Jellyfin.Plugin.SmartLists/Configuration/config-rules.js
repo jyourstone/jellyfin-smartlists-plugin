@@ -973,7 +973,7 @@
         const moveUpBtn = document.createElement('button');
         moveUpBtn.type = 'button';
         moveUpBtn.className = 'rule-action-btn clone-btn move-group-up-btn';
-        moveUpBtn.title = 'Move OR Block Up';
+        moveUpBtn.title = 'Move Rule Group Up';
         moveUpBtn.innerHTML = '<span class="material-icons" style="font-size: 1.2em; height: 31px; display: flex; justify-content: center; align-items: center;">keyboard_arrow_up</span>';
 
         // Style the move button using the clone button styling
@@ -982,7 +982,7 @@
         const moveDownBtn = document.createElement('button');
         moveDownBtn.type = 'button';
         moveDownBtn.className = 'rule-action-btn clone-btn move-group-down-btn';
-        moveDownBtn.title = 'Move OR Block Down';
+        moveDownBtn.title = 'Move Rule Group Down';
         moveDownBtn.innerHTML = '<span class="material-icons" style="font-size: 1.2em; height: 31px; display: flex; justify-content: center; align-items: center;">keyboard_arrow_down</span>';
 
         // Style the move button using the clone button styling
@@ -991,7 +991,7 @@
         const cloneBtn = document.createElement('button');
         cloneBtn.type = 'button';
         cloneBtn.className = 'rule-action-btn clone-btn clone-group-btn';
-        cloneBtn.title = 'Clone OR Block';
+        cloneBtn.title = 'Clone Rule Group';
         cloneBtn.innerHTML = '<span class="material-icons" style="font-size: 1em; height: 31px; display: flex; justify-content: center; align-items: center;">content_copy</span>';
 
         // Style the clone button using the styling system
@@ -1000,7 +1000,7 @@
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'rule-action-btn delete-btn delete-group-btn';
-        deleteBtn.title = 'Remove OR Block';
+        deleteBtn.title = 'Remove Rule Group';
         deleteBtn.textContent = '×';
 
         // Style the delete button
@@ -1020,7 +1020,7 @@
         container.style.cssText = 'margin: 10px 0 5px 0; padding: 8px; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;';
 
         const label = document.createElement('label');
-        label.textContent = 'Max Items for this OR block: ';
+        label.textContent = 'Max Items for this rule group: ';
         label.style.cssText = 'font-size: 0.9em; opacity: 0.6; margin-right: 8px;';
 
         const input = document.createElement('input');

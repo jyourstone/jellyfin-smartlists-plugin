@@ -95,21 +95,21 @@ Sort by similarity score (highest first). Only available when using the "Similar
 ### Random
 Randomize the order of items. Each refresh generates a new random order.
 
-### Rule Block Order
-Preserves the natural grouping from OR blocks by keeping items from each block together.
+### Rule Group Order
+Preserves the natural grouping from rule groups by keeping items from each group together.
 
 **How it works**:
 
-- Items from OR Block 1 appear first
-- Then items from OR Block 2
-- Then OR Block 3, and so on
+- Items from rule group 1 appear first
+- Then items from rule group 2
+- Then rule group 3, and so on
 
 **When to use**: Perfect for creating playlists with distinct sections from different rule groups, especially when combined with [Per-Group Max Items](#per-group-max-items).
 
-**Works with secondary sorts**: Items within each block are sorted by your secondary sort options.
+**Works with secondary sorts**: Items within each group are sorted by your secondary sort options.
 
-!!! note "Requires Multiple OR Blocks"
-    This sort option requires multiple OR blocks to be meaningful. With only one OR block, it behaves like regular sorting.
+!!! note "Requires Multiple Rule Groups"
+    This sort option requires multiple rule groups to be meaningful. With only one rule group, it behaves like regular sorting.
 
 ### Round Robin (Interleave)
 Interleaves items across groups defined by a field you choose (e.g., Series Name, Album Name, Artist, Genre, or Studio). This creates a "TV channel" effect where episodes cycle through shows one at a time.
@@ -146,7 +146,7 @@ Interleaves items across groups defined by a field you choose (e.g., Series Name
 4. Optionally set Sort Order to control group ordering (Ascending = A→Z, Descending = Z→A)
 
 !!! tip "Keep it simple"
-    You do **not** need separate OR blocks per show/album. A single rule block (e.g., `Playback Status = Unplayed`) is enough — the Round Robin sort automatically groups and interleaves items by the Group By field you choose.
+    You do **not** need separate rule groups per show/album. A single rule group (e.g., `Playback Status = Unplayed`) is enough — the Round Robin sort automatically groups and interleaves items by the Group By field you choose.
 
 **Available Group By fields**:
 
@@ -398,11 +398,11 @@ Set a maximum number of items for your smart list. The limit applies **after sor
 
 ### Per-Group Max Items
 
-When using multiple OR blocks, you can set a **Max Items limit for each individual OR block**. This allows precise control over your smart list composition.
+When using multiple rule groups, you can set a **Max Items limit for each individual rule group**. This allows precise control over your smart list composition.
 
 **How it works**:
 
-1. Items matching each OR block's rules are collected separately
+1. Items matching each rule group's rules are collected separately
 2. Each group is sorted using the playlist's sort options
 3. The MaxItems limit is applied to each group independently
 4. The limited results from all groups are combined
@@ -410,22 +410,22 @@ When using multiple OR blocks, you can set a **Max Items limit for each individu
 
 **Configuration**:
 
-1. Create your rule(s) within an OR block
-2. At the bottom of each OR block, enter a value in **"Max Items for this OR block"**
+1. Create your rule(s) within a rule group
+2. At the bottom of each rule group, enter a value in **"Max Items for this rule group"**
 3. Leave empty or set to 0 for unlimited items from that group
 
-**Example**: Create a balanced playlist with 50 trailers and 50 episodes by setting MaxItems to 50 on each OR block.
+**Example**: Create a balanced playlist with 50 trailers and 50 episodes by setting MaxItems to 50 on each rule group.
 
 !!! tip "Combining with Global Limits"
-    Per-group limits are applied first, then the global Max Items limit. Example: 3 blocks × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
+    Per-group limits are applied first, then the global Max Items limit. Example: 3 rule groups × 50 items each = 150 total, then global limit of 100 = final result of 100 items.
 
 !!! note "Collection / Playlist media types"
-    Collections and playlists matched via the [Collection/Playlist media types](media-types.md#container-media-types) participate like any other results: they count toward the limit of the OR block that matched them (with **Match by members** on, the block whose rules their member items passed) and are unaffected by limits set on other blocks.
+    Collections and playlists matched via the [Collection/Playlist media types](media-types.md#container-media-types) participate like any other results: they count toward the limit of the rule group that matched them (with **Match by members** on, the group whose rules their member items passed) and are unaffected by limits set on other groups.
 
-    The same holds with **[Group results into collections](media-types.md#group-into-collections)** on: grouping runs before both limits, so it is the grouped collection that counts toward the per-block and global limits, never the items that collapsed into it. It inherits the rule blocks of those items, so it survives a limit set on their block.
+    The same holds with **[Group results into collections](media-types.md#group-into-collections)** on: grouping runs before both limits, so it is the grouped collection that counts toward the per-group and global limits, never the items that collapsed into it. It inherits the rule groups of those items, so it survives a limit set on their group.
 
-!!! note "Similar To blocks"
-    A block containing a **Similar To** rule scores similarity against [its own block's reference items](fields-and-operators.md#similar-to), so per-block limits behave as expected: each block's limit is filled from the items similar to *that block's* reference. An item similar to several blocks' references counts toward the first of those blocks with a free slot, never twice.
+!!! note "Similar To rule groups"
+    A rule group containing a **Similar To** rule scores similarity against [its own group's reference items](fields-and-operators.md#similar-to), so per-block limits behave as expected: each block's limit is filled from the items similar to *that block's* reference. An item similar to several blocks' references counts toward the first of those blocks with a free slot, never twice.
 
 !!! info "See Examples"
     For detailed examples using per-group limits, see [Common Use Cases](../examples/common-use-cases.md#balanced-mix-with-per-group-limits) and [Advanced Examples](../examples/advanced-examples.md#advanced-per-group-limit-techniques).

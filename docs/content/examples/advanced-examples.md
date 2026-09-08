@@ -126,18 +126,18 @@ As you add new content to any collection, the sort order automatically updates b
 ### Curated Discovery Playlist
 Combine different content discovery strategies with precise control:
 
-- **OR Block 1** (Recent Additions):
+- **Rule group 1** (Recent Additions):
     - **Date Created** after 7:Days
     - **Playback Status** = Unplayed
-    - **Max Items for this OR block**: 10
-- **OR Block 2** (Rediscover Old Favorites):
+    - **Max Items for this rule group**: 10
+- **Rule group 2** (Rediscover Old Favorites):
     - **Last Played** before 6:Months
     - **Community Rating** >= 8
-    - **Max Items for this OR block**: 5
-- **OR Block 3** (Highly Rated Unwatched):
+    - **Max Items for this rule group**: 5
+- **Rule group 3** (Highly Rated Unwatched):
     - **Community Rating** >= 9
     - **Playback Status** = Unplayed
-    - **Max Items for this OR block**: 5
+    - **Max Items for this rule group**: 5
 - **Global Max Items**: 15
 - **Sort by**: Random
 - Result: Up to 10 recent additions, 5 older high-rated items, and 5 top-rated unwatched items, then randomly select 15 from this pool
@@ -145,19 +145,19 @@ Combine different content discovery strategies with precise control:
 ### Perfectly Balanced Genre Workout Mix
 Create a music playlist with exact genre proportions:
 
-- **OR Block 1** (High Energy):
+- **Rule group 1** (High Energy):
     - **Genre** is in "Electronic;Dance;EDM"
     - **BPM** >= 140 (if using music metadata)
-    - **Max Items for this OR block**: 20
-- **OR Block 2** (Rock Energy):
+    - **Max Items for this rule group**: 20
+- **Rule group 2** (Rock Energy):
     - **Genre** is in "Rock;Metal;Punk"
-    - **Max Items for this OR block**: 15
-- **OR Block 3** (Hip Hop):
+    - **Max Items for this rule group**: 15
+- **Rule group 3** (Hip Hop):
     - **Genre** is in "Hip Hop;Rap"
-    - **Max Items for this OR block**: 10
-- **OR Block 4** (Recovery):
+    - **Max Items for this rule group**: 10
+- **Rule group 4** (Recovery):
     - **Genre** is in "Ambient;Chill"
-    - **Max Items for this OR block**: 5
+    - **Max Items for this rule group**: 5
 - **Sort by**: Random
 - **Max Playtime**: 45 minutes
 - Result: Mix of 20 electronic, 15 rock, 10 hip hop, and 5 chill tracks (50 total), then trimmed to fit 45 minutes
@@ -165,35 +165,35 @@ Create a music playlist with exact genre proportions:
 ### Multi-User Family Content Balance
 Create a balanced playlist from different family members' preferences:
 
-- **OR Block 1** (Dad's Action):
+- **Rule group 1** (Dad's Action):
     - **Genre** contains "Action"
     - **Playback Status** = Unplayed for user "Dad"
-    - **Max Items for this OR block**: 3
-- **OR Block 2** (Mom's Drama):
+    - **Max Items for this rule group**: 3
+- **Rule group 2** (Mom's Drama):
     - **Genre** contains "Drama"
     - **Playback Status** = Unplayed for user "Mom"
-    - **Max Items for this OR block**: 3
-- **OR Block 3** (Kids' Content):
+    - **Max Items for this rule group**: 3
+- **Rule group 3** (Kids' Content):
     - **Parental Rating** is in "G;PG"
-    - **Max Items for this OR block**: 4
+    - **Max Items for this rule group**: 4
 - **Sort by**: Random
 - Result: 3 unwatched action movies for dad, 3 unwatched dramas for mom, and 4 kid-friendly items (10 total)
 
 ### Temporal Content Balance
 Create a playlist that balances content across release eras and rating tiers:
 
-- **OR Block 1** (Modern Masterpieces):
+- **Rule group 1** (Modern Masterpieces):
     - **Production Year** >= 2020
     - **Community Rating** >= 9
-    - **Max Items for this OR block**: 8
-- **OR Block 2** (Recent Quality):
+    - **Max Items for this rule group**: 8
+- **Rule group 2** (Recent Quality):
     - **Production Year** >= 2020
     - **Community Rating** between 7-8.9
-    - **Max Items for this OR block**: 12
-- **OR Block 3** (Classic Gems):
+    - **Max Items for this rule group**: 12
+- **Rule group 3** (Classic Gems):
     - **Production Year** < 2020
     - **Community Rating** >= 8.5
-    - **Max Items for this OR block**: 10
+    - **Max Items for this rule group**: 10
 - **Sort by**: Random
 - **Global Max Items**: 25
 - Result: Balanced mix prioritizing modern masterpieces, recent quality content, and classic gems, randomly selecting 25 items from the pool
@@ -201,21 +201,21 @@ Create a playlist that balances content across release eras and rating tiers:
 ### Structured Multi-Section Playlist
 Create a playlist with distinct sections that remain grouped:
 
-- **OR Block 1** (Opening: Recent Blockbusters):
+- **Rule group 1** (Opening: Recent Blockbusters):
     - **Date Created** after 30:Days
     - **Community Rating** >= 8
-    - **Max Items for this OR block**: 5
-- **OR Block 2** (Main Content: Unwatched Classics):
+    - **Max Items for this rule group**: 5
+- **Rule group 2** (Main Content: Unwatched Classics):
     - **Playback Status** = Unplayed
     - **Production Year** < 2000
     - **Community Rating** >= 8.5
-    - **Max Items for this OR block**: 15
-- **OR Block 3** (Closing: Fan Favorites):
+    - **Max Items for this rule group**: 15
+- **Rule group 3** (Closing: Fan Favorites):
     - **Is Favorite** = True
     - **Play Count** >= 3
-    - **Max Items for this OR block**: 5
+    - **Max Items for this rule group**: 5
 - **Sort by**: 
-    - **Primary**: Rule Block Order (keeps sections intact)
+    - **Primary**: Rule Group Order (keeps sections intact)
     - **Secondary**: Community Rating descending (orders within each section)
 - Result: A structured 25-item playlist with three distinct sections:
     1. Opening section: 5 recent highly-rated new releases

@@ -132,7 +132,7 @@
             id: 'balanced-mix',
             name: 'Balanced Genre Mix',
             category: 'Movies',
-            description: 'Up to 15 movies each of Action, Comedy and Drama, kept in that block order. Change the genres to taste — each rule block has its own item limit.',
+            description: 'Up to 15 movies each of Action, Comedy and Drama, kept in that group order. Change the genres to taste — each rule group has its own item limit.',
             adminOnly: false,
             inputHint: null,
             dto: {
