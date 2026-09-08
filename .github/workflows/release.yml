@@ -177,7 +177,8 @@ jobs:
               --arg timestamp "$TIMESTAMP" \
               '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
             jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
-              '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
+              '(.[] | select(.guid == $guid).versions) |=
+                 ([$new_package] + map(select(.version != $new_package.version or .targetAbi != $new_package.targetAbi)))' \
               "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
           done
 
@@ -241,7 +242,8 @@ jobs:
               --arg timestamp "$TIMESTAMP" \
               '{version: $version, targetAbi: $abi, sourceUrl: $url, checksum: $checksum, changelog: $changelog, timestamp: $timestamp}')
             jq --argjson new_package "$NEW_PACKAGE" --arg guid "$PLUGIN_GUID" \
-              '(.[] | select(.guid == $guid).versions) |= [$new_package] + .' \
+              '(.[] | select(.guid == $guid).versions) |=
+                 ([$new_package] + map(select(.version != $new_package.version or .targetAbi != $new_package.targetAbi)))' \
               "$MANIFEST_FILE" > tmp_manifest.json && mv tmp_manifest.json "$MANIFEST_FILE"
           done
 
