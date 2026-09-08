@@ -10,6 +10,16 @@ Version numbers are .NET four-part versions (`Major.Minor.Build.Revision`), not 
 Stable releases end in `.0`.
 
 
+## v12.0.2.0
+
+*2026-09-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.2.0)*
+
+Same plugin as v12.0.1.0 — no functional changes. It exists so that servers upgraded from Jellyfin 10.11 to Jellyfin 12 automatically pick up the correct build.
+
+**Bug Fixes**
+
+- **Upgrading Jellyfin from 10.11 to 12 left the plugin showing "Not supported".** Each release published its 10.11 and its 12 build under the *same* version number, so a server that had installed the 10.11 build kept it after the upgrade — Jellyfin saw no newer version to offer, and the 10.11 build cannot run on Jellyfin 12. This release is published for Jellyfin 12 only, so those servers now see an update and repair themselves. Jellyfin 10.11 servers are unaffected and stay on v12.0.1.0.
+
 ## v12.0.1.0
 
 *2026-09-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.1.0)*
