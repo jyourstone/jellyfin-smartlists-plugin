@@ -335,8 +335,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
                     var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
                     var duplicateCollection = allCollections.FirstOrDefault(c => 
-                        c.Id != collectionDto.Id && 
-                        string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
+                        c.Id != collectionDto.Id &&
+                        Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
                     
                     if (duplicateCollection != null)
                     {
@@ -344,7 +344,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         return BadRequest(new ProblemDetails
                         {
                             Title = "Validation Error",
-                            Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
+                            Detail = Utilities.InputValidator.BuildCollectionNameConflictDetail(formattedName, Utilities.NameFormatter.FormatPlaylistName(duplicateCollection.Name)),
                             Status = StatusCodes.Status400BadRequest
                         });
                     }
@@ -1270,8 +1270,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
                         var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
                         var duplicateCollection = allCollections.FirstOrDefault(c => 
-                            c.Id != collectionDto.Id && 
-                            string.Equals(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName, StringComparison.OrdinalIgnoreCase));
+                            c.Id != collectionDto.Id &&
+                            Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
                         
                         if (duplicateCollection != null)
                         {
@@ -1280,7 +1280,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             return BadRequest(new ProblemDetails
                             {
                                 Title = "Validation Error",
-                                Detail = $"A collection named '{formattedName}' already exists. Jellyfin does not allow multiple collections with the same name.",
+                                Detail = Utilities.InputValidator.BuildCollectionNameConflictDetail(formattedName, Utilities.NameFormatter.FormatPlaylistName(duplicateCollection.Name)),
                                 Status = StatusCodes.Status400BadRequest
                             });
                         }

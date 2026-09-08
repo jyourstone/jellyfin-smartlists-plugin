@@ -24,6 +24,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 - **Saving a list now reports why it failed.** A rejected update showed no message whatsoever: a bug in the error handler threw before the notification was reached, so the save simply appeared to do nothing. Converting lists between playlist and collection was similarly silent, in both the single and bulk actions, and now shows the server's reason.
 - A failed update no longer discards the edits in the form. The form was being reloaded from the saved copy, wiping out whatever had just been typed; it now stays as-is so the change can be corrected and resubmitted.
 - List names are escaped in the notifications that show them, so a name containing HTML can no longer affect the page.
+- Two smart collections whose names differ only in the characters Jellyfin rewrites — *Marvel: Phase One* and *Marvel? Phase One* — can no longer be created. Both names become the same folder, so Jellyfin quietly gave the two lists **one shared collection**: each refresh renamed it and took it over from the other, with nothing reported in either list. Naming a collection so that it would collide with an existing one is now refused up front, and the message names the collection it clashes with ([#515](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/515)).
 
 
 ## v12.0.0.20-rc

@@ -165,6 +165,32 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         }
 
         /// <summary>
+        /// Returns true when two already-formatted list names would resolve to the same folder on disk.
+        /// Jellyfin core replaces every character it treats as invalid with a space when it derives a
+        /// collection's folder name, and derives the item's id from that path - so two names differing
+        /// only in those characters silently share one BoxSet.
+        /// </summary>
+        internal static bool NamesResolveToSameFolder(string first, string second)
+        {
+            return string.Equals(SanitizedFolderName(first), SanitizedFolderName(second), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Builds the validation message for a collection name conflict. Names that are already equal get
+        /// the plain duplicate message; names that collide only after core's sanitization need to say why,
+        /// because the two names visibly differ on screen.
+        /// </summary>
+        internal static string BuildCollectionNameConflictDetail(string candidateFormatted, string existingFormatted)
+        {
+            if (string.Equals(candidateFormatted, existingFormatted, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"A collection named '{candidateFormatted}' already exists. Jellyfin does not allow multiple collections with the same name.";
+            }
+
+            return $"A collection named '{existingFormatted}' already exists, and Jellyfin replaces the characters \" < > | : * ? \\ / with spaces when it creates the collection folder - so '{candidateFormatted}' would end up sharing that same collection. Choose a name that differs by more than those characters.";
+        }
+
+        /// <summary>
         /// Validates a string value (used in expressions).
         /// </summary>
         /// <summary>

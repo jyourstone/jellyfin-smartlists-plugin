@@ -1075,4 +1075,25 @@ public class InputValidatorTests
 
         AssertValid(InputValidator.ValidateSmartList(dto));
     }
+
+    // ---------------------------------------------------------------------------------
+    // NamesResolveToSameFolder
+    // ---------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Marvel: Phase One [Smart]", "Marvel? Phase One [Smart]")] // issue #515
+    [InlineData("Marvel Phase One", "Marvel Phase One")]
+    [InlineData("Marvel Phase One", "MARVEL PHASE ONE")]
+    [InlineData(":Marvel:", "?Marvel?")]
+    [InlineData("A:B", "A B")]
+    public void NamesResolveToSameFolder_CollidingNames_ReturnsTrue(string first, string second)
+    {
+        Assert.True(InputValidator.NamesResolveToSameFolder(first, second));
+    }
+
+    [Fact]
+    public void NamesResolveToSameFolder_GenuinelyDifferentNames_ReturnsFalse()
+    {
+        Assert.False(InputValidator.NamesResolveToSameFolder("Marvel Phase One", "Marvel Phase Two"));
+    }
 }
