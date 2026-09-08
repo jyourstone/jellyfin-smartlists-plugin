@@ -39,6 +39,14 @@ For regular users to access SmartLists from their home screen, the following plu
     - Click **Install**
     - Restart Jellyfin after the plugin installation completes
 
+## Jellyfin 10.11 vs. Jellyfin 12
+
+!!! note "Jellyfin 10.11 users"
+    New releases now target Jellyfin 12 only. If you're on Jellyfin 10.11, the newest version you'll be offered is **v12.0.1.0** — that's expected, not a bug. It's the last release built for 10.11, and it will keep working normally; it just won't receive newer features. To get newer versions, upgrade Jellyfin itself to version 12.
+
+!!! warning "After upgrading Jellyfin from 10.11 to 12"
+    Update the SmartLists plugin after upgrading your Jellyfin server. If the plugin shows **"Not supported"** right after the server upgrade, that's just the old 10.11 build still installed — updating to the newest version replaces it with the Jellyfin 12 build and fixes it.
+
 ## Manual Installation
 
 Download the latest release from the [Releases page](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases) and extract it to a subfolder in your Jellyfin plugins directory (for example `/config/plugins/smartlists`) and restart Jellyfin.

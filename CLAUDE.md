@@ -127,11 +127,11 @@ Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-upd
 
 ### Release Line — single `12.x` line (decided 2026-08-14)
 
-**All version numbers are `v12.x.y.z`.** The old split scheme (RCs on `main`, `v10.11.X.0` stables on `10.11-release`) is **retired** — no further stable releases will be cut on the `10.11-release` branch. It is kept only as history; never tag from it.
+**All version numbers are `v12.x.y.z`.** The old split scheme (RCs on `main`, `v10.11.X.0` stables on `10.11-release`) is **retired** — no routine stable releases are cut on the `10.11-release` branch. It is kept as history and as the escape hatch for a Jellyfin 10.11 hotfix (see the branch table below).
 
-Every tag still builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 and 12.0.0/net10.0) and writes both `targetAbi` entries to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
+Releases now **ship forward to Jellyfin 12 only** — `TARGETS` in release.yml is `[{"abi":"12.0.0.0","framework":"net10.0"}]`, and each tag writes a single `targetAbi` entry to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
 
-**Jellyfin 10.11 users keep receiving updates.** Support is unchanged — the plugin still multi-targets `net9.0` and every release still publishes an ABI-10.11 entry. Only the *version number* they see changed: updates now arrive as `12.x.y.z` instead of `10.11.x.0`. The plugin version no longer tracks the Jellyfin version line.
+**Jellyfin 10.11 servers are not broken by this, but they stop receiving new releases.** Jellyfin offers every version whose `targetAbi` is at or below the running server, so a 10.11 server simply stays on `v12.0.1.0` — the last version published with a 10.11 build — and keeps working. The csproj still deliberately multi-targets `net9.0;net10.0`, so a 10.11 hotfix cut from `10.11-release` remains possible if one is ever genuinely needed. This replaces the old dual-ABI-per-tag scheme, which had two problems: `targetAbi` is a *minimum* supported version with no maximum, so two entries sharing one version number showed as duplicate rows in the plugin UI; and worse, a server running the 10.11 build that upgraded to Jellyfin 12 was stranded — Jellyfin compares version numbers only, and since the version hadn't changed it offered no update, while the installed net9.0 build could not load on Jellyfin 12, leaving the plugin stuck showing "Not supported" with no way out but a manual reinstall.
 
 #### Branches
 
@@ -139,7 +139,7 @@ Every tag still builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 a
 |---|---|
 | `main` | Trunk. All development lands here. **RCs are tagged here.** |
 | `12-release` | Tracks the **last stable release**. Fast-forwarded to `main` at each stable. **Stables are tagged here.** The mkdocs Cloudflare Worker publishes from this branch, so the docs site shows released state rather than unreleased trunk. |
-| `10.11-release` | Historical only. Do not tag, do not merge into. |
+| `10.11-release` | Frozen just past `v10.11.30.2`. Outside the normal release flow — tag here **only** for a Jellyfin 10.11 hotfix, with `TARGETS` temporarily set to `[{"abi":"10.11.0.0","framework":"net9.0"}]` so the build targets `net9.0`. Never merge into. |
 
 #### Cutting a release
 
@@ -158,7 +158,7 @@ Every tag still builds **both** ABIs (`TARGETS` in release.yml: 10.11.0/net9.0 a
 
 Bump the **Build** segment for stables; Revision is reserved exclusively for RC numbers. Ordering holds across the whole line, so RC users now roll straight into stables — the old trade-off where a `10.11.X.0` stable sorted *below* the `12.x` RCs and was never offered to RC users is gone with the split.
 
-Smoke testing the 10.11 ABI before a stable is still worthwhile since it is still shipped: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
+Smoke testing the 10.11 ABI is no longer a routine pre-stable step, since 10.11 is no longer shipped by normal releases. Use it when preparing a 10.11 hotfix on `10.11-release`: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
 
 ## When Making Changes
 
