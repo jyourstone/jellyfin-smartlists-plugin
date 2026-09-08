@@ -660,15 +660,10 @@
                 console.error('Error creating ' + listTypeName.toLowerCase() + ':', err);
                 const action = editState.editMode ? 'update' : 'create';
 
-                // For UPDATE operations: restore edit mode by reloading playlist from server
-                if (editState.editMode && editState.editingPlaylistId) {
-                    // Reload the playlist to restore form state
-                    if (SmartLists.editPlaylist) {
-                        SmartLists.editPlaylist(page, editState.editingPlaylistId);
-                    }
-                }
-                // For CREATE operations: form remains populated, user can fix and retry
-                // Stay on Create tab (already there)
+                // Edit mode is only exited in the success handler, so it is still active here and
+                // there is nothing to restore. Reloading the stored list would overwrite the form
+                // with the saved values and throw away everything the user just typed - so on both
+                // create and update the form stays populated and the user can fix and retry.
 
                 // Show error notification
                 SmartLists.handleApiError(err, 'Failed to ' + action + ' ' + listTypeName.toLowerCase() + ' ' + playlistName);
@@ -1312,7 +1307,10 @@
         var statusLink = SmartLists.createStatusPageLink('status page');
         var message = 'Refresh started';
         if (playlistName) {
-            message += ' for ' + (listTypeName || 'list') + ' "' + playlistName + '"';
+            // This notification is always rendered with { html: true } so the status-page link
+            // works, which means the name reaches innerHTML - escape it. A non-admin can name a
+            // list, and the admin sees that name here when they refresh it.
+            message += ' for ' + (listTypeName || 'list') + ' "' + SmartLists.escapeHtml(playlistName) + '"';
         }
         
         if (SmartLists.IS_USER_PAGE) {
@@ -1461,13 +1459,15 @@
             }
 
             // Show success message
-            var successMessage = 'List "' + listName + '" converted to ' + targetType.toLowerCase() + '.';
             var isEnabled = listData.Enabled !== false;
 
             // Only show status page link if list is enabled (will refresh) and on admin page
-            // Note: html option should only be true when we actually include HTML content (the statusLink)
-            // to avoid XSS from user-controlled listName being interpreted as HTML
             var includeStatusLink = !SmartLists.IS_USER_PAGE && isEnabled;
+
+            // The status link forces html: true, which sends the whole message through innerHTML -
+            // escape the user-controlled name in that case.
+            var displayName = includeStatusLink ? SmartLists.escapeHtml(listName) : listName;
+            var successMessage = 'List "' + displayName + '" converted to ' + targetType.toLowerCase() + '.';
             if (includeStatusLink) {
                 var statusLink = SmartLists.createStatusPageLink('status page');
                 successMessage += ' Check the ' + statusLink + ' for progress.';
@@ -1480,7 +1480,10 @@
             }
         } catch (err) {
             console.error('Error converting list:', listId, err);
-            SmartLists.showNotification('Failed to convert list: ' + (err.message || 'Unknown error'), 'error');
+            // apiClient.ajax rejects with the Response for a 4xx, and a Response has no .message -
+            // extractErrorMessage knows both shapes and pulls the ProblemDetails text out.
+            const errorMessage = await SmartLists.extractErrorMessage(err, 'Unknown error');
+            SmartLists.showNotification('Failed to convert list: ' + errorMessage, 'error');
         }
     };
 

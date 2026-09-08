@@ -116,43 +116,52 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return SmartListValidationResult.Failure("List name contains invalid control characters");
             }
 
-            // A name built only from characters core strips would sanitize to whitespace, leaving core
-            // to create a blank folder name - which fails outright on Windows, where a path segment
-            // cannot be blank or end in a space. Reject only that degenerate case; every other use of
-            // ": * ? < > | \" / \\" is a legitimate display name that core handles for us.
-            if (SanitizesToBlank(name))
+            // Everything below validates the name core will actually put on disk, not the raw input:
+            // checking the raw string misses names that only become degenerate after core rewrites
+            // them (e.g. "..:" sanitizes to ".." and escapes to the parent directory).
+            var folderName = SanitizedFolderName(name);
+
+            if (folderName.Length == 0)
             {
                 return SmartListValidationResult.Failure("List name must contain at least one character that is valid in a file name");
             }
 
             // "." and ".." are relative path segments rather than names: core concatenates the
-            // sanitized name straight into Path.Combine, so a playlist named ".." would resolve to the
-            // parent directory. The traversal patterns above are separator-anchored and miss this.
-            var trimmed = name.Trim();
-            if (string.Equals(trimmed, ".", StringComparison.Ordinal) || string.Equals(trimmed, "..", StringComparison.Ordinal))
+            // sanitized name straight into Path.Combine, so a playlist named ".." would resolve to
+            // the parent directory. The traversal patterns above are separator-anchored and miss the
+            // bare form.
+            if (string.Equals(folderName, ".", StringComparison.Ordinal) || string.Equals(folderName, "..", StringComparison.Ordinal))
             {
-                return SmartListValidationResult.Failure("List name contains invalid characters");
+                return SmartListValidationResult.Failure("List name cannot be '.' or '..'");
+            }
+
+            // Windows also drops trailing dots from a path segment, so a name like "...." would
+            // create nothing at all there.
+            if (folderName.TrimEnd('.').Trim().Length == 0)
+            {
+                return SmartListValidationResult.Failure("List name must contain at least one character that is valid in a file name");
             }
 
             return SmartListValidationResult.Success();
         }
 
         /// <summary>
-        /// Returns true when every character in <paramref name="name"/> is either whitespace or one
-        /// that Jellyfin core replaces with a space when deriving a folder name, i.e. the name would
-        /// sanitize to nothing usable.
+        /// Reproduces the folder name Jellyfin core derives from a list name: every character core
+        /// treats as invalid becomes a space (ManagedFileSystem.GetValidFilename), and the result is
+        /// trimmed because a path segment cannot begin or end in whitespace on Windows.
         /// </summary>
-        private static bool SanitizesToBlank(string name)
+        private static string SanitizedFolderName(string name)
         {
-            foreach (var c in name)
+            var chars = name.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
             {
-                if (!char.IsWhiteSpace(c) && Array.IndexOf(JellyfinSanitizedChars, c) < 0)
+                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0)
                 {
-                    return false;
+                    chars[i] = ' ';
                 }
             }
 
-            return true;
+            return new string(chars).Trim();
         }
 
         /// <summary>

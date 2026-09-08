@@ -166,11 +166,12 @@ public class InputValidatorTests
     [InlineData(":")]
     [InlineData("  ?  ")]
     [InlineData("<>|")]
+    [InlineData("....")] // Windows drops trailing dots, leaving an empty path segment
     public void ValidateName_NameThatSanitizesToBlank_IsRejected(string name)
     {
         // Core would replace every one of these with a space, leaving it to create a
-        // blank/trailing-space folder name - illegal on Windows. This is the one case core
-        // does not handle, so it is the one case still worth rejecting.
+        // blank/trailing-space folder name - illegal on Windows. This is one of only two cases
+        // core does not handle, so it is one of only two still worth rejecting.
         AssertInvalid(InputValidator.ValidateName(name), "must contain at least one character");
     }
 
@@ -178,12 +179,25 @@ public class InputValidatorTests
     [InlineData(".")]
     [InlineData("..")]
     [InlineData("  ..  ")]
+    [InlineData("..:")] // sanitizes to ".. ", which Windows trims back to ".."
+    [InlineData("..*")]
+    [InlineData("?..")]
     public void ValidateName_BareRelativePathSegments_AreRejected(string name)
     {
         // Core concatenates the sanitized name straight into Path.Combine, so a playlist named
         // ".." would resolve to the parent directory. The separator-anchored traversal patterns
-        // miss the bare form.
-        AssertInvalid(InputValidator.ValidateName(name), "List name contains invalid characters");
+        // miss the bare form, and checking the RAW name would miss the sanitized variants - hence
+        // validating the folder name core actually derives.
+        AssertInvalid(InputValidator.ValidateName(name), "cannot be \'.\' or \'..\'");
+    }
+
+    [Theory]
+    [InlineData("Seasons 1..3")]
+    [InlineData("Volume 2..")]  // trailing dots are trimmed by Windows but "Volume 2" survives
+    [InlineData("...and Justice for All")]
+    public void ValidateName_DotsThatStillLeaveARealName_AreAccepted(string name)
+    {
+        AssertValid(InputValidator.ValidateName(name));
     }
 
     [Theory]
