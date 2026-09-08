@@ -149,6 +149,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Gets the count of items waiting in the queue (excludes currently processing item).
         /// </summary>
+        /// <summary>
+        /// Takes the queue's processing lock and returns a scope that releases it on dispose, so the
+        /// caller cannot interleave with an operation that is already materializing a list. Deletes need
+        /// this: the queue reloads a list from the store before building it, and a delete landing after
+        /// that reload leaves the operation recreating what was just deleted. Holding the lock makes the
+        /// delete wait for the in-flight operation instead. The queue never deletes lists itself, so this
+        /// cannot deadlock.
+        /// </summary>
+        public async Task<IDisposable> AcquireProcessingLockAsync(CancellationToken cancellationToken = default)
+        {
+            await _processingLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new ProcessingLockScope(_processingLock);
+        }
+
+        private sealed class ProcessingLockScope : IDisposable
+        {
+            private SemaphoreSlim? _semaphore;
+
+            public ProcessingLockScope(SemaphoreSlim semaphore)
+            {
+                _semaphore = semaphore;
+            }
+
+            public void Dispose()
+            {
+                // Exchange so a double dispose cannot release the semaphore twice.
+                Interlocked.Exchange(ref _semaphore, null)?.Release();
+            }
+        }
+
         public int GetQueueCount()
         {
             return _queue.Count;

@@ -334,8 +334,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
                     var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
                     var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                    // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
+                    // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
+                    // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
+                    var selfCollectionId = Guid.TryParse(collectionDto.Id, out var parsedSelfCollectionId) ? parsedSelfCollectionId : Guid.Empty;
                     var duplicateCollection = allCollections.FirstOrDefault(c => 
-                        c.Id != collectionDto.Id &&
+                        !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == selfCollectionId) &&
                         Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
                     
                     if (duplicateCollection != null)
@@ -1269,8 +1273,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
                         var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
+                        // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
+                        // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
+                        // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
+                        var selfCollectionId = Guid.TryParse(collectionDto.Id, out var parsedSelfCollectionId) ? parsedSelfCollectionId : Guid.Empty;
                         var duplicateCollection = allCollections.FirstOrDefault(c => 
-                            c.Id != collectionDto.Id &&
+                            !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == selfCollectionId) &&
                             Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
                         
                         if (duplicateCollection != null)
@@ -1343,6 +1351,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     return BadRequest(new { message = "Invalid list ID format" });
                 }
+
+                // Serialize against the refresh queue: an operation that already reloaded this list
+                // would otherwise finish after the delete and recreate what was just removed.
+                using var processingLock = await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false);
 
                 // Normalize ID to dashed format for consistent cache operations
                 var normalizedId = guidId.ToString("D");
@@ -1605,6 +1617,26 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             
             var collectionStore = _collectionStore;
             var playlistStore = _playlistStore;
+
+            // A converted playlist becomes a collection, so it must clear the same folder-collision check
+            // as a created or renamed one.
+            var convertedFormattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
+            var existingCollectionsForConversion = await collectionStore.GetAllAsync().ConfigureAwait(false);
+            var conversionSelfId = Guid.TryParse(collectionDto.Id, out var parsedConversionSelfId) ? parsedConversionSelfId : Guid.Empty;
+            var conversionDuplicate = existingCollectionsForConversion.FirstOrDefault(c =>
+                !(Guid.TryParse(c.Id, out var otherConversionId) && otherConversionId == conversionSelfId) &&
+                Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), convertedFormattedName));
+
+            if (conversionDuplicate != null)
+            {
+                _logger.LogWarning("User {UserId} cannot convert playlist '{PlaylistName}' to a collection - a collection with a conflicting name already exists", userId, existingPlaylist.Name);
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Validation Error",
+                    Detail = Utilities.InputValidator.BuildCollectionNameConflictDetail(convertedFormattedName, Utilities.NameFormatter.FormatPlaylistName(conversionDuplicate.Name)),
+                    Status = StatusCodes.Status400BadRequest
+                });
+            }
             
             // Save-first approach: persist new collection before deleting old playlist
             try

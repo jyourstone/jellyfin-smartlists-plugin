@@ -26,6 +26,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 - List names are escaped in the notifications that show them, so a name containing HTML can no longer affect the page.
 - Two smart collections whose names differ only in the characters Jellyfin rewrites — *Marvel: Phase One* and *Marvel? Phase One* — can no longer be created. Both names become the same folder, so Jellyfin quietly gave the two lists **one shared collection**: each refresh renamed it and took it over from the other, with nothing reported in either list. Naming a collection so that it would collide with an existing one is now refused up front, and the message names the collection it clashes with ([#515](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/515)).
 - **Deleting a list right after editing it no longer brings it back.** Saving a change queues a refresh, and a delete arriving before that refresh ran did not stop it: the refresh rebuilt the list from the copy captured when it was queued, restoring its folder, its images and its stored configuration, so the deleted list reappeared in the list view ([#515](https://github.com/jyourstone/jellyfin-smartlists-plugin/pull/518)).
+- Converting a playlist into a collection is now refused when the resulting collection would share a folder with an existing one. Conversion previously skipped the duplicate-name check entirely, so it could produce the shared-collection state described above; the playlist is left untouched when the conversion is refused.
 
 
 ## v12.0.0.20-rc

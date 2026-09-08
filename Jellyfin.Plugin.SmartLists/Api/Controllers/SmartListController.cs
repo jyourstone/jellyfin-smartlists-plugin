@@ -1004,8 +1004,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
                 var formattedName = NameFormatter.FormatPlaylistName(collection.Name);
                 var allCollections = await collectionStore.GetAllAsync();
+                // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
+                // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
+                // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
+                var selfCollectionId = Guid.TryParse(collection.Id, out var parsedSelfCollectionId) ? parsedSelfCollectionId : Guid.Empty;
                 var duplicateCollection = allCollections.FirstOrDefault(c => 
-                    c.Id != collection.Id &&
+                    !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == selfCollectionId) &&
                     InputValidator.NamesResolveToSameFolder(NameFormatter.FormatPlaylistName(c.Name), formattedName));
                 
                 if (duplicateCollection != null)
@@ -1264,6 +1268,27 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         if (existingPlaylist.DateCreated.HasValue)
                         {
                             collectionDto.DateCreated = existingPlaylist.DateCreated;
+                        }
+
+                        // A converted playlist becomes a collection, so it must clear the same folder-collision
+                        // check as a created or renamed one - and it must clear it before the delete-first block
+                        // below destroys the playlist, or a rejected conversion would lose the original.
+                        var convertedFormattedName = NameFormatter.FormatPlaylistName(collectionDto.Name);
+                        var existingCollectionsForConversion = await GetCollectionStore().GetAllAsync();
+                        var conversionSelfId = Guid.TryParse(collectionDto.Id, out var parsedConversionSelfId) ? parsedConversionSelfId : Guid.Empty;
+                        var conversionDuplicate = existingCollectionsForConversion.FirstOrDefault(c =>
+                            !(Guid.TryParse(c.Id, out var otherConversionId) && otherConversionId == conversionSelfId) &&
+                            InputValidator.NamesResolveToSameFolder(NameFormatter.FormatPlaylistName(c.Name), convertedFormattedName));
+
+                        if (conversionDuplicate != null)
+                        {
+                            logger.LogWarning("Cannot convert playlist '{PlaylistName}' to a collection - a collection with a conflicting name already exists", existingPlaylist.Name);
+                            return BadRequest(new ProblemDetails
+                            {
+                                Title = "Validation Error",
+                                Detail = InputValidator.BuildCollectionNameConflictDetail(convertedFormattedName, NameFormatter.FormatPlaylistName(conversionDuplicate.Name)),
+                                Status = StatusCodes.Status400BadRequest
+                            });
                         }
 
                         // Delete-first approach for atomicity: if any deletion fails, original state is preserved
@@ -1845,8 +1870,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     var formattedName = NameFormatter.FormatPlaylistName(collection.Name);
                     var allCollections = await collectionStore.GetAllAsync();
+                    // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
+                    // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
+                    // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
                     var duplicateCollection = allCollections.FirstOrDefault(c => 
-                        c.Id != guidId.ToString() &&
+                        !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == guidId) &&
                         InputValidator.NamesResolveToSameFolder(NameFormatter.FormatPlaylistName(c.Name), formattedName));
                     
                     if (duplicateCollection != null)
@@ -2040,6 +2068,10 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 {
                     return BadRequest("Invalid list ID format");
                 }
+
+                // Serialize against the refresh queue: an operation that already reloaded this list
+                // would otherwise finish after the delete and recreate what was just removed.
+                using var processingLock = await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false);
 
                 // Normalize ID to dashed format for consistent image folder operations
                 var normalizedId = guidId.ToString("D");

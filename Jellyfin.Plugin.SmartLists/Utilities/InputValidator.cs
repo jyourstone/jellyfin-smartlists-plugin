@@ -85,8 +85,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         // Path.GetInvalidFileNameChars(), so it is identical on Linux and Windows - which is why this
         // plugin neither rejects nor sanitizes these characters itself: doing so would double-sanitize,
         // and since the display name is re-asserted after every refresh it would also make the
-        // sanitized form the user-visible name. Core's list also covers control chars 1-31, which the
-        // control-character check above already rejects outright.
+        // sanitized form the user-visible name. The punctuation is spelled out here as a literal
+        // array; control characters (also in core's list) are handled via char.IsControl in
+        // SanitizedFolderName below, because collection restore (SmartListController.RestoreCollection...)
+        // saves names without going through ValidateName, so a restored name can still contain them.
         private static readonly char[] JellyfinSanitizedChars = new[] { '"', '<', '>', '|', ':', '*', '?', '\\', '/' };
 
         /// <summary>
@@ -155,7 +157,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             var chars = name.ToCharArray();
             for (var i = 0; i < chars.Length; i++)
             {
-                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0)
+                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0 || char.IsControl(chars[i]))
                 {
                     chars[i] = ' ';
                 }

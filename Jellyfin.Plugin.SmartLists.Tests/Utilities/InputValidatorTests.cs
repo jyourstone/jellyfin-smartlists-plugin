@@ -1086,6 +1086,8 @@ public class InputValidatorTests
     [InlineData("Marvel Phase One", "MARVEL PHASE ONE")]
     [InlineData(":Marvel:", "?Marvel?")]
     [InlineData("A:B", "A B")]
+    [InlineData("AB", "A B")] // control char maps to a space
+    [InlineData("A\tB", "A B")] // tab is a control character
     public void NamesResolveToSameFolder_CollidingNames_ReturnsTrue(string first, string second)
     {
         Assert.True(InputValidator.NamesResolveToSameFolder(first, second));
