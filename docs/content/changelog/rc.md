@@ -19,6 +19,7 @@ itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved int
 
 **Bug Fixes**
 
+- Updated for the final Jellyfin 12.0.0 release. Jellyfin changed one of its internal interfaces between its release candidates and the finished release, so this is the first build of the plugin compiled against the final one.
 - List names can contain `:`, `*`, `?`, `<`, `>`, `|`, `"`, `/` and `\` again. Names like *Marvel: Phase One* were rejected outright on the premise that a list name becomes a file name, which it never does here — the plugin stores lists by ID, and Jellyfin itself already rewrites the name when it builds the collection or playlist folder, keeping the original as the display name. Only two names are still refused: one made up entirely of characters Jellyfin strips (`***`), and a bare `.` or `..` ([#514](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/514)).
 - Lists whose names already contained one of those characters — created before the rule was applied to the admin page, or restored from a backup — could not be saved at all, even when only a rule was edited. They save normally again.
 - **Saving a list now reports why it failed.** A rejected update showed no message whatsoever: a bug in the error handler threw before the notification was reached, so the save simply appeared to do nothing. Converting lists between playlist and collection was similarly silent, in both the single and bulk actions, and now shows the server's reason.
