@@ -32,7 +32,7 @@ namespace Jellyfin.Plugin.SmartLists
 
         public override Guid Id => Guid.Parse("A0A2A7B2-747A-4113-8B39-757A9D267C79");
         public override string Name => "SmartLists";
-        public override string Description => "Create smart, rule-based playlists and collections in Jellyfin.";
+        public override string Description => "Create smart, rule-based playlists and collections in Jellyfin — for movies, shows, music, or anything your library holds. A single genre rule takes seconds; stack rules into groups and you can express almost anything. Either way, they keep themselves up to date.";
 
         /// <summary>
         /// Gets the current plugin instance.

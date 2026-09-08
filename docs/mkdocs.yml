@@ -1,5 +1,5 @@
 site_name: Jellyfin SmartLists Plugin
-site_description: Create smart, rule-based playlists and collections in Jellyfin.
+site_description: Create smart, rule-based playlists and collections in Jellyfin — for movies, shows, music, or anything your library holds. They keep themselves up to date.
 site_url: https://jellyfin-smartlists-plugin.dinsten.se
 
 repo_name: jyourstone/jellyfin-smartlists-plugin

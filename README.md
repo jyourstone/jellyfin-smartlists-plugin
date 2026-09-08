@@ -6,9 +6,9 @@
     </p>        
 </div>
 
-Create smart, rule-based **playlists and collections** in Jellyfin.
+Create smart, rule-based **playlists and collections** in Jellyfin — for movies, shows, music, or anything your library holds.
 
-This plugin allows you to create dynamic playlists and collections based on a set of rules, which will automatically update as your library changes. It works with all media types (movies, episodes, TV shows, music etc.) and features a modern web-based interface for easy list management - no technical knowledge required.
+A single genre rule takes seconds; stack rules into groups and you can express almost anything. Either way, they keep themselves up to date. The plugin features a modern web-based interface for easy list management - no technical knowledge required.
 
 **Requires Jellyfin version `10.11.0` and newer.**
 

@@ -154,8 +154,8 @@ jobs:
             PLUGIN_ENTRY=$(jq -n \
               --arg name "SmartLists" \
               --arg guid "$PLUGIN_GUID" \
-              --arg overview "SmartLists plugin for Jellyfin." \
-              --arg description "Create smart, rule-based playlists and collections in Jellyfin." \
+              --arg overview "Smart, self-updating playlists and collections." \
+              --arg description "Create smart, rule-based playlists and collections in Jellyfin — for movies, shows, music, or anything your library holds. A single genre rule takes seconds; stack rules into groups and you can express almost anything. Either way, they keep themselves up to date." \
               --arg category "General" \
               --arg owner "jyourstone" \
               --arg imageUrl "https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/logo.jpg" \
@@ -219,8 +219,8 @@ jobs:
             PLUGIN_ENTRY=$(jq -n \
               --arg name "SmartLists" \
               --arg guid "$PLUGIN_GUID" \
-              --arg overview "SmartLists plugin for Jellyfin (Unstable)." \
-              --arg description "Create smart, rule-based playlists and collections in Jellyfin. This is an unstable/preview version." \
+              --arg overview "Smart, self-updating playlists and collections (Unstable)." \
+              --arg description "Create smart, rule-based playlists and collections in Jellyfin — for movies, shows, music, or anything your library holds. A single genre rule takes seconds; stack rules into groups and you can express almost anything. Either way, they keep themselves up to date. This is an unstable/preview version." \
               --arg category "General" \
               --arg owner "jyourstone" \
               --arg imageUrl "https://raw.githubusercontent.com/jyourstone/jellyfin-smartlists-plugin/main/images/logo.jpg" \

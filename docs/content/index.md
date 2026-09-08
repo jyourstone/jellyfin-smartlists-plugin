@@ -12,7 +12,7 @@
 
 Official documentation for the Jellyfin SmartLists plugin.
 
-SmartLists creates rule-based playlists and collections that refresh automatically as your Jellyfin library changes. The plugin is maintained in the open on GitHub.
+Create smart, rule-based playlists and collections in Jellyfin — for movies, shows, music, or anything your library holds. A single genre rule takes seconds; stack rules into groups and you can express almost anything. Either way, they keep themselves up to date. The plugin is maintained in the open on GitHub.
 
 The documentation is published twice — a [stable site](https://jellyfin-smartlists-plugin.dinsten.se/) tracking the current release, and a [preview site](https://jellyfin-smartlists-plugin-preview.dinsten.se/) tracking release candidates. If you installed from the [unstable manifest](getting-started/installation.md#try-rc-releases-unstable), use the preview site.
 
