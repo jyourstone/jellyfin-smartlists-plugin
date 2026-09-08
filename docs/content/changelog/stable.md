@@ -10,6 +10,76 @@ Version numbers are .NET four-part versions (`Major.Minor.Build.Revision`), not 
 Stable releases end in `.0`.
 
 
+## v12.0.1.0
+
+*2026-09-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.1.0)*
+
+The first stable release for Jellyfin 12, and the biggest update yet — 22 release candidates of work since v10.11.30.2. Jellyfin 10.11 is still fully supported.
+
+**Jellyfin 12**
+
+- Full support for Jellyfin 12, including the final 12.0.0 release.
+- Jellyfin 10.11 continues to receive the same updates.
+
+**New Features**
+
+- List templates: one-click starting points on the Create tab.
+- Hide when empty: a list disappears while nothing matches, and returns on its own.
+- Group results into collections: turn an item search into a collection of collections.
+- Collection and Playlist media types: build collections *of* collections or playlists.
+- Smart collections now carry genres, studios, parental rating and total runtime.
+- Smart list badge on generated covers, with a setting to turn it off.
+- Integration API so other tools can create and manage smart lists.
+- Bumpers, and random group selection.
+- New rule field: User Rating.
+- Date rules can include items whose date is missing from metadata.
+- New settings for default media types and for hiding new lists when empty.
+
+**External Lists**
+
+- New providers: ListenBrainz and Scrob.
+- Music lists match tracks via MusicBrainz, one library item per matched track.
+- User-Agent setting for when a provider starts blocking requests.
+
+**Sorting**
+
+- Least Recently Watched Round Robin, and Shuffled Round Robin.
+- Round Robin can group by Collection and order items within each group.
+- Crossover episodes that aired close together play back-to-back, with an Air Window setting.
+- Play Count (all users) and Last Played (all users).
+
+**Improvements**
+
+- Large speed-up for expensive rules — people, languages, resolution and more are read once per refresh.
+- Parent tags, studios and genres are found at every level above an item, including the library.
+- Only fully watched episodes advance the Least Recently Watched rotation.
+- Weekly cleanup removes leftover playlists and collections whose list is gone.
+- Rule groups are named consistently throughout; the sort option is now **Rule Group Order**.
+
+**Bug Fixes**
+
+- Titles containing numbers sort correctly — "Season 2" before "Season 10".
+- The Resolution sort did nothing and left lists sorted by name.
+- Episodes came back unordered when Season/Episode was combined with another sort.
+- A series showed a play count of 0 even when every episode was watched.
+- Items with no release date no longer match "before", "older than" and "not equals".
+- IMDb lists, charts and awards failed to load with a "Forbidden" error.
+- Configuration pages loaded blank behind a reverse proxy, or with Cloudflare Rocket Loader.
+- Smart collections disappeared when the TMDbBoxSets plugin was installed.
+- Duplicates left behind by a failed deletion are detected and cleaned up.
+- List names can contain `:` `*` `?` `<` `>` `|` `"` `/` `\` again.
+- Saving a list now reports why it failed instead of appearing to do nothing.
+- A failed save no longer discards what you typed.
+- Deleting a list right after editing it no longer brings it back.
+
+**Existing lists may change**
+
+- Rules checking parent values now look at every level above an item, so they match more.
+- Music lists are the most visible case: artist folder and library values now count.
+- Similar To applies within its own rule group instead of filtering the whole list.
+- Smart collections now carry aggregated genres/studios/runtime, so other lists may match them.
+- Include-only checkboxes are migrated automatically to Name rules.
+
 ## v10.11.30.2
 
 *2026-06-28 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v10.11.30.2)*
