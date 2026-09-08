@@ -329,21 +329,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // after the queue item was created but before processing started
             var fileSystem = new SmartListFileSystem(_applicationPaths);
 
+            // Each branch below reloads the DTO from the store: a list deleted after this operation was
+            // queued is gone from the store, and must not be resurrected from the stale enqueued DTO.
+            // A delete landing after the reload but during materialization is still possible; closing that
+            // window would require the delete path to take the queue's _processingLock.
             if (item.ListType == SmartListType.Playlist)
             {
                 var playlistStore = new PlaylistStore(fileSystem);
                 if (Guid.TryParse(item.ListId, out var listGuid))
                 {
                     var latestDto = await playlistStore.GetByIdAsync(listGuid);
-                    if (latestDto != null)
+                    if (latestDto == null)
                     {
-                        _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
-                            latestDto.Name, latestDto.CustomImages?.Count > 0);
-                        await ProcessPlaylistRefreshAsync(latestDto, item.TriggeringUserIds, cancellationToken);
+                        // The list was deleted after this operation was queued. Falling back to the DTO captured at
+                        // enqueue time would re-create the playlist and rewrite its config.json, resurrecting
+                        // a list the user deleted.
+                        _logger.LogInformation("Skipping {OperationType} operation for playlist '{ListName}' ({ListId}) - it no longer exists in the store.",
+                            item.OperationType, item.ListName, item.ListId);
                         return;
                     }
+                    _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
+                        latestDto.Name, latestDto.CustomImages?.Count > 0);
+                    await ProcessPlaylistRefreshAsync(latestDto, item.TriggeringUserIds, cancellationToken);
+                    return;
                 }
-                // Fallback to original DTO if reload fails
+                // Only reached when the list id is not a valid Guid - a deleted list returns above.
                 await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, item.TriggeringUserIds, cancellationToken);
             }
             else if (item.ListType == SmartListType.Collection)
@@ -352,15 +362,21 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 if (Guid.TryParse(item.ListId, out var listGuid))
                 {
                     var latestDto = await collectionStore.GetByIdAsync(listGuid);
-                    if (latestDto != null)
+                    if (latestDto == null)
                     {
-                        _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
-                            latestDto.Name, latestDto.CustomImages?.Count > 0);
-                        await ProcessCollectionRefreshAsync(latestDto, cancellationToken);
+                        // The list was deleted after this operation was queued. Falling back to the DTO captured at
+                        // enqueue time would re-create the collection folder and rewrite its config.json, resurrecting
+                        // a list the user deleted.
+                        _logger.LogInformation("Skipping {OperationType} operation for collection '{ListName}' ({ListId}) - it no longer exists in the store.",
+                            item.OperationType, item.ListName, item.ListId);
                         return;
                     }
+                    _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
+                        latestDto.Name, latestDto.CustomImages?.Count > 0);
+                    await ProcessCollectionRefreshAsync(latestDto, cancellationToken);
+                    return;
                 }
-                // Fallback to original DTO if reload fails
+                // Only reached when the list id is not a valid Guid - a deleted list returns above.
                 await ProcessCollectionRefreshAsync((SmartCollectionDto)item.ListData, cancellationToken);
             }
             else
