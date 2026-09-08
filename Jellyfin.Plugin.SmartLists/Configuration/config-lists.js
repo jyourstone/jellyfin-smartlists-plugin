@@ -661,10 +661,10 @@
                 const action = editState.editMode ? 'update' : 'create';
 
                 // For UPDATE operations: restore edit mode by reloading playlist from server
-                if (editState.editMode && editingPlaylistId) {
+                if (editState.editMode && editState.editingPlaylistId) {
                     // Reload the playlist to restore form state
                     if (SmartLists.editPlaylist) {
-                        SmartLists.editPlaylist(page, editingPlaylistId);
+                        SmartLists.editPlaylist(page, editState.editingPlaylistId);
                     }
                 }
                 // For CREATE operations: form remains populated, user can fix and retry

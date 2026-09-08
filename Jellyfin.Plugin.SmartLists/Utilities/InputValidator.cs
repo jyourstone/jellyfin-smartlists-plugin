@@ -77,8 +77,17 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             RegexOptions.Compiled
         );
 
-        // Dangerous characters for file names
-        private static readonly char[] DangerousFileNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0' };
+        // Mirrors Jellyfin core's ManagedFileSystem._invalidPathCharacters
+        // (Emby.Server.Implementations/IO/ManagedFileSystem.cs). Core replaces each of these with a
+        // space when it derives the FOLDER name for a collection or playlist
+        // (CollectionManager.CreateCollectionAsync, PlaylistManager.CreatePlaylist) while storing the
+        // raw name as the item's display name. That list is a hardcoded literal in core, not
+        // Path.GetInvalidFileNameChars(), so it is identical on Linux and Windows - which is why this
+        // plugin neither rejects nor sanitizes these characters itself: doing so would double-sanitize,
+        // and since the display name is re-asserted after every refresh it would also make the
+        // sanitized form the user-visible name. Core's list also covers control chars 1-31, which the
+        // control-character check above already rejects outright.
+        private static readonly char[] JellyfinSanitizedChars = new[] { '"', '<', '>', '|', ':', '*', '?', '\\', '/' };
 
         /// <summary>
         /// Validates a smart list name.
@@ -107,13 +116,43 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return SmartListValidationResult.Failure("List name contains invalid control characters");
             }
 
-            // Check for potentially dangerous characters that could cause issues with file systems
-            if (name.Any(c => DangerousFileNameChars.Contains(c)))
+            // A name built only from characters core strips would sanitize to whitespace, leaving core
+            // to create a blank folder name - which fails outright on Windows, where a path segment
+            // cannot be blank or end in a space. Reject only that degenerate case; every other use of
+            // ": * ? < > | \" / \\" is a legitimate display name that core handles for us.
+            if (SanitizesToBlank(name))
             {
-                return SmartListValidationResult.Failure("List name contains invalid characters: < > : \" / \\ | ? *");
+                return SmartListValidationResult.Failure("List name must contain at least one character that is valid in a file name");
+            }
+
+            // "." and ".." are relative path segments rather than names: core concatenates the
+            // sanitized name straight into Path.Combine, so a playlist named ".." would resolve to the
+            // parent directory. The traversal patterns above are separator-anchored and miss this.
+            var trimmed = name.Trim();
+            if (string.Equals(trimmed, ".", StringComparison.Ordinal) || string.Equals(trimmed, "..", StringComparison.Ordinal))
+            {
+                return SmartListValidationResult.Failure("List name contains invalid characters");
             }
 
             return SmartListValidationResult.Success();
+        }
+
+        /// <summary>
+        /// Returns true when every character in <paramref name="name"/> is either whitespace or one
+        /// that Jellyfin core replaces with a space when deriving a folder name, i.e. the name would
+        /// sanitize to nothing usable.
+        /// </summary>
+        private static bool SanitizesToBlank(string name)
+        {
+            foreach (var c in name)
+            {
+                if (!char.IsWhiteSpace(c) && Array.IndexOf(JellyfinSanitizedChars, c) < 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

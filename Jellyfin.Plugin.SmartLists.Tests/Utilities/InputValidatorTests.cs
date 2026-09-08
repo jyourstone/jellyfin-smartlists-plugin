@@ -131,10 +131,10 @@ public class InputValidatorTests
     }
 
     [Fact]
-    public void ValidateName_NulByte_IsReportedAsControlCharacterNotAsDangerousChar()
+    public void ValidateName_NulByte_IsReportedAsAControlCharacter()
     {
-        // NUL appears in both the control-character check and DangerousFileNameChars.
-        // The control check runs first; this pins which message a caller actually sees.
+        // NUL is in Jellyfin core's sanitized set too, but the control-character check catches it
+        // first and is the only thing that rejects it here; this pins the message a caller sees.
         var result = InputValidator.ValidateName("My\0List");
 
         Assert.False(result.IsValid);
@@ -144,17 +144,46 @@ public class InputValidatorTests
     [Theory]
     [InlineData("My<List")]
     [InlineData("My>List")]
-    [InlineData("My:List")]
-    [InlineData("My\"List")]
-    [InlineData("My/List")]
-    [InlineData("My\\List")]
-    [InlineData("My|List")]
-    [InlineData("My?List")]
-    [InlineData("My*List")]
-    public void ValidateName_FileSystemHostileCharacters_AreRejected(string name)
+    [InlineData("Marvel: Phase One")]
+    [InlineData("Rock \"n\" Roll")]
+    [InlineData("Action/Adventure")]
+    [InlineData("AC\\DC")]
+    [InlineData("Comedy|Drama")]
+    [InlineData("Who? What!")]
+    [InlineData("Action*")]
+    public void ValidateName_CharactersJellyfinSanitizes_AreAccepted(string name)
     {
-        // Names become file names on disk, so these must not get through.
-        AssertInvalid(InputValidator.ValidateName(name), "List name contains invalid characters:");
+        // These are DISPLAY names, not file names. This plugin's own storage is GUID-keyed
+        // (SmartListFileSystem.GetSmartListFolderPath), and the only other consumer is Jellyfin
+        // core, which runs the name through ManagedFileSystem.GetValidFilename before building the
+        // collection/playlist folder while keeping the raw name as the item's display name.
+        // Rejecting them here just broke names like "Marvel: Phase One" for no gain (issue #514).
+        AssertValid(InputValidator.ValidateName(name));
+    }
+
+    [Theory]
+    [InlineData("***")]
+    [InlineData(":")]
+    [InlineData("  ?  ")]
+    [InlineData("<>|")]
+    public void ValidateName_NameThatSanitizesToBlank_IsRejected(string name)
+    {
+        // Core would replace every one of these with a space, leaving it to create a
+        // blank/trailing-space folder name - illegal on Windows. This is the one case core
+        // does not handle, so it is the one case still worth rejecting.
+        AssertInvalid(InputValidator.ValidateName(name), "must contain at least one character");
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("  ..  ")]
+    public void ValidateName_BareRelativePathSegments_AreRejected(string name)
+    {
+        // Core concatenates the sanitized name straight into Path.Combine, so a playlist named
+        // ".." would resolve to the parent directory. The separator-anchored traversal patterns
+        // miss the bare form.
+        AssertInvalid(InputValidator.ValidateName(name), "List name contains invalid characters");
     }
 
     [Theory]
@@ -164,8 +193,8 @@ public class InputValidatorTests
     [InlineData("Ω Alpha (Director's Cut) [4K] - #1, 50% off!")]
     public void ValidateName_UnicodeAndOrdinaryPunctuation_AreAccepted(string name)
     {
-        // Only the nine file-system-hostile characters are banned; everything else,
-        // including non-ASCII and astral-plane emoji, is a legal list name.
+        // No character is banned outright; only control characters, path traversal, and names
+        // that would sanitize to nothing are rejected. Non-ASCII and astral-plane emoji are fine.
         AssertValid(InputValidator.ValidateName(name));
     }
 
@@ -546,9 +575,9 @@ public class InputValidatorTests
     public void ValidateSmartList_InvalidName_ReportsTheNameProblem()
     {
         var dto = ValidPlaylist();
-        dto.Name = "Bad/Name";
+        dto.Name = "Bad\nName";
 
-        AssertInvalid(InputValidator.ValidateSmartList(dto), "List name contains invalid characters:");
+        AssertInvalid(InputValidator.ValidateSmartList(dto), "List name contains invalid control characters");
     }
 
     [Fact]
