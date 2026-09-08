@@ -77,8 +77,17 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             RegexOptions.Compiled
         );
 
-        // Dangerous characters for file names
-        private static readonly char[] DangerousFileNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0' };
+        // Mirrors Jellyfin core's ManagedFileSystem._invalidPathCharacters
+        // (Emby.Server.Implementations/IO/ManagedFileSystem.cs). Core replaces each of these with a
+        // space when it derives the FOLDER name for a collection or playlist
+        // (CollectionManager.CreateCollectionAsync, PlaylistManager.CreatePlaylist) while storing the
+        // raw name as the item's display name. That list is a hardcoded literal in core, not
+        // Path.GetInvalidFileNameChars(), so it is identical on Linux and Windows - which is why this
+        // plugin neither rejects nor sanitizes these characters itself: doing so would double-sanitize,
+        // and since the display name is re-asserted after every refresh it would also make the
+        // sanitized form the user-visible name. Core's list also covers control chars 1-31, which the
+        // control-character check above already rejects outright.
+        private static readonly char[] JellyfinSanitizedChars = new[] { '"', '<', '>', '|', ':', '*', '?', '\\', '/' };
 
         /// <summary>
         /// Validates a smart list name.
@@ -107,13 +116,52 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 return SmartListValidationResult.Failure("List name contains invalid control characters");
             }
 
-            // Check for potentially dangerous characters that could cause issues with file systems
-            if (name.Any(c => DangerousFileNameChars.Contains(c)))
+            // Everything below validates the name core will actually put on disk, not the raw input:
+            // checking the raw string misses names that only become degenerate after core rewrites
+            // them (e.g. "..:" sanitizes to ".." and escapes to the parent directory).
+            var folderName = SanitizedFolderName(name);
+
+            if (folderName.Length == 0)
             {
-                return SmartListValidationResult.Failure("List name contains invalid characters: < > : \" / \\ | ? *");
+                return SmartListValidationResult.Failure("List name must contain at least one character that is valid in a file name");
+            }
+
+            // "." and ".." are relative path segments rather than names: core concatenates the
+            // sanitized name straight into Path.Combine, so a playlist named ".." would resolve to
+            // the parent directory. The traversal patterns above are separator-anchored and miss the
+            // bare form.
+            if (string.Equals(folderName, ".", StringComparison.Ordinal) || string.Equals(folderName, "..", StringComparison.Ordinal))
+            {
+                return SmartListValidationResult.Failure("List name cannot be '.' or '..'");
+            }
+
+            // Windows also drops trailing dots from a path segment, so a name like "...." would
+            // create nothing at all there.
+            if (folderName.TrimEnd('.').Trim().Length == 0)
+            {
+                return SmartListValidationResult.Failure("List name must contain at least one character that is valid in a file name");
             }
 
             return SmartListValidationResult.Success();
+        }
+
+        /// <summary>
+        /// Reproduces the folder name Jellyfin core derives from a list name: every character core
+        /// treats as invalid becomes a space (ManagedFileSystem.GetValidFilename), and the result is
+        /// trimmed because a path segment cannot begin or end in whitespace on Windows.
+        /// </summary>
+        private static string SanitizedFolderName(string name)
+        {
+            var chars = name.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0)
+                {
+                    chars[i] = ' ';
+                }
+            }
+
+            return new string(chars).Trim();
         }
 
         /// <summary>

@@ -806,6 +806,7 @@
         let successCount = 0;
         let errorCount = 0;
         let enabledSuccessCount = 0;
+        let firstErrorMessage = null;
 
         // Clear selections immediately
         const selectAllCheckbox = page.querySelector('#selectAllCheckbox');
@@ -850,6 +851,11 @@
                 if (!putResponse.ok) {
                     const errorMessage = await SmartLists.extractErrorMessage(putResponse, 'HTTP ' + putResponse.status);
                     console.error('Error converting list:', listId, errorMessage);
+                    // Keep the first server message so the summary can say WHY, instead of
+                    // reporting a bare failure count the user cannot act on.
+                    if (!firstErrorMessage && errorMessage) {
+                        firstErrorMessage = errorMessage;
+                    }
                     errorCount++;
                 } else {
                     successCount++;
@@ -859,6 +865,12 @@
                 }
             } catch (err) {
                 console.error('Error converting list:', listId, err);
+                // apiClient.ajax rejects with the Response on a 4xx, so a validation failure lands
+                // here rather than in the !ok branch above. Pull the reason out either way.
+                const errorMessage = await SmartLists.extractErrorMessage(err, null);
+                if (!firstErrorMessage && errorMessage) {
+                    firstErrorMessage = errorMessage;
+                }
                 errorCount++;
             }
         }
@@ -880,7 +892,15 @@
         }
         if (errorCount > 0) {
             var errorListWord = errorCount === 1 ? 'list' : 'lists';
-            SmartLists.showNotification('Failed to convert ' + errorCount + ' ' + errorListWord + '.', 'error');
+            var errorMessageText = 'Failed to convert ' + errorCount + ' ' + errorListWord + '.';
+            if (firstErrorMessage) {
+                // With several failures the captured reason belongs to only one of them, so label
+                // it rather than implying every list failed for the same reason.
+                errorMessageText += errorCount === 1
+                    ? ' ' + firstErrorMessage
+                    : ' First error: ' + firstErrorMessage;
+            }
+            SmartLists.showNotification(errorMessageText, 'error');
         }
 
         // Reload list to show updated state
