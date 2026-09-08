@@ -333,14 +333,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
 
                     // Check for duplicate collection names (Jellyfin doesn't allow collections with the same name)
                     var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
-                    var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
-                    // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
-                    // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
-                    // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
-                    var selfCollectionId = Guid.TryParse(collectionDto.Id, out var parsedSelfCollectionId) ? parsedSelfCollectionId : Guid.Empty;
-                    var duplicateCollection = allCollections.FirstOrDefault(c => 
-                        !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == selfCollectionId) &&
-                        Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
+                    var duplicateCollection = await Utilities.CollectionNameConflict.FindAsync(collectionStore, formattedName, collectionDto.Id).ConfigureAwait(false);
                     
                     if (duplicateCollection != null)
                     {
@@ -1272,14 +1265,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     if (nameChanging)
                     {
                         var formattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
-                        var allCollections = await collectionStore.GetAllAsync().ConfigureAwait(false);
-                        // Compare ids as Guids: a restored backup or a client-supplied body can use another valid
-                        // representation, and the sanitized-name match means a self-rename (A:B -> A?B) now collides
-                        // with itself, so this exclusion is what keeps a valid rename from being called a duplicate.
-                        var selfCollectionId = Guid.TryParse(collectionDto.Id, out var parsedSelfCollectionId) ? parsedSelfCollectionId : Guid.Empty;
-                        var duplicateCollection = allCollections.FirstOrDefault(c => 
-                            !(Guid.TryParse(c.Id, out var otherCollectionId) && otherCollectionId == selfCollectionId) &&
-                            Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), formattedName));
+                        var duplicateCollection = await Utilities.CollectionNameConflict.FindAsync(collectionStore, formattedName, collectionDto.Id).ConfigureAwait(false);
                         
                         if (duplicateCollection != null)
                         {
@@ -1621,11 +1607,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             // A converted playlist becomes a collection, so it must clear the same folder-collision check
             // as a created or renamed one.
             var convertedFormattedName = Utilities.NameFormatter.FormatPlaylistName(collectionDto.Name);
-            var existingCollectionsForConversion = await collectionStore.GetAllAsync().ConfigureAwait(false);
-            var conversionSelfId = Guid.TryParse(collectionDto.Id, out var parsedConversionSelfId) ? parsedConversionSelfId : Guid.Empty;
-            var conversionDuplicate = existingCollectionsForConversion.FirstOrDefault(c =>
-                !(Guid.TryParse(c.Id, out var otherConversionId) && otherConversionId == conversionSelfId) &&
-                Utilities.InputValidator.NamesResolveToSameFolder(Utilities.NameFormatter.FormatPlaylistName(c.Name), convertedFormattedName));
+            var conversionDuplicate = await Utilities.CollectionNameConflict.FindAsync(collectionStore, convertedFormattedName, collectionDto.Id).ConfigureAwait(false);
 
             if (conversionDuplicate != null)
             {
