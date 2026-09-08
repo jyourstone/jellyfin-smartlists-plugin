@@ -85,8 +85,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         // Path.GetInvalidFileNameChars(), so it is identical on Linux and Windows - which is why this
         // plugin neither rejects nor sanitizes these characters itself: doing so would double-sanitize,
         // and since the display name is re-asserted after every refresh it would also make the
-        // sanitized form the user-visible name. Core's list also covers control chars 1-31, which the
-        // control-character check above already rejects outright.
+        // sanitized form the user-visible name. The punctuation is spelled out here as a literal
+        // array; control characters (also in core's list) are handled via char.IsControl in
+        // SanitizedFolderName below, because collection restore (SmartListController.RestoreCollection...)
+        // saves names without going through ValidateName, so a restored name can still contain them.
         private static readonly char[] JellyfinSanitizedChars = new[] { '"', '<', '>', '|', ':', '*', '?', '\\', '/' };
 
         /// <summary>
@@ -155,13 +157,39 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             var chars = name.ToCharArray();
             for (var i = 0; i < chars.Length; i++)
             {
-                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0)
+                if (Array.IndexOf(JellyfinSanitizedChars, chars[i]) >= 0 || char.IsControl(chars[i]))
                 {
                     chars[i] = ' ';
                 }
             }
 
             return new string(chars).Trim();
+        }
+
+        /// <summary>
+        /// Returns true when two already-formatted list names would resolve to the same folder on disk.
+        /// Jellyfin core replaces every character it treats as invalid with a space when it derives a
+        /// collection's folder name, and derives the item's id from that path - so two names differing
+        /// only in those characters silently share one BoxSet.
+        /// </summary>
+        internal static bool NamesResolveToSameFolder(string first, string second)
+        {
+            return string.Equals(SanitizedFolderName(first), SanitizedFolderName(second), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Builds the validation message for a collection name conflict. Names that are already equal get
+        /// the plain duplicate message; names that collide only after core's sanitization need to say why,
+        /// because the two names visibly differ on screen.
+        /// </summary>
+        internal static string BuildCollectionNameConflictDetail(string candidateFormatted, string existingFormatted)
+        {
+            if (string.Equals(candidateFormatted, existingFormatted, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"A collection named '{candidateFormatted}' already exists. Jellyfin does not allow multiple collections with the same name.";
+            }
+
+            return $"A collection named '{existingFormatted}' already exists, and Jellyfin replaces the characters \" < > | : * ? \\ / with spaces when it creates the collection folder - so '{candidateFormatted}' would end up sharing that same collection. Choose a name that differs by more than those characters.";
         }
 
         /// <summary>

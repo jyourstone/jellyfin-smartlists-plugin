@@ -149,6 +149,36 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         /// <summary>
         /// Gets the count of items waiting in the queue (excludes currently processing item).
         /// </summary>
+        /// <summary>
+        /// Takes the queue's processing lock and returns a scope that releases it on dispose, so the
+        /// caller cannot interleave with an operation that is already materializing a list. Deletes need
+        /// this: the queue reloads a list from the store before building it, and a delete landing after
+        /// that reload leaves the operation recreating what was just deleted. Holding the lock makes the
+        /// delete wait for the in-flight operation instead. The queue never deletes lists itself, so this
+        /// cannot deadlock.
+        /// </summary>
+        public async Task<IDisposable> AcquireProcessingLockAsync(CancellationToken cancellationToken = default)
+        {
+            await _processingLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new ProcessingLockScope(_processingLock);
+        }
+
+        private sealed class ProcessingLockScope : IDisposable
+        {
+            private SemaphoreSlim? _semaphore;
+
+            public ProcessingLockScope(SemaphoreSlim semaphore)
+            {
+                _semaphore = semaphore;
+            }
+
+            public void Dispose()
+            {
+                // Exchange so a double dispose cannot release the semaphore twice.
+                Interlocked.Exchange(ref _semaphore, null)?.Release();
+            }
+        }
+
         public int GetQueueCount()
         {
             return _queue.Count;
@@ -329,21 +359,43 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // after the queue item was created but before processing started
             var fileSystem = new SmartListFileSystem(_applicationPaths);
 
+            // Each branch below reloads the DTO from the store: a list deleted after this operation was
+            // queued is gone from the store, and must not be resurrected from the stale enqueued DTO.
+            // A delete landing after the reload but during materialization is still possible; closing that
+            // window would require the delete path to take the queue's _processingLock.
             if (item.ListType == SmartListType.Playlist)
             {
                 var playlistStore = new PlaylistStore(fileSystem);
                 if (Guid.TryParse(item.ListId, out var listGuid))
                 {
                     var latestDto = await playlistStore.GetByIdAsync(listGuid);
-                    if (latestDto != null)
+                    if (latestDto == null)
                     {
-                        _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
-                            latestDto.Name, latestDto.CustomImages?.Count > 0);
-                        await ProcessPlaylistRefreshAsync(latestDto, item.TriggeringUserIds, cancellationToken);
+                        // GetByIdAsync returns null both for a list that was deleted and for one whose config
+                        // file cannot be read or deserialized, so ask the file system which case this is.
+                        if (fileSystem.GetSmartListFilePath(item.ListId) == null)
+                        {
+                            // Genuinely deleted after this operation was queued. Falling back to the DTO captured
+                            // at enqueue time would rebuild the playlist and rewrite its config.json, resurrecting
+                            // a list the user deleted.
+                            _logger.LogInformation("Skipping {OperationType} operation for playlist '{ListName}' ({ListId}) - it no longer exists in the store.",
+                                item.OperationType, item.ListName, item.ListId);
+                            return;
+                        }
+
+                        // The config file is still there but could not be loaded. Refresh from the queued copy
+                        // rather than silently skipping, and surface the storage failure.
+                        _logger.LogWarning("Could not load playlist '{ListName}' ({ListId}) from its config file; refreshing from the copy captured when the operation was queued.",
+                            item.ListName, item.ListId);
+                        await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, item.TriggeringUserIds, cancellationToken);
                         return;
                     }
+                    _logger.LogDebug("Reloaded playlist '{PlaylistName}' from store (CustomImages: {HasImages})",
+                        latestDto.Name, latestDto.CustomImages?.Count > 0);
+                    await ProcessPlaylistRefreshAsync(latestDto, item.TriggeringUserIds, cancellationToken);
+                    return;
                 }
-                // Fallback to original DTO if reload fails
+                // Only reached when the list id is not a valid Guid - a deleted list returns above.
                 await ProcessPlaylistRefreshAsync((SmartPlaylistDto)item.ListData, item.TriggeringUserIds, cancellationToken);
             }
             else if (item.ListType == SmartListType.Collection)
@@ -352,15 +404,33 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 if (Guid.TryParse(item.ListId, out var listGuid))
                 {
                     var latestDto = await collectionStore.GetByIdAsync(listGuid);
-                    if (latestDto != null)
+                    if (latestDto == null)
                     {
-                        _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
-                            latestDto.Name, latestDto.CustomImages?.Count > 0);
-                        await ProcessCollectionRefreshAsync(latestDto, cancellationToken);
+                        // GetByIdAsync returns null both for a list that was deleted and for one whose config
+                        // file cannot be read or deserialized, so ask the file system which case this is.
+                        if (fileSystem.GetSmartListFilePath(item.ListId) == null)
+                        {
+                            // Genuinely deleted after this operation was queued. Falling back to the DTO captured
+                            // at enqueue time would rebuild the collection and rewrite its config.json, resurrecting
+                            // a list the user deleted.
+                            _logger.LogInformation("Skipping {OperationType} operation for collection '{ListName}' ({ListId}) - it no longer exists in the store.",
+                                item.OperationType, item.ListName, item.ListId);
+                            return;
+                        }
+
+                        // The config file is still there but could not be loaded. Refresh from the queued copy
+                        // rather than silently skipping, and surface the storage failure.
+                        _logger.LogWarning("Could not load collection '{ListName}' ({ListId}) from its config file; refreshing from the copy captured when the operation was queued.",
+                            item.ListName, item.ListId);
+                        await ProcessCollectionRefreshAsync((SmartCollectionDto)item.ListData, cancellationToken);
                         return;
                     }
+                    _logger.LogDebug("Reloaded collection '{CollectionName}' from store (CustomImages: {HasImages})",
+                        latestDto.Name, latestDto.CustomImages?.Count > 0);
+                    await ProcessCollectionRefreshAsync(latestDto, cancellationToken);
+                    return;
                 }
-                // Fallback to original DTO if reload fails
+                // Only reached when the list id is not a valid Guid - a deleted list returns above.
                 await ProcessCollectionRefreshAsync((SmartCollectionDto)item.ListData, cancellationToken);
             }
             else
