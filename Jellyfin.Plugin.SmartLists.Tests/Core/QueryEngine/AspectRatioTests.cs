@@ -51,6 +51,31 @@ public class AspectRatioTests
     }
 
     [Fact]
+    public void Evaluate_RatiosDifferingBeyondSupportedPrecisionCompareEqual()
+    {
+        // Both sides round to 1:1 at the supported precision. Treating them as equal is the
+        // deliberate trade for exact comparison; ordering them would mean ordering by digits
+        // no display format carries.
+        const string overSpecified = "1.0000000000000000000000000001:1.0000000000000000000000000002";
+        const string target = "1:1.0000000000000000000000000001";
+
+        Assert.True(AspectRatioTypes.Evaluate(overSpecified, target, "Equal"));
+        Assert.False(AspectRatioTypes.Evaluate(overSpecified, target, "GreaterThan"));
+        Assert.False(AspectRatioTypes.Evaluate(overSpecified, target, "LessThan"));
+    }
+
+    [Fact]
+    public void Evaluate_DifferencesWithinSupportedPrecisionStayExact()
+    {
+        Assert.True(AspectRatioTypes.Evaluate("1.00000001:1", "1:1", "GreaterThan"));
+        Assert.True(AspectRatioTypes.Evaluate("1:1.00000001", "1:1", "LessThan"));
+        Assert.True(AspectRatioTypes.Evaluate("1.00000001:1", "1.00000002:1", "LessThan"));
+
+        // Worst case the bounds allow: full magnitude and full precision on both operands.
+        Assert.True(AspectRatioTypes.Evaluate("99999.99999999:0.0001", "99999.99999998:0.0001", "GreaterThan"));
+    }
+
+    [Fact]
     public void Evaluate_NearOverflowComponentsStayOrdered()
     {
         // Both cross-products land at 1e10, the arithmetic worst case the bounds allow.

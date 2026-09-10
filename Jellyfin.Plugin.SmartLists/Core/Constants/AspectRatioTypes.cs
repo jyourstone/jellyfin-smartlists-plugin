@@ -26,6 +26,16 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         private const decimal MaxComponent = 100000m;
 
         /// <summary>
+        /// Decimal places kept when parsing a component. 16:9 needs none and 2.35:1 needs two, so
+        /// eight is far past any real display format. Bounding precision is what makes
+        /// <see cref="Compare"/> exact rather than merely overflow-free: with at most six integer
+        /// digits each component carries at most 14 significant digits, so a cross-product carries
+        /// at most 28 and always fits a decimal without rounding. The trade is deliberate - two
+        /// ratios that differ only past the eighth decimal compare equal.
+        /// </summary>
+        private const int MaxScale = 8;
+
+        /// <summary>
         /// Determines whether a value is a width-to-height ratio whose components both fall
         /// inside the supported range.
         /// </summary>
@@ -127,11 +137,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             }
 
             var parts = value.Split(':');
-            return parts.Length == 2
-                && decimal.TryParse(parts[0].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out width)
-                && decimal.TryParse(parts[1].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out height)
-                && IsInRange(width)
-                && IsInRange(height);
+            if (parts.Length != 2
+                || !decimal.TryParse(parts[0].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out width)
+                || !decimal.TryParse(parts[1].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out height)
+                || !IsInRange(width)
+                || !IsInRange(height))
+            {
+                return false;
+            }
+
+            // Excess precision is dropped rather than rejected: a ratio written to more places
+            // than MaxScale is still a legitimate ratio, only an over-specified one. Rounding
+            // cannot leave the range, since MinComponent is itself larger than half an ulp here.
+            width = decimal.Round(width, MaxScale);
+            height = decimal.Round(height, MaxScale);
+            return true;
         }
 
         private static bool IsInRange(decimal component)
@@ -140,10 +160,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         }
 
         /// <summary>
-        /// Orders two ratios by cross-multiplication. Components are bounded by
-        /// <see cref="MinComponent"/> and <see cref="MaxComponent"/>, so neither cross-product can
-        /// overflow or underflow to zero. That removes the need to fall back on division, which
-        /// rounds distinct proportions together at the extremes.
+        /// Orders two ratios by cross-multiplication. Components are bounded in magnitude by
+        /// <see cref="MinComponent"/> and <see cref="MaxComponent"/> and in precision by
+        /// <see cref="MaxScale"/>, so every cross-product is exact: it can neither overflow nor
+        /// round two distinct proportions onto the same value. That is what removes the need for
+        /// a division fallback, which would do both at the extremes.
         /// </summary>
         private static int Compare(decimal leftWidth, decimal leftHeight, decimal rightWidth, decimal rightHeight)
         {
