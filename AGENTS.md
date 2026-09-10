@@ -35,7 +35,7 @@ CI (`.github/workflows/ci.yml`) builds both ABIs and runs the tests on every pul
 ```text
 Jellyfin.Plugin.SmartLists/
 ├── Core/                    # Business logic
-│   ├── Constants/           # MediaTypes, Operators, ResolutionTypes
+│   ├── Constants/           # MediaTypes, Operators, ResolutionTypes, AspectRatioTypes, ProviderKeys
 │   ├── Enums/               # SmartListType, RuleLogic, AutoRefreshMode, etc.
 │   ├── Models/              # DTOs: SmartListDto, SmartPlaylistDto, SmartCollectionDto
 │   ├── Orders/              # 25+ sort implementations (NameOrder, RandomOrder, etc.)
