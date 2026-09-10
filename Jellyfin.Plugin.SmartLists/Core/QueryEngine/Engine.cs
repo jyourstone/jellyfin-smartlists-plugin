@@ -223,6 +223,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildResolutionExpression(r, left, logger);
             }
 
+            if (tProp == typeof(string) && FieldRegistry.IsAspectRatioField(r.MemberName))
+            {
+                return BuildAspectRatioExpression(r, left, logger);
+            }
+
             // Check framerate fields (nullable float type)
             if (tProp == typeof(float?) && IsFramerateField(r.MemberName))
             {
@@ -1043,6 +1048,75 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Combine: resolution must be valid AND meet the comparison criteria
             return System.Linq.Expressions.Expression.AndAlso(isValidResolution, comparisonExpression);
+        }
+
+        /// <summary>
+        /// Builds expressions for aspect ratios. Equality and ordering compare the numeric
+        /// width-to-height proportion, while regex intentionally targets Jellyfin's raw string.
+        /// </summary>
+        private static System.Linq.Expressions.Expression BuildAspectRatioExpression(Expression r, MemberExpression left, ILogger? logger)
+        {
+            var allowedOps = Operators.GetOperatorsForField(r.MemberName);
+            if (!allowedOps.Contains(r.Operator))
+            {
+                logger?.LogError(
+                    "SmartLists unsupported operator '{Operator}' for aspect-ratio field '{Field}'. Allowed: {Allowed}",
+                    r.Operator,
+                    r.MemberName,
+                    string.Join(", ", allowedOps));
+                throw new ArgumentException(
+                    $"Operator '{r.Operator}' is not supported for aspect-ratio field '{r.MemberName}'. Supported operators: {string.Join(", ", allowedOps)}");
+            }
+
+            var isValidMethod = typeof(AspectRatioTypes).GetMethod(nameof(AspectRatioTypes.IsValid), [typeof(string)]);
+            if (isValidMethod == null)
+            {
+                throw new InvalidOperationException("AspectRatioTypes.IsValid method not found");
+            }
+
+            var hasValidAspectRatio = System.Linq.Expressions.Expression.Call(isValidMethod, left);
+
+            if (r.Operator == "MatchRegex")
+            {
+                var regex = GetOrCreateRegex(r.TargetValue, logger);
+                var regexMethod = typeof(Engine).GetMethod(nameof(RegexIsMatch), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                if (regexMethod == null)
+                {
+                    throw new InvalidOperationException("Engine.RegexIsMatch method not found");
+                }
+
+                var regexCall = System.Linq.Expressions.Expression.Call(
+                    regexMethod,
+                    System.Linq.Expressions.Expression.Constant(regex),
+                    left);
+                return System.Linq.Expressions.Expression.AndAlso(hasValidAspectRatio, regexCall);
+            }
+
+            var targetIsValid = r.Operator is "IsIn" or "IsNotIn"
+                ? AspectRatioTypes.IsValidList(r.TargetValue)
+                : AspectRatioTypes.IsValid(r.TargetValue);
+            if (!targetIsValid)
+            {
+                var expected = r.Operator is "IsIn" or "IsNotIn"
+                    ? "a non-empty list of width:height ratios"
+                    : "a width:height ratio";
+                throw new ArgumentException(
+                    $"Invalid aspect ratio value '{r.TargetValue}' for field '{r.MemberName}'. Expected {expected}, for example 16:9 or 2.35:1.");
+            }
+
+            var evaluateMethod = typeof(AspectRatioTypes).GetMethod(
+                nameof(AspectRatioTypes.Evaluate),
+                [typeof(string), typeof(string), typeof(string)]);
+            if (evaluateMethod == null)
+            {
+                throw new InvalidOperationException("AspectRatioTypes.Evaluate method not found");
+            }
+
+            return System.Linq.Expressions.Expression.Call(
+                evaluateMethod,
+                left,
+                System.Linq.Expressions.Expression.Constant(r.TargetValue, typeof(string)),
+                System.Linq.Expressions.Expression.Constant(r.Operator, typeof(string)));
         }
 
         /// <summary>

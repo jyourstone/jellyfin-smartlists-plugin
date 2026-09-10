@@ -56,11 +56,30 @@ The more fields selected, the more comprehensive but potentially stricter the ma
 | Field | JSON name | Description |
 |-------|-----------|-------------|
 | **Resolution** | `Resolution` | Video resolution (480p, 720p, 1080p, 1440p, 4K, 8K) |
+| **Aspect Ratio** | `AspectRatio` | Jellyfin's display aspect ratio (for example, `16:9`, `2.35:1`, `9:16`, or `80:29`) |
 | **Framerate** | `Framerate` | Video framerate in fps (e.g., 23.976, 29.97, 59.94) |
 | **Video Codec** | `VideoCodec` | Codec format (e.g., HEVC, H264, AV1, VP9) |
 | **Video Profile** | `VideoProfile` | Codec profile (e.g., Main 10, High) |
 | **Video Range** | `VideoRange` | Dynamic range (e.g., SDR, HDR) |
 | **Video Range Type** | `VideoRangeType` | Specific HDR format (e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG) |
+
+#### Aspect Ratio
+
+Aspect Ratio uses the display ratio reported by Jellyfin for the video's first stream with valid
+ratio metadata. Enter ratios as `width:height`; both whole-number and decimal components work.
+There is no fixed list of possible values, so the field uses a text input.
+
+Equality and comparison operators compare the proportions rather than the text. For example,
+`160:58` equals `80:29`. This also makes orientation rules possible without listing every phone
+format:
+
+- **less than `1:1`** — portrait video
+- **greater than `1:1`** — landscape video
+- **equals `1:1`** — square video
+
+**is in** and **is not in** compare against multiple exact ratios. **matches regex** is the one
+operator that works against Jellyfin's original ratio text. Items without a valid video aspect
+ratio never match an Aspect Ratio rule, including negative rules.
 
 ### Audio
 
@@ -349,6 +368,9 @@ For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlist
 | **equals** / **not equals** | `Equal` / `NotEqual` | Exact match |
 | **greater than** / **less than** | `GreaterThan` / `LessThan` | Comparison |
 | **greater than or equal** / **less than or equal** | `GreaterThanOrEqual` / `LessThanOrEqual` | Comparison |
+
+Aspect Ratio supports these numeric operators using `width:height` values. It additionally supports
+**is in**, **is not in**, and **matches regex**, as described in the Aspect Ratio section above.
 
 ### Date Operators
 

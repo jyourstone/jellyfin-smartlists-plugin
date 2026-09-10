@@ -62,7 +62,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         // These trigger two-phase filtering for optimization
         AudioLanguages = 1 << 0,      // Fields: AudioLanguages, SubtitleLanguages | Cache: MediaStreamsCache
         AudioQuality = 1 << 1,        // Fields: AudioBitrate, AudioSampleRate, AudioBitDepth, AudioCodec, AudioProfile, AudioChannels | Cache: MediaStreamsCache
-        VideoQuality = 1 << 2,        // Fields: Resolution, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType | Cache: MediaStreamsCache
+        VideoQuality = 1 << 2,        // Fields: Resolution, AspectRatio, Framerate, VideoCodec, VideoProfile, VideoRange, VideoRangeType | Cache: MediaStreamsCache
         People = 1 << 3,              // Fields: All people roles (Actors, Directors, etc.) | Cache: ItemPeople
         Collections = 1 << 4,         // Fields: Collections | Cache: ItemCollectionsWithDepth, CollectionMembershipCache
         Playlists = 1 << 5,           // Fields: Playlists | Cache: ItemPlaylists, PlaylistMembershipCache
@@ -100,6 +100,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         Boolean,
         List,           // IEnumerable&lt;string&gt;
         Resolution,
+        AspectRatio,
         Framerate,
         UserData,       // User-specific fields (PlaybackStatus, IsFavorite, etc.)
         Similarity,
@@ -173,6 +174,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static readonly string[] BooleanOperators = ["Equal", "NotEqual"];
         private static readonly string[] SimpleOperators = ["Equal", "NotEqual"];
         private static readonly string[] SimilarityOperators = ["Equal", "Contains", "IsIn", "MatchRegex"];
+        private static readonly string[] AspectRatioOperators = ["Equal", "NotEqual", "IsIn", "IsNotIn", "GreaterThan", "LessThan", "GreaterThanOrEqual", "LessThanOrEqual", "MatchRegex"];
 
         // The canonical registry - all field metadata in one place
         private static readonly Dictionary<string, FieldMetadata> _fields;
@@ -187,6 +189,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static readonly HashSet<string> _userDataFields;
         private static readonly HashSet<string> _simpleFields;
         private static readonly HashSet<string> _resolutionFields;
+        private static readonly HashSet<string> _aspectRatioFields;
         private static readonly HashSet<string> _framerateFields;
         private static readonly HashSet<string> _similarityFields;
         private static readonly Dictionary<string, string[]> _fieldOperators;
@@ -207,6 +210,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             _userDataFields = BuildFieldSet(f => f.IsUserSpecific);
             _simpleFields = BuildFieldSet(f => f.Type == FieldType.Simple);
             _resolutionFields = BuildFieldSet(f => f.Type == FieldType.Resolution);
+            _aspectRatioFields = BuildFieldSet(f => f.Type == FieldType.AspectRatio);
             _framerateFields = BuildFieldSet(f => f.Type == FieldType.Framerate);
             _similarityFields = BuildFieldSet(f => f.Type == FieldType.Similarity);
             _fieldOperators = _fields.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedOperators, StringComparer.OrdinalIgnoreCase);
@@ -233,6 +237,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             // Video Fields
             AddField(fields, "Resolution", "Resolution", FieldType.Resolution, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "AspectRatio", "Aspect Ratio", FieldType.AspectRatio, FieldCategory.Video, AspectRatioOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "Framerate", "Framerate", FieldType.Framerate, FieldCategory.Video, NumericOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoCodec", "Video Codec", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoProfile", "Video Profile", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
@@ -423,6 +428,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public static bool IsUserDataField(string fieldName) => _userDataFields.Contains(fieldName);
         public static bool IsSimpleField(string fieldName) => _simpleFields.Contains(fieldName);
         public static bool IsResolutionField(string fieldName) => _resolutionFields.Contains(fieldName);
+        public static bool IsAspectRatioField(string fieldName) => _aspectRatioFields.Contains(fieldName);
         public static bool IsFramerateField(string fieldName) => _framerateFields.Contains(fieldName);
         public static bool IsSimilarityField(string fieldName) => _similarityFields.Contains(fieldName);
 
@@ -471,6 +477,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public static HashSet<string> GetResolutionFields()
         {
             return new HashSet<string>(_resolutionFields, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static HashSet<string> GetAspectRatioFields()
+        {
+            return new HashSet<string>(_aspectRatioFields, StringComparer.OrdinalIgnoreCase);
         }
 
         public static HashSet<string> GetFramerateFields()

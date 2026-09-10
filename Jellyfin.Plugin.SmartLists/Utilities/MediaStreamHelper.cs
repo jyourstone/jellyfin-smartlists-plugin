@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using MediaBrowser.Controller.Entities;
@@ -96,6 +97,43 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             return maxHeight;
+        }
+
+        /// <summary>
+        /// Gets Jellyfin's stored display aspect ratio from the first video stream that has a
+        /// valid ratio. The stored value is authoritative because it accounts for anamorphic
+        /// display metadata that cannot be reconstructed from encoded width and height alone.
+        /// </summary>
+        /// <param name="item">The item whose video streams should be inspected.</param>
+        /// <param name="cache">Optional per-refresh media-stream cache.</param>
+        /// <param name="logger">Optional logger for stream-read failures.</param>
+        /// <returns>The original Jellyfin ratio string, or an empty string when unavailable.</returns>
+        public static string GetAspectRatio(BaseItem item, RefreshQueueService.RefreshCache? cache, ILogger? logger)
+        {
+            foreach (var stream in GetMediaStreams(item, cache, logger))
+            {
+                try
+                {
+                    var typeProperty = stream.GetType().GetProperty("Type");
+                    var aspectRatioProperty = stream.GetType().GetProperty("AspectRatio");
+                    if (typeProperty?.GetValue(stream)?.ToString() != "Video" || aspectRatioProperty == null)
+                    {
+                        continue;
+                    }
+
+                    var aspectRatio = aspectRatioProperty.GetValue(stream)?.ToString();
+                    if (AspectRatioTypes.IsValid(aspectRatio))
+                    {
+                        return aspectRatio!;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "Failed to read an aspect ratio for item {Name}", item.Name);
+                }
+            }
+
+            return string.Empty;
         }
     }
 }
