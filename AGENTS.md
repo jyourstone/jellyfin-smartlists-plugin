@@ -112,7 +112,7 @@ Releases are triggered by pushing a git tag matching `v*` (see `.github/workflow
 
 ### Cutting releases
 
-Releases are tagged with the `/release` skill; the project-specific flow (branch lines, RC-in-Revision numbering, tag-message format) lives in `.claude/skills/release/SKILL.md` — the personal `/release` skill reads it as a reference document, since personal skills shadow same-named project skills. The workflow publishes the annotated tag message body (`%(contents:body)` — everything after the first line) as both the GitHub release body and the plugin-manifest changelog. Tags without an annotated message fall back to GitHub auto-generated notes (PR titles + labels per `.github/release.yml`).
+Releases are tagged with the `/release` skill; the project-specific flow (branch lines, RC-in-Revision numbering, tag-message format) lives in `.agents/skills/release/SKILL.md` — the personal `/release` skill reads it as a reference document, since personal skills shadow same-named project skills. The workflow publishes the annotated tag message body (`%(contents:body)` — everything after the first line) as both the GitHub release body and the plugin-manifest changelog. Tags without an annotated message fall back to GitHub auto-generated notes (PR titles + labels per `.github/release.yml`).
 
 ### Version Format
 
