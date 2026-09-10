@@ -1099,7 +1099,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 var expected = r.Operator is "IsIn" or "IsNotIn"
                     ? "a non-empty list of width:height ratios"
-                    : "a positive width:height ratio";
+                    : "a width:height ratio";
                 throw new ArgumentException(
                     $"Invalid aspect ratio value '{r.TargetValue}' for field '{r.MemberName}'. Expected {expected}, for example 16:9 or 2.35:1.");
             }

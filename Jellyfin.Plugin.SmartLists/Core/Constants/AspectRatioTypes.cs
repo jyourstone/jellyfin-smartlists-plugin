@@ -11,10 +11,26 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
     public static class AspectRatioTypes
     {
         /// <summary>
-        /// Determines whether a value is a positive width-to-height ratio.
+        /// Smallest and largest accepted ratio component. Real display ratios sit far inside this
+        /// range - the widest cinema formats are near 2.76:1, and ratios written as pixel
+        /// dimensions top out around 7680:4320 - so the bounds only exclude values that could
+        /// never describe a picture. Rejecting the rest at parse time is what keeps
+        /// <see cref="Compare"/> arithmetic safe: the largest possible cross-product is 1e10,
+        /// against a decimal ceiling of roughly 7.9e28.
+        /// </summary>
+        private const decimal MinComponent = 0.0001m;
+
+        /// <summary>
+        /// Upper bound for a ratio component. See <see cref="MinComponent"/>.
+        /// </summary>
+        private const decimal MaxComponent = 100000m;
+
+        /// <summary>
+        /// Determines whether a value is a width-to-height ratio whose components both fall
+        /// inside the supported range.
         /// </summary>
         /// <param name="value">Ratio in <c>width:height</c> form.</param>
-        /// <returns><c>true</c> when both components are valid and positive.</returns>
+        /// <returns><c>true</c> when both components parse and are in range.</returns>
         public static bool IsValid(string? value)
         {
             return TryParse(value, out _, out _);
@@ -114,20 +130,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             return parts.Length == 2
                 && decimal.TryParse(parts[0].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out width)
                 && decimal.TryParse(parts[1].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out height)
-                && width > 0
-                && height > 0;
+                && IsInRange(width)
+                && IsInRange(height);
         }
 
+        private static bool IsInRange(decimal component)
+        {
+            return component >= MinComponent && component <= MaxComponent;
+        }
+
+        /// <summary>
+        /// Orders two ratios by cross-multiplication. Components are bounded by
+        /// <see cref="MinComponent"/> and <see cref="MaxComponent"/>, so neither cross-product can
+        /// overflow or underflow to zero. That removes the need to fall back on division, which
+        /// rounds distinct proportions together at the extremes.
+        /// </summary>
         private static int Compare(decimal leftWidth, decimal leftHeight, decimal rightWidth, decimal rightHeight)
         {
-            try
-            {
-                return decimal.Compare(leftWidth * rightHeight, rightWidth * leftHeight);
-            }
-            catch (OverflowException)
-            {
-                return decimal.Compare(leftWidth / leftHeight, rightWidth / rightHeight);
-            }
+            return decimal.Compare(leftWidth * rightHeight, rightWidth * leftHeight);
         }
     }
 }

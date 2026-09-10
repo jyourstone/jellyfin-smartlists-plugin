@@ -25,6 +25,40 @@ public class AspectRatioTests
     }
 
     [Theory]
+    [InlineData("100000:1", true)]
+    [InlineData("1:100000", true)]
+    [InlineData("0.0001:1", true)]
+    [InlineData("100001:1", false)]
+    [InlineData("1:100001", false)]
+    [InlineData("0.00009:1", false)]
+    [InlineData("99999999999999999999:1", false)]
+    public void IsValid_RejectsComponentsOutsideSupportedRange(string value, bool expected)
+    {
+        Assert.Equal(expected, AspectRatioTypes.IsValid(value));
+    }
+
+    [Fact]
+    public void CompileRule_ExtremeTargetIsRejectedInsteadOfOverflowing()
+    {
+        Assert.Throws<ArgumentException>(() => Compile("GreaterThan", "99999999999999999999:1"));
+    }
+
+    [Fact]
+    public void CompileRule_ExtremeItemRatioNeverMatches()
+    {
+        var isWide = Compile("GreaterThan", "1:1");
+        Assert.False(isWide(Item("99999999999999999999:0.0000000001")));
+    }
+
+    [Fact]
+    public void Evaluate_NearOverflowComponentsStayOrdered()
+    {
+        // Both cross-products land at 1e10, the arithmetic worst case the bounds allow.
+        Assert.True(AspectRatioTypes.Evaluate("100000:0.0001", "99999:0.0001", "GreaterThan"));
+        Assert.True(AspectRatioTypes.Evaluate("0.0001:100000", "0.0001:99999", "LessThan"));
+    }
+
+    [Theory]
     [InlineData("Equal", "160:58", "80:29", true)]
     [InlineData("NotEqual", "16:9", "4:3", true)]
     [InlineData("LessThan", "9:16", "1:1", true)]
