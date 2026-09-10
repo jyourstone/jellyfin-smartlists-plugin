@@ -1696,6 +1696,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
+        /// Extracts Jellyfin's display aspect ratio from the item's video streams.
+        /// </summary>
+        private static void ExtractAspectRatio(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
+        {
+            operand.AspectRatio = Utilities.MediaStreamHelper.GetAspectRatio(baseItem, cache, logger);
+        }
+
+        /// <summary>
         /// Extracts framerate from media streams.
         /// </summary>
         private static void ExtractFramerate(Operand operand, BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -2977,6 +2985,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 if (MediaTypes.VideoStreamCapableSet.Contains(operand.ItemType))
                 {
                     ExtractResolution(operand, baseItem, cache, logger);
+                    ExtractAspectRatio(operand, baseItem, cache, logger);
                     ExtractFramerate(operand, baseItem, cache, logger);
                     ExtractVideoQuality(operand, baseItem, cache, logger);
                 }
@@ -2984,6 +2993,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 {
                     // Clear video quality fields for non-video items
                     operand.Resolution = string.Empty;
+                    operand.AspectRatio = string.Empty;
                     operand.Framerate = null;
                     operand.VideoCodec = string.Empty;
                     operand.VideoProfile = string.Empty;
@@ -2995,6 +3005,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             else
             {
                 operand.Resolution = string.Empty;
+                operand.AspectRatio = string.Empty;
                 operand.Framerate = null;
                 operand.VideoCodec = string.Empty;
                 operand.VideoProfile = string.Empty;

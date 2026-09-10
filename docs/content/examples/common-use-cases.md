@@ -20,6 +20,14 @@ Here are some popular playlist and collection types you can create:
 ### Unwatched Action Movies
 - **Playback Status** = Unplayed AND **Genre** contains "Action"
 
+### Portrait Videos for Phones
+- **Media Types**: Movie, Episode, Music Video, or Video
+- **Aspect Ratio** less than `1:1`
+- Matches every portrait display ratio, including `9:16` and uncommon phone-specific ratios
+
+To target particular formats instead, use **Aspect Ratio is in** with values such as `9:16` and
+`4:5`. Aspect ratios are entered as `width:height`.
+
 ### Continue Watching (In Progress)
 - **Playback Status** = In Progress
 - Shows all movies and episodes that have been started but not finished
@@ -399,4 +407,3 @@ Use **matches regex** with .NET syntax for advanced matching:
 
 - **Audio Languages** matches regex `(?i)fra?` with "Must be default language" enabled
 - Matches "fr" or "fra" as default audio, excluding English films with French dubs
-

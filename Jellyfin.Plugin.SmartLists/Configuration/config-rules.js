@@ -39,6 +39,7 @@
         if (SmartLists.FIELD_TYPES.BOOLEAN_FIELDS.indexOf(fieldValue) !== -1) return 'boolean';
         if (SmartLists.FIELD_TYPES.SIMPLE_FIELDS.indexOf(fieldValue) !== -1) return 'simple';
         if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) return 'resolution';
+        if (SmartLists.FIELD_TYPES.ASPECT_RATIO_FIELDS.indexOf(fieldValue) !== -1) return 'aspectratio';
         if (fieldValue === 'PlaybackStatus') return 'playback';
         if (fieldValue === 'ExtraType') return 'extratype';
         if (fieldValue === 'SeriesStatus') return 'seriesstatus';
@@ -200,6 +201,8 @@
             SmartLists.handleDateFieldInput(valueContainer, currentOperator, currentValue);
         } else if (SmartLists.FIELD_TYPES.RESOLUTION_FIELDS.indexOf(fieldValue) !== -1) {
             SmartLists.handleResolutionFieldInput(valueContainer, currentValue);
+        } else if (SmartLists.FIELD_TYPES.ASPECT_RATIO_FIELDS.indexOf(fieldValue) !== -1) {
+            SmartLists.handleAspectRatioFieldInput(valueContainer, currentValue);
         } else {
             SmartLists.handleTextFieldInput(valueContainer, currentValue);
         }
@@ -500,6 +503,14 @@
             input.value = currentValue;
         }
         valueContainer.appendChild(input);
+    };
+
+    SmartLists.handleAspectRatioFieldInput = function (valueContainer, currentValue) {
+        SmartLists.handleTextFieldInput(valueContainer, currentValue);
+        const input = valueContainer.querySelector('.rule-value-input');
+        if (input) {
+            input.placeholder = 'Width:height (e.g., 16:9 or 2.35:1)';
+        }
     };
 
     // ===== VALUE RESTORATION =====

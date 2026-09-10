@@ -59,6 +59,7 @@ public class FieldRegistryInvariantTests
         FieldType.Simple => clr == typeof(string),
         FieldType.UserData => clr == typeof(string),
         FieldType.Resolution => clr == typeof(string),
+        FieldType.AspectRatio => clr == typeof(string),
         FieldType.Framerate => clr == typeof(float?),
         FieldType.Boolean => clr == typeof(bool),
         FieldType.Date => clr == typeof(double),
@@ -70,7 +71,7 @@ public class FieldRegistryInvariantTests
 
     private static string ExpectedClrDescription(FieldType type) => type switch
     {
-        FieldType.Text or FieldType.Simple or FieldType.UserData or FieldType.Resolution => "string",
+        FieldType.Text or FieldType.Simple or FieldType.UserData or FieldType.Resolution or FieldType.AspectRatio => "string",
         FieldType.Framerate => "float?",
         FieldType.Boolean => "bool",
         FieldType.Date => "double (unix seconds)",
@@ -372,6 +373,7 @@ public class FieldRegistryInvariantTests
             ("IsBooleanField", FieldType.Boolean, FieldRegistry.IsBooleanField),
             ("IsSimpleField", FieldType.Simple, FieldRegistry.IsSimpleField),
             ("IsResolutionField", FieldType.Resolution, FieldRegistry.IsResolutionField),
+            ("IsAspectRatioField", FieldType.AspectRatio, FieldRegistry.IsAspectRatioField),
             ("IsFramerateField", FieldType.Framerate, FieldRegistry.IsFramerateField),
             ("IsSimilarityField", FieldType.Similarity, FieldRegistry.IsSimilarityField),
         };

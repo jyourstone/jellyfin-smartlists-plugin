@@ -46,6 +46,7 @@
         BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched'],
         SIMPLE_FIELDS: ['ItemType', 'SeriesStatus'],
         RESOLUTION_FIELDS: ['Resolution'],
+        ASPECT_RATIO_FIELDS: ['AspectRatio'],
         STRING_FIELDS: ['SimilarTo', 'Name', 'Album', 'SeriesName', 'OfficialRating', 'Overview', 'FileName', 'FolderPath', 'AudioCodec', 'AudioProfile', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType', 'PlaybackStatus', 'CustomRating', 'ImdbId', 'TmdbId', 'TvdbId'],
         USER_DATA_FIELDS: ['PlaybackStatus', 'IsFavorite', 'PlayCount', 'Rating', 'NextUnwatched', 'LastPlayedDate']
     };
@@ -68,7 +69,7 @@
 
     // Audio and video field lists for visibility gating
     SmartLists.AUDIO_FIELD_NAMES = ['AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioCodec', 'AudioProfile', 'AudioChannels', 'AudioLanguages', 'SubtitleLanguages'];
-    SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType'];
+    SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'AspectRatio', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType'];
 
     // Debounce delay for media type change updates (milliseconds)
     SmartLists.MEDIA_TYPE_UPDATE_DEBOUNCE_MS = 200;
