@@ -48,18 +48,7 @@ The build scripts automatically:
 - Restart the Jellyfin Docker container
 - Make the plugin available in your local Jellyfin instance
 
-By default, the scripts build for Jellyfin ABI `12.0.0` using `net10.0`, which matches the Jellyfin 12 RC development container. To test against Jellyfin 10.11, set `JELLYFIN_ABI=10.11.0` before running the script:
-
-```bash
-cd dev
-JELLYFIN_ABI=10.11.0 ./build-local.sh
-```
-
-```powershell
-cd dev
-$env:JELLYFIN_ABI = "10.11.0"
-.\build-local.ps1
-```
+The scripts build for Jellyfin 12 (`net10.0`), which matches the development container. Jellyfin 10.11 is no longer a build target on `main`.
 
 ### 2. Access Jellyfin
 

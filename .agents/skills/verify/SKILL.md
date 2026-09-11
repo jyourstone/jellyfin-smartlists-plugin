@@ -7,7 +7,7 @@ description: Drive the SmartLists plugin against the local dev Jellyfin containe
 
 ## Build + deploy (from repo root; works from worktrees too)
 
-Before deploying, compile-check BOTH target frameworks (the container only runs net10.0, but the project must also build for net9.0 / Jellyfin 10.11):
+Before deploying, compile-check the plugin (net10.0 / Jellyfin 12):
 
 ```bash
 dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj -c Release --no-incremental

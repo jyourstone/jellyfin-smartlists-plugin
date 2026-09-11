@@ -5,21 +5,10 @@
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
-# Set the Jellyfin ABI for local testing. Defaults to Jellyfin 12 RC/dev.
+# Set the Jellyfin ABI for local testing. Written into the dev manifest; build targets net10.0 only.
 JELLYFIN_ABI="${JELLYFIN_ABI:-12.0.0}"
 VERSION="${VERSION:-${JELLYFIN_ABI}.0}"
-case "$JELLYFIN_ABI" in
-    10.11.*)
-        TARGET_FRAMEWORK="${TARGET_FRAMEWORK:-net9.0}"
-        ;;
-    12.*)
-        TARGET_FRAMEWORK="${TARGET_FRAMEWORK:-net10.0}"
-        ;;
-    *)
-        echo "Unsupported JELLYFIN_ABI '$JELLYFIN_ABI'. Expected 10.11.x or 12.x."
-        exit 1
-        ;;
-esac
+TARGET_FRAMEWORK="net10.0"
 OUTPUT_DIR="../build_output"
 
 echo "Building SmartLists plugin for Jellyfin ABI $JELLYFIN_ABI ($TARGET_FRAMEWORK)..."

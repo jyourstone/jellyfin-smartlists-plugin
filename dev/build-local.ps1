@@ -5,7 +5,7 @@
 
 $ErrorActionPreference = "Stop" # Exit immediately if a command fails
 
-# Set the Jellyfin ABI for local testing. Defaults to Jellyfin 12 RC/dev.
+# Set the Jellyfin ABI for local testing. Written into the dev manifest; build targets net10.0 only.
 $JellyfinAbi = $env:JELLYFIN_ABI
 if ([string]::IsNullOrWhiteSpace($JellyfinAbi)) {
     $JellyfinAbi = "12.0.0"
@@ -16,16 +16,7 @@ if ([string]::IsNullOrWhiteSpace($VERSION)) {
     $VERSION = "$JellyfinAbi.0"
 }
 
-$TargetFramework = $env:TARGET_FRAMEWORK
-if ([string]::IsNullOrWhiteSpace($TargetFramework)) {
-    if ($JellyfinAbi.StartsWith("10.11.")) {
-        $TargetFramework = "net9.0"
-    } elseif ($JellyfinAbi.StartsWith("12.")) {
-        $TargetFramework = "net10.0"
-    } else {
-        throw "Unsupported JELLYFIN_ABI '$JellyfinAbi'. Expected 10.11.x or 12.x."
-    }
-}
+$TargetFramework = "net10.0"
 
 $OUTPUT_DIR = "..\build_output"
 
