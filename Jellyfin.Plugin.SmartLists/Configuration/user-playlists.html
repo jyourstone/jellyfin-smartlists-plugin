@@ -208,7 +208,16 @@
                         </div>
 
                         <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
-                            <label class="inputLabel inputLabelUnfocused" for="playlistMinItems">Min Items</label>
+                            <label class="inputLabel" for="playlistMinItems"
+                                style="display: flex; align-items: center;">
+                                Min Items
+                                <a href="https://jellyfin-smartlists-plugin.dinsten.se/user-guide/configuration/#min-items"
+                                    target="_blank" rel="noopener noreferrer" title="Documentation"
+                                    style="margin-left: 0.5em; text-decoration: none; color: inherit; display: inline-flex; align-items: center;">
+                                    <span class="material-icons" aria-hidden="true"
+                                        style="font-size: 1.1em; line-height: 0;">info_outline</span>
+                                </a>
+                            </label>
                             <input type="number" id="playlistMinItems" class="emby-input" min="0" step="1" value="1">
                             <div class="fieldDescription">Hides the list while the number of items in the list is
                                 less than this minimum. The list will be shown once the number of items is at least
