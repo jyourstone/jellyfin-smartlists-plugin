@@ -36,10 +36,19 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public bool DefaultMakePublic { get; set; } = false;
 
         /// <summary>
-        /// Gets or sets whether new lists should hide when empty by default.
-        /// Keep the default in sync with SmartLists.getDefaultHideWhenEmpty in config-core.js.
+        /// Gets or sets the default minimum-items-to-show threshold for new lists (0/null = none).
+        /// Keep the default in sync with SmartLists.getDefaultMinItems in config-core.js.
         /// </summary>
-        public bool DefaultHideWhenEmpty { get; set; } = true;
+        public int? DefaultMinItems { get; set; } = 1;
+
+        /// <summary>
+        /// Legacy input-only field, replaced by <see cref="DefaultMinItems"/>. An existing saved
+        /// XML config with this element set still deserializes into it (unlike a genuinely new
+        /// install, where it's simply absent); <see cref="Plugin"/> migrates it into
+        /// DefaultMinItems once at startup and saves the configuration back with this cleared, so
+        /// it is a one-time read, not a standing property to keep populating.
+        /// </summary>
+        public bool? DefaultHideWhenEmpty { get; set; }
 
         /// <summary>
         /// Gets or sets whether to stamp a small smart list badge onto auto-generated

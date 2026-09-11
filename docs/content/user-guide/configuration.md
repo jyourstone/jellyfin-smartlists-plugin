@@ -203,6 +203,7 @@ The remaining fields live inside the collapsed **More options** section, grouped
 - **Limits**
   - Set the maximum number of items
   - Set the maximum playtime for the list (playlists only)
+  - Hide the list while its item count is below a minimum you set (see [Min Items](#min-items))
   - Configure random group selection (see [Random Group Selection](sorting-and-limits.md#random-group-selection))
 - **Bumpers** — weave short interstitial items between the playlist's main items (playlists only, see [Bumpers](bumpers.md))
 - **Automation**
@@ -214,7 +215,6 @@ The remaining fields live inside the collapsed **More options** section, grouped
   - Decide if the list should be public or private (playlists only - collections are always server-wide)
 - **Presentation**
   - Upload custom images and set metadata such as sort title, overview, tags and favorite (see [Custom Images](#custom-images) and [Metadata](#metadata) above)
-  - Hide the Jellyfin playlist/collection while the list matches no items (see [Hide When Empty](#hide-when-empty))
   - Replace matched items with the collections that contain them (collections only, see [Group results into collections](media-types.md#group-into-collections))
 
 !!! info "User Page Differences"
@@ -272,7 +272,7 @@ Configure global settings for the plugin:
 - Set the default sort order for new lists
 - Set the default media types pre-selected for new lists (types only available for collections are skipped when creating a playlist)
 - Set the default max items and max playtime for new lists
-- Set whether new lists hide when empty by default
+- Set the default minimum items to show for new lists
 - Configure custom prefix and suffix for list names
 - Set the default auto-refresh mode for new lists
 - Set the default custom schedule settings for new lists
@@ -322,17 +322,20 @@ Disabling lists can be useful for:
 !!! tip "Use Visibility Scheduling Instead"
     For seasonal or time-based list visibility, consider using [Visibility Scheduling](auto-refresh.md#visibility-scheduling) instead of manually enabling/disabling lists. This automates the process and ensures lists appear and disappear exactly when you want them to.
 
-## Hide When Empty
+## Min Items
 
-With **Hide when empty** (in the **Presentation** group under **More options** when creating or editing a list), a smart list's Jellyfin playlist or collection is hidden while its rules match no items:
+With **Min Items** (in the **Limits** group under **More options** when creating or editing a list, next to Max Items), a smart list's Jellyfin playlist or collection is hidden while its matched item count is below a threshold you set:
 
-- If a refresh finds **no matching items**, the Jellyfin playlist/collection is removed (or never created in the first place).
-- As soon as a later refresh finds matching items again, it is recreated automatically — including any custom images and metadata you configured.
+- If a refresh finds **fewer matching items than the minimum**, the Jellyfin playlist/collection is removed (or never created in the first place).
+- As soon as a later refresh's count reaches the minimum again, it is recreated automatically — including any custom images and metadata you configured.
 - The smart list configuration itself is never deleted; it stays visible in the Smart Lists interface.
+- Leave the field blank or set it to `0` to always show the list, even with zero items — this is the default for existing lists.
+- Setting it to `1` reproduces the old **Hide when empty** behaviour exactly: the list is only hidden when it matches nothing at all.
+- Any value above `1` also hides thinly-populated lists — useful for e.g. a tag-based collection you only want visible once it has a handful of items, not just one.
 
-This is useful for seasonal or rotating lists (e.g. "Halloween movies" driven by a schedule or an external list) that would otherwise linger as empty entries in your library. For multi-user playlists, hiding applies per user: a user with no matching items has their playlist hidden while other users keep theirs.
+This is useful for seasonal or rotating lists (e.g. "Halloween movies" driven by a schedule or an external list) that would otherwise linger as near-empty entries in your library. For multi-user playlists, hiding applies per user: a user below the minimum has their playlist hidden while other users keep theirs.
 
-New lists have this enabled by default. Admins can change the default for new lists with **Hide lists when empty by default** in the Settings tab; the per-list checkbox always takes precedence, and changing the global setting does not affect existing lists. The Settings-tab default applies to lists created from the admin configuration page — the user page always starts new lists with **Hide when empty** enabled.
+New lists default to a minimum of `1` (equivalent to the old **Hide when empty** default). Admins can change the default for new lists with **Default Min Items** in the Settings tab; the per-list field always takes precedence, and changing the global setting does not affect existing lists. The Settings-tab default applies to lists created from the admin configuration page — the user page always starts new lists with a minimum of `1`.
 
 ## Custom List Naming
 

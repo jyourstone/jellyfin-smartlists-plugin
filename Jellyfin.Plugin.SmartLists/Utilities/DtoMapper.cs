@@ -42,7 +42,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 Order = source.Order,
                 MediaTypes = source.MediaTypes,
                 IncludeExtras = source.IncludeExtras,
-                HideWhenEmpty = source.HideWhenEmpty,
+                MinItems = source.MinItems,
                 
                 // State and limits
                 Enabled = source.Enabled,
@@ -119,7 +119,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 IncludeExtras = source.IncludeExtras,
                 MatchByMembers = source.MatchByMembers,
                 GroupIntoCollections = source.GroupIntoCollections,
-                HideWhenEmpty = source.HideWhenEmpty,
+                MinItems = source.MinItems,
 
                 // State and limits
                 Enabled = source.Enabled,

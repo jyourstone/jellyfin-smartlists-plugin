@@ -291,12 +291,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 // Now that we've found the existing playlist (or not), apply the new naming format
                 var smartPlaylistName = NameFormatter.FormatPlaylistName(dto.Name);
 
-                // Hide when empty: don't keep a Jellyfin playlist around while no items match
-                if (dto.HideWhenEmpty && newLinkedChildren.Length == 0)
+                // Minimum items: don't keep a Jellyfin playlist around while it's below the floor
+                if (dto.MinItems.GetValueOrDefault() > 0 && newLinkedChildren.Length < dto.MinItems)
                 {
                     if (existingPlaylist != null)
                     {
-                        logger.LogInformation("Smart playlist '{PlaylistName}' matched no items - deleting Jellyfin playlist (hide when empty)", dto.Name);
+                        logger.LogInformation("Smart playlist '{PlaylistName}' matched {Count} item(s), below its minimum of {MinItems} - deleting Jellyfin playlist", dto.Name, newLinkedChildren.Length, dto.MinItems);
                         _libraryManager.DeleteItem(existingPlaylist, new DeleteOptions { DeleteFileLocation = true }, true);
 
                         // Drop it from this drain's snapshot too, so lists refreshed after this one
@@ -333,7 +333,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         }
                     }
 
-                    return (true, $"Playlist '{smartPlaylistName}' has no items - hidden (hide when empty)", string.Empty);
+                    return (true, $"Playlist '{smartPlaylistName}' has {newLinkedChildren.Length} item(s), below its minimum of {dto.MinItems} - hidden", string.Empty);
                 }
 
                 if (existingPlaylist != null)

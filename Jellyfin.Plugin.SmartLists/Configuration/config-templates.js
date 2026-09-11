@@ -183,7 +183,7 @@
                 }],
                 Order: { SortOptions: [{ SortBy: 'External List Order', SortOrder: 'Ascending' }] },
                 Schedules: [{ Trigger: 'Daily', Time: '06:00:00' }],
-                HideWhenEmpty: true,
+                MinItems: 1,
                 MaxItems: 50
             }
         },
@@ -331,13 +331,13 @@
         // Deep-copy so form population can never mutate the catalog
         const dto = JSON.parse(JSON.stringify(template.dto));
 
-        // Templates that don't specify HideWhenEmpty inherit the configured
+        // Templates that don't specify MinItems inherit the configured
         // default for new lists (cached by the form-defaults population; the
-        // live checkbox may have been toggled by a previously applied template)
-        if (dto.HideWhenEmpty === undefined) {
-            dto.HideWhenEmpty = page._defaultHideWhenEmpty !== undefined
-                ? page._defaultHideWhenEmpty
-                : SmartLists.getDefaultHideWhenEmpty(null);
+        // live field may have been edited by a previously applied template)
+        if (dto.MinItems === undefined) {
+            dto.MinItems = page._defaultMinItems !== undefined
+                ? page._defaultMinItems
+                : SmartLists.getDefaultMinItems(null);
         }
 
         try {

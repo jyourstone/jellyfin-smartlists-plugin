@@ -636,6 +636,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 });
             }
 
+            // A caller on an older client version may still send a legacy field (e.g.
+            // HideWhenEmpty). Normalize it into its current equivalent before this DTO is used
+            // for anything, so a fresh save/refresh never sees the stale legacy value.
+            list.MigrateLegacyFields();
+
             // Route to appropriate handler based on type
             if (list.Type == Core.Enums.SmartListType.Collection)
             {
@@ -1142,6 +1147,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     Status = StatusCodes.Status400BadRequest
                 });
             }
+
+            // A caller on an older client version may still send a legacy field (e.g.
+            // HideWhenEmpty). Normalize it into its current equivalent before this DTO is saved
+            // or used for a refresh, so a stale legacy value is never persisted or acted on.
+            list.MigrateLegacyFields();
 
             var stopwatch = Stopwatch.StartNew();
             try

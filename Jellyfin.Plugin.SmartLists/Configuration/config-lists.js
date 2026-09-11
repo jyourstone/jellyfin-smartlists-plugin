@@ -348,7 +348,8 @@
             // Only meaningful when a container media type is selected; the checkbox is
             // reset whenever the toggle is hidden, so reading it directly is safe
             const matchByMembers = SmartLists.getElementChecked(page, '#matchByMembers', false);
-            const hideWhenEmpty = SmartLists.getElementChecked(page, '#playlistHideWhenEmpty', false);
+            const minItemsInput = SmartLists.getElementValue(page, '#playlistMinItems', '');
+            const minItems = minItemsInput === '' ? null : parseInt(minItemsInput, 10);
             // Collection-only: the flag is never sent for a playlist regardless of UI state
             const groupIntoCollections = isCollection && SmartLists.getElementChecked(page, '#groupIntoCollections', false);
             const isEnabled = SmartLists.getElementChecked(page, '#playlistIsEnabled', true); // Default to true
@@ -451,7 +452,7 @@
                 IncludeExtras: includeExtras,
                 MatchByMembers: matchByMembers,
                 GroupIntoCollections: groupIntoCollections,
-                HideWhenEmpty: hideWhenEmpty,
+                MinItems: minItems,
                 MediaTypes: selectedMediaTypes,
                 MaxItems: maxItems,
                 MaxPlayTimeMinutes: maxPlayTimeMinutes,
@@ -746,7 +747,9 @@
         if (playlist.Enabled === false) {
             chips.push('Disabled');
         }
-        if (playlist.HideWhenEmpty) {
+        if (playlist.MinItems > 1) {
+            chips.push('Min ' + playlist.MinItems + ' items');
+        } else if (playlist.MinItems === 1) {
             chips.push('Hide when empty');
         }
         if (playlist.GroupIntoCollections) {
@@ -987,7 +990,7 @@
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
         SmartLists.setElementChecked(page, '#matchByMembers', playlist.MatchByMembers || false);
         SmartLists.setElementChecked(page, '#groupIntoCollections', playlist.GroupIntoCollections || false);
-        SmartLists.setElementChecked(page, '#playlistHideWhenEmpty', playlist.HideWhenEmpty || false);
+        SmartLists.setElementValue(page, '#playlistMinItems', playlist.MinItems !== undefined && playlist.MinItems !== null ? playlist.MinItems : '');
 
         // Handle AutoRefresh with backward compatibility
         const autoRefreshValue = playlist.AutoRefresh !== undefined ? playlist.AutoRefresh : 'Never';
@@ -2078,10 +2081,10 @@
                 '</tr>' :
                 ''
             ) +
-            (playlist.HideWhenEmpty ?
+            (playlist.MinItems > 0 ?
                 '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
-                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Hide When Empty</td>' +
-                '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Min Items</td>' +
+                '<td style="padding: 0.5em 0.75em; ">' + playlist.MinItems + '</td>' +
                 '</tr>' :
                 ''
             ) +

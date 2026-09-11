@@ -278,10 +278,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var validationResult = ValidateSmartList(list);
                 if (!validationResult.IsValid)
                 {
-                    _logger.LogWarning("Validation failed for user {UserId} creating list '{Name}': {Error}", 
+                    _logger.LogWarning("Validation failed for user {UserId} creating list '{Name}': {Error}",
                         userId, list.Name, validationResult.ErrorMessage);
                     return BadRequest(new { error = validationResult.ErrorMessage });
                 }
+
+                // A caller on an older client version may still send a legacy field (e.g.
+                // HideWhenEmpty). Normalize it before this DTO is saved or used for a refresh.
+                list.MigrateLegacyFields();
 
                 // Check if user can create collections
                 if (list.Type == Core.Enums.SmartListType.Collection && !CanUserManageCollections())
@@ -1112,6 +1116,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     list.Id = id;
                 }
 
+                // A caller on an older client version may still send a legacy field (e.g.
+                // HideWhenEmpty). Normalize it before this DTO is used for anything below --
+                // including the playlist<->collection conversion paths, which bypass the
+                // per-branch update logic entirely.
+                list.MigrateLegacyFields();
+
                 // Determine if it's a playlist or collection and update accordingly
                 var playlistStore = _playlistStore;
                 var collectionStore = _collectionStore;
@@ -1166,7 +1176,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     var validationResult = ValidateSmartList(playlistDto);
                     if (!validationResult.IsValid)
                     {
-                        _logger.LogWarning("Validation failed for user {UserId} updating playlist '{Name}': {Error}", 
+                        _logger.LogWarning("Validation failed for user {UserId} updating playlist '{Name}': {Error}",
                             userId, playlistDto.Name, validationResult.ErrorMessage);
                         return BadRequest(new { error = validationResult.ErrorMessage });
                     }
@@ -1254,7 +1264,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     var validationResult = ValidateSmartList(collectionDto);
                     if (!validationResult.IsValid)
                     {
-                        _logger.LogWarning("Validation failed for user {UserId} updating collection '{Name}': {Error}", 
+                        _logger.LogWarning("Validation failed for user {UserId} updating collection '{Name}': {Error}",
                             userId, collectionDto.Name, validationResult.ErrorMessage);
                         return BadRequest(new { error = validationResult.ErrorMessage });
                     }
