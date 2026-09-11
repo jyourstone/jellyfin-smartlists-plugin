@@ -490,13 +490,16 @@
     };
 
     /**
-     * Resolve the hide-when-empty default for new lists.
+     * Resolve the minimum-items-to-show default for new lists (0/empty = never hide).
      * Single JS source of truth — must stay in sync with the
-     * PluginConfiguration.DefaultHideWhenEmpty initializer (true) in C#.
+     * PluginConfiguration.DefaultMinItems initializer (1) in C#.
      * Pass null when no config is available (user page, config fetch failure).
      */
-    SmartLists.getDefaultHideWhenEmpty = function (config) {
-        return !config || config.DefaultHideWhenEmpty !== false;
+    SmartLists.getDefaultMinItems = function (config) {
+        if (!config || config.DefaultMinItems === undefined || config.DefaultMinItems === null) {
+            return 1;
+        }
+        return config.DefaultMinItems;
     };
 
     SmartLists.getPluginId = function () {

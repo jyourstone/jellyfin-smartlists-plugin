@@ -93,11 +93,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public bool GroupIntoCollections { get; set; } = false;
 
         /// <summary>
-        /// When true, the Jellyfin playlist/collection is not created (and an existing one is
-        /// removed) while the list's rules match zero items. It is recreated automatically
-        /// once items match again. The smart list configuration itself is never deleted.
+        /// Minimum number of matched items required for the Jellyfin playlist/collection to
+        /// exist. While the count is below this, the Jellyfin playlist/collection is not
+        /// created (and an existing one is removed) -- it is recreated automatically once the
+        /// count reaches the threshold again. The smart list configuration itself is never
+        /// deleted. Null or 0 means no minimum (always shown, even with zero items) --
+        /// this is the legacy behaviour and the current default. 1 reproduces the old
+        /// "hide when empty" checkbox exactly; see MigrateLegacyFields.
         /// </summary>
-        public bool HideWhenEmpty { get; set; } = false;
+        public int? MinItems { get; set; }
+
+        /// <summary>
+        /// Legacy input-only field, replaced by <see cref="MinItems"/>. Kept so existing saved
+        /// lists (which serialized this as a bool) still deserialize; migrated to MinItems and
+        /// cleared by MigrateLegacyFields, so it is never written back out.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? HideWhenEmpty { get; set; }
 
         // State and limits
         public bool Enabled { get; set; } = true; // Default to enabled
@@ -173,11 +185,21 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public bool? Favorite { get; set; }
 
         /// <summary>
-        /// Migrates legacy IsPlayed rules to PlaybackStatus.
-        /// Called after deserialization.
+        /// Migrates legacy IsPlayed rules to PlaybackStatus, and the legacy HideWhenEmpty bool
+        /// to MinItems. Called after deserialization.
         /// </summary>
         public void MigrateLegacyFields()
         {
+            if (HideWhenEmpty.HasValue)
+            {
+                if (MinItems is null)
+                {
+                    MinItems = HideWhenEmpty.Value ? 1 : null;
+                }
+
+                HideWhenEmpty = null;
+            }
+
             if (ExpressionSets != null)
             {
                 foreach (var expressionSet in ExpressionSets)

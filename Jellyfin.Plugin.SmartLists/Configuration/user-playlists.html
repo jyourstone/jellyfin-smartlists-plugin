@@ -207,6 +207,14 @@
                             </div>
                         </div>
 
+                        <div class="inputContainer" style="margin-bottom: 1em; margin-top: 1em;">
+                            <label class="inputLabel inputLabelUnfocused" for="playlistMinItems">Min Items</label>
+                            <input type="number" id="playlistMinItems" class="emby-input" min="0" step="1" value="1">
+                            <div class="fieldDescription">Hides the list while the number of items in the list is
+                                less than this. The list will be shown once the number of items is greater than
+                                this minimum. Leave blank or 0 to never hide.</div>
+                        </div>
+
                         <div class="inputContainer playlist-only-field" style="margin-bottom: 1em; margin-top: 1em;">
                             <label class="inputLabel" for="playlistMaxPlayTimeMinutes"
                                 style="display: flex; align-items: center;">
@@ -387,21 +395,6 @@
                         </div>
 
                             <h3 class="sectionTitle" style="margin-top: 1.5em;">Presentation</h3>
-                        <div class="checkboxList paperList"
-                            style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 0.5em;">
-                            <label class="emby-checkbox-label">
-                                <input type="checkbox" is="emby-checkbox" id="playlistHideWhenEmpty"
-                                    data-embycheckbox="true" class="emby-checkbox" checked>
-                                <span class="checkboxLabel">Hide when empty</span>
-                                <span class="checkboxOutline">
-                                    <span class="material-icons checkboxIcon checkboxIcon-checked check"
-                                        aria-hidden="true"></span>
-                                    <span class="material-icons checkboxIcon checkboxIcon-unchecked"
-                                        aria-hidden="true"></span>
-                                </span>
-                            </label>
-                            <div class="fieldDescription">Don't create the playlist or collection while it has no matching items. If a refresh finds no items, the existing Jellyfin playlist/collection is removed and recreated automatically once items match again.</div>
-                        </div>
                         <div id="groupIntoCollectionsContainer" class="checkboxList paperList collection-only-field"
                             style="padding: 0.5em 1em; margin-bottom: 1em; margin-top: 0.5em;">
                             <label class="emby-checkbox-label">
