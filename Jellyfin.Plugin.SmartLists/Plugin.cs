@@ -16,9 +16,35 @@ namespace Jellyfin.Plugin.SmartLists
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
-            
+
             // Register assembly resolver to help .NET find ImageSharp DLL
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
+
+            MigrateLegacyConfiguration();
+        }
+
+        /// <summary>
+        /// Migrates the legacy DefaultHideWhenEmpty bool to DefaultMinItems, once. Jellyfin's XML
+        /// configuration loader silently drops elements with no matching property, so an existing
+        /// installation's saved DefaultHideWhenEmpty is otherwise lost on upgrade and every new
+        /// list would silently fall back to DefaultMinItems' class initializer (1) regardless of
+        /// what the admin had configured. Only a genuinely pre-existing config has this field set
+        /// at all -- a fresh install never serializes it -- so there's no ambiguity here between
+        /// "never configured" and "admin set it back to the default" the way there can be for a
+        /// value with its own default. Saves the configuration back immediately with the legacy
+        /// field cleared, so this only ever runs its migration branch once.
+        /// </summary>
+        private void MigrateLegacyConfiguration()
+        {
+            var config = Configuration;
+            if (!config.DefaultHideWhenEmpty.HasValue)
+            {
+                return;
+            }
+
+            config.DefaultMinItems = config.DefaultHideWhenEmpty.Value ? 1 : null;
+            config.DefaultHideWhenEmpty = null;
+            SaveConfiguration(config);
         }
 
         /// <summary>

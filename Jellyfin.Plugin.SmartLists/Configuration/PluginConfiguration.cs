@@ -42,6 +42,15 @@ namespace Jellyfin.Plugin.SmartLists.Configuration
         public int? DefaultMinItems { get; set; } = 1;
 
         /// <summary>
+        /// Legacy input-only field, replaced by <see cref="DefaultMinItems"/>. An existing saved
+        /// XML config with this element set still deserializes into it (unlike a genuinely new
+        /// install, where it's simply absent); <see cref="Plugin"/> migrates it into
+        /// DefaultMinItems once at startup and saves the configuration back with this cleared, so
+        /// it is a one-time read, not a standing property to keep populating.
+        /// </summary>
+        public bool? DefaultHideWhenEmpty { get; set; }
+
+        /// <summary>
         /// Gets or sets whether to stamp a small smart list badge onto auto-generated
         /// and uploaded cover images so smart lists are recognizable at a glance.
         /// </summary>
