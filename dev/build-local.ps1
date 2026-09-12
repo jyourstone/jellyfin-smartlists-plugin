@@ -5,11 +5,8 @@
 
 $ErrorActionPreference = "Stop" # Exit immediately if a command fails
 
-# Set the Jellyfin ABI for local testing. Written into the dev manifest; build targets net10.0 only.
-$JellyfinAbi = $env:JELLYFIN_ABI
-if ([string]::IsNullOrWhiteSpace($JellyfinAbi)) {
-    $JellyfinAbi = "12.0.0"
-}
+# Jellyfin ABI written into the dev manifest. Fixed: the build is net10.0 / Jellyfin 12 only.
+$JellyfinAbi = "12.0.0"
 
 $VERSION = $env:VERSION
 if ([string]::IsNullOrWhiteSpace($VERSION)) {

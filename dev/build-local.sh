@@ -5,8 +5,8 @@
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
-# Set the Jellyfin ABI for local testing. Written into the dev manifest; build targets net10.0 only.
-JELLYFIN_ABI="${JELLYFIN_ABI:-12.0.0}"
+# Jellyfin ABI written into the dev manifest. Fixed: the build is net10.0 / Jellyfin 12 only.
+JELLYFIN_ABI="12.0.0"
 VERSION="${VERSION:-${JELLYFIN_ABI}.0}"
 TARGET_FRAMEWORK="net10.0"
 OUTPUT_DIR="../build_output"

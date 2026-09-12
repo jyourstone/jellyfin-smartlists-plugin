@@ -88,4 +88,4 @@ dev/jellyfin-data/config/log/
 
 ### Development Metadata
 
-**`meta-dev.json`** is a development-specific plugin manifest for the default Jellyfin 12 development setup. The build scripts generate `build_output/meta.json` from the selected `JELLYFIN_ABI` value during local builds.
+**`meta-dev.json`** is a development-specific plugin manifest for the default Jellyfin 12 development setup. The build scripts generate `build_output/meta.json` with the Jellyfin 12 ABI during local builds.
