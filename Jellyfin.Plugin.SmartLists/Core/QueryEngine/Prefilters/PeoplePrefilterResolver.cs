@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using MediaBrowser.Controller.Entities;
 using Microsoft.Extensions.Logging;
-#if !NET10_0_OR_GREATER
-using System.Reflection;
-#endif
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 {
@@ -16,29 +13,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
     /// 1. Resolve which STORED person names the rule matches by evaluating the operator in
     ///    memory (via the same <see cref="Engine"/> helpers the compiled rules bind) against
     ///    a bulk name dump from the people table. This step is mandatory, not an
-    ///    optimization: the item query's Person clause is byte-exact case-sensitive on
-    ///    Jellyfin 10.11, so passing the user's raw rule value would silently under-match.
+    ///    optimization: the item query's Person clause is byte-exact, so passing the
+    ///    user's raw rule value would silently under-match.
     /// 2. One user-neutral GetItemIds(Person = exact stored name) query per matched name.
     ///    The union over matched names is a guaranteed superset of the items whose people
     ///    list satisfies the rule, because every name in an item's extracted people list
     ///    also exists as a people-table row reachable through the same dump.
     ///
-    /// Role handling differs per ABI:
-    /// - net10 (Jellyfin 12): names are dumped via GetPeopleNames, whose SQL is a plain
-    ///   ordinal Distinct over Name - unlike GetPeople, whose no-ItemId branch collapses to
-    ///   ONE arbitrary row per LOWERCASED name and would drop case-only duplicate spellings
-    ///   (each stored spelling needs its own byte-exact item query). Role-specific fields
-    ///   push the role into the people query itself (InternalPeopleQuery.PersonTypes is
-    ///   translated BEFORE the name projection) and into the item query (Person +
-    ///   PersonTypes compose). Never role-filter dump results in memory on 12.
-    /// - net9 (Jellyfin 10.11): the GetPeople dump has no collapse and returns one row per
-    ///   (Name, Type); it runs ONCE per filter run and each role's names are derived from
-    ///   it in memory with the same Type.ToString() comparison CategorizePeople uses.
-    ///   PersonTypes is a silent no-op on 10.11 item queries, so the per-name item query is
-    ///   any-role there - a valid superset; role verification stays per-item.
+    /// Names are dumped via GetPeopleNames, whose SQL is a plain ordinal Distinct over
+    /// Name - unlike GetPeople, whose no-ItemId branch collapses to ONE arbitrary row per
+    /// LOWERCASED name and would drop case-only duplicate spellings (each stored spelling
+    /// needs its own byte-exact item query). Role-specific fields push the role into the
+    /// people query itself (InternalPeopleQuery.PersonTypes is translated BEFORE the name
+    /// projection) and into the item query (Person + PersonTypes compose). Never
+    /// role-filter dump results in memory.
     ///
     /// ActorRoles never rides: role strings live on the people map row and are not
-    /// filterable in either ABI. Negative operators are rejected centrally by
+    /// filterable. Negative operators are rejected centrally by
     /// <see cref="CandidateSetBuilder"/> (SupportsNegativeOperators stays false).
     /// </summary>
     internal sealed class PeoplePrefilterResolver : IRulePrefilterResolver
@@ -133,15 +124,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                     Person = name,
                     GroupByPresentationUniqueKey = false,
                 };
-#if NET10_0_OR_GREATER
                 // Jellyfin 12 composes Person + PersonTypes into an indexed role-specific
-                // lookup. On 10.11 PersonTypes is declared but never read by TranslateQuery,
-                // so the query stays any-role there (still a superset).
+                // lookup.
                 if (role != null)
                 {
                     query.PersonTypes = [role];
                 }
-#endif
                 result.UnionWith(context.LibraryManager.GetItemIds(query));
             }
 
@@ -218,7 +206,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 return cached;
             }
 
-#if NET10_0_OR_GREATER
             // Jellyfin 12: GetPeopleNames only - its SQL is an ordinal Distinct over Name,
             // so every distinct stored spelling survives and gets its own byte-exact item
             // query. GetPeople's no-ItemId branch instead collapses to one arbitrary row
@@ -232,103 +219,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 : new InternalPeopleQuery([role], []);
 
             IReadOnlyList<string>? names = context.LibraryManager.GetPeopleNames(query);
-#else
-            // Jellyfin 10.11 returns one GetPeople row per (Name, Type) with no collapse:
-            // dump the table once per filter run and derive each role's names in memory
-            // with the same Type.ToString() comparison the per-item CategorizePeople
-            // switch uses. (PersonTypes narrowing in the people query is 12-only behavior,
-            // and 10.11's GetPeopleNames cannot be used - it drops the Type column.)
-            var names = FilterNamesByRole(GetDumpRows(context), role);
-#endif
             _namesByRole[cacheKey] = names;
             return names;
         }
-
-#if !NET10_0_OR_GREATER
-        /// <summary>
-        /// The unrestricted (Name, Type) dump rows for this filter run, materialized at most
-        /// once; null when the dump is unavailable. See <see cref="_dumpAttempted"/>.
-        /// </summary>
-        private IReadOnlyList<(string Name, string? Type)>? _dumpRows;
-
-        /// <summary>
-        /// Whether the dump has been attempted, so a failed dump is not retried per role.
-        /// </summary>
-        private bool _dumpAttempted;
-
-        /// <summary>
-        /// Runs the unrestricted people dump through the reflected ABI-shared
-        /// ILibraryManager.GetPeople(InternalPeopleQuery), once per filter run.
-        /// </summary>
-        private IReadOnlyList<(string Name, string? Type)>? GetDumpRows(PrefilterContext context)
-        {
-            if (_dumpAttempted)
-            {
-                return _dumpRows;
-            }
-
-            _dumpAttempted = true;
-            var getPeopleMethod = OperandFactory.GetPeopleQueryMethod(context.LibraryManager);
-            if (getPeopleMethod == null)
-            {
-                return null;
-            }
-
-            var result = getPeopleMethod.Invoke(context.LibraryManager, [new InternalPeopleQuery()]);
-            if (result is not IEnumerable<object> rows)
-            {
-                return null;
-            }
-
-            var dump = new List<(string Name, string? Type)>();
-            PropertyInfo? nameProperty = null;
-            PropertyInfo? typeProperty = null;
-            foreach (var row in rows)
-            {
-                if (row == null)
-                {
-                    continue;
-                }
-
-                nameProperty ??= row.GetType().GetProperty("Name");
-                typeProperty ??= row.GetType().GetProperty("Type");
-                if (nameProperty?.GetValue(row) is not string name || name.Length == 0)
-                {
-                    continue;
-                }
-
-                dump.Add((name, typeProperty?.GetValue(row)?.ToString()));
-            }
-
-            _dumpRows = dump;
-            return _dumpRows;
-        }
-
-        /// <summary>
-        /// Derives the distinct names for a role (null = any role) from the dump rows.
-        /// Ordinal distinctness is deliberate: names differing only by case are distinct
-        /// stored rows and each needs its own byte-exact item query on 10.11.
-        /// </summary>
-        private static IReadOnlyList<string>? FilterNamesByRole(IReadOnlyList<(string Name, string? Type)>? rows, string? role)
-        {
-            if (rows == null)
-            {
-                return null;
-            }
-
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var (name, type) in rows)
-            {
-                if (role != null && !string.Equals(type, role, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                names.Add(name);
-            }
-
-            return [.. names];
-        }
-#endif
     }
 }

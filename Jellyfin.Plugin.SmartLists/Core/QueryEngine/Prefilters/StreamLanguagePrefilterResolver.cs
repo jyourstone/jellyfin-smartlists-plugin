@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-#if NET10_0_OR_GREATER
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Entities;
-#endif
 
 namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 {
@@ -40,13 +38,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
     /// are a subset of all audio-stream languages, so the any-stream candidate set is a
     /// superset and default-ness stays verified per-item.
     ///
-    /// Jellyfin 10.11 (net9.0) contributes no candidates: there is no positive language
-    /// filter there, and the double-negation route over HasNo*TrackWithLanguage has
-    /// verified false-negative traps (the server silently DROPS the filter when it cannot
-    /// resolve the code - collapsing pool-minus-result to an empty candidate set - and its
-    /// SQL IN over stored codes is case-sensitive where the plugin compare is not). Those
-    /// rules simply stay per-item on 10.11.
-    ///
     /// Negative operators are rejected centrally by <see cref="CandidateSetBuilder"/>
     /// (SupportsNegativeOperators stays false); MatchRegex patterns matching the empty
     /// string are rejected both centrally and here (empty stream lists test against "").
@@ -65,7 +56,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
         /// <inheritdoc />
         public HashSet<Guid>? Resolve(Expression expression, PrefilterContext context)
         {
-#if NET10_0_OR_GREATER
             var isAudio = string.Equals(expression.MemberName, "AudioLanguages", StringComparison.Ordinal);
             if ((!isAudio && !string.Equals(expression.MemberName, "SubtitleLanguages", StringComparison.Ordinal))
                 || context.LibraryManager == null)
@@ -133,11 +123,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 
             // Fresh set per call - the caller owns and mutates the result.
             return [.. ids];
-#else
-            // Jellyfin 10.11: no positive language filter; the double-negation route has
-            // verified false-negative traps (see the class doc). Always per-item.
-            return null;
-#endif
         }
 
         /// <summary>
@@ -188,7 +173,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             return matched;
         }
 
-#if NET10_0_OR_GREATER
         /// <summary>
         /// Per-stream-kind raw code dumps for this filter run (the resolver lives for one
         /// CandidateSetBuilder.Build call); null when the dump failed, so a failure is not
@@ -221,6 +205,5 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             _dumpByType[streamType] = codes;
             return codes;
         }
-#endif
     }
 }

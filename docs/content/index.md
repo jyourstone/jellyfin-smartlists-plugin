@@ -6,7 +6,7 @@
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Total GitHub Downloads" src="https://img.shields.io/github/downloads/jyourstone/jellyfin-smartlists-plugin/total"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/issues"><img alt="GitHub Issues or Pull Requests" src="https://img.shields.io/github/issues/jyourstone/jellyfin-smartlists-plugin"/></a> 
         <a href="https://github.com/jyourstone/jellyfin-smartlists-plugin/releases"><img alt="Build and Release" src="https://github.com/jyourstone/jellyfin-smartlists-plugin/actions/workflows/release.yml/badge.svg"/></a> 
-        <a href="https://jellyfin.org/"><img alt="Jellyfin Version" src="https://img.shields.io/badge/Jellyfin-10.11%20%7C%2012.x-blue.svg"/></a>
+        <a href="https://jellyfin.org/"><img alt="Jellyfin Version" src="https://img.shields.io/badge/Jellyfin-12.x-blue.svg"/></a>
     </p>        
 </div>
 
@@ -16,7 +16,7 @@ Create smart, rule-based playlists and collections in Jellyfin — for movies, s
 
 The documentation is published twice — a [stable site](https://jellyfin-smartlists-plugin.dinsten.se/) tracking the current release, and a [preview site](https://jellyfin-smartlists-plugin-preview.dinsten.se/) tracking release candidates. If you installed from the [unstable manifest](getting-started/installation.md#try-rc-releases-unstable), use the preview site.
 
-**Requires Jellyfin version `10.11.0` and newer.**
+**Requires Jellyfin 12.** Jellyfin 10.11 servers stay on `v12.0.1.0`, the last release built for them.
 
 ## Project Links
 

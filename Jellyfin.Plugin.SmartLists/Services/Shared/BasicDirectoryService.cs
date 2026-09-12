@@ -17,7 +17,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public FileSystemMetadata? GetDirectory(string path) => null;
         public FileSystemMetadata? GetFileSystemEntry(string path) => null;
         public IReadOnlyList<string> GetFilePaths(string path) => [];
-#if NET10_0_OR_GREATER
         public IReadOnlyList<string> GetFilePaths(string path, bool clearCache) => GetFilePaths(path);
         public void Invalidate(string path)
         {
@@ -26,7 +25,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public void Move(string source, string destination)
         {
         }
-#endif
         public IReadOnlyList<string> GetFilePaths(string path, bool clearCache, bool sort) => GetFilePaths(path);
         public bool IsAccessible(string path) => false;
     }

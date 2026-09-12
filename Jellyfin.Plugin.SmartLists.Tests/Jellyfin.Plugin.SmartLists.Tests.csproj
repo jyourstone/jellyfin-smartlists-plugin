@@ -1,20 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!--
-      ponytail: CEILING - tests run on net10.0 (Jellyfin 12 ABI) only, while the plugin
-      multi-targets net9.0;net10.0. Not a design preference: no .NET 9 *runtime* exists
-      to run them on. This machine has only Microsoft.NETCore.App 10.0.7, and CI
-      (.github/workflows/release.yml, DOTNET_VERSION: 10.0.x) installs only the 10 SDK.
-      net9.0 *compiles* via reference packs but the testhost aborts at launch:
-      "You must install or update .NET to run this application. Framework:
-      'Microsoft.NETCore.App', version '9.0.0'".
-      UPGRADE PATH: install the .NET 9 runtime locally (and add 9.0.x to setup-dotnet in
-      CI), then change this single line to <TargetFrameworks>net9.0;net10.0</TargetFrameworks>.
-      Nothing else here needs to change - the ProjectReference already TFM-matches.
-      Low urgency: every file under test is pure C# with zero Jellyfin dependencies, so
-      the two ABIs differ only in BCL, not in plugin surface.
-    -->
+    <!-- Tests run on net10.0 (Jellyfin 12 ABI), same as the plugin. -->
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.SmartLists.Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>

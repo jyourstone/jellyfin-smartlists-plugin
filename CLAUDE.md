@@ -6,8 +6,7 @@ A Jellyfin plugin that creates dynamic playlists and collections based on user-d
 
 ```bash
 # Build + restart local Jellyfin Docker container (from /dev directory)
-./build-local.sh                        # defaults to Jellyfin 12.x (net10.0)
-JELLYFIN_ABI=10.11.0 ./build-local.sh   # build for Jellyfin 10.11 (net9.0)
+./build-local.sh                        # builds for Jellyfin 12 (net10.0)
 
 # View logs
 docker logs jellyfin 2>&1 | grep -i "Smart"
@@ -18,17 +17,17 @@ tail -f dev/jellyfin-data/config/log/log_*.log | grep "Smart"
 dotnet test Jellyfin.Plugin.SmartLists.Tests/Jellyfin.Plugin.SmartLists.Tests.csproj
 ```
 
-The project multi-targets `net9.0` (Jellyfin 10.11) and `net10.0` (Jellyfin 12.x). The build treats all warnings as errors with `AnalysisMode=Recommended` — CA analyzer warnings (e.g. CA1822 make-static, CA1305 locale) fail the build.
+The project targets `net10.0` (Jellyfin 12). The build treats all warnings as errors with `AnalysisMode=Recommended` — CA analyzer warnings (e.g. CA1822 make-static, CA1305 locale) fail the build.
 
 ### Tests
 
 Unit tests live in `Jellyfin.Plugin.SmartLists.Tests` (xunit, ~1,640 tests). They cover the pure-C# surface — the query engine (operators, prefilter resolvers, `FieldRegistry` invariants), the sort implementations in `Core/Orders/`, the external-list providers, and `Utilities/`. Every file under test is plain C# with no Jellyfin dependencies.
 
-The test project targets `net10.0` only, while the plugin multi-targets `net9.0;net10.0`. This is a runtime constraint, not a preference: no .NET 9 runtime is installed to run them on (`net9.0` compiles against reference packs, but the testhost aborts at launch). The upgrade path is documented in the test csproj. Warnings-as-errors and analyzers are deliberately relaxed in the test project, since tests do things production code must not.
+The test project targets `net10.0`, same as the plugin. Warnings-as-errors and analyzers are deliberately relaxed in the test project, since tests do things production code must not.
 
 Tests do **not** cover anything that touches Jellyfin at runtime — playlist and collection creation, refresh scheduling, or the config UI. Verify those by building and exercising the plugin against the local Jellyfin instance (<http://localhost:8096>); the `/verify` skill drives that flow.
 
-CI (`.github/workflows/ci.yml`) builds both ABIs and runs the tests on every pull request and on pushes to `main` and `10.11-release`.
+CI (`.github/workflows/ci.yml`) builds the plugin and runs the tests on every pull request and on pushes to `main` and `10.11-release`.
 
 ## Project Structure
 
@@ -142,7 +141,7 @@ Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-upd
 
 Releases now **ship forward to Jellyfin 12 only** — `TARGETS` in release.yml is `[{"abi":"12.0.0.0","framework":"net10.0"}]`, and each tag writes a single `targetAbi` entry to the manifest. The manifest branch (stable = main, unstable) is the release *channel*; git branches only anchor where tags are cut.
 
-**Jellyfin 10.11 servers are not broken by this, but they stop receiving new releases.** Jellyfin offers every version whose `targetAbi` is at or below the running server, so a 10.11 server simply stays on `v12.0.1.0` — the last version published with a 10.11 build — and keeps working. The csproj still deliberately multi-targets `net9.0;net10.0`, so a 10.11 hotfix cut from `10.11-release` remains possible if one is ever genuinely needed. This replaces the old dual-ABI-per-tag scheme, which had two problems: `targetAbi` is a *minimum* supported version with no maximum, so two entries sharing one version number showed as duplicate rows in the plugin UI; and worse, a server running the 10.11 build that upgraded to Jellyfin 12 was stranded — Jellyfin compares version numbers only, and since the version hadn't changed it offered no update, while the installed net9.0 build could not load on Jellyfin 12, leaving the plugin stuck showing "Not supported" with no way out but a manual reinstall.
+**Jellyfin 10.11 servers are not broken by this, but they stop receiving new releases.** Jellyfin offers every version whose `targetAbi` is at or below the running server, so a 10.11 server simply stays on `v12.0.1.0` — the last version published with a 10.11 build — and keeps working. `main` builds `net10.0` only; a 10.11 hotfix is still possible from `10.11-release`, which sits at `v12.0.1.0`, the last commit that carried the `net9.0` target. This replaces the old dual-ABI-per-tag scheme, which had two problems: `targetAbi` is a *minimum* supported version with no maximum, so two entries sharing one version number showed as duplicate rows in the plugin UI; and worse, a server running the 10.11 build that upgraded to Jellyfin 12 was stranded — Jellyfin compares version numbers only, and since the version hadn't changed it offered no update, while the installed net9.0 build could not load on Jellyfin 12, leaving the plugin stuck showing "Not supported" with no way out but a manual reinstall.
 
 #### Branches
 
@@ -150,7 +149,7 @@ Releases now **ship forward to Jellyfin 12 only** — `TARGETS` in release.yml i
 |---|---|
 | `main` | Trunk. All development lands here. **RCs are tagged here.** |
 | `12-release` | Tracks the **last stable release**. Fast-forwarded to `main` at each stable. **Stables are tagged here.** The mkdocs Cloudflare Worker publishes from this branch, so the docs site shows released state rather than unreleased trunk. |
-| `10.11-release` | Frozen just past `v10.11.30.2`. Outside the normal release flow — tag here **only** for a Jellyfin 10.11 hotfix, with `TARGETS` temporarily set to `[{"abi":"10.11.0.0","framework":"net9.0"}]` so the build targets `net9.0`. Never merge into. |
+| `10.11-release` | Pinned at `v12.0.1.0` — the last commit that still built `net9.0`, and the last version 10.11 servers were offered. Outside the normal release flow — tag here **only** for a Jellyfin 10.11 hotfix, with `TARGETS` temporarily set to `[{"abi":"10.11.0.0","framework":"net9.0"}]` so the build targets `net9.0`. Never merge into. |
 
 #### Cutting a release
 
@@ -169,7 +168,7 @@ Releases now **ship forward to Jellyfin 12 only** — `TARGETS` in release.yml i
 
 Bump the **Build** segment for stables; Revision is reserved exclusively for RC numbers. Ordering holds across the whole line, so RC users now roll straight into stables — the old trade-off where a `10.11.X.0` stable sorted *below* the `12.x` RCs and was never offered to RC users is gone with the split.
 
-Smoke testing the 10.11 ABI is no longer a routine pre-stable step, since 10.11 is no longer shipped by normal releases. Use it when preparing a 10.11 hotfix on `10.11-release`: `JELLYFIN_ABI=10.11.0 ./build-local.sh`.
+Smoke testing the 10.11 ABI is no longer a routine pre-stable step, since 10.11 is no longer shipped by normal releases. 10.11 can't be smoke-tested from `main` any more (no `net9.0` target); when preparing a 10.11 hotfix, check out `10.11-release` and use that branch's own `build-local.sh` with `JELLYFIN_ABI=10.11.0`.
 
 ## When Making Changes
 

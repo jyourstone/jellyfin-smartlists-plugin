@@ -2471,9 +2471,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Cached reflection lookup for the ABI-shared ILibraryManager.GetPeople(InternalPeopleQuery)
-        /// overload. Shared by every per-item people extraction path and (on 10.11) the
-        /// prefilter's people name dump so all callers reuse the same MethodInfo cache.
+        /// Cached reflection lookup for the ILibraryManager.GetPeople(InternalPeopleQuery)
+        /// overload. Shared by every per-item people extraction path so all callers reuse
+        /// the same MethodInfo cache.
         /// </summary>
         /// <param name="libraryManager">The library manager whose concrete type carries the method.</param>
         /// <returns>The GetPeople method, or null when the lookup fails.</returns>

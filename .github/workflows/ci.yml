@@ -40,22 +40,11 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Both ABIs are built because the plugin ships both and the build treats all
-      # warnings as errors (AnalysisMode=Recommended) - an analyzer regression on
-      # either target should fail here, not at release-tag time.
-      # net9.0 compiles against reference packs, so no .NET 9 runtime is needed.
-      - name: Build plugin (net9.0 / Jellyfin 10.11)
+      - name: Build plugin
         run: >-
           dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj
-          --framework net9.0 --configuration Release --no-restore
+          --configuration Release --no-restore
 
-      - name: Build plugin (net10.0 / Jellyfin 12)
-        run: >-
-          dotnet build Jellyfin.Plugin.SmartLists/Jellyfin.Plugin.SmartLists.csproj
-          --framework net10.0 --configuration Release --no-restore
-
-      # The test project targets net10.0 only - it needs a runtime to execute, and
-      # only .NET 10 is installed here. See the note in the test csproj.
       - name: Run tests
         run: >-
           dotnet test Jellyfin.Plugin.SmartLists.Tests/Jellyfin.Plugin.SmartLists.Tests.csproj
