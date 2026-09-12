@@ -20,6 +20,7 @@ When creating a smart list, you must select at least one **Media Type** to speci
 | **Photo** | Home Videos and Photos | Photo content |
 | **Books** | Books | E-book content |
 | **AudioBooks** | Books | Audiobook content |
+| **Live TV Channel** | Live TV | Channels from your Live TV tuners (collections only — Jellyfin playlists cannot hold channels). Channel metadata is thin: mostly **Name**, plus any tags or favorite status you set on the channel in Jellyfin. Requires Jellyfin 12.0 or newer. |
 | **Collection** | Collections | Jellyfin collections themselves (collections only, see [below](#container-media-types)) |
 | **Playlist** | Playlists | Jellyfin playlists themselves (collections only, see [below](#container-media-types)) |
 

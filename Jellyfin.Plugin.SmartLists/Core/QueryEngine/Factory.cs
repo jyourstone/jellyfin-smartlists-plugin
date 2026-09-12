@@ -3220,6 +3220,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 Video => MediaTypes.Video,
                 Photo => MediaTypes.Photo,
                 Book => MediaTypes.Book,
+                MediaBrowser.Controller.LiveTv.LiveTvChannel => MediaTypes.LiveTvChannel,
                 _ => null,
             };
 

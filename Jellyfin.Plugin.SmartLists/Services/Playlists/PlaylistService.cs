@@ -1224,6 +1224,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 return (false, $"{Core.Constants.MediaTypes.MusicAlbum} media type is not supported for Playlists. Use {Core.Constants.MediaTypes.Audio} media type, or create a Collection instead.", string.Empty);
             }
 
+            if (mediaTypes?.Contains(Core.Constants.MediaTypes.LiveTvChannel) == true)
+            {
+                _logger.LogError(
+                    "Smart playlist '{PlaylistName}' uses '{MediaType}' media type. Jellyfin playlists cannot contain Live TV channels. Create a Collection for Live TV support. Skipping playlist refresh.",
+                    playlistName, Core.Constants.MediaTypes.LiveTvChannel);
+                return (false, $"{Core.Constants.MediaTypes.LiveTvChannel} media type is not supported for Playlists. Jellyfin playlists cannot contain Live TV channels - create a Collection instead.", string.Empty);
+            }
+
             return (true, string.Empty, string.Empty);
         }
 

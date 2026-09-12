@@ -363,6 +363,14 @@ Collections are great for organizing related content that you want to browse tog
 - Works the same way for a tag on a plain folder inside the library, or on a season or series for episodes
 - See [Parent metadata options](../user-guide/fields-and-operators.md#parent-metadata-options) for the full list of what counts as a parent
 
+### Live TV Channel Group
+- **List Type**: Collection
+- **Media Type**: Live TV Channel
+- **Name** contains "Sport" OR **Name** contains "ESPN"
+- Groups matching channels from your Live TV tuners into one collection, which Jellyfin's own Live TV view can't do
+- Channels carry little metadata, so **Name**, **Tags** and **Is Favorite** are the useful rules; tag channels in Jellyfin's metadata editor to group them by anything else
+- **Note**: Collections only (Jellyfin playlists cannot hold channels) and requires Jellyfin 12.0 or newer
+
 ## Operator Examples
 
 ### Using "Is In" for Multiple Values

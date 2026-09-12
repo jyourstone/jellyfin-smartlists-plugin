@@ -42,6 +42,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
         public const string Book = nameof(Book);
         public const string AudioBook = nameof(AudioBook);
 
+        // Live TV Types
+        // LiveTvChannel media type: Not supported in Playlists (Jellyfin's PlaylistManager drops any
+        // item whose SupportsAddingToPlaylist is false, and LiveTvChannel never overrides it) but
+        // supported in Collections. Note: LiveTvChannel.GetBaseItemKind() returns BaseItemKind.TvChannel
+        // at runtime, so the runtime type-name switches in OperandFactory/AutoRefreshService match the
+        // LiveTvChannel class directly instead of going through BaseItemKindToMediaType.
+        public const string LiveTvChannel = nameof(LiveTvChannel);
+
         // Container Types
         // Collection media type (BoxSet): Not supported in Playlists (Jellyfin playlists can only
         // contain media items; containers are silently dropped) but supported in Collections
@@ -74,6 +82,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { BaseItemKind.Season, Season },
             // MusicAlbum: Supported in Collections, not in Playlists
             { BaseItemKind.MusicAlbum, MusicAlbum },
+            // LiveTvChannel: Supported in Collections, not in Playlists
+            { BaseItemKind.LiveTvChannel, LiveTvChannel },
             // Collection: Supported in Collections, not in Playlists
             { BaseItemKind.BoxSet, Collection },
             // Playlist: Supported in Collections, not in Playlists
@@ -99,6 +109,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Constants
             { Season, BaseItemKind.Season },
             // MusicAlbum: Supported in Collections, not in Playlists
             { MusicAlbum, BaseItemKind.MusicAlbum },
+            // LiveTvChannel: Supported in Collections, not in Playlists
+            { LiveTvChannel, BaseItemKind.LiveTvChannel },
             // Collection: Supported in Collections, not in Playlists
             { Collection, BaseItemKind.BoxSet },
             // Playlist: Supported in Collections, not in Playlists

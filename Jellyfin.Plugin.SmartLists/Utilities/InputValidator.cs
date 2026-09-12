@@ -413,6 +413,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     mt == Core.Constants.MediaTypes.Series
                     || mt == Core.Constants.MediaTypes.Season
                     || mt == Core.Constants.MediaTypes.MusicAlbum
+                    || mt == Core.Constants.MediaTypes.LiveTvChannel
                     || Core.Constants.MediaTypes.IsContainerType(mt));
                 if (unsupportedBumperType != null)
                 {

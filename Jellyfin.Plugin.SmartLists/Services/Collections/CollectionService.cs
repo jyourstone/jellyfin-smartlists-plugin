@@ -1410,9 +1410,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             var validTopParentIds = GetLibraryTopParentIds();
 
             // Container kinds (BoxSet/Playlist) live in Jellyfin's internal collections/playlists
-            // folders, outside the library TopParentIds scope - query them separately without it
-            var containerKinds = baseItemKinds.Where(static k => k is BaseItemKind.BoxSet or BaseItemKind.Playlist).ToArray();
-            var itemKinds = baseItemKinds.Where(static k => k is not (BaseItemKind.BoxSet or BaseItemKind.Playlist)).ToArray();
+            // folders and Live TV channels have no library parent at all - both sit outside the
+            // library TopParentIds scope, so query them separately without it
+            var unscopedKinds = baseItemKinds.Where(static k => k is BaseItemKind.BoxSet or BaseItemKind.Playlist or BaseItemKind.LiveTvChannel).ToArray();
+            var itemKinds = baseItemKinds.Where(static k => k is not (BaseItemKind.BoxSet or BaseItemKind.Playlist or BaseItemKind.LiveTvChannel)).ToArray();
 
             // Query all items the owner user has access to
             var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
@@ -1431,15 +1432,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
 
             IEnumerable<BaseItem> allItems = items;
-            if (containerKinds.Length > 0)
+            if (unscopedKinds.Length > 0)
             {
-                var containerQuery = new InternalItemsQuery(ownerUser)
+                var unscopedQuery = new InternalItemsQuery(ownerUser)
                 {
-                    IncludeItemTypes = containerKinds,
+                    IncludeItemTypes = unscopedKinds,
                     Recursive = true,
                 };
 
-                allItems = allItems.Concat(_libraryManager.GetItemsResult(containerQuery).Items);
+                allItems = allItems.Concat(_libraryManager.GetItemsResult(unscopedQuery).Items);
             }
 
             if (dto?.IncludeExtras != true)
