@@ -43,6 +43,9 @@ Items are matched by comparing provider IDs between the external list and your l
 | Type | URL format |
 |------|-----------|
 | User list | `https://mdblist.com/lists/{username}/{listname}` |
+| Official list | `https://mdblist.com/lists/official/{movies\|shows}/{listname}` |
+
+The official **JustWatch Streaming Charts** list is a live top-20 chart. The country, period, provider and genre filters you pick on the MDBList website end up in the URL (e.g. `?locale=en_US&rank=7&provider=nfx`) and are applied by the plugin, so copy the URL after choosing your filters. Some official lists shown on the website are not exposed by the MDBList API and return no items.
 
 **Example:**
 

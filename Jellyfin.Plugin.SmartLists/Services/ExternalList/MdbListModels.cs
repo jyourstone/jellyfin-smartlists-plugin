@@ -62,4 +62,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         [JsonPropertyName("mdblist")]
         public string? MdbList { get; set; }
     }
+
+    /// <summary>
+    /// Response wrapper for the MDBList JustWatch streaming chart endpoint
+    /// (/justwatch/streaming-charts/{movie|show}). Items carry the same "ids" object as list items.
+    /// </summary>
+    public class MdbListJustWatchChartResponse
+    {
+        [JsonPropertyName("results")]
+        public MdbListItem[]? Results { get; set; }
+    }
 }
