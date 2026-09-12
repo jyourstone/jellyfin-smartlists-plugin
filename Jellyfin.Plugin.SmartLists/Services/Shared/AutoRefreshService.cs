@@ -1377,6 +1377,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 MediaBrowser.Controller.Entities.Video => MediaTypes.Video,
                 MediaBrowser.Controller.Entities.Photo => MediaTypes.Photo,
                 MediaBrowser.Controller.Entities.Book => MediaTypes.Book,
+                MediaBrowser.Controller.LiveTv.LiveTvChannel => MediaTypes.LiveTvChannel,
                 _ => null,
             };
 

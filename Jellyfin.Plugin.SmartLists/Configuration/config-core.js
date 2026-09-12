@@ -168,6 +168,7 @@
         { Value: "Photo", Label: "Photo (Home Photo)" },
         { Value: "Book", Label: "Book" },
         { Value: "AudioBook", Label: "Audiobook" },
+        { Value: "LiveTvChannel", Label: "Live TV Channel", CollectionOnly: true }, // Jellyfin playlists silently drop channels (SupportsAddingToPlaylist is false)
         { Value: "Collection", Label: "Collection", CollectionOnly: true }, // Containers can only be added to Collections, not Playlists
         { Value: "Playlist", Label: "Playlist", CollectionOnly: true } // Containers can only be added to Collections, not Playlists
     ];

@@ -1014,6 +1014,7 @@ public class InputValidatorTests
     [InlineData(MediaTypeConstants.Series)]
     [InlineData(MediaTypeConstants.Season)]
     [InlineData(MediaTypeConstants.MusicAlbum)]
+    [InlineData(MediaTypeConstants.LiveTvChannel)]
     [InlineData(MediaTypeConstants.Collection)]
     [InlineData(MediaTypeConstants.Playlist)]
     public void ValidateSmartList_ContainerBumperMediaTypes_AreRejectedBecausePlaylistsCannotHoldThem(string mediaType)
