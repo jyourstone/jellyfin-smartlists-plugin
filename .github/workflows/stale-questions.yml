@@ -16,8 +16,8 @@ jobs:
     steps:
       - uses: actions/stale@v10
         with:
-          # Consider only issues labeled "insufficient data"
-          only-labels: insufficient data
+          # Consider only issues labeled "awaiting reply"
+          only-labels: awaiting reply
 
           # Timing
           days-before-issue-stale: 14          # mark as stale after 14 days of no activity
