@@ -73,7 +73,6 @@ jobs:
             STAGING_DIR="staging/${TARGET_ABI}"
             mkdir -p "$STAGING_DIR"
             cp "./build_output/${TARGET_ABI}/Jellyfin.Plugin.SmartLists.dll" "$STAGING_DIR/"
-            cp "./build_output/${TARGET_ABI}/SixLabors.ImageSharp.dll" "$STAGING_DIR/"
             cp "./build_output/${TARGET_ABI}/Jellyfin.Plugin.SmartLists.deps.json" "$STAGING_DIR/"
             cp images/logo.jpg "$STAGING_DIR/logo.jpg"
             cd "$STAGING_DIR"

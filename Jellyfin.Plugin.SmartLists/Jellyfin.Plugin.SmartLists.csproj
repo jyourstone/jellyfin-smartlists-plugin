@@ -70,19 +70,9 @@
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="12.0.*-*" />
     <PackageReference Include="Jellyfin.Model" Version="12.0.*-*" />
-    <!-- ImageSharp is bundled with the plugin as Jellyfin doesn't provide it -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12">
-      <Private>true</Private>
-      <CopyLocal>true</CopyLocal>
-    </PackageReference>
+    <!-- Compile-only: Jellyfin ships SkiaSharp at runtime. Read "SkiaSharp comes from Jellyfin" in CLAUDE.md before changing the version. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" IncludeAssets="compile" PrivateAssets="all" />
   </ItemGroup>
-
-  <Target Name="CopyImageSharpDll" AfterTargets="ResolveReferences">
-    <ItemGroup>
-      <ImageSharpReference Include="@(ReferencePath)" Condition="'%(Filename)' == 'SixLabors.ImageSharp'" />
-    </ItemGroup>
-    <Copy SourceFiles="@(ImageSharpReference)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-  </Target>
 
   <ItemGroup>
     <PackageReference Include="SerilogAnalyzer" Version="0.15.0" PrivateAssets="All" />

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using Jellyfin.Plugin.SmartLists.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
@@ -16,9 +15,6 @@ namespace Jellyfin.Plugin.SmartLists
             : base(applicationPaths, xmlSerializer)
         {
             Instance = this;
-
-            // Register assembly resolver to help .NET find ImageSharp DLL
-            AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
 
             MigrateLegacyConfiguration();
         }
@@ -48,11 +44,10 @@ namespace Jellyfin.Plugin.SmartLists
         }
 
         /// <summary>
-        /// Disposes the plugin and unsubscribes from events.
+        /// Disposes the plugin and clears the static instance.
         /// </summary>
         public void Dispose()
         {
-            AppDomain.CurrentDomain.AssemblyResolve -= OnAssemblyResolve;
             Instance = null;
         }
 
@@ -64,34 +59,6 @@ namespace Jellyfin.Plugin.SmartLists
         /// Gets the current plugin instance.
         /// </summary>
         public static Plugin? Instance { get; private set; }
-
-        /// <summary>
-        /// Resolves assembly loading for SixLabors.ImageSharp.
-        /// </summary>
-        private Assembly? OnAssemblyResolve(object? sender, ResolveEventArgs args)
-        {
-            // Only handle ImageSharp assembly
-            var assemblyName = new AssemblyName(args.Name);
-            if (!assemblyName.Name!.Equals("SixLabors.ImageSharp", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            // Try to load from the plugin directory
-            var pluginDirectory = System.IO.Path.GetDirectoryName(GetType().Assembly.Location);
-            if (string.IsNullOrEmpty(pluginDirectory))
-            {
-                return null;
-            }
-
-            var imageSharpPath = System.IO.Path.Combine(pluginDirectory, "SixLabors.ImageSharp.dll");
-            if (System.IO.File.Exists(imageSharpPath))
-            {
-                return Assembly.LoadFrom(imageSharpPath);
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Gets the plugin's web pages.

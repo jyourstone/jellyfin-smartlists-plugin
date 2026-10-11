@@ -1072,7 +1072,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         // and stamped, keeping the badge visible in every view (documented
                         // trade-off: detail pages show the crop instead of the original
                         // proportions). With the badge disabled, uploads are copied untouched.
-                        // Raw copy fallback for formats ImageSharp cannot decode, e.g. SVG.
+                        // Raw copy fallback when CollageBuilder cannot decode or re-encode the upload.
                         var stamped = false;
                         if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {
