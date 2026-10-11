@@ -419,14 +419,15 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
 
         /// <summary>
         /// Encodes a cover and writes it to disk via a temp file, so a failed encode or an
-        /// interrupted write leaves any existing cover intact.
+        /// interrupted write leaves any existing cover intact. The temp name is unique per save,
+        /// so concurrent saves to the same cover never touch each other's file.
         /// </summary>
-        private static async Task SaveCoverAsync(SKBitmap bitmap, string outputPath, SKEncodedImageFormat format, CancellationToken cancellationToken)
+        internal static async Task SaveCoverAsync(SKBitmap bitmap, string outputPath, SKEncodedImageFormat format, CancellationToken cancellationToken)
         {
             using var data = bitmap.Encode(format, Quality)
                 ?? throw new InvalidOperationException("Skia failed to encode the cover as " + format);
             using var encoded = data.AsStream();
-            var tempPath = outputPath + ".tmp";
+            var tempPath = outputPath + "." + Path.GetRandomFileName() + ".tmp";
             try
             {
                 var file = File.Create(tempPath);

@@ -208,6 +208,20 @@ public sealed class CollageBuilderTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveCoverAsync_InterruptedSave_KeepsExistingCover_AndRemovesTempFile()
+    {
+        var coverPath = Path.Combine(_dir, "cover.jpg");
+        File.WriteAllBytes(coverPath, [1, 2, 3]);
+        using var bitmap = Solid(10, 10, SKColors.White);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CollageBuilder.SaveCoverAsync(bitmap, coverPath, SKEncodedImageFormat.Jpeg, new CancellationToken(canceled: true)));
+
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(coverPath));
+        Assert.Equal([coverPath], Directory.GetFiles(_dir));
+    }
+
+    [Fact]
     public async Task TryCreateCroppedCoverAsync_AppliesExifOrientationBeforeCropping()
     {
         // Stored 40x20 landscape tagged RightTop (6): displays as 20x40 portrait. A 1:2 crop
