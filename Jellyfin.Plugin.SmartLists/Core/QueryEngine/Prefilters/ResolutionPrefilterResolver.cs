@@ -16,34 +16,35 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
     /// &lt;=720 -> 720p, &lt;=1080 -> 1080p, &lt;=1440 -> 1440p, &lt;=2160 -> 4K, else 8K),
     /// and the compiled rule compares bucket heights only after a validity gate that
     /// requires a positive extracted height (Engine.BuildResolutionExpression). On the
-    /// height axis those buckets translate to exact MinHeight/MaxHeight windows against
-    /// the denormalized item-row Height - both ABIs translate Min/MaxHeight to indexed
-    /// SQL comparisons - so one GetItemIds range query replaces per-item stream
-    /// extraction over the whole pool. Width windows are deliberately NOT used: non-16:9
-    /// content (4:3, portrait) breaks any width window while the height axis stays exact.
+    /// height axis a bucket's lower boundary translates to a MinHeight bound against the
+    /// denormalized item-row Height, so one GetItemIds query drops everything below it
+    /// without per-item stream extraction. Width bounds are deliberately NOT used: non-16:9
+    /// content (4:3, portrait) breaks any width bound while the height axis stays exact.
+    ///
+    /// LOWER BOUNDS ONLY: Jellyfin 12 translates Min/MaxHeight version-aware - an item's
+    /// height is the best its version group offers. MinHeight is met when the item OR any
+    /// alternate version is tall enough, which only widens the candidate set (safe).
+    /// MaxHeight is met only when NO version is too tall, so a 1080p primary with a 2160p
+    /// alternate would be dropped by MaxHeight 1080 although the per-item path - which reads
+    /// the primary's own streams - classifies it 1080p, breaking the superset contract. No
+    /// upper bound is pushed down; the compiled rule enforces it per item. If the per-item
+    /// path ever adopts the best-of-versions definition, upper bounds become safe again.
     ///
     /// Operator mapping (bucket boundaries, upper-inclusive):
-    /// - Equal "X": (previous bucket height + 1) .. X's height (e.g. 1080p -> 721..1080).
-    /// - GreaterThan "X": X's height + 1, no upper bound.
-    /// - GreaterThanOrEqual "X": previous bucket height + 1, no upper bound.
-    /// - LessThan "X": no lower bound, up to the previous bucket height.
-    /// - LessThanOrEqual "X": no lower bound, up to X's height.
-    /// - Equal/GreaterThanOrEqual "8K" get NO MaxHeight: the bucketer maps every height
-    ///   above 2160 (including &gt; 4320) to "8K", so the top bucket is open-ended.
-    /// - LessThanOrEqual "8K" stays per-item for the same reason: it matches EVERY item
-    ///   with a valid resolution (all buckets compare &lt;= the top bucket), so no height
-    ///   window can bound it without dropping &gt;4320-height items that match per-item.
+    /// - Equal / GreaterThanOrEqual "X": previous bucket height + 1 (e.g. 1080p -> 721).
+    /// - GreaterThan "X": X's height + 1.
+    /// - LessThan / LessThanOrEqual stay per-item: they have no lower bound to push down.
     /// - NotEqual stays per-item (central negative-operator gate; the complement is not a
     ///   single range and a pool-minus-window complement would inherit the divergence edge
     ///   below in the unsafe direction).
     ///
-    /// ACCEPTED DIVERGENCE EDGE (row-vs-streams, both operator directions): the SQL window
-    /// filters the denormalized row Width/Height while per-item extraction reads the media
-    /// streams, so an item whose row Height is NULL (unfilled dimensions) but whose streams
-    /// are readable - or a multi-video-stream file whose non-default stream is taller than
-    /// the default the row dims come from - can be dropped here yet classified per-item.
-    /// Rare in practice (both require the row dims to disagree with the streams table) and
-    /// accepted as a documented divergence per the spec.
+    /// ACCEPTED DIVERGENCE EDGE (row-vs-streams): the SQL bound filters the denormalized
+    /// row Height while per-item extraction reads the media streams, so an item whose row
+    /// Height is NULL (unfilled dimensions) but whose streams are readable - or a
+    /// multi-video-stream file whose non-default stream is taller than the default the row
+    /// dims come from - can be dropped here yet classified per-item. Rare in practice (both
+    /// require the row dims to disagree with the streams table) and accepted as a
+    /// documented divergence per the spec.
     ///
     /// GATE: only applied when the list's media types are exclusively leaf video types
     /// (Movie/Episode/Video/MusicVideo). Folder kinds (Series/Season/BoxSet) carry no row
@@ -69,8 +70,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 return null;
             }
 
-            var window = TryBuildHeightWindow(expression.Operator, expression.TargetValue);
-            if (window == null)
+            var minHeight = TryBuildMinHeight(expression.Operator, expression.TargetValue);
+            if (minHeight == null)
             {
                 return null;
             }
@@ -85,8 +86,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             var query = new InternalItemsQuery
             {
                 IncludeItemTypes = kinds,
-                MinHeight = window.MinHeight,
-                MaxHeight = window.MaxHeight,
+                MinHeight = minHeight,
                 Recursive = true,
                 GroupByPresentationUniqueKey = false,
             };
@@ -94,32 +94,23 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             var ids = context.LibraryManager.GetItemIds(query);
 
             context.Logger?.LogDebug(
-                "Resolution prefilter: {Operator} '{Value}' -> height window [{Min}..{Max}] -> {Count} candidate items in {Ms}ms",
-                expression.Operator, expression.TargetValue, window.MinHeight, window.MaxHeight, ids.Count, stopwatch.ElapsedMilliseconds);
+                "Resolution prefilter: {Operator} '{Value}' -> MinHeight {Min} -> {Count} candidate items in {Ms}ms",
+                expression.Operator, expression.TargetValue, minHeight, ids.Count, stopwatch.ElapsedMilliseconds);
 
             // Fresh set per call - the caller owns and mutates the result.
             return [.. ids];
         }
 
         /// <summary>
-        /// Immutable height window an operator/value combination maps to. A null bound is
-        /// left unset on the query (no constraint in that direction).
-        /// </summary>
-        /// <param name="MinHeight">Inclusive lower bound, or null for none.</param>
-        /// <param name="MaxHeight">Inclusive upper bound, or null for none.</param>
-        internal sealed record HeightWindow(int? MinHeight, int? MaxHeight);
-
-        /// <summary>
-        /// Maps an operator/value combination to its exact bucket-boundary height window,
-        /// or null when the rule stays per-item (NotEqual, LessThanOrEqual on the top
-        /// bucket, an operator the whitelist rejects, or a value the compiled rule would
-        /// reject). Value lookup mirrors the Engine exactly: ordinal match against
-        /// <see cref="ResolutionTypes.AllResolutions"/>.
+        /// Maps an operator/value combination to its bucket-boundary MinHeight, or null when
+        /// the rule stays per-item (LessThan/LessThanOrEqual, NotEqual, an operator the
+        /// whitelist rejects, or a value the compiled rule would reject). Value lookup mirrors
+        /// the Engine exactly: ordinal match against <see cref="ResolutionTypes.AllResolutions"/>.
         /// </summary>
         /// <param name="ruleOperator">The rule operator.</param>
         /// <param name="targetValue">The rule target value (e.g. "1080p").</param>
-        /// <returns>The height window, or null when the rule stays per-item.</returns>
-        internal static HeightWindow? TryBuildHeightWindow(string? ruleOperator, string? targetValue)
+        /// <returns>The inclusive minimum height, or null when the rule stays per-item.</returns>
+        internal static int? TryBuildMinHeight(string? ruleOperator, string? targetValue)
         {
             var target = ResolutionTypes.GetByValue(targetValue ?? string.Empty);
             if (target == null)
@@ -127,30 +118,20 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
                 return null;
             }
 
-            var previousBucketHeight = PreviousBucketHeight(target.Height);
-            var isTopBucket = target.Height == TopBucketHeight();
-
             switch (ruleOperator)
             {
                 case "Equal":
-                    return new HeightWindow(previousBucketHeight + 1, isTopBucket ? null : target.Height);
+                case "GreaterThanOrEqual":
+                    return PreviousBucketHeight(target.Height) + 1;
 
                 case "GreaterThan":
-                    return new HeightWindow(target.Height + 1, null);
-
-                case "GreaterThanOrEqual":
-                    return new HeightWindow(previousBucketHeight + 1, null);
-
-                case "LessThan":
-                    return new HeightWindow(null, previousBucketHeight);
-
-                case "LessThanOrEqual":
-                    // The top bucket is open-ended above; see the class doc.
-                    return isTopBucket ? null : new HeightWindow(null, target.Height);
+                    return target.Height + 1;
 
                 default:
-                    // NotEqual and anything else is not a riding resolution operator.
-                    // Operator comparison is Ordinal, mirroring the engine switch.
+                    // LessThan/LessThanOrEqual have no lower bound (upper bounds are never
+                    // pushed down, see the class doc); NotEqual and anything else is not a
+                    // riding resolution operator. Operator comparison is Ordinal, mirroring
+                    // the engine switch.
                     return null;
             }
         }
@@ -203,8 +184,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
 
         /// <summary>
         /// The largest bucket height strictly below the target, or 0 for the lowest bucket
-        /// (480p windows then start at height 1, matching the compiled rule's positive-
-        /// height validity gate).
+        /// (480p then starts at height 1, matching the compiled rule's positive-height
+        /// validity gate).
         /// </summary>
         private static int PreviousBucketHeight(int targetHeight)
         {
@@ -218,24 +199,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine.Prefilters
             }
 
             return previous;
-        }
-
-        /// <summary>
-        /// The top bucket's height (the bucketer maps everything above the second-highest
-        /// boundary into this bucket, so it is open-ended above).
-        /// </summary>
-        private static int TopBucketHeight()
-        {
-            var top = 0;
-            foreach (var info in ResolutionTypes.AllResolutions)
-            {
-                if (info.Height > top)
-                {
-                    top = info.Height;
-                }
-            }
-
-            return top;
         }
     }
 }
