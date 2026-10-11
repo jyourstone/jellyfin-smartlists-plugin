@@ -1,11 +1,8 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace Jellyfin.Plugin.SmartLists.Utilities
 {
@@ -26,11 +23,12 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         private const float BadgeRelativeInset = 0.03f;
 
         /// <summary>
-        /// Badge PNG bytes, or null when the embedded resource can't be loaded. Loading
-        /// never throws out of the Lazy - a cached exception would otherwise disable all
-        /// cover generation for the process lifetime.
+        /// Badge image, decoded once, or null when the embedded resource can't be loaded or
+        /// decoded. Loading never throws out of the Lazy - a cached exception would otherwise
+        /// disable all cover generation for the process lifetime. The image is immutable, so
+        /// concurrent cover jobs can draw it.
         /// </summary>
-        private static readonly Lazy<byte[]?> BadgeBytes = new(LoadBadgeBytes);
+        private static readonly Lazy<SKImage?> Badge = new(LoadBadge);
 
         /// <summary>
         /// Gets a value indicating whether the badge overlay is enabled in the plugin configuration.
@@ -43,10 +41,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// </summary>
         /// <param name="image">The image to stamp. Mutated in place.</param>
         /// <param name="logger">Logger for badge failures.</param>
-        public static void ApplyBadge(Image image, ILogger logger)
+        public static void ApplyBadge(SKBitmap image, ILogger logger)
         {
-            var badgeBytes = BadgeBytes.Value;
-            if (badgeBytes == null)
+            var badge = Badge.Value;
+            if (badge == null)
             {
                 logger.LogWarning("Smart list badge resource unavailable; cover saved without badge");
                 return;
@@ -58,9 +56,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 var size = Math.Max(1, (int)(shortEdge * BadgeRelativeSize));
                 var inset = (int)(shortEdge * BadgeRelativeInset);
 
-                using var badge = Image.Load<Rgba32>(badgeBytes);
-                badge.Mutate(ctx => ctx.Resize(size, size));
-                image.Mutate(ctx => ctx.DrawImage(badge, new Point(inset, inset), 1.0f));
+                using var canvas = new SKCanvas(image);
+                canvas.DrawImage(badge, SKRect.Create(inset, inset, size, size), CollageBuilder.Sampling);
             }
             catch (Exception ex)
             {
@@ -69,7 +66,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
         }
 
-        private static byte[]? LoadBadgeBytes()
+        private static SKImage? LoadBadge()
         {
             try
             {
@@ -87,9 +84,15 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     return null;
                 }
 
-                using var ms = new MemoryStream();
-                stream.CopyTo(ms);
-                return ms.ToArray();
+                using var bitmap = SKBitmap.Decode(stream);
+                if (bitmap == null)
+                {
+                    return null;
+                }
+
+                // Immutable lets the image share the decoded pixels instead of copying them.
+                bitmap.SetImmutable();
+                return SKImage.FromBitmap(bitmap);
             }
             catch (Exception)
             {

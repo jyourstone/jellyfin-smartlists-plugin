@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace Jellyfin.Plugin.SmartLists.Utilities
 {
@@ -28,9 +26,16 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         public const string ThumbCollageFileName = "smartlist-thumb-collage.jpg";
 
         /// <summary>
-        /// JPEG quality for all generated covers.
+        /// Encode quality for all generated covers (JPEG and WebP; PNG ignores it).
         /// </summary>
-        private const int JpegQuality = 90;
+        private const int Quality = 90;
+
+        /// <summary>
+        /// Gets the sampling used for every scaled draw: bilinear across mipmap levels, so large
+        /// downscales average source pixels instead of aliasing, and a 1:1 draw on whole pixels
+        /// is an exact copy.
+        /// </summary>
+        internal static SKSamplingOptions Sampling { get; } = new(SKFilterMode.Linear, SKMipmapMode.Linear);
 
         /// <summary>
         /// Gets the Jellyfin tile aspect ratio covers are cropped to for an image type:
@@ -92,41 +97,26 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             var quadrantWidth = width / 2;
             var quadrantHeight = height / 2;
 
-            using var collage = new Image<Rgba32>(width, height);
-            collage.Mutate(x => x.BackgroundColor(Color.Black));
-
-            var positions = new[]
+            using var collage = new SKBitmap(width, height);
+            using (var canvas = new SKCanvas(collage))
             {
-                new Point(0, 0),
-                new Point(quadrantWidth, 0),
-                new Point(0, quadrantHeight),
-                new Point(quadrantWidth, quadrantHeight)
-            };
+                canvas.Clear(SKColors.Black);
 
-            for (int i = 0; i < 4 && i < imagePaths.Count; i++)
-            {
-                try
+                for (int i = 0; i < 4 && i < imagePaths.Count; i++)
                 {
-                    using var sourceImage = await Image.LoadAsync(imagePaths[i], cancellationToken).ConfigureAwait(false);
-
-                    // Rotate EXIF-oriented sources (e.g. phone photos) into the display frame
-                    // before any geometry runs on their pixel grid.
-                    sourceImage.Mutate(x => x.AutoOrient());
-
-                    // Resize image to fit quadrant while maintaining aspect ratio
-                    var resizeOptions = new ResizeOptions
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
                     {
-                        Size = new Size(quadrantWidth, quadrantHeight),
-                        Mode = ResizeMode.Crop,
-                        Position = AnchorPositionMode.Center
-                    };
+                        using var sourceImage = LoadOrientedBitmap(imagePaths[i], quadrantWidth, quadrantHeight);
 
-                    sourceImage.Mutate(x => x.Resize(resizeOptions));
-                    collage.Mutate(ctx => ctx.DrawImage(sourceImage, positions[i], 1.0f));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogWarning(ex, "Failed to load image {ImagePath} for collage, skipping", imagePaths[i]);
+                        // Quadrants fill left-to-right, top-to-bottom. Scale to cover each while
+                        // maintaining aspect ratio, cropping the overflow.
+                        DrawCenterCropped(canvas, sourceImage, SKRectI.Create(i % 2 * quadrantWidth, i / 2 * quadrantHeight, quadrantWidth, quadrantHeight));
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogWarning(ex, "Failed to load image {ImagePath} for collage, skipping", imagePaths[i]);
+                    }
                 }
             }
 
@@ -135,7 +125,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 CoverBadgeHelper.ApplyBadge(collage, logger);
             }
 
-            await SaveCoverAsync(collage, outputPath, cancellationToken).ConfigureAwait(false);
+            await SaveCoverAsync(collage, outputPath, SKEncodedImageFormat.Jpeg, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -144,7 +134,8 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// Jellyfin tiles crop covers (square for playlists, poster/thumb ratios for
         /// collections), so a badge in the corner of an off-ratio cover would fall outside the
         /// visible area — and off-ratio covers also distort overview grids. The encoder is
-        /// inferred from the output extension (JPEG saved at quality 90).
+        /// inferred from the output extension; one Skia cannot encode returns false without
+        /// touching the source, so the caller's raw-copy fallback uses the upload as-is.
         /// </summary>
         /// <param name="sourcePath">The source image path.</param>
         /// <param name="outputPath">The destination path.</param>
@@ -166,53 +157,34 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             ILogger logger,
             CancellationToken cancellationToken)
         {
+            var format = GetEncoderFormat(outputPath);
+            if (format == null)
+            {
+                logger.LogDebug("Cannot save a cropped cover as {OutputPath}: no encoder for that extension", outputPath);
+                return false;
+            }
+
             try
             {
-                using var image = await Image.LoadAsync(sourcePath, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                // Rotate EXIF-oriented sources into the display frame BEFORE the crop
-                // geometry below reads Width/Height, and so the saved copy carries no
-                // orientation tag for clients to re-apply.
-                image.Mutate(x => x.AutoOrient());
+                // A fixed-width cover's size is known before decoding, so the decode can scale down to it.
+                var fixedHeight = targetWidth > 0 ? Math.Max(1, targetWidth * aspectHeight / aspectWidth) : 0;
 
-                int cropWidth;
-                int cropHeight;
-                if (targetWidth > 0)
-                {
-                    cropWidth = targetWidth;
-                    cropHeight = targetWidth * aspectHeight / aspectWidth;
-                }
-                else if (image.Width * aspectHeight >= image.Height * aspectWidth)
-                {
-                    // Source is wider than the target ratio: full height, cropped width
-                    cropHeight = image.Height;
-                    cropWidth = image.Height * aspectWidth / aspectHeight;
-                }
-                else
-                {
-                    // Source is taller than the target ratio: full width, cropped height
-                    cropWidth = image.Width;
-                    cropHeight = image.Width * aspectHeight / aspectWidth;
-                }
-
-                // Degenerate sources (1px edges) can truncate a dimension to 0, which
-                // ImageSharp would interpret as "preserve aspect", silently skipping the crop.
-                cropWidth = Math.Max(1, cropWidth);
-                cropHeight = Math.Max(1, cropHeight);
-
-                image.Mutate(x => x.Resize(new ResizeOptions
-                {
-                    Size = new Size(cropWidth, cropHeight),
-                    Mode = ResizeMode.Crop,
-                    Position = AnchorPositionMode.Center
-                }));
+                // Decoding applies the EXIF orientation of JPEG and WebP sources (Skia ignores a PNG
+                // eXIf chunk) BEFORE the crop geometry below reads Width/Height, and the saved copy
+                // carries no orientation tag for clients to re-apply.
+                using var image = LoadOrientedBitmap(sourcePath, targetWidth, fixedHeight);
+                using var cover = targetWidth > 0
+                    ? DrawScaledCover(image, targetWidth, fixedHeight)
+                    : ExtractNativeCrop(image, aspectWidth, aspectHeight);
 
                 if (applyBadge)
                 {
-                    CoverBadgeHelper.ApplyBadge(image, logger);
+                    CoverBadgeHelper.ApplyBadge(cover, logger);
                 }
 
-                await SaveCoverAsync(image, outputPath, cancellationToken).ConfigureAwait(false);
+                await SaveCoverAsync(cover, outputPath, format.Value, cancellationToken).ConfigureAwait(false);
                 return true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -223,19 +195,253 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         }
 
         /// <summary>
-        /// Saves a cover with the encoder inferred from the output extension; JPEG output
-        /// uses the plugin's standard quality.
+        /// Computes the region of a source image that, scaled uniformly, exactly covers a target
+        /// of the given size: the largest centered rectangle with the target's aspect ratio
+        /// (a center-anchored crop-to-fill). An unscaled (1:1) crop's origin is floored to whole
+        /// pixels so it copies pixels exactly; a scaled crop keeps the exact centered origin.
         /// </summary>
-        private static Task SaveCoverAsync(Image image, string outputPath, CancellationToken cancellationToken)
+        /// <param name="sourceWidth">Source width in pixels.</param>
+        /// <param name="sourceHeight">Source height in pixels.</param>
+        /// <param name="targetWidth">Target width in pixels.</param>
+        /// <param name="targetHeight">Target height in pixels.</param>
+        /// <returns>The source rectangle to draw into the full target.</returns>
+        internal static SKRect GetCenterCropSourceRect(int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
         {
-            var extension = System.IO.Path.GetExtension(outputPath);
-            if (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))
+            double cropWidth;
+            double cropHeight;
+            if ((long)sourceWidth * targetHeight >= (long)sourceHeight * targetWidth)
             {
-                return image.SaveAsync(outputPath, new JpegEncoder { Quality = JpegQuality }, cancellationToken);
+                // Source is wider than the target: full height, centered horizontal crop
+                cropHeight = sourceHeight;
+                cropWidth = (double)sourceHeight * targetWidth / targetHeight;
+            }
+            else
+            {
+                // Source is taller than the target: full width, centered vertical crop
+                cropWidth = sourceWidth;
+                cropHeight = (double)sourceWidth * targetHeight / targetWidth;
             }
 
-            return image.SaveAsync(outputPath, cancellationToken);
+            var left = (sourceWidth - cropWidth) / 2;
+            var top = (sourceHeight - cropHeight) / 2;
+            if (cropWidth == targetWidth)
+            {
+                left = Math.Floor(left);
+                top = Math.Floor(top);
+            }
+
+            return SKRect.Create((float)left, (float)top, (float)cropWidth, (float)cropHeight);
+        }
+
+        /// <summary>
+        /// Draws the centered crop of a source scaled to fill a new bitmap of the given size.
+        /// </summary>
+        private static SKBitmap DrawScaledCover(SKBitmap source, int width, int height)
+        {
+            var cover = new SKBitmap(width, height);
+            using var canvas = new SKCanvas(cover);
+            canvas.Clear(SKColors.Transparent);
+            DrawCenterCropped(canvas, source, SKRectI.Create(0, 0, width, height));
+            return cover;
+        }
+
+        /// <summary>
+        /// Takes the largest centered crop of the aspect ratio at native resolution. The result
+        /// shares the source's pixels instead of copying them, so the source must outlive it.
+        /// </summary>
+        private static SKBitmap ExtractNativeCrop(SKBitmap source, int aspectWidth, int aspectHeight)
+        {
+            var crop = GetCenterCropSourceRect(source.Width, source.Height, aspectWidth, aspectHeight);
+
+            // Degenerate sources (1px edges) can truncate a dimension to 0, which would
+            // produce an empty bitmap that cannot be encoded.
+            var width = Math.Max(1, (int)crop.Width);
+            var height = Math.Max(1, (int)crop.Height);
+
+            var subset = new SKBitmap();
+            if (!source.ExtractSubset(subset, SKRectI.Create((source.Width - width) / 2, (source.Height - height) / 2, width, height)))
+            {
+                subset.Dispose();
+                throw new InvalidOperationException("Could not extract the cover crop");
+            }
+
+            return subset;
+        }
+
+        /// <summary>
+        /// Returns a copy of a decoded bitmap rotated/mirrored from its stored orientation into
+        /// its display orientation (EXIF orientation). Origins LeftTop through LeftBottom swap
+        /// width and height. The matrices are Skia's SkEncodedOriginToMatrix.
+        /// </summary>
+        /// <param name="source">The bitmap as stored in the file.</param>
+        /// <param name="origin">The encoded origin reported by the codec.</param>
+        /// <returns>A new bitmap the caller owns; the source is left untouched.</returns>
+        internal static SKBitmap ApplyEncodedOrigin(SKBitmap source, SKEncodedOrigin origin)
+        {
+            float w = source.Width;
+            float h = source.Height;
+            var matrix = origin switch
+            {
+                SKEncodedOrigin.TopRight => new SKMatrix(-1, 0, w, 0, 1, 0, 0, 0, 1),
+                SKEncodedOrigin.BottomRight => new SKMatrix(-1, 0, w, 0, -1, h, 0, 0, 1),
+                SKEncodedOrigin.BottomLeft => new SKMatrix(1, 0, 0, 0, -1, h, 0, 0, 1),
+                SKEncodedOrigin.LeftTop => new SKMatrix(0, 1, 0, 1, 0, 0, 0, 0, 1),
+                SKEncodedOrigin.RightTop => new SKMatrix(0, -1, h, 1, 0, 0, 0, 0, 1),
+                SKEncodedOrigin.RightBottom => new SKMatrix(0, -1, h, -1, 0, w, 0, 0, 1),
+                SKEncodedOrigin.LeftBottom => new SKMatrix(0, 1, 0, -1, 0, w, 0, 0, 1),
+                _ => SKMatrix.Identity,
+            };
+
+            var info = SwapsAxes(origin) ? source.Info.WithSize(source.Height, source.Width) : source.Info;
+
+            var oriented = new SKBitmap(info);
+            try
+            {
+                using var canvas = new SKCanvas(oriented);
+                canvas.Clear(SKColors.Transparent);
+                canvas.SetMatrix(matrix);
+
+                // Whole-pixel 90-degree/mirror transforms map pixel centers onto pixel
+                // centers, so the default nearest sampling copies pixels losslessly.
+                canvas.DrawBitmap(source, 0, 0);
+                return oriented;
+            }
+            catch
+            {
+                oriented.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Whether an encoded origin is a 90-degree rotation, which swaps width and height.
+        /// </summary>
+        private static bool SwapsAxes(SKEncodedOrigin origin)
+            => origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop
+                or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
+
+        /// <summary>
+        /// Decodes an image file into an N32 premultiplied sRGB bitmap in its display
+        /// orientation. When the caller will draw it at a known size, the decode is scaled down
+        /// as far as the codec allows while still covering that size, so a large source never
+        /// holds its full-resolution pixels.
+        /// </summary>
+        /// <param name="path">The image path.</param>
+        /// <param name="minWidth">Display width the crop is drawn at, or 0 for native resolution.</param>
+        /// <param name="minHeight">Display height the crop is drawn at, or 0 for native resolution.</param>
+        /// <returns>The bitmap; the caller owns it.</returns>
+        /// <exception cref="InvalidDataException">The file is missing, corrupt, or in a format
+        /// Skia has no decoder for (e.g. SVG, TIFF, AVIF).</exception>
+        internal static SKBitmap LoadOrientedBitmap(string path, int minWidth, int minHeight)
+        {
+            using var codec = SKCodec.Create(path, out var result)
+                ?? throw new InvalidDataException("Cannot decode " + path + ": " + result);
+
+            var origin = codec.EncodedOrigin;
+            var size = SwapsAxes(origin)
+                ? GetDecodeSize(codec, minHeight, minWidth)
+                : GetDecodeSize(codec, minWidth, minHeight);
+
+            // Decode into sRGB, converting from any embedded ICC profile: saved covers carry no profile.
+            var info = new SKImageInfo(size.Width, size.Height, SKImageInfo.PlatformColorType, SKAlphaType.Premul, SKColorSpace.CreateSrgb());
+            var decoded = SKBitmap.Decode(codec, info)
+                ?? throw new InvalidDataException("Cannot decode " + path);
+            if (origin == SKEncodedOrigin.TopLeft)
+            {
+                return decoded;
+            }
+
+            using (decoded)
+            {
+                // Immutable lets the orientation draw share the pixels instead of taking a
+                // hidden full-size copy of them.
+                decoded.SetImmutable();
+                return ApplyEncodedOrigin(decoded, origin);
+            }
+        }
+
+        /// <summary>
+        /// Picks the decode size: the smallest the codec can scale to that still covers
+        /// minWidth x minHeight, so the crop drawn from it is never upscaled. JPEG scales in
+        /// eighths, WebP freely; other formats decode at full size.
+        /// </summary>
+        /// <param name="codec">The codec.</param>
+        /// <param name="minWidth">Minimum width in stored orientation, or 0 for full size.</param>
+        /// <param name="minHeight">Minimum height in stored orientation, or 0 for full size.</param>
+        private static SKSizeI GetDecodeSize(SKCodec codec, int minWidth, int minHeight)
+        {
+            var full = codec.Info.Size;
+            if (minWidth <= 0 || minHeight <= 0)
+            {
+                return full;
+            }
+
+            var scale = Math.Max((float)minWidth / full.Width, (float)minHeight / full.Height);
+            if (scale >= 1)
+            {
+                return full;
+            }
+
+            // JPEG rounds to the nearest eighth: step up one when that undershoots.
+            var scaled = codec.GetScaledDimensions(scale);
+            if (scaled.Width < minWidth || scaled.Height < minHeight)
+            {
+                scaled = codec.GetScaledDimensions(Math.Min(1f, scale + 0.125f));
+            }
+
+            return scaled.Width >= minWidth && scaled.Height >= minHeight ? scaled : full;
+        }
+
+        /// <summary>
+        /// Draws the centered crop of a source bitmap scaled to fill the destination rectangle exactly.
+        /// </summary>
+        private static void DrawCenterCropped(SKCanvas canvas, SKBitmap source, SKRectI destination)
+        {
+            var sourceRect = GetCenterCropSourceRect(source.Width, source.Height, destination.Width, destination.Height);
+
+            // Immutable lets the image share the bitmap's pixels instead of copying them.
+            source.SetImmutable();
+            using var image = SKImage.FromBitmap(source);
+            canvas.DrawImage(image, sourceRect, destination, Sampling);
+        }
+
+        /// <summary>
+        /// Maps an output extension to its Skia encoder. Skia encodes only JPEG, PNG and WebP.
+        /// </summary>
+        private static SKEncodedImageFormat? GetEncoderFormat(string outputPath)
+            => Path.GetExtension(outputPath).ToUpperInvariant() switch
+            {
+                ".JPG" or ".JPEG" => SKEncodedImageFormat.Jpeg,
+                ".PNG" => SKEncodedImageFormat.Png,
+                ".WEBP" => SKEncodedImageFormat.Webp,
+                _ => null,
+            };
+
+        /// <summary>
+        /// Encodes a cover and writes it to disk via a temp file, so a failed encode or an
+        /// interrupted write leaves any existing cover intact. The temp name is unique per save,
+        /// so concurrent saves to the same cover never touch each other's file.
+        /// </summary>
+        internal static async Task SaveCoverAsync(SKBitmap bitmap, string outputPath, SKEncodedImageFormat format, CancellationToken cancellationToken)
+        {
+            using var data = bitmap.Encode(format, Quality)
+                ?? throw new InvalidOperationException("Skia failed to encode the cover as " + format);
+            using var encoded = data.AsStream();
+            var tempPath = outputPath + "." + Path.GetRandomFileName() + ".tmp";
+            try
+            {
+                var file = File.Create(tempPath);
+                await using (file.ConfigureAwait(false))
+                {
+                    await encoded.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+                }
+
+                File.Move(tempPath, outputPath, overwrite: true);
+            }
+            finally
+            {
+                File.Delete(tempPath);
+            }
         }
     }
 }

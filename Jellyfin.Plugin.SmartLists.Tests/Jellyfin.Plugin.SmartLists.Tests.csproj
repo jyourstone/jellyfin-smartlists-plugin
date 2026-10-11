@@ -25,6 +25,12 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <!--
+      Runtime copy for the tests (the plugin's reference is compile-only), plus the Linux native
+      library for CI; NoDependencies skips fontconfig. Same version as the plugin's reference.
+    -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
   </ItemGroup>
 
   <ItemGroup>

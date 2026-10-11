@@ -1274,8 +1274,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         // resolution (Primary 2:3 poster, Thumb 16:9) and stamped - off-ratio
                         // uploads would otherwise distort the collections overview grid and
                         // could hide the corner badge. With the badge disabled, uploads are
-                        // copied untouched. Raw copy fallback for formats ImageSharp cannot
-                        // decode, e.g. SVG.
+                        // copied untouched. Raw copy fallback when CollageBuilder cannot decode
+                        // or re-encode the upload.
                         var stamped = false;
                         if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {

@@ -21,7 +21,7 @@ The project targets `net10.0` (Jellyfin 12). The build treats all warnings as er
 
 ### Tests
 
-Unit tests live in `Jellyfin.Plugin.SmartLists.Tests` (xunit, ~1,640 tests). They cover the pure-C# surface — the query engine (operators, prefilter resolvers, `FieldRegistry` invariants), the sort implementations in `Core/Orders/`, the external-list providers, and `Utilities/`. Every file under test is plain C# with no Jellyfin dependencies.
+Unit tests live in `Jellyfin.Plugin.SmartLists.Tests` (xunit, ~1,780 tests). They cover the pure-C# surface — the query engine (operators, prefilter resolvers, `FieldRegistry` invariants), the sort implementations in `Core/Orders/`, the external-list providers, and `Utilities/`. Every file under test is plain C# with no Jellyfin dependencies. The `CollageBuilder` tests run real SkiaSharp, so the test project carries its own SkiaSharp runtime packages (including the Linux native library for CI) — the plugin's reference is compile-only.
 
 The test project targets `net10.0`, same as the plugin. Warnings-as-errors and analyzers are deliberately relaxed in the test project, since tests do things production code must not.
 
@@ -98,6 +98,15 @@ binding source to `BindingSource.Form`, which makes Swashbuckle throw and return
 `/api-docs/openapi.json` server-wide** — breaking API-doc generation for all of Jellyfin, not just this
 plugin. Add `[Consumes("multipart/form-data")]` alongside so the schema declares the right shape.
 `[FromForm]` on plain scalar parameters (e.g. `string imageType`) is fine.
+
+### SkiaSharp comes from Jellyfin — never bundle it
+Cover images (`Utilities/CollageBuilder.cs`, `CoverBadgeHelper.cs`) use SkiaSharp referenced compile-only
+(`IncludeAssets="compile"`); at runtime the plugin binds to the copy Jellyfin ships. Never put `SkiaSharp.dll`
+in the build output or the release zip. Keep the reference **at or below** the SkiaSharp of the lowest
+Jellyfin the release `targetAbi` admits (12.0 → 3.119.4, per Jellyfin's own `Directory.Packages.props`): a
+higher reference fails to load on that server, and Jellyfin then disables the whole plugin. Raise it only
+together with the `targetAbi` floor (`TARGETS` in `release.yml`, `JELLYFIN_ABI` in `dev/build-local.sh`) and
+the test project's SkiaSharp packages.
 
 ### Media Type Constants
 Use `MediaTypes.Episode` instead of `"Episode"` - see `Core/Constants/MediaTypes.cs`.
