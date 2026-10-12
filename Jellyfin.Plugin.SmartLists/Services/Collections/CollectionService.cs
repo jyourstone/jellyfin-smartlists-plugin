@@ -183,10 +183,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         .Take(10)
                         .Select(g => $"{g.Key} ({g.Count()} copies)");
                     _logger.LogDebug(
-                        "Collection '{CollectionName}' GetAllMedia returned {DuplicateGroupCount} duplicate item id groups while LibraryName virtual-library matching is enabled (TopParentIds={TopParentCount}); mediaLookup will keep the first item for each id. Sample duplicate ids: {DuplicateIds}",
+                        "Collection '{CollectionName}' GetAllMedia returned {DuplicateGroupCount} duplicate item id groups while LibraryName virtual-library matching is enabled; mediaLookup will keep the first item for each id. Sample duplicate ids: {DuplicateIds}",
                         dto.Name,
                         duplicateMediaGroups.Count,
-                        GetLibraryTopParentIds().Length,
                         string.Join(", ", sampleIds));
                 }
 
@@ -1327,10 +1326,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 return [];
             }
 
-            // Build a set of valid TopParentIds from VirtualFolder physical locations.
-            // Excludes internal folders like live TV recordings.
-            var validTopParentIds = GetLibraryTopParentIds();
-
             // Container kinds (BoxSet/Playlist) live in Jellyfin's internal collections/playlists
             // folders and Live TV channels have no library parent at all - both sit outside the
             // library TopParentIds scope, so query them separately without it
@@ -1348,7 +1343,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     Recursive = true,
                 };
 
-                LibraryManagerHelper.ApplyVirtualItemQueryScope(query, includeVirtualItems, validTopParentIds);
+                LibraryManagerHelper.ApplyVirtualItemQueryScope(_libraryManager, query, ownerUser, includeVirtualItems);
 
                 items = _libraryManager.GetItemsResult(query).Items;
             }
@@ -1372,12 +1367,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
             // Extras belong to regular library items only - containers have none
             var extras = LibraryManagerHelper.FetchExtras(
-                _libraryManager, ownerUser, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
+                _libraryManager, ownerUser, items, extraOwnerMap, _logger, dto.Name);
 
             return allItems.Concat(extras);
         }
-
-        private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
 
         /// <summary>
         /// Refreshes collection metadata including cover image generation.
