@@ -13,6 +13,32 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.0.4.1-rc
+
+*2026-10-12 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.1-rc)*
+
+**Features**
+
+- **Bumpers per break**: a break can now play up to 10 bumpers back to back. The new **Take turns between bumper rule groups** option gives each bumper rule group its own pool, so every break can follow a pattern such as ident, commercial, ident. With take turns on, Bumpers per break must be at least the number of bumper rule groups ([Bumpers](../user-guide/bumpers.md#multi-bumper-breaks), [#542](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/542)).
+- **Missing items** (admin page): see which entries of a list's external lists are not in your library, with their position, title, type and IDs, and download them as CSV. It uses each external list as it was last fetched, so refresh the list first ([External lists](../user-guide/external-lists.md#missing-items), [#544](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/544)).
+- **Is Favorite** has a new parent favorite option, to match items whose album, season, series or folder is a favorite — for example every track on the albums you have favorited ([Fields](../user-guide/fields-and-operators.md#parent-favorite-options), [#535](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/535)).
+
+**Bug Fixes**
+
+- **Security:** smart playlists and user-owned smart collections could include items from libraries the user has no access to. Lists now only contain items from libraries the user can see.
+- **External List Order** could sort by positions from other playlists' external lists when several lists refreshed together, such as with Refresh All ([#543](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/543)).
+- **Resolution** rules could skip a movie whose alternate version has a higher resolution than its main version ([#546](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/546)).
+- During a refresh of several lists, a list with a **Library Name** rule and a list without one could share the same item pool, so one could show missing (virtual) items or the other could miss them.
+- Scheduled playlist refreshes now run through the same refresh queue as every other refresh ([#539](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/539)).
+- An all-users playlist with a rule tied to one user (for example Is Favorite for user B) now refreshes every user's copy when that user's data changes, not only that user's own copy.
+- Per-group **Max Items** and **Rule Group Order** no longer drop or misplace episodes added through a Collections rule's *include episodes within series* option.
+
+**Improvements**
+
+- Cover images now use the image library built into Jellyfin. **Manual installs:** delete `SixLabors.ImageSharp.dll` from the plugin folder; repository installs are not affected. Uploaded GIF, BMP and TIFF covers are no longer badged or cropped, and an animated WebP keeps only its first frame while the badge is on.
+- The refresh status API no longer returns `batchCurrentIndex` and `batchTotalCount`; they were always empty.
+
+
 ## v12.0.0.21-rc
 
 *2026-09-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.0.21-rc)*
