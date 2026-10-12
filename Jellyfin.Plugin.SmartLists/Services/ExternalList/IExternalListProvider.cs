@@ -200,7 +200,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <param name="position">The 0-based position in the external list.</param>
         /// <param name="title">The item title, if available (display only).</param>
         /// <param name="year">The release year, if available (display only).</param>
-        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, string? tmdbId, string? tvdbId, int position, string? title = null, int? year = null)
+        /// <param name="displayKind">The kind shown for the entry when it differs from <paramref name="kind"/>:
+        /// IMDb reports a title type but files every ID under Unknown, so matching stays type-agnostic.</param>
+        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, string? tmdbId, string? tvdbId, int position, string? title = null, int? year = null, ExternalListItemKind? displayKind = null)
         {
             AddToDictionaries(ImdbIds, TmdbIds, TvdbIds, imdbId, tmdbId, tvdbId, position);
 
@@ -211,7 +213,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             {
                 Entries.Add(new ExternalListEntry(
                     position,
-                    kind,
+                    displayKind ?? kind,
                     string.IsNullOrEmpty(imdbId) ? null : imdbId,
                     string.IsNullOrEmpty(tmdbId) ? null : tmdbId,
                     string.IsNullOrEmpty(tvdbId) ? null : tvdbId,

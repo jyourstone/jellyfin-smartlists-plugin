@@ -1411,18 +1411,20 @@
             .missing-items-table th, .missing-items-table td { padding: 0.4em 0.6em; vertical-align: top; text-align: left; }
             .missing-items-table td:first-child { opacity: 0.7; }
             .missing-items-table td:nth-child(n+3) { white-space: nowrap; }
+            #missing-items-modal a { color: var(--jf-palette-primary-main); text-decoration: none; }
         </style>
         <!-- Admin page only, on purpose: lists are fetched with admin-configured keys, so never add this to user-playlists.html -->
         <div id="missing-items-modal" class="custom-modal hide">
             <div class="custom-modal-container paperList">
                 <div class="modal-content">
-                    <div class="custom-modal-header" style="margin-top: -1em;">
+                    <!-- The list can be hundreds of rows long, so the CSV button sits up here -->
+                    <div class="custom-modal-header" style="margin-top: -1em; display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap;">
                         <h2 class="custom-modal-title" id="missing-items-title">Missing items</h2>
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="missing-items-csv-btn">Download CSV</button>
                     </div>
                     <div class="custom-modal-body" id="missing-items-body"></div>
                     <div class="custom-modal-footer">
-                        <button type="button" is="emby-button" class="emby-button raised"
-                            id="missing-items-csv-btn">Download CSV</button>
                         <button type="button" is="emby-button" class="emby-button raised"
                             id="missing-items-close-btn">Close</button>
                     </div>

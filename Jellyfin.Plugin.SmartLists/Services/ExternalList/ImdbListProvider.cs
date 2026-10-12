@@ -22,6 +22,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         private const int ListPageSize = 250;
         private const int SearchPageSize = 250;
 
+        // Title fields shown in the Missing items view (see ReadTitleAndYear and ReadKind)
+        private const string DisplayFields = "titleText{text} releaseYear{year} titleType{id canHaveEpisodes}";
+
         private static readonly Dictionary<string, string> ChartTypeMap = new(StringComparer.OrdinalIgnoreCase)
         {
             ["top"] = "TOP_RATED_MOVIES",
@@ -124,7 +127,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 var afterClause = cursor != null ? ",after:\"" + cursor + "\"" : string.Empty;
                 var query = "{chartTitles(chart:{chartType:" + chartType + "},first:" + fetchCount + afterClause
-                    + "){edges{node{id titleText{text} releaseYear{year}}}pageInfo{hasNextPage endCursor}}}";
+                    + "){edges{node{id " + DisplayFields + "}}pageInfo{hasNextPage endCursor}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -139,7 +142,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (!string.IsNullOrEmpty(id))
                     {
                         var (itemTitle, itemYear) = ReadTitleAndYear(node);
-                        result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear, ReadKind(node));
                         position++;
                         itemsInPage++;
                     }
@@ -244,7 +247,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 var batch = candidateIds.GetRange(i, Math.Min(verifyBatchSize, candidateIds.Count - i));
                 var idsParam = string.Join(",", batch.ConvertAll(id => "\"" + id + "\""));
 
-                var query = "{titles(ids:[" + idsParam + "]){id titleText{text} releaseYear{year} awardNominations(first:50,filter:{events:[\"" + eventId + "\"]})"
+                var query = "{titles(ids:[" + idsParam + "]){id " + DisplayFields + " awardNominations(first:50,filter:{events:[\"" + eventId + "\"]})"
                     + "{edges{node{award{year" + categoryFields + "}}}}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
@@ -299,7 +302,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (matches)
                     {
                         var (itemTitle, itemYear) = ReadTitleAndYear(title);
-                        result.AddProviderIds(ExternalListItemKind.Unknown, titleId, (string?)null, null, position, itemTitle, itemYear);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, titleId, (string?)null, null, position, itemTitle, itemYear, ReadKind(title));
                         position++;
 
                         if (maxItems > 0 && position >= maxItems)
@@ -361,6 +364,31 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return (title, year);
         }
 
+        /// <summary>
+        /// Maps titleType from a GraphQL Title node to the kind shown in the Missing items view. Unknown when
+        /// the type is missing or is not a movie, series or episode (video games, podcasts, music videos).
+        /// </summary>
+        internal static ExternalListItemKind ReadKind(JsonElement titleNode)
+        {
+            if (!titleNode.TryGetProperty("titleType", out var titleType) || titleType.ValueKind != JsonValueKind.Object)
+            {
+                return ExternalListItemKind.Unknown;
+            }
+
+            if (titleType.TryGetProperty("canHaveEpisodes", out var canHaveEpisodes) && canHaveEpisodes.ValueKind == JsonValueKind.True)
+            {
+                return ExternalListItemKind.Show;
+            }
+
+            var id = titleType.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String ? idProp.GetString() : null;
+            return id switch
+            {
+                "tvEpisode" => ExternalListItemKind.Episode,
+                "movie" or "tvMovie" or "tvSpecial" or "short" or "tvShort" or "video" => ExternalListItemKind.Movie,
+                _ => ExternalListItemKind.Unknown,
+            };
+        }
+
         private async Task<ExternalListResult> FetchUserListAsync(string listId, string url, int maxItems, CancellationToken cancellationToken)
         {
             var result = new ExternalListResult();
@@ -379,7 +407,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 var afterClause = cursor != null ? ",after:\"" + cursor + "\"" : string.Empty;
                 var query = "{list(id:\"" + listId + "\"){items(first:" + fetchCount + afterClause
-                    + "){edges{node{item{... on Title{id titleText{text} releaseYear{year}}}}}pageInfo{hasNextPage endCursor}}}}";
+                    + "){edges{node{item{... on Title{id " + DisplayFields + "}}}}pageInfo{hasNextPage endCursor}}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -408,7 +436,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         if (!string.IsNullOrEmpty(id))
                         {
                             var (itemTitle, itemYear) = ReadTitleAndYear(itemNode);
-                            result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear);
+                            result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear, ReadKind(itemNode));
                             position++;
                             itemsInPage++;
                         }
