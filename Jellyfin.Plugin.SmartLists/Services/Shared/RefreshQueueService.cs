@@ -1138,12 +1138,33 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             public ConcurrentDictionary<string, ExternalListResult> ExternalListData { get; } = new(StringComparer.OrdinalIgnoreCase);
             // Maps ItemId → list of external list URLs this item appears in (per-item cache)
             public ConcurrentDictionary<Guid, List<string>> ItemExternalLists { get; } = new();
-            // Maps ItemId → best (lowest) position across all matched external lists (for External List Order sorting)
+            // Maps ItemId → best (lowest) position across the active external lists (for External List Order sorting)
             public ConcurrentDictionary<Guid, int> ExternalListPositions { get; } = new();
 
             // Maps ItemId → (external list URL → matched track position) for music items.
             // Used by SmartList to keep a single library item per external-list track.
             public ConcurrentDictionary<Guid, Dictionary<string, int>> MusicListPositionsByUrl { get; } = new();
+
+            // External lists of the list being filtered; set by BeginExternalListScope.
+            public IReadOnlyList<(string Url, ExternalListResult Result)> ActiveExternalLists { get; private set; } = [];
+
+            /// <summary>
+            /// Scopes external list matching to one list's ExternalList rule URLs and drops the
+            /// per-item membership and positions computed for the previous list. Without this, a
+            /// list refreshed later in the same drain sorts by positions from other lists (#543).
+            /// </summary>
+            /// <param name="urls">The URLs referenced by the list's ExternalList rules.</param>
+            public void BeginExternalListScope(IEnumerable<string> urls)
+            {
+                // Resolved once per list: callers pre-fetch the lists before filtering starts.
+                ActiveExternalLists = [.. urls
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(ExternalListData.ContainsKey)
+                    .Select(url => (url, ExternalListData[url]))];
+                ItemExternalLists.Clear();
+                ExternalListPositions.Clear();
+                MusicListPositionsByUrl.Clear();
+            }
 
             // Warnings collected during processing (e.g., missing API keys, fetch failures)
             public ConcurrentBag<string> Warnings { get; } = [];

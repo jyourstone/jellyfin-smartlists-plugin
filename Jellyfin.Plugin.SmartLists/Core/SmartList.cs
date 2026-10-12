@@ -896,6 +896,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     logger?.LogWarning(ex, "Error analyzing expression sets for expensive fields in playlist '{PlaylistName}'. Assuming no expensive fields needed.", Name);
                 }
 
+                // Every call, even without ExternalList rules: the cache is shared across the lists
+                // (and bumper pools) of a refresh drain, and matches from those must not leak in.
+                refreshCache.BeginExternalListScope(fieldReqs.ExternalListUrls);
+
                 // CRITICAL: Enable extraction when SimilarTo requires it for comparison fields
                 // Without this, similarity matching will fail for fields that need conditional extraction
                 try
@@ -1536,31 +1540,12 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// the same song (album + compilation + live versions) can match one list entry; only the
         /// best match survives — exact MusicBrainz recording ID first, then title matches that
         /// needed no trailing "(...)" group stripping, then the rest. Items that did not match a
-        /// music external list are never dropped. Only this list's own ExternalList rule URLs are
-        /// considered: the refresh cache retains fetched data for other lists (shared, additive),
-        /// and matches against those must not affect this list's results.
+        /// music external list are never dropped. Positions only cover this list's own ExternalList
+        /// rule URLs (see <see cref="RefreshQueueService.RefreshCache.BeginExternalListScope"/>).
         /// </summary>
-        private List<BaseItem> DedupExternalMusicListMatches(List<BaseItem> items, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+        private static List<BaseItem> DedupExternalMusicListMatches(List<BaseItem> items, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
             if (refreshCache.MusicListPositionsByUrl.IsEmpty)
-            {
-                return items;
-            }
-
-            // URLs referenced by this list's own ExternalList rules
-            var activeListUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var set in ExpressionSets ?? [])
-            {
-                foreach (var expr in set?.Expressions ?? [])
-                {
-                    if (expr?.MemberName == "ExternalList" && !string.IsNullOrWhiteSpace(expr.TargetValue))
-                    {
-                        activeListUrls.Add(expr.TargetValue);
-                    }
-                }
-            }
-
-            if (activeListUrls.Count == 0)
             {
                 return items;
             }
@@ -1576,11 +1561,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 foreach (var entry in positionsByUrl)
                 {
-                    if (!activeListUrls.Contains(entry.Key))
-                    {
-                        continue;
-                    }
-
                     var key = (entry.Key, entry.Value);
                     if (!groups.TryGetValue(key, out var group))
                     {

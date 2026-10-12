@@ -338,7 +338,7 @@ You can sort items in the same order as they appear in the external list. Select
 
 Items that are not matched by any external list are placed at the end.
 
-If an item appears in multiple external lists, its best (lowest) position across all lists is used for sorting.
+If an item appears in more than one of the list's own external lists, its best (lowest) position among them is used for sorting. External lists used by other smart lists, or by this playlist's bumper rules, never affect the order.
 
 **Example:**
 

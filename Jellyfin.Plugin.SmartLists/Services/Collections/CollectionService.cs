@@ -234,12 +234,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     var fieldReqs = FieldRequirements.Analyze(dto.ExpressionSets);
                     if (fieldReqs.NeedsExternalLists && fieldReqs.ExternalListUrls.Count > 0)
                     {
-                        // Clear per-item external list caches so items are re-evaluated against this collection's lists.
-                        // ExternalListData (the fetched list data) is kept since it's shared and additive across playlists.
-                        refreshCache.ItemExternalLists.Clear();
-                        refreshCache.ExternalListPositions.Clear();
-                        refreshCache.MusicListPositionsByUrl.Clear();
-
                         var fetchLimit = ExternalListService.ComputeFetchLimit();
                         _logger.LogDebug("Pre-fetching {Count} external list(s) for collection '{CollectionName}' (fetchLimit: {FetchLimit})", fieldReqs.ExternalListUrls.Count, dto.Name, fetchLimit);
                         await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);

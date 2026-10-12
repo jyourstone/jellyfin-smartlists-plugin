@@ -4087,8 +4087,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Checks if a library item appears in any pre-fetched external lists by matching provider IDs.
-        /// Returns the list of external list URLs that contain this item.
+        /// Checks if a library item appears in the active external lists (the list being filtered's
+        /// own ExternalList URLs, see <see cref="RefreshQueueServiceRefreshCache.BeginExternalListScope"/>)
+        /// by matching provider IDs. Returns the list of external list URLs that contain this item.
         /// External list data must be pre-fetched into the cache before calling this method.
         /// </summary>
         private static List<string> ExtractExternalListMembership(BaseItem baseItem, RefreshQueueServiceRefreshCache cache, ILogger? logger)
@@ -4101,7 +4102,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             var matchingLists = new List<string>();
 
-            if (cache.ExternalListData.IsEmpty)
+            if (cache.ActiveExternalLists.Count == 0)
             {
                 cache.ItemExternalLists[baseItem.Id] = matchingLists;
                 return matchingLists;
@@ -4115,15 +4116,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 var artistNames = (baseItem as Audio)?.Artists;
                 var positionsByUrl = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (var kvp in cache.ExternalListData)
+                foreach (var (url, listResult) in cache.ActiveExternalLists)
                 {
-                    if (kvp.Value.TryGetMusicPosition(recordingMbid, baseItem.Name, artistNames, out var trackPosition))
+                    if (listResult.TryGetMusicPosition(recordingMbid, baseItem.Name, artistNames, out var trackPosition))
                     {
-                        matchingLists.Add(kvp.Key);
-                        positionsByUrl[kvp.Key] = trackPosition;
-                        // Cache the best (lowest) position across all matched external lists for sorting
+                        matchingLists.Add(url);
+                        positionsByUrl[url] = trackPosition;
+                        // Cache the best (lowest) position across the active external lists for sorting
                         cache.ExternalListPositions.AddOrUpdate(baseItem.Id, trackPosition, (_, existing) => Math.Min(existing, trackPosition));
-                        logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, kvp.Key, trackPosition);
+                        logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, url, trackPosition);
                     }
                 }
 
@@ -4162,12 +4163,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return matchingLists;
             }
 
-            // Check each pre-fetched external list
-            foreach (var kvp in cache.ExternalListData)
+            // Check each active external list
+            foreach (var (url, listResult) in cache.ActiveExternalLists)
             {
-                var url = kvp.Key;
-                var listResult = kvp.Value;
-
                 int matchedPosition = -1;
 
                 if (listResult.TryGetPosition(GetExternalListItemKind(baseItem), imdbId, tmdbId, tvdbId, out var itemPosition))
@@ -4186,7 +4184,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 if (matchedPosition >= 0)
                 {
                     matchingLists.Add(url);
-                    // Cache the best (lowest) position across all matched external lists for sorting
+                    // Cache the best (lowest) position across the active external lists for sorting
                     cache.ExternalListPositions.AddOrUpdate(baseItem.Id, matchedPosition, (_, existing) => Math.Min(existing, matchedPosition));
                     logger?.LogDebug("Item '{ItemName}' matched external list: {Url} at position {Position}", baseItem.Name, url, matchedPosition);
                 }
