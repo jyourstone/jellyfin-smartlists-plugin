@@ -74,6 +74,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
         private readonly ConcurrentDictionary<string, RefreshQueueItem> _queuedItems = new(); // For deduplication by ListId
         private readonly SemaphoreSlim _processingLock = new(1, 1); // Single-threaded processing
+        private readonly Lock _scopeMergeLock = new(); // Makes widening a pending item's user scope atomic
 
         // Cache management - per-user caches to avoid rebuilding when switching between users
         private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<MediaTypesKey, Lazy<BaseItem[]>>> _userCaches = new();
@@ -139,7 +140,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 // full refresh arriving behind a user-data auto refresh): widen the pending item instead.
                 if (_queuedItems.TryGetValue(item.ListId, out var pending))
                 {
-                    pending.TriggeringUserIds = MergeTriggeringUserIds(pending.TriggeringUserIds, item.TriggeringUserIds);
+                    lock (_scopeMergeLock)
+                    {
+                        pending.TriggeringUserIds = MergeTriggeringUserIds(pending.TriggeringUserIds, item.TriggeringUserIds);
+                    }
                 }
 
                 _logger.LogDebug("List {ListId} ({ListName}) is already queued, skipping duplicate", item.ListId, item.ListName);
