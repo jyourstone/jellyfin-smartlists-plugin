@@ -1501,7 +1501,7 @@
             });
         });
         // The byte-order mark makes Excel read the file as UTF-8
-        const csv = '﻿' + rows.map(function (row) {
+        const csv = '\uFEFF' + rows.map(function (row) {
             return row.map(csvCell).join(',');
         }).join('\r\n');
 
