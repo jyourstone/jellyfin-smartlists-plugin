@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Support;
@@ -63,10 +64,13 @@ public class TestLibraryManager : DispatchProxy
     internal static readonly ConcurrentDictionary<Guid, int> GetItemByIdCalls = new();
 
     /// <summary>
-    /// Answers <c>GetItemList(InternalItemsQuery)</c>, keyed by the query's <c>ParentId</c>.
+    /// Answers <c>GetItemList(InternalItemsQuery)</c> and <c>GetItemsResult(InternalItemsQuery)</c>,
+    /// keyed by the query's <c>ParentId</c>.
     /// Used to test proactive container-cache warming (SmartList's aggregate-user cache warm-up)
     /// without needing a live Jellyfin: tests register the children a container "has" here, then
-    /// assert the refresh cache picks them up for every configured aggregate user.
+    /// assert the refresh cache picks them up for every configured aggregate user. Collections
+    /// episode expansion fetches a series' episodes through <c>GetItemsResult</c> the same way.
+    /// Queries without a <c>ParentId</c> (such as the all-collections query) stay unstubbed.
     /// </summary>
     internal static readonly ConcurrentDictionary<Guid, List<BaseItem>> ItemListByParentId = new();
 
@@ -100,6 +104,14 @@ public class TestLibraryManager : DispatchProxy
                 ? children
                 : throw new NotSupportedException(
                     $"TestLibraryManager: GetItemList called for unregistered ParentId {query.ParentId}. Seed ItemListByParentId first.");
+        }
+
+        if (targetMethod?.Name == "GetItemsResult" && args is { Length: 1 } && args[0] is InternalItemsQuery resultQuery && resultQuery.ParentId != Guid.Empty)
+        {
+            return ItemListByParentId.TryGetValue(resultQuery.ParentId, out var children)
+                ? new QueryResult<BaseItem>(children)
+                : throw new NotSupportedException(
+                    $"TestLibraryManager: GetItemsResult called for unregistered ParentId {resultQuery.ParentId}. Seed ItemListByParentId first.");
         }
 
         throw new NotSupportedException(

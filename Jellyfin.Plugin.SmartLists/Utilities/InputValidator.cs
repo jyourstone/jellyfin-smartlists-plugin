@@ -395,6 +395,19 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     return intervalResult;
                 }
 
+                var breakSizeResult = ValidateInteger(bumpers.BreakSize, min: 1, max: BumperConfigDto.MaxBreakSize, fieldName: "Bumpers per break");
+                if (!breakSizeResult.IsValid)
+                {
+                    return breakSizeResult;
+                }
+
+                // Every break starts over at the first rule group, so groups past the break size would never play
+                if (bumpers.AlternateRuleGroups && bumpers.ExpressionSets != null && bumpers.ExpressionSets.Count > 1
+                    && bumpers.BreakSize < bumpers.ExpressionSets.Count)
+                {
+                    return SmartListValidationResult.Failure("Bumpers per break must be at least the number of bumper rule groups when taking turns between them");
+                }
+
                 // Bumpers with rules configured require a media type to fetch content from
                 if (bumpers.ExpressionSets != null && bumpers.ExpressionSets.Count > 0
                     && (bumpers.MediaTypes == null || bumpers.MediaTypes.Count == 0))

@@ -190,12 +190,15 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 var finalItemIds = mainItemIds;
                 if (dto.Bumpers != null && dto.Bumpers.ExpressionSets != null && dto.Bumpers.ExpressionSets.Count > 0 && mainItemIds.Count > 0)
                 {
-                    var bumperItemIds = GetBumperItemIds(dto, user, refreshCache, mainItemIds, mediaLookup, logger);
-                    if (bumperItemIds.Count > 0)
+                    var bumperPools = GetBumperPools(dto, user, refreshCache, mainItemIds, mediaLookup, logger);
+                    var bumperCount = bumperPools.Sum(pool => pool.Count);
+                    if (bumperCount > 0)
                     {
-                        finalItemIds = WeaveBumpers(mainItemIds, bumperItemIds, Math.Max(1, dto.Bumpers.Interval));
-                        logger.LogDebug("Wove bumpers into playlist '{PlaylistName}' every {Interval} item(s): {MainCount} main + {BumperPool} pool -> {TotalCount} entries",
-                            dto.Name, dto.Bumpers.Interval, mainItemIds.Count, bumperItemIds.Count, finalItemIds.Count);
+                        // Clamped as well as validated: stored lists are never re-validated (restored backups, edited files)
+                        var breakSize = Math.Clamp(dto.Bumpers.BreakSize, 1, BumperConfigDto.MaxBreakSize);
+                        finalItemIds = WeaveBumpers(mainItemIds, bumperPools, Math.Max(1, dto.Bumpers.Interval), breakSize);
+                        logger.LogDebug("Wove bumpers into playlist '{PlaylistName}' every {Interval} item(s), {BreakSize} per break from {PoolCount} pool(s): {MainCount} main + {BumperPool} pooled -> {TotalCount} entries",
+                            dto.Name, dto.Bumpers.Interval, breakSize, bumperPools.Count(pool => pool.Count > 0), mainItemIds.Count, bumperCount, finalItemIds.Count);
                     }
                     else
                     {
@@ -1236,12 +1239,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         /// <summary>
-        /// Builds the ordered bumper item pool by running the playlist's bumper rule sets
-        /// through a synthetic SmartList. Items already in the main list are excluded so an
-        /// item is never both content and bumper. Bumper media is added to
-        /// <paramref name="mediaLookup"/> so LinkedChildren can be created for woven entries.
+        /// Builds the ordered bumper pools by running the playlist's bumper rule sets through a synthetic
+        /// SmartList. With <see cref="BumperConfigDto.AlternateRuleGroups"/> on and two or more rule groups,
+        /// the result is split into one pool per rule group, indexed by group; otherwise it is one pool.
+        /// Items already in the main list are excluded so an item is never both content and bumper. Bumper
+        /// media is added to <paramref name="mediaLookup"/> so LinkedChildren can be created for woven entries.
         /// </summary>
-        private List<Guid> GetBumperItemIds(
+        private List<List<Guid>> GetBumperPools(
             SmartPlaylistDto dto,
             User user,
             RefreshQueueService.RefreshCache refreshCache,
@@ -1289,13 +1293,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     IncludeExtras = true,
                 };
 
+                // Taking turns splits the result by rule group, so the SmartList records which
+                // group(s) each returned item matched.
+                var perGroupPools = bumpers.AlternateRuleGroups && bumpers.ExpressionSets.Count > 1;
                 var bumperList = new Core.SmartList(bumperDto)
                 {
                     UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution
                     ItemRepository = _itemRepository, // ItemValues-backed name dumps for DB prefilters
+                    TrackRuleGroups = perGroupPools,
                 };
                 var bumperMedia = GetAllUserMedia(user, bumperDto.MediaTypes, bumperDto).ToArray();
-                var bumperIds = bumperList.FilterPlaylistItems(bumperMedia, _libraryManager, user, refreshCache, _userDataManager, logger, null);
+                var bumperIds = bumperList.FilterPlaylistItems(bumperMedia, _libraryManager, user, refreshCache, _userDataManager, logger, null).ToList();
 
                 var mainSet = new HashSet<Guid>(mainItemIds);
 
@@ -1311,22 +1319,38 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     }
                 }
 
-                var result = new List<Guid>();
-                var seen = new HashSet<Guid>();
-                foreach (var id in bumperIds)
-                {
-                    // LibraryName virtual-item queries can emit duplicate ids - skip repeats
-                    // so the woven pool never contains the same bumper twice in a row.
-                    if (mainSet.Contains(id) || !seen.Add(id) || !matchedBumperItems.TryGetValue(id, out var item))
-                    {
-                        continue;
-                    }
+                // Per-group Max Items on the bumper groups narrow an item's mapping to the one group that
+                // kept it, so it then joins that pool only.
+                var pools = SplitBumperPools(
+                    bumperIds,
+                    perGroupPools ? bumperList.ItemGroupMappings : null,
+                    bumpers.ExpressionSets.Count,
+                    mainSet,
+                    matchedBumperItems.ContainsKey,
+                    out var unmappedCount);
 
-                    result.Add(id);
-                    mediaLookup.TryAdd(id, item);
+                foreach (var id in pools.SelectMany(pool => pool))
+                {
+                    mediaLookup.TryAdd(id, matchedBumperItems[id]);
                 }
 
-                return result;
+                if (perGroupPools)
+                {
+                    if (unmappedCount > 0)
+                    {
+                        logger.LogDebug("{Count} bumper item(s) for playlist '{PlaylistName}' have no rule group mapping and are left out", unmappedCount, dto.Name);
+                    }
+
+                    for (int g = 0; g < pools.Count; g++)
+                    {
+                        if (pools[g].Count == 0)
+                        {
+                            logger.LogDebug("Bumper rule group {Group} matched no items for playlist '{PlaylistName}'; it is left out of the rotation", g + 1, dto.Name);
+                        }
+                    }
+                }
+
+                return pools;
             }
             catch (Exception ex)
             {
@@ -1336,22 +1360,85 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         /// <summary>
-        /// Inserts one bumper after every <paramref name="interval"/> main items, cycling
-        /// through the bumper pool with wraparound. No bumper follows the final main item.
-        /// Main item order is never altered.
+        /// Splits the sorted bumper ids into pools, each keeping that order. Without
+        /// <paramref name="groupMappings"/> every id goes into one pool; with them there is one pool per rule
+        /// group, indexed by group, and an id joins the pool of every group it maps to - an id with no mapping
+        /// is left out and counted in <paramref name="unmappedCount"/>. Main-list ids, ids
+        /// <paramref name="isResolved"/> rejects and repeated ids are skipped.
         /// </summary>
-        internal static List<Guid> WeaveBumpers(List<Guid> mainItemIds, List<Guid> bumperItemIds, int interval)
+        internal static List<List<Guid>> SplitBumperPools(
+            IEnumerable<Guid> sortedIds,
+            IReadOnlyDictionary<Guid, List<int>>? groupMappings,
+            int groupCount,
+            HashSet<Guid> mainIds,
+            Func<Guid, bool> isResolved,
+            out int unmappedCount)
         {
-            var result = new List<Guid>(mainItemIds.Count + (mainItemIds.Count / interval) + 1);
-            int bumperIndex = 0;
+            var pools = Enumerable.Range(0, groupMappings != null ? groupCount : 1)
+                .Select(_ => new List<Guid>())
+                .ToList();
+            var seen = new HashSet<Guid>();
+            unmappedCount = 0;
+            foreach (var id in sortedIds)
+            {
+                // LibraryName virtual-item queries can emit duplicate ids - skip repeats
+                // so a pool never lists the same bumper twice.
+                if (mainIds.Contains(id) || !seen.Add(id) || !isResolved(id))
+                {
+                    continue;
+                }
+
+                if (groupMappings == null)
+                {
+                    pools[0].Add(id);
+                }
+                else if (groupMappings.TryGetValue(id, out var groups))
+                {
+                    // An item matching several rule groups joins each of their pools
+                    foreach (var groupIndex in groups)
+                    {
+                        pools[groupIndex].Add(id);
+                    }
+                }
+                else
+                {
+                    unmappedCount++;
+                }
+            }
+
+            return pools;
+        }
+
+        /// <summary>
+        /// Inserts a break of <paramref name="breakSize"/> bumpers after every <paramref name="interval"/>
+        /// main items. Slot s of a break (0-based) draws from pool s mod G, where G counts the non-empty
+        /// pools, so every break starts over at the first pool; each pool keeps its own wraparound cursor
+        /// across breaks, so a single pool yields breakSize consecutive draws. No break follows the final
+        /// main item, and main item order is never altered.
+        /// </summary>
+        internal static List<Guid> WeaveBumpers(List<Guid> mainItemIds, List<List<Guid>> bumperPools, int interval, int breakSize)
+        {
+            // Pools that matched nothing drop out of the rotation
+            var pools = bumperPools.Where(pool => pool.Count > 0).ToList();
+            if (pools.Count == 0)
+            {
+                return [.. mainItemIds];
+            }
+
+            var result = new List<Guid>(mainItemIds.Count + (mainItemIds.Count / interval * breakSize));
+            var cursors = new int[pools.Count];
             for (int i = 0; i < mainItemIds.Count; i++)
             {
                 result.Add(mainItemIds[i]);
                 bool isLast = i == mainItemIds.Count - 1;
                 if (!isLast && (i + 1) % interval == 0)
                 {
-                    result.Add(bumperItemIds[bumperIndex % bumperItemIds.Count]);
-                    bumperIndex++;
+                    for (int slot = 0; slot < breakSize; slot++)
+                    {
+                        int p = slot % pools.Count;
+                        result.Add(pools[p][cursors[p] % pools[p].Count]);
+                        cursors[p]++;
+                    }
                 }
             }
 

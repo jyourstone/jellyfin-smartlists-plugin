@@ -49,11 +49,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
         // dump-dependent pushdowns degrade conservatively (stay per-item) when absent.
         public MediaBrowser.Controller.Persistence.IItemRepository? ItemRepository { get; set; }
 
+        // Opt-in rule-group tracking for callers that read ItemGroupMappings (bumper pools that take
+        // turns between rule groups); per-group limits and Rule Block Order turn it on by themselves.
+        internal bool TrackRuleGroups { get; set; }
+
         // Similarity scores for sorting (populated during filtering when SimilarTo rules are active)
         private readonly ConcurrentDictionary<Guid, float> _similarityScores = new();
 
         // Item-to-group mappings for per-group limiting (populated during filtering when per-group MaxItems are set)
         private readonly ConcurrentDictionary<Guid, List<int>> _itemGroupMappings = new();
+
+        /// <summary>
+        /// Rule group indices each returned item matched, valid after <see cref="FilterPlaylistItems"/>
+        /// returns. Populated only while group tracking is on (see <see cref="TrackRuleGroups"/>).
+        /// </summary>
+        internal IReadOnlyDictionary<Guid, List<int>> ItemGroupMappings => _itemGroupMappings;
 
         // OPTIMIZATION: Static cache for compiled rules to avoid recompilation
         private static readonly ConcurrentDictionary<string, List<List<Func<Operand, bool>>>> _ruleCache = new();
@@ -672,7 +682,14 @@ namespace Jellyfin.Plugin.SmartLists.Core
             return matchingGroups.Count > 0;
         }
 
-        private bool EvaluateLogicGroupsForEpisode(List<List<Func<Operand, bool>>> compiledRules, Operand operand, Series? parentSeries, ILogger? logger)
+        /// <summary>
+        /// Evaluates an episode against the rule groups (OR between groups). When
+        /// <paramref name="matchingGroups"/> is given, every group is evaluated and each matching group
+        /// index is added to it; otherwise evaluation stops at the first matching group.
+        /// <paramref name="parentSeriesOperand"/> (group tracking only) narrows the recorded groups to those
+        /// whose skipped Collections rules the parent series passes, without changing whether the episode matches.
+        /// </summary>
+        private bool EvaluateLogicGroupsForEpisode(List<List<Func<Operand, bool>>> compiledRules, Operand operand, Series? parentSeries, ILogger? logger, List<int>? matchingGroups = null, Operand? parentSeriesOperand = null)
         {
             try
             {
@@ -684,6 +701,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // If we have a parent series, it means this episode is being expanded from a series that matched Collections rules
                 // In this case, we should skip Collections rule evaluation for episodes since they inherit from their parent
                 bool isFromSeriesExpansion = parentSeries != null;
+
+                // Matching groups whose Collections rules the parent series passes as well
+                List<int>? seriesGroups = matchingGroups != null && parentSeriesOperand != null ? [] : null;
 
                 // Each ExpressionSet is a logic group
                 // Groups are combined with OR logic (any group can match)
@@ -699,6 +719,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     try
                     {
                         bool groupMatches = true; // Start with true for AND logic within groups
+                        bool seriesPassesCollections = true;
 
                         // Check each expression in the group
                         // Use separate index for compiled rules since SimilarTo expressions are not compiled
@@ -719,6 +740,21 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             if (isFromSeriesExpansion && expression.MemberName == "Collections")
                             {
                                 logger?.LogDebug("Skipping Collections rule for episode - inherited from parent series '{SeriesName}'", parentSeries?.Name ?? "unknown");
+
+                                // Every group skips it, so the mapping checks it against the series instead:
+                                // the episode then maps only to the group(s) that expanded its series
+                                if (seriesGroups != null && parentSeriesOperand != null)
+                                {
+                                    try
+                                    {
+                                        seriesPassesCollections &= groupRules[compiledIndex]?.Invoke(parentSeriesOperand) == true;
+                                    }
+                                    catch (Exception)
+                                    {
+                                        seriesPassesCollections = false;
+                                    }
+                                }
+
                                 compiledIndex++; // Still advance the compiled index
                                 continue; // Skip this rule, don't evaluate it,
                             }
@@ -750,7 +786,16 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                         if (groupMatches)
                         {
-                            return true; // This group matches, so the item matches overall,
+                            if (matchingGroups == null)
+                            {
+                                return true; // This group matches, so the item matches overall,
+                            }
+
+                            matchingGroups.Add(groupIndex);
+                            if (seriesPassesCollections)
+                            {
+                                seriesGroups?.Add(groupIndex);
+                            }
                         }
                     }
                     catch (Exception)
@@ -760,7 +805,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                return false; // No groups matched,
+                bool anyGroupMatched = matchingGroups is { Count: > 0 };
+
+                // Record only the groups whose Collections rules the series passes - possibly none, when the
+                // episode matched only through another group's skipped Collections rule. Whether it matches
+                // stays the same as without tracking.
+                if (matchingGroups != null && seriesGroups != null)
+                {
+                    matchingGroups.Clear();
+                    matchingGroups.AddRange(seriesGroups);
+                }
+
+                return anyGroupMatched; // False when no groups matched,
             }
             catch (Exception ex)
             {
@@ -1305,7 +1361,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         private bool NeedsGroupTracking()
         {
-            return HasPerGroupLimits() || UsesRuleBlockOrdering();
+            return TrackRuleGroups || HasPerGroupLimits() || UsesRuleBlockOrdering();
         }
 
         private bool HasRandomGroupSelection()
@@ -1618,8 +1674,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
-        /// Records which rule groups a matched container (collection/playlist) belongs to, so
-        /// ApplyPerGroupLimits doesn't silently drop it and Rule Block Order places it
+        /// Records which rule groups a matched container (collection/playlist) or expanded episode
+        /// belongs to, so ApplyPerGroupLimits doesn't silently drop it and Rule Block Order places it
         /// in its group's block. Merges with any existing mapping (an item can be both
         /// a direct match and a nested child of another matched collection).
         /// </summary>
@@ -2390,19 +2446,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogDebug("Series '{SeriesName}' checking Collections rules for expansion eligibility", series.Name);
 
                 // Extract Collections data for this series to check if it matches Collections rules
-                var collectionsOperand = OperandFactory.GetMediaType(libraryManager, series, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
-                {
-                    ExtractAudioLanguages = false,
-                    ExtractPeople = false,
-                    ExtractCollections = true,  // Only extract Collections for this check
-                    CollectionRecursionDepth = CollectionSearchDepth,
-                    ExtractNextUnwatched = false,
-                    ExtractSeriesName = false,
-                    IncludeUnwatchedSeries = true,
-                    AdditionalUserIds = [],
-                    Origin = this.Origin,
-                },
-                refreshCache);
+                var collectionsOperand = GetSeriesCollectionsOperand(series, libraryManager, user, userDataManager, logger, refreshCache);
                 bool matchesCollectionsRule = DoCollectionsMatchRules(collectionsOperand.Collections);
 
                 if (matchesCollectionsRule)
@@ -2421,6 +2465,28 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 logger?.LogWarning(ex, "Error checking Collections rules for series '{SeriesName}', excluding from expansion", series.Name);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Builds an operand carrying only the series' Collections, for checking Collections rules against the series.
+        /// </summary>
+        private Operand GetSeriesCollectionsOperand(Series series,
+            ILibraryManager libraryManager, User user, IUserDataManager? userDataManager,
+            ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
+        {
+            return OperandFactory.GetMediaType(libraryManager, series, user, userDataManager, UserManager, logger, new MediaTypeExtractionOptions
+            {
+                ExtractAudioLanguages = false,
+                ExtractPeople = false,
+                ExtractCollections = true,  // Only extract Collections for this check
+                CollectionRecursionDepth = CollectionSearchDepth,
+                ExtractNextUnwatched = false,
+                ExtractSeriesName = false,
+                IncludeUnwatchedSeries = true,
+                AdditionalUserIds = [],
+                Origin = this.Origin,
+            },
+            refreshCache);
         }
 
         /// <summary>
@@ -2595,17 +2661,30 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Create extraction options from field requirements (DRY - single source of truth)
                 var extractionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
 
+                // Expanded episodes skip the main evaluation, so their rule groups are recorded here
+                bool trackGroups = NeedsGroupTracking();
+
+                // The group mapping checks each group's Collections rules against the parent series
+                var parentSeriesOperand = trackGroups && parentSeries != null
+                    ? GetSeriesCollectionsOperand(parentSeries, libraryManager, user, userDataManager, logger, refreshCache)
+                    : null;
+
                 foreach (var episode in episodes)
                 {
                     try
                     {
                         var operand = OperandFactory.GetMediaType(libraryManager, episode, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
-                        var matches = EvaluateLogicGroupsForEpisode(compiledRules, operand, parentSeries, logger);
+                        var episodeGroups = trackGroups ? new List<int>() : null;
+                        var matches = EvaluateLogicGroupsForEpisode(compiledRules, operand, parentSeries, logger, episodeGroups, parentSeriesOperand);
 
                         if (matches)
                         {
                             matchingEpisodes.Add(episode);
+                            if (episodeGroups is { Count: > 0 })
+                            {
+                                TrackContainerGroupMapping(episode.Id, episodeGroups);
+                            }
                         }
                     }
                     catch (Exception ex)
