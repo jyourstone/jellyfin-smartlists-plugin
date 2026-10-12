@@ -355,15 +355,7 @@
                 if (!response.ok) {
                     throw new Error('Failed to download backup');
                 }
-                const blob = await response.blob();
-                const blobUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(blobUrl);
-                document.body.removeChild(a);
+                SmartLists.downloadBlob(await response.blob(), filename);
             })
             .catch(function (error) {
                 console.error('Download backup error:', error);

@@ -124,7 +124,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 var afterClause = cursor != null ? ",after:\"" + cursor + "\"" : string.Empty;
                 var query = "{chartTitles(chart:{chartType:" + chartType + "},first:" + fetchCount + afterClause
-                    + "){edges{node{id}}pageInfo{hasNextPage endCursor}}}";
+                    + "){edges{node{id titleText{text} releaseYear{year}}}pageInfo{hasNextPage endCursor}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -134,10 +134,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 foreach (var edge in edges.EnumerateArray())
                 {
-                    var id = edge.GetProperty("node").GetProperty("id").GetString();
+                    var node = edge.GetProperty("node");
+                    var id = node.GetProperty("id").GetString();
                     if (!string.IsNullOrEmpty(id))
                     {
-                        result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position);
+                        var (itemTitle, itemYear) = ReadTitleAndYear(node);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear);
                         position++;
                         itemsInPage++;
                     }
@@ -242,7 +244,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 var batch = candidateIds.GetRange(i, Math.Min(verifyBatchSize, candidateIds.Count - i));
                 var idsParam = string.Join(",", batch.ConvertAll(id => "\"" + id + "\""));
 
-                var query = "{titles(ids:[" + idsParam + "]){id awardNominations(first:50,filter:{events:[\"" + eventId + "\"]})"
+                var query = "{titles(ids:[" + idsParam + "]){id titleText{text} releaseYear{year} awardNominations(first:50,filter:{events:[\"" + eventId + "\"]})"
                     + "{edges{node{award{year" + categoryFields + "}}}}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
@@ -296,7 +298,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                     if (matches)
                     {
-                        result.AddProviderIds(ExternalListItemKind.Unknown, titleId, (string?)null, null, position);
+                        var (itemTitle, itemYear) = ReadTitleAndYear(title);
+                        result.AddProviderIds(ExternalListItemKind.Unknown, titleId, (string?)null, null, position, itemTitle, itemYear);
                         position++;
 
                         if (maxItems > 0 && position >= maxItems)
@@ -330,6 +333,34 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 || normalizedFragment.EndsWith("_" + slug, StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// Reads titleText.text and releaseYear.year from a GraphQL Title node. Either part may be
+        /// missing or null; this returns null for it and never throws.
+        /// </summary>
+        internal static (string? Title, int? Year) ReadTitleAndYear(JsonElement titleNode)
+        {
+            string? title = null;
+            if (titleNode.TryGetProperty("titleText", out var titleText)
+                && titleText.ValueKind == JsonValueKind.Object
+                && titleText.TryGetProperty("text", out var text)
+                && text.ValueKind == JsonValueKind.String)
+            {
+                title = text.GetString();
+            }
+
+            int? year = null;
+            if (titleNode.TryGetProperty("releaseYear", out var releaseYear)
+                && releaseYear.ValueKind == JsonValueKind.Object
+                && releaseYear.TryGetProperty("year", out var yearProp)
+                && yearProp.ValueKind == JsonValueKind.Number
+                && yearProp.TryGetInt32(out var parsedYear))
+            {
+                year = parsedYear;
+            }
+
+            return (title, year);
+        }
+
         private async Task<ExternalListResult> FetchUserListAsync(string listId, string url, int maxItems, CancellationToken cancellationToken)
         {
             var result = new ExternalListResult();
@@ -348,7 +379,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 var afterClause = cursor != null ? ",after:\"" + cursor + "\"" : string.Empty;
                 var query = "{list(id:\"" + listId + "\"){items(first:" + fetchCount + afterClause
-                    + "){edges{node{item{... on Title{id}}}}pageInfo{hasNextPage endCursor}}}}";
+                    + "){edges{node{item{... on Title{id titleText{text} releaseYear{year}}}}}pageInfo{hasNextPage endCursor}}}}";
 
                 using var json = await SendGraphQlAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -376,7 +407,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         var id = idProp.GetString();
                         if (!string.IsNullOrEmpty(id))
                         {
-                            result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position);
+                            var (itemTitle, itemYear) = ReadTitleAndYear(itemNode);
+                            result.AddProviderIds(ExternalListItemKind.Unknown, id, (string?)null, null, position, itemTitle, itemYear);
                             position++;
                             itemsInPage++;
                         }

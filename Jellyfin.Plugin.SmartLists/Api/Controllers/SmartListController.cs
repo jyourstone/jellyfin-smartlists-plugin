@@ -17,6 +17,7 @@ using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
 using Jellyfin.Plugin.SmartLists.Services.Collections;
+using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using AutoRefreshService = Jellyfin.Plugin.SmartLists.Services.Shared.AutoRefreshService;
 using Jellyfin.Plugin.SmartLists.Utilities;
@@ -60,7 +61,8 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         RefreshStatusService refreshStatusService,
         RefreshQueueService refreshQueueService,
         SmartListImageService imageService,
-        IBackupService backupService) : ControllerBase
+        IBackupService backupService,
+        ExternalListService externalListService) : ControllerBase
     {
         private readonly ILoggerFactory _loggerFactory = loggerFactory;
         private readonly IServerApplicationPaths _applicationPaths = applicationPaths;
@@ -75,6 +77,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
         private readonly SmartListImageService _imageService = imageService;
         private readonly IBackupService _backupService = backupService;
+        private readonly ExternalListService _externalListService = externalListService;
 
         private Services.Playlists.PlaylistStore GetPlaylistStore()
         {
@@ -600,6 +603,32 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 logger.LogError(ex, "Error retrieving smart list {ListId}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error retrieving smart list");
+            }
+        }
+
+        /// <summary>
+        /// Get the entries of a smart list's external lists that are not in the library. Checks the whole
+        /// server library, using each external list as it was last fetched successfully.
+        /// </summary>
+        /// <param name="id">The list ID.</param>
+        /// <returns>The missing items per external list.</returns>
+        [HttpGet("{id}/missing-items")]
+        public async Task<ActionResult<List<MissingItemsListDto>>> GetMissingItems([FromRoute, Required] string id)
+        {
+            var lookup = await GetSmartList(id).ConfigureAwait(false);
+            if (lookup.Result is not OkObjectResult { Value: SmartListDto list })
+            {
+                return lookup.Result ?? NotFound();
+            }
+
+            try
+            {
+                return Ok(MissingItemsReport.Build(list, _externalListService, _libraryManager));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error building missing items for smart list {ListId}", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error building missing items");
             }
         }
 

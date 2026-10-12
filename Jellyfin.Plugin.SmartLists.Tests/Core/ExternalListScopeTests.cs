@@ -137,4 +137,19 @@ public class ExternalListScopeTests
         Assert.Empty(cache.ItemExternalLists);
         Assert.Empty(cache.ExternalListPositions);
     }
+
+    [Fact]
+    public void IncludedExternalListUrls_AreTheRawEqualRuleUrls()
+    {
+        // Missing items looks snapshots up by these strings, which PreFetch stores from ExternalListUrls,
+        // so they must stay byte-identical (untrimmed) and only come from rules that include items.
+        var requirements = FieldRequirements.Analyze(
+        [
+            new ExpressionSet { Expressions = [new Expression("ExternalList", "Equal", " https://mdblist.com/lists/a/b ")] },
+            new ExpressionSet { Expressions = [new Expression("ExternalList", "NotEqual", "https://mdblist.com/lists/a/c"), new Expression("ExternalList", "Equal", "")] },
+        ]);
+
+        Assert.Equal([" https://mdblist.com/lists/a/b ", "https://mdblist.com/lists/a/c"], requirements.ExternalListUrls);
+        Assert.Equal([" https://mdblist.com/lists/a/b "], requirements.IncludedExternalListUrls);
+    }
 }

@@ -351,6 +351,21 @@ This creates a collection sorted exactly like IMDb's Top 250 chart.
 
 ---
 
+## Missing Items
+
+**Missing items** shows which entries of a list's external lists are not in your library, so you can see what to add. It is available on the **admin configuration page** only, for lists that have an External List rule: open it from the list card's ⋮ menu, or with the **Missing items** button on the expanded card.
+
+For each external list, the dialog shows how many entries are missing, when the external list was last fetched, and a table of the missing entries: their position in the external list, title and year where known, type, and links to IMDb, TMDB and TVDB. **Download CSV** saves the missing entries of all the list's external lists to a spreadsheet file.
+
+- **Uses the last fetch**: Opening the dialog does not contact the provider. It uses each external list as it was last fetched by a refresh of this list, or of any other list with the same URL. To see current data, click **Refresh** (enable the list first if it is disabled), wait for the refresh to finish, then open Missing items again.
+- **Empty until fetched**: Fetched lists are kept in memory only. After a server restart, the dialog shows "No data yet" until a refresh fetches the list successfully. A fetch that fails with an error (for example, because the provider's API key is missing) leaves the last fetched data in place, or "No data yet" if there is none. Some providers report a failed request as an empty or shortened list instead, for example MDBList when its API returns an error, or an IMDb list that is private. That replaces the previous data, and the dialog then shows that the list returned no entries, or checks only the entries that were fetched.
+- **Checks the whole server**: Your library is checked live when you open the dialog, across all libraries on the server.
+- **Matches like the rule**: Movie entries are checked against movies, show entries against series (a show counts as present when the series is in your library), and episode entries against episodes. Entries without a type (all IMDb entries) are checked against movies, series, episodes, music videos and videos.
+- **Titles depend on the provider**: MDBList, Trakt, TMDB and IMDb entries include a title. Letterboxd and Scrob entries show IDs only.
+- **Not checked**: Music lists (ListenBrainz) are not supported. External List `not equals` rules and bumper rules are not included.
+
+---
+
 ## User-Agent
 
 The plugin sends a User-Agent header when fetching external lists. Each provider has a sensible built-in default, but if a provider starts blocking the plugin's requests you can override the User-Agent in the plugin **Settings** tab under **External Lists > User-Agent**:

@@ -174,25 +174,29 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             };
         }
 
-        private static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)
+        internal static void AddItemIds(TraktListItem item, ExternalListResult result, ref int position)
         {
             // Items can be wrapped (list items) or direct (trending/popular)
             var kind = ExternalListItemKind.Unknown;
             var ids = item.Ids;
+            TraktMedia? media = null;
             if (item.Episode?.Ids != null)
             {
                 kind = ExternalListItemKind.Episode;
                 ids = item.Episode.Ids;
+                media = item.Episode;
             }
             else if (item.Movie?.Ids != null)
             {
                 kind = ExternalListItemKind.Movie;
                 ids = item.Movie.Ids;
+                media = item.Movie;
             }
             else if (item.Show?.Ids != null)
             {
                 kind = ExternalListItemKind.Show;
                 ids = item.Show.Ids;
+                media = item.Show;
             }
 
             if (ids == null)
@@ -201,7 +205,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             // TryAdd keeps first/lowest position for duplicates
-            result.AddProviderIds(kind, ids.Imdb, ids.Tmdb, ids.Tvdb, position);
+            result.AddProviderIds(kind, ids.Imdb, ids.Tmdb, ids.Tvdb, position, media?.Title ?? item.Title, media?.Year ?? item.Year);
             position++;
         }
 

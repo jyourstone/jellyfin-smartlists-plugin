@@ -4194,7 +4194,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return matchingLists;
         }
 
-        private static ExternalListItemKind GetExternalListItemKind(BaseItem baseItem)
+        internal static ExternalListItemKind GetExternalListItemKind(BaseItem baseItem)
         {
             return baseItem switch
             {

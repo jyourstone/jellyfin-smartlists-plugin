@@ -38,7 +38,7 @@ The documentation is published twice — a [stable site](https://jellyfin-smartl
 ## Features
 
 - **Modern Web Interface** - A full-featured UI to create, manage and view status for smart playlists and collections
-- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), [ListenBrainz](https://listenbrainz.org), and [Scrob](https://github.com/ellite/scrob)
+- **External Lists** - Populate lists from [MDBList](https://mdblist.com), [IMDb](https://www.imdb.com), [Letterboxd](https://letterboxd.com), [Trakt](https://trakt.tv), [TMDB](https://www.themoviedb.org), [ListenBrainz](https://listenbrainz.org), and [Scrob](https://github.com/ellite/scrob), then see which list entries are missing from your library
 - **User Selection** - Choose which users should own a playlist or collection with an intuitive dropdown
 - **Flexible Rules** - Build simple or complex rules with an intuitive builder
 - **Automatic Updates** - Playlists and collections refresh automatically on library updates, playback status changes, or via scheduled tasks

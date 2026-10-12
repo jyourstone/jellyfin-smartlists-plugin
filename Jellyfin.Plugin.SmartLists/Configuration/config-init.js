@@ -1207,6 +1207,12 @@
                     SmartLists.refreshPlaylist(button.getAttribute('data-playlist-id'), button.getAttribute('data-playlist-name'));
                 }
             }
+            if (target.closest('.missing-items-btn')) {
+                const button = target.closest('.missing-items-btn');
+                if (SmartLists.showMissingItems) {
+                    SmartLists.showMissingItems(page, button.getAttribute('data-playlist-id'), button.getAttribute('data-playlist-name'));
+                }
+            }
             if (target.closest('.enable-playlist-btn')) {
                 const button = target.closest('.enable-playlist-btn');
                 if (SmartLists.enablePlaylist) {
@@ -1296,6 +1302,15 @@
                 SmartLists.closeAllKebabMenus(page);
                 if (!refreshBtn.classList.contains('disabled') && SmartLists.refreshPlaylist) {
                     SmartLists.refreshPlaylist(refreshBtn.getAttribute('data-playlist-id'), refreshBtn.getAttribute('data-playlist-name'));
+                }
+                return;
+            }
+            if (target.closest('.kebab-missing-items-btn')) {
+                e.stopPropagation();
+                var missingItemsBtn = target.closest('.kebab-missing-items-btn');
+                SmartLists.closeAllKebabMenus(page);
+                if (SmartLists.showMissingItems) {
+                    SmartLists.showMissingItems(page, missingItemsBtn.getAttribute('data-playlist-id'), missingItemsBtn.getAttribute('data-playlist-name'));
                 }
                 return;
             }

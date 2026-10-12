@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,6 +10,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
     /// <summary>
     /// Describes the media kind represented by an external-list ID.
     /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ExternalListItemKind
     {
         /// <summary>
@@ -36,6 +38,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// </summary>
         Music
     }
+
+    /// <summary>
+    /// One external-list item as the provider reported it, kept for display (e.g. the Missing items view).
+    /// </summary>
+    /// <param name="Position">The 0-based position in the external list.</param>
+    /// <param name="Kind">The media kind the provider reported.</param>
+    /// <param name="ImdbId">The IMDb ID, or null when not provided.</param>
+    /// <param name="TmdbId">The TMDB ID as an invariant-culture string, or null when not provided.</param>
+    /// <param name="TvdbId">The TVDB ID as an invariant-culture string, or null when not provided.</param>
+    /// <param name="Title">The trimmed title, or null when the provider gave none.</param>
+    /// <param name="Year">The release year, or null when the provider gave none.</param>
+    public sealed record ExternalListEntry(
+        int Position,
+        ExternalListItemKind Kind,
+        string? ImdbId,
+        string? TmdbId,
+        string? TvdbId,
+        string? Title,
+        int? Year);
 
     /// <summary>
     /// Represents the result of fetching an external list — provider IDs mapped to their 0-based position in the list.
@@ -129,6 +150,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public Dictionary<string, int> MusicTitleArtistIds { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
+        /// Gets one entry per AddProviderIds call with at least one ID, in call order, duplicates kept.
+        /// </summary>
+        public List<ExternalListEntry> Entries { get; } = [];
+
+        /// <summary>
         /// Gets or sets the total number of items in the external list.
         /// </summary>
         public int TotalItems { get; set; }
@@ -154,15 +180,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <param name="tmdbId">The TMDB ID, if available.</param>
         /// <param name="tvdbId">The TVDB ID, if available.</param>
         /// <param name="position">The 0-based position in the external list.</param>
-        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, int? tmdbId, int? tvdbId, int position)
+        /// <param name="title">The item title, if available (display only).</param>
+        /// <param name="year">The release year, if available (display only).</param>
+        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, int? tmdbId, int? tvdbId, int position, string? title = null, int? year = null)
         {
             var tmdb = tmdbId is > 0 ? tmdbId.Value.ToString(CultureInfo.InvariantCulture) : null;
             var tvdb = tvdbId is > 0 ? tvdbId.Value.ToString(CultureInfo.InvariantCulture) : null;
 
-            AddToDictionaries(ImdbIds, TmdbIds, TvdbIds, imdbId, tmdb, tvdb, position);
-
-            var (imdbIds, tmdbIds, tvdbIds) = GetDictionaries(kind);
-            AddToDictionaries(imdbIds, tmdbIds, tvdbIds, imdbId, tmdb, tvdb, position);
+            AddProviderIds(kind, imdbId, tmdb, tvdb, position, title, year);
         }
 
         /// <summary>
@@ -173,12 +198,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <param name="tmdbId">The TMDB ID, if available.</param>
         /// <param name="tvdbId">The TVDB ID, if available.</param>
         /// <param name="position">The 0-based position in the external list.</param>
-        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, string? tmdbId, string? tvdbId, int position)
+        /// <param name="title">The item title, if available (display only).</param>
+        /// <param name="year">The release year, if available (display only).</param>
+        public void AddProviderIds(ExternalListItemKind kind, string? imdbId, string? tmdbId, string? tvdbId, int position, string? title = null, int? year = null)
         {
             AddToDictionaries(ImdbIds, TmdbIds, TvdbIds, imdbId, tmdbId, tvdbId, position);
 
             var (imdbIds, tmdbIds, tvdbIds) = GetDictionaries(kind);
             AddToDictionaries(imdbIds, tmdbIds, tvdbIds, imdbId, tmdbId, tvdbId, position);
+
+            if (!string.IsNullOrEmpty(imdbId) || !string.IsNullOrEmpty(tmdbId) || !string.IsNullOrEmpty(tvdbId))
+            {
+                Entries.Add(new ExternalListEntry(
+                    position,
+                    kind,
+                    string.IsNullOrEmpty(imdbId) ? null : imdbId,
+                    string.IsNullOrEmpty(tmdbId) ? null : tmdbId,
+                    string.IsNullOrEmpty(tvdbId) ? null : tvdbId,
+                    string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
+                    year is > 0 ? year : null));
+            }
         }
 
         /// <summary>

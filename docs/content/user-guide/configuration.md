@@ -12,6 +12,7 @@ SmartLists has two configuration pages with different capabilities:
 | View/edit other users' lists | ❌ | ✅ |
 | Global plugin settings | ❌ | ✅ |
 | Backup & restore | ❌ | ✅ |
+| [Missing items](external-lists.md#missing-items) for external lists | ❌ | ✅ |
 | Status tab with statistics | ❌ | ✅ |
 | Bulk operations | ✅ (own lists) | ✅ (all lists) |
 

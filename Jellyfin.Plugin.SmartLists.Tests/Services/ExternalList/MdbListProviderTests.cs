@@ -38,4 +38,27 @@ public class MdbListProviderTests
     {
         Assert.Equal(expected, MdbListProvider.BuildJustWatchChartQuery(url));
     }
+
+    // Issue #544: each item records its title and release year for the Missing items view.
+    [Fact]
+    public void AddItemIds_RecordsTitleAndYearAndPrefersTopLevelIds()
+    {
+        var result = new ExternalListResult();
+        var position = 4;
+        var item = new MdbListItem
+        {
+            Title = "Iron Man",
+            ReleaseYear = 2008,
+            ImdbId = "tt0371746",
+            TvdbId = 111,
+            Ids = new MdbListItemIds { Imdb = "tt9999999", Tmdb = 1726, Tvdb = 222 },
+        };
+
+        MdbListProvider.AddItemIds(item, result, ref position, ExternalListItemKind.Movie);
+
+        Assert.Equal(5, position);
+        Assert.Equal(
+            new ExternalListEntry(4, ExternalListItemKind.Movie, "tt0371746", "1726", "111", "Iron Man", 2008),
+            Assert.Single(result.Entries));
+    }
 }

@@ -28,6 +28,18 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         public TraktMedia? Episode { get; set; }
 
         /// <summary>
+        /// Gets or sets the title directly on the item (popular charts return bare media objects).
+        /// </summary>
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        /// <summary>
+        /// Gets or sets the year directly on the item (popular charts return bare media objects).
+        /// </summary>
+        [JsonPropertyName("year")]
+        public int? Year { get; set; }
+
+        /// <summary>
         /// Gets or sets the ids directly on the item (some endpoints).
         /// </summary>
         [JsonPropertyName("ids")]

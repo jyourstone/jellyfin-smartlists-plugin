@@ -1384,6 +1384,32 @@
             </div>
         </div>
 
+        <!-- Missing Items Modal (admin page only) -->
+        <style>
+            .missing-items-table { width: 100%; border-collapse: collapse; }
+            .missing-items-table tr { border-bottom: 1px solid var(--jf-palette-divider); }
+            .missing-items-table th, .missing-items-table td { padding: 0.4em 0.6em; vertical-align: top; text-align: left; }
+            .missing-items-table td:first-child { opacity: 0.7; }
+            .missing-items-table td:nth-child(n+3) { white-space: nowrap; }
+        </style>
+        <!-- Admin page only, on purpose: lists are fetched with admin-configured keys, so never add this to user-playlists.html -->
+        <div id="missing-items-modal" class="custom-modal hide">
+            <div class="custom-modal-container paperList">
+                <div class="modal-content">
+                    <div class="custom-modal-header" style="margin-top: -1em;">
+                        <h2 class="custom-modal-title" id="missing-items-title">Missing items</h2>
+                    </div>
+                    <div class="custom-modal-body" id="missing-items-body"></div>
+                    <div class="custom-modal-footer">
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="missing-items-csv-btn">Download CSV</button>
+                        <button type="button" is="emby-button" class="emby-button raised"
+                            id="missing-items-close-btn">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!--
             Module loader. These must NOT be plain <script src> tags.
 
