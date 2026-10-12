@@ -2,7 +2,7 @@
 
 Bumpers let a smart **playlist** weave short interstitial items — commercials, channel idents, "coming up next" clips — between its main items, recreating the feel of a classic TV channel.
 
-Bumpers are selected by their **own rules and media type**, completely independent of the playlist's main rules. After the main content has been filtered, sorted, and limited, one bumper is inserted after every N main items, cycling through the bumper pool and repeating as needed.
+Bumpers are selected by their **own rules and media type**, completely independent of the playlist's main rules. After the main content has been filtered, sorted, and limited, a break of one or more bumpers is inserted after every N main items, cycling through the bumper pool and repeating as needed.
 
 !!! note "Playlists only"
     Bumpers are available for playlists only. Collections have no play order, so the bumper section is hidden when creating or editing a collection.
@@ -12,20 +12,22 @@ Bumpers are selected by their **own rules and media type**, completely independe
 1. The playlist's main rules, sorting, and limits are applied as usual
 2. The bumper rules select the bumper pool from the bumper media type
 3. The pool is ordered by the **Bumper order** setting
-4. One bumper is inserted after every **N** main items, cycling through the pool with wraparound — when the pool runs out, it starts over from the beginning, so bumpers repeat as often as needed
+4. After every **N** main items, a break of **Bumpers per break** bumpers is inserted, cycling through the pool with wraparound — when the pool runs out, it starts over from the beginning, so bumpers repeat as often as needed
 5. No bumper is added after the final item
 
 The order of your main items is never changed — bumpers are only inserted between them.
 
 ## Configuration
 
-The **Bumpers (optional)** section appears below the sorting options in the playlist form (on both the admin and user pages).
+The **Bumpers** section is in the **More options** fold of the playlist form (on both the admin and user pages).
 
 | Setting | Description |
 |---------|-------------|
 | **Bumper media type** | The media type of the bumper pool — it can differ from the playlist's main media types (e.g., Video items as bumpers between Episodes). Only playlist-supported types are available: Series, Season, Album, and Live TV Channel are collection-only and cannot be used as bumpers, since bumpers are woven into playlists. Set to **None (disabled)** to turn bumpers off. |
 | **Bumper order** | How the bumper pool is cycled: **Random** (reshuffled on every refresh), **Name**, or **Release Date**. |
-| **Every N items** | How many main items play between bumpers. `1` inserts a bumper after every item, `2` after every second item, and so on. |
+| **Every N items** | How many main items play between bumpers. `1` inserts a break after every item, `2` after every second item, and so on. |
+| **Bumpers per break** | How many bumpers play back to back in each break, from `1` (default) to `10`. |
+| **Take turns between bumper rule groups** | Off (default): all bumper rule groups combine into one pool. On: each rule group gets its own pool and the bumpers in a break take turns between them — see [Multi-Bumper Breaks](#multi-bumper-breaks). Needs two or more rule groups, and **Bumpers per break** must be at least the number of groups. |
 | **Bumper rules** | A full rule editor, exactly like the main rules — including multiple rule groups via **Add Bumper Rule Group**. Only items matching these rules are used as bumpers. |
 
 **Steps**:
@@ -33,7 +35,7 @@ The **Bumpers (optional)** section appears below the sorting options in the play
 1. Create or edit a playlist
 2. Choose a **Bumper media type** — the remaining bumper controls appear, along with the first bumper rule group
 3. Add one or more bumper rules (e.g., `Name contains "bumper"` or `Tags contains "ident"`)
-4. Pick a **Bumper order** and set **Every N items**
+4. Pick a **Bumper order**, set **Every N items** and **Bumpers per break**
 5. Save — bumpers are woven in on the next refresh
 
 !!! warning "Complete rules required"
@@ -59,6 +61,28 @@ A "TV channel" playlist over three shows (Round Robin, Group By: Series Name) wi
 
 There are more gaps (5) than bumpers (4), so the pool wraps around and Bumper 1 plays again. No bumper follows the final episode.
 
+## Multi-Bumper Breaks
+
+Set **Bumpers per break** above `1` to play several bumpers back to back in each break. With **Take turns between bumper rule groups** on, each rule group feeds its own slots, so a break can mix kinds of bumper — for example, a channel ident on both sides of a commercial.
+
+Rule group 1 matches **3** channel idents, rule group 2 matches **3** toy commercials, **Bumpers per break** is `3`, take turns is on, and **Every N items** is `1`:
+
+| Position | Item |
+|----------|------|
+| 1 | Show A |
+| 2 | Ident 1 |
+| 3 | Toy commercial 1 |
+| 4 | Ident 2 |
+| 5 | Show B |
+| 6 | Ident 3 |
+| 7 | Toy commercial 2 |
+| 8 | Ident 1 *(idents wrap)* |
+| 9 | Show C |
+
+Each group keeps its own place in its rotation across breaks. **Bumper order** sorts all matches once and each group's pool keeps that order, so with Random every group's rotation is shuffled.
+
+With take turns off, the same break draws three bumpers in a row from one combined pool of all six clips.
+
 ## Behavior Notes
 
 - **Limits**: Bumpers do **not** count toward [Max Items or Max Playtime](sorting-and-limits.md#limits) — those limits apply to the main content only. A playlist with Max Items 50 contains 50 main items *plus* bumpers. The playlist's displayed item count and total runtime do include bumpers, since they are real playlist content.
@@ -66,6 +90,9 @@ There are more gaps (5) than bumpers (4), so the pool wraps around and Bumper 1 
 - **Empty pool**: If the bumper rules match no items (or every match was claimed by the main rules — see below), the playlist refreshes normally without bumpers. The server log records the reason (`grep -i bumper` in the Jellyfin log).
 - **Extras always included**: The bumper pool always includes [extras](media-types.md#extras-special-features) (trailers, interstitials, theme videos, etc.) — trailers are classic bumper material. This is independent of the playlist's own **Include Extras** setting, and no checkbox is needed for the bumper rules. Use a bumper rule like `Extra Type` = Trailer to build the pool from extras, or narrow it with any other rules.
 - **Random order**: With **Bumper order** set to Random, the pool is reshuffled on every refresh, so the bumper rotation changes each time.
+- **Groups with no matches**: With take turns on, a group that matches nothing is skipped and the later groups move up a turn. If only one group has matches, it behaves like a single pool.
+- **Bumpers per break vs. groups**: Every break starts again at the first group, so with take turns on, saving requires **Bumpers per break** to be at least the number of rule groups — otherwise the later groups would never play.
+- **Overlapping groups**: An item matched by two groups is in both pools, so it can play twice in one break — unless the groups set [Max Items for this rule group](sorting-and-limits.md#per-group-max-items), which assigns each item to one group only. A pool smaller than **Bumpers per break** repeats within a break.
 
 !!! warning "Keep the bumper rules and main rules disjoint"
     Because main content wins, bumpers silently disappear when your main rules also match your bumper items — each overlapping item becomes ordinary playlist content and is removed from the bumper pool. This is easy to hit when the bumper media type is the **same** as the playlist's (e.g., an Episode playlist with broad genre rules and Episode bumpers): the main rules swallow the whole pool and the playlist refreshes with no bumpers at all.
@@ -80,4 +107,5 @@ There are more gaps (5) than bumpers (4), so the pool wraps around and Bumper 1 
 
 !!! info "See Also"
     - [TV Channel with Commercials (Bumpers)](../examples/common-use-cases.md#tv-channel-with-commercials-bumpers) — full example configuration
+    - [Cartoon Block with Multi-Bumper Breaks](../examples/common-use-cases.md#cartoon-block-with-multi-bumper-breaks) — ident, commercial, ident in every break
     - [Round Robin sorting](sorting-and-limits.md#round-robin-interleave) — interleaved "TV channel" episode ordering that pairs well with bumpers

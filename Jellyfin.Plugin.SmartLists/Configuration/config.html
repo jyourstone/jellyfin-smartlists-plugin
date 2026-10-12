@@ -368,12 +368,32 @@
                                     <label class="inputLabel" for="bumperInterval">Every N items</label>
                                     <input type="number" class="emby-input" id="bumperInterval" min="1" max="10000" value="1" />
                                 </div>
+                                <div class="inputContainer bumper-detail" style="min-width: 120px; display: none;">
+                                    <label class="inputLabel" for="bumperBreakSize">Bumpers per break</label>
+                                    <input type="number" class="emby-input" id="bumperBreakSize" min="1" max="10" value="1" />
+                                </div>
                             </div>
                             <div id="bumper-rules-container" class="bumper-detail" style="display: none;"></div>
                             <button type="button" id="add-bumper-rule-group" class="raised emby-button bumper-detail"
                                 style="margin-top: 0.5em; display: none;">
                                 <span>Add Bumper Rule Group</span>
                             </button>
+                            <div class="checkboxList paperList bumper-detail" style="padding: 0.5em 1em; margin-top: 1em; display: none;">
+                                <label class="emby-checkbox-label">
+                                    <input type="checkbox" is="emby-checkbox" id="bumperAlternateRuleGroups"
+                                        data-embycheckbox="true" class="emby-checkbox">
+                                    <span class="checkboxLabel">Take turns between bumper rule groups</span>
+                                    <span class="checkboxOutline">
+                                        <span class="material-icons checkboxIcon checkboxIcon-checked check"
+                                            aria-hidden="true"></span>
+                                        <span class="material-icons checkboxIcon checkboxIcon-unchecked"
+                                            aria-hidden="true"></span>
+                                    </span>
+                                </label>
+                                <div class="fieldDescription">Bumpers in a break take turns between rule groups, starting over each
+                                    break, and Bumpers per break must be at least the number of groups; when off, all groups form
+                                    one pool.</div>
+                            </div>
                         </div>
 
                             <h3 class="sectionTitle" style="margin-top: 1.5em;">Automation</h3>

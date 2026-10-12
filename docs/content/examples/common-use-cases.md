@@ -166,6 +166,19 @@ Take any of the TV Channel playlists above and weave "commercial break" clips be
 
 Result: A random episode from a random show, then a bumper clip, then the next episode, and so on. With 4 bumper clips and dozens of episodes, the bumpers repeat in rotation — just like real station idents. See [Bumpers](../user-guide/bumpers.md) for details.
 
+### Cartoon Block with Multi-Bumper Breaks
+A Toonami-style block where every break is *ident → commercial → ident*:
+
+- **Media Types**: Episode
+- **Genre** contains "Animation"
+- **Playback Status** = Unplayed
+- **Sort by**: Shuffled Round Robin (Interleave), **Group By**: Series Name
+- **Bumpers**: Bumper media type **Video**, Bumper order **Random**, Every **1** items, Bumpers per break **3**, **Take turns between bumper rule groups** on
+    - Rule group 1: `Tags contains "ident"`
+    - Rule group 2: `Tags contains "commercial"`
+
+Result: Show, ident, commercial, ident, next show… Idents and commercials each cycle through their own pool. See [Multi-Bumper Breaks](../user-guide/bumpers.md#multi-bumper-breaks) for how the turns work.
+
 ### Music Album Sampler (Round Robin)
 Create a playlist that samples tracks from different albums:
 

@@ -2923,6 +2923,8 @@
         }
         var intervalInput = page.querySelector('#bumperInterval');
         var interval = intervalInput ? parseInt(intervalInput.value, 10) : 1;
+        var breakSizeInput = page.querySelector('#bumperBreakSize');
+        var breakSize = breakSizeInput ? parseInt(breakSizeInput.value, 10) : 1;
         var orderSelect = page.querySelector('#bumperOrder');
         return {
             valid: true,
@@ -2930,7 +2932,9 @@
                 ExpressionSets: expressionSets,
                 MediaTypes: [mediaTypeSelect.value],
                 BumperOrder: (orderSelect && orderSelect.value) ? orderSelect.value : 'Random',
-                Interval: (isNaN(interval) || interval < 1) ? 1 : interval
+                Interval: (isNaN(interval) || interval < 1) ? 1 : interval,
+                BreakSize: (isNaN(breakSize) || breakSize < 1) ? 1 : breakSize,
+                AlternateRuleGroups: SmartLists.getElementChecked(page, '#bumperAlternateRuleGroups', false)
             }
         };
     };

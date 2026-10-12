@@ -979,6 +979,87 @@ public class InputValidatorTests
         AssertInvalid(InputValidator.ValidateSmartList(dto), expected);
     }
 
+    [Theory]
+    [InlineData(0, "Bumpers per break must be at least 1")]
+    [InlineData(-1, "Bumpers per break must be at least 1")]
+    [InlineData(11, "Bumpers per break cannot exceed 10")]
+    public void ValidateSmartList_BumperBreakSizeOutOfRange_IsRejected(int breakSize, string expected)
+    {
+        var dto = PlaylistWithBumpers(b => b.BreakSize = breakSize);
+
+        AssertInvalid(InputValidator.ValidateSmartList(dto), expected);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    public void ValidateSmartList_BumperBreakSizeInRange_IsAccepted(int breakSize)
+    {
+        var dto = PlaylistWithBumpers(b => { b.BreakSize = breakSize; b.AlternateRuleGroups = true; });
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Fact]
+    public void ValidateSmartList_TakingTurnsWithFewerSlotsThanGroups_IsRejected()
+    {
+        // Every break starts over at the first group, so the second group would never play
+        var dto = PlaylistWithBumpers(b =>
+        {
+            b.ExpressionSets = [Group(Rule("Tags", "Contains", "ident")), Group(Rule("Tags", "Contains", "commercial"))];
+            b.AlternateRuleGroups = true;
+            b.BreakSize = 1;
+        });
+
+        AssertInvalid(InputValidator.ValidateSmartList(dto),
+            "Bumpers per break must be at least the number of bumper rule groups when taking turns between them");
+    }
+
+    [Fact]
+    public void ValidateSmartList_TakingTurnsWithOneSlotPerGroup_IsAccepted()
+    {
+        var dto = PlaylistWithBumpers(b =>
+        {
+            b.ExpressionSets = [Group(Rule("Tags", "Contains", "ident")), Group(Rule("Tags", "Contains", "commercial"))];
+            b.AlternateRuleGroups = true;
+            b.BreakSize = 2;
+        });
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Fact]
+    public void ValidateSmartList_MergedGroupsWithFewerSlotsThanGroups_IsAccepted()
+    {
+        // Without taking turns all groups form one pool, so the break size is unconstrained
+        var dto = PlaylistWithBumpers(b =>
+        {
+            b.ExpressionSets =
+            [
+                Group(Rule("Tags", "Contains", "ident")),
+                Group(Rule("Tags", "Contains", "commercial")),
+                Group(Rule("Tags", "Contains", "promo")),
+            ];
+            b.AlternateRuleGroups = false;
+            b.BreakSize = 1;
+        });
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
+    [Fact]
+    public void ValidateSmartList_TakingTurnsWithSingleGroup_IsAccepted()
+    {
+        // A single group has nothing to take turns with, so one bumper per break is fine
+        var dto = PlaylistWithBumpers(b =>
+        {
+            b.AlternateRuleGroups = true;
+            b.BreakSize = 1;
+        });
+
+        AssertValid(InputValidator.ValidateSmartList(dto));
+    }
+
     [Fact]
     public void ValidateSmartList_BumperRulesWithoutMediaTypes_IsRejected()
     {

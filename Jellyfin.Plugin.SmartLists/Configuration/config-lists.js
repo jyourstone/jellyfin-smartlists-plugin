@@ -135,8 +135,10 @@
         var interval = (bumpers.Interval && bumpers.Interval > 0) ? bumpers.Interval : 1;
         var ruleGroups = bumpers.ExpressionSets.length;
         return mediaTypeLabel + ' · ' + orderLabel + ' order · every ' +
-            interval + (interval === 1 ? ' item' : ' items') + ' · ' +
-            ruleGroups + (ruleGroups === 1 ? ' rule group' : ' rule groups');
+            interval + (interval === 1 ? ' item' : ' items') +
+            (bumpers.BreakSize > 1 ? ' · ' + bumpers.BreakSize + ' per break' : '') + ' · ' +
+            ruleGroups + (ruleGroups === 1 ? ' rule group' : ' rule groups') +
+            (bumpers.AlternateRuleGroups && ruleGroups > 1 ? ' taking turns' : '');
     };
 
     // ===== USER MANAGEMENT =====
@@ -862,7 +864,7 @@
             rulesContainer.innerHTML = '';
         }
 
-        // Reset the bumper section (rules, media type, order, interval)
+        // Reset the bumper section
         SmartLists.populateBumperConfigIntoForm(page, {});
 
         // Clear media type selections
@@ -1739,7 +1741,7 @@
 
     // Note: getPeopleFieldDisplayName is defined in config-formatters.js to avoid duplication
 
-    // Populate the bumper section (media type, order, interval, rules) from a playlist's
+    // Populate the bumper section from a playlist's
     // Bumpers config, clearing existing bumper rules first; shared by edit and clone paths.
     SmartLists.populateBumperConfigIntoForm = function (page, playlist) {
         const bumperRulesContainer = page.querySelector('#bumper-rules-container');
@@ -1753,6 +1755,7 @@
         const bumperMediaSelect = page.querySelector('#bumperMediaType');
         const bumperOrderSelect = page.querySelector('#bumperOrder');
         const bumperIntervalInput = page.querySelector('#bumperInterval');
+        const bumperBreakSizeInput = page.querySelector('#bumperBreakSize');
         if (playlist.Bumpers && playlist.Bumpers.ExpressionSets && playlist.Bumpers.ExpressionSets.length > 0) {
             if (bumperMediaSelect) {
                 const savedType = (playlist.Bumpers.MediaTypes && playlist.Bumpers.MediaTypes.length > 0) ? playlist.Bumpers.MediaTypes[0] : '';
@@ -1763,6 +1766,8 @@
             }
             if (bumperOrderSelect) { bumperOrderSelect.value = playlist.Bumpers.BumperOrder || 'Random'; }
             if (bumperIntervalInput) { bumperIntervalInput.value = playlist.Bumpers.Interval || 1; }
+            if (bumperBreakSizeInput) { bumperBreakSizeInput.value = playlist.Bumpers.BreakSize || 1; }
+            SmartLists.setElementChecked(page, '#bumperAlternateRuleGroups', playlist.Bumpers.AlternateRuleGroups === true);
             playlist.Bumpers.ExpressionSets.forEach(function (expressionSet, setIndex) {
                 const logicGroup = setIndex === 0 ? SmartLists.createInitialLogicGroup(page, 'bumper') : SmartLists.addNewLogicGroup(page, 'bumper');
                 SmartLists.populateLogicGroupExpressions(page, logicGroup, expressionSet);
@@ -1771,6 +1776,8 @@
             if (bumperMediaSelect) { bumperMediaSelect.value = ''; }
             if (bumperOrderSelect) { bumperOrderSelect.value = 'Random'; }
             if (bumperIntervalInput) { bumperIntervalInput.value = 1; }
+            if (bumperBreakSizeInput) { bumperBreakSizeInput.value = 1; }
+            SmartLists.setElementChecked(page, '#bumperAlternateRuleGroups', false);
         }
         SmartLists.updateBumperSectionVisibility(page);
     };
