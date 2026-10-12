@@ -1672,13 +1672,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var now = DateTime.UtcNow;
                 _logger.LogDebug("Checking for scheduled list refreshes (15-minute boundary check) at {CurrentTime}", now);
 
-                // Visibility first, so the refresh check below sees lists it just enabled or disabled.
-                // Under the queue's processing lock: disabling deletes Jellyfin playlists/collections,
-                // which must not overlap a refresh that is writing to the database (#539).
-                using (await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false))
-                {
-                    await CheckVisibilitySchedules(now).ConfigureAwait(false);
-                }
+                // Not awaited: it waits for the queue's processing lock, and waiting out a long refresh
+                // here would push this tick past the next boundary and skip that boundary's schedules.
+                // Ordering against the refresh check below doesn't matter - the queue reloads each list
+                // and skips disabled ones, and enabling a list enqueues its own refresh.
+                _ = ApplyVisibilitySchedulesAsync(now);
 
                 // Check playlists
                 var allPlaylists = await _playlistStore.GetAllAsync().ConfigureAwait(false);
@@ -2086,6 +2084,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         // Visibility schedule checking methods
+
+        /// <summary>
+        /// Applies visibility schedules under the queue's processing lock: disabling deletes Jellyfin
+        /// playlists/collections, which must not overlap a refresh that is writing to the database (#539).
+        /// </summary>
+        private async Task ApplyVisibilitySchedulesAsync(DateTime now)
+        {
+            try
+            {
+                using (await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false))
+                {
+                    await CheckVisibilitySchedules(now).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to apply visibility schedules");
+            }
+        }
 
         /// <summary>
         /// Check and process visibility schedules for all lists

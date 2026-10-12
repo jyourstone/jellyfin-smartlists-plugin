@@ -135,6 +135,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // Deduplication: Use TryAdd as atomic gate to prevent race conditions
             if (!_queuedItems.TryAdd(item.ListId, item))
             {
+                // A pending refresh scoped to some users must not swallow a broader one (e.g. a scheduled
+                // full refresh arriving behind a user-data auto refresh): widen the pending item instead.
+                if (_queuedItems.TryGetValue(item.ListId, out var pending))
+                {
+                    pending.TriggeringUserIds = MergeTriggeringUserIds(pending.TriggeringUserIds, item.TriggeringUserIds);
+                }
+
                 _logger.LogDebug("List {ListId} ({ListName}) is already queued, skipping duplicate", item.ListId, item.ListName);
                 return;
             }
@@ -145,6 +152,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _logger.LogDebug("Enqueued {OperationType} operation for list {ListId} ({ListName}) of type {ListType}",
                 item.OperationType, item.ListId, item.ListName, item.ListType);
         }
+
+        /// <summary>
+        /// Combines the user scopes of two refreshes of the same list. Null means all users.
+        /// </summary>
+        internal static List<string>? MergeTriggeringUserIds(List<string>? pending, List<string>? incoming)
+            => pending == null || incoming == null
+                ? null
+                : [.. pending.Union(incoming, StringComparer.OrdinalIgnoreCase)];
 
         /// <summary>
         /// Gets the count of items waiting in the queue (excludes currently processing item).
