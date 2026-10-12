@@ -52,8 +52,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly ISmartListStore<SmartCollectionDto> _collectionStore;
         private readonly ISmartListService<SmartCollectionDto> _collectionService;
         private readonly IUserDataManager _userDataManager;
-        private readonly IUserManager _userManager;
-        private readonly RefreshCache _playlistRefreshCache;
         private readonly RefreshQueueService _refreshQueueService;
 
         // Static reference for API access to cache management
@@ -99,8 +97,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         // Schedule checking for custom playlist schedules
         private Timer? _scheduleTimer;
 
-        private readonly RefreshStatusService? _refreshStatusService;
-
         public AutoRefreshService(
             ILibraryManager libraryManager,
             ILogger<AutoRefreshService> logger,
@@ -109,9 +105,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             ISmartListStore<SmartCollectionDto> collectionStore,
             ISmartListService<SmartCollectionDto> collectionService,
             IUserDataManager userDataManager,
-            IUserManager userManager,
-            RefreshQueueService refreshQueueService,
-            RefreshStatusService? refreshStatusService = null)
+            RefreshQueueService refreshQueueService)
         {
             _libraryManager = libraryManager;
             _logger = logger;
@@ -120,22 +114,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             _collectionStore = collectionStore;
             _collectionService = collectionService;
             _userDataManager = userDataManager;
-            _userManager = userManager;
-            _refreshStatusService = refreshStatusService;
             _refreshQueueService = refreshQueueService;
-
-            // Initialize cache helper - using interfaces for proper dependency injection
-            _playlistRefreshCache = new RefreshCache(
-                _libraryManager,
-                _userManager,
-                _playlistService,
-                _playlistStore,
-                _logger);
 
             // Set static instance for API access
             Instance = this;
 
-            // Note: RefreshCache is used for scheduled batch processing to efficiently process multiple lists.
             // The RefreshQueueService handles all refresh operations (manual, auto, and scheduled).
             // Initialize batch processing timer (runs every 1 second to check for pending refreshes)
             _batchProcessTimer = new Timer(ProcessPendingBatchRefreshes, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
@@ -1689,6 +1672,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 var now = DateTime.UtcNow;
                 _logger.LogDebug("Checking for scheduled list refreshes (15-minute boundary check) at {CurrentTime}", now);
 
+                // Visibility first, so the refresh check below sees lists it just enabled or disabled.
+                // Under the queue's processing lock: disabling deletes Jellyfin playlists/collections,
+                // which must not overlap a refresh that is writing to the database (#539).
+                using (await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false))
+                {
+                    await CheckVisibilitySchedules(now).ConfigureAwait(false);
+                }
+
                 // Check playlists
                 var allPlaylists = await _playlistStore.GetAllAsync().ConfigureAwait(false);
                 var scheduledPlaylists = allPlaylists.Where(p =>
@@ -1702,9 +1693,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     c.Enabled &&
                         c.Schedules != null && c.Schedules.Any(s => s?.Trigger != null)
                     ).ToList();
-
-                // Check visibility schedules first (independent of refresh schedules)
-                await CheckVisibilitySchedules(now).ConfigureAwait(false);
 
                 if (!scheduledPlaylists.Any() && !scheduledCollections.Any())
                 {
@@ -1745,7 +1733,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         _logger.LogInformation("Found {Count} playlists due for scheduled refresh: {PlaylistNames}",
                             duePlaylists.Count,
                             string.Join(", ", duePlaylists.Select(p => $"'{p.Name}'")));
-                        await RefreshScheduledPlaylists(duePlaylists).ConfigureAwait(false);
+                        EnqueueScheduledRefreshes(duePlaylists);
                     }
 
                     if (dueCollections.Any())
@@ -1753,7 +1741,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                         _logger.LogInformation("Found {Count} collections due for scheduled refresh: {CollectionNames}",
                             dueCollections.Count,
                             string.Join(", ", dueCollections.Select(c => $"'{c.Name}'")));
-                        await RefreshScheduledCollections(dueCollections).ConfigureAwait(false);
+                        EnqueueScheduledRefreshes(dueCollections);
                     }
                 }
                 else
@@ -2077,196 +2065,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             return isDue;
         }
 
-        private async Task RefreshScheduledPlaylists(List<SmartPlaylistDto> playlists)
+        /// <summary>
+        /// Enqueues due scheduled lists on the refresh queue, the same path as every other refresh.
+        /// </summary>
+        private void EnqueueScheduledRefreshes(IEnumerable<SmartListDto> lists)
         {
-            if (!playlists.Any())
+            foreach (var list in lists)
             {
-                return;
-            }
-
-            _logger.LogDebug("Refreshing {PlaylistCount} scheduled playlists using advanced caching", playlists.Count);
-
-            try
-            {
-                var totalCount = playlists.Count;
-                var playlistIdMap = new Dictionary<string, string>(); // Map playlist ID to listId for batch updates
-                var playlistLookup = playlists.ToDictionary(p => p.Id ?? string.Empty, p => p); // Map playlist ID to playlist object
-
-                // Build playlistIdMap without starting operations yet
-                foreach (var playlist in playlists)
+                _refreshQueueService.EnqueueOperation(new RefreshQueueItem
                 {
-                    var listId = string.IsNullOrEmpty(playlist.Id) ? Guid.NewGuid().ToString() : playlist.Id;
-                    playlistIdMap[playlist.Id ?? string.Empty] = listId;
-                }
-
-                // Create callback to start operation and update batch index as each playlist is processed
-                Action<string>? batchProgressCallback = null;
-                Func<string, Action<int, int>?>? createProgressCallback = null;
-                Action<string, bool, TimeSpan, string>? onPlaylistComplete = null;
-                if (_refreshStatusService != null)
-                {
-                    var currentIndex = 0;
-                    batchProgressCallback = (playlistId) =>
-                    {
-                        currentIndex++;
-                        
-                        // Start operation for this specific playlist right before processing
-                        if (playlistLookup.TryGetValue(playlistId, out var playlist))
-                        {
-                            var listId = playlistIdMap.TryGetValue(playlistId, out var mappedListId) 
-                                ? mappedListId 
-                                : playlistId;
-                            
-                            // Only start if not already started (in case of retries or duplicates)
-                            if (!_refreshStatusService.HasOngoingOperation(listId))
-                            {
-                                _refreshStatusService.StartOperation(
-                                    listId,
-                                    playlist.Name,
-                                    Core.Enums.SmartListType.Playlist,
-                                    Core.Enums.RefreshTriggerType.Scheduled,
-                                    0,
-                                    batchCurrentIndex: currentIndex,
-                                    batchTotalCount: totalCount);
-                            }
-                        }
-                    };
-                    
-                    // Create progress callback factory that maps playlistId to listId and updates status service
-                    createProgressCallback = (playlistId) =>
-                    {
-                        var listId = playlistIdMap.TryGetValue(playlistId, out var mappedListId) 
-                            ? mappedListId 
-                            : playlistId;
-                        
-                        return (processed, total) =>
-                        {
-                            _refreshStatusService.UpdateProgress(listId, processed, total);
-                        };
-                    };
-                    
-                    // Create completion callback to complete operations immediately as they finish
-                    onPlaylistComplete = (playlistId, success, duration, message) =>
-                    {
-                        var listId = playlistIdMap.TryGetValue(playlistId, out var mappedListId) 
-                            ? mappedListId 
-                            : playlistId;
-                        
-                        _refreshStatusService.CompleteOperation(
-                            listId,
-                            success,
-                            duration,
-                            success ? null : message);
-                    };
-                }
-
-                // Use the cache helper for efficient batch processing
-                var results = await _playlistRefreshCache.RefreshPlaylistsWithCacheAsync(
-                    playlists,
-                    updateLastRefreshTime: true, // Update LastRefreshed for scheduled refreshes
-                    batchProgressCallback,
-                    createProgressCallback,
-                    onPlaylistComplete,
-                    CancellationToken.None);
-
-                // Log individual results (operations are already completed via callback)
-                foreach (var result in results)
-                {
-
-                    if (result.Success)
-                    {
-                        _logger.LogInformation("Successfully refreshed scheduled playlist: {PlaylistName} in {ElapsedTime}ms",
-                            result.PlaylistName, result.ElapsedMilliseconds);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Failed to refresh scheduled playlist {PlaylistName}: {Message}",
-                            result.PlaylistName, result.Message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to refresh scheduled playlists with caching - falling back to queueing individual playlist refreshes");
-
-                // Fallback to individual refresh without caching
-                foreach (var playlist in playlists)
-                {
-                    var listId = string.IsNullOrEmpty(playlist.Id) ? Guid.NewGuid().ToString() : playlist.Id;
-                    try
-                    {
-                        _logger.LogDebug("Refreshing scheduled playlist (fallback): {PlaylistName}", playlist.Name);
-
-                        // Enqueue scheduled refresh
-                        var queueItem = new RefreshQueueItem
-                        {
-                            ListId = listId,
-                            ListName = playlist.Name,
-                            ListType = Core.Enums.SmartListType.Playlist,
-                            OperationType = RefreshOperationType.Refresh,
-                            ListData = playlist,
-                            UserId = playlist.UserId,
-                            TriggerType = Core.Enums.RefreshTriggerType.Scheduled
-                        };
-
-                        _refreshQueueService.EnqueueOperation(queueItem);
-                    }
-                    catch (Exception fallbackEx)
-                    {
-                        _logger.LogError(fallbackEx, "Failed to enqueue scheduled playlist {PlaylistName}", playlist.Name);
-                    }
-                }
-            }
-        }
-
-        private Task RefreshScheduledCollections(List<SmartCollectionDto> collections)
-        {
-            if (!collections.Any())
-            {
-                return Task.CompletedTask;
-            }
-
-            _logger.LogDebug("Refreshing {CollectionCount} scheduled collections", collections.Count);
-
-            try
-            {
-                var enqueuedCount = 0;
-
-                foreach (var collection in collections)
-                {
-                    var listId = string.IsNullOrEmpty(collection.Id) ? Guid.NewGuid().ToString() : collection.Id;
-                    try
-                    {
-                        _logger.LogDebug("Enqueuing scheduled collection for refresh: {CollectionName}", collection.Name);
-                        
-                        var queueItem = new RefreshQueueItem
-                        {
-                            ListId = listId,
-                            ListName = collection.Name,
-                            ListType = Core.Enums.SmartListType.Collection,
-                            OperationType = RefreshOperationType.Refresh,
-                            ListData = collection,
-                            UserId = collection.UserId,
-                            TriggerType = Core.Enums.RefreshTriggerType.Scheduled
-                        };
-
-                        _refreshQueueService.EnqueueOperation(queueItem);
-                        enqueuedCount++;
-                        _logger.LogDebug("Enqueued scheduled collection: {CollectionName}", collection.Name);
-                    }
-                    catch (Exception collectionEx)
-                    {
-                        _logger.LogError(collectionEx, "Failed to enqueue scheduled collection: {CollectionName}", collection.Name);
-                    }
-                }
-
-                _logger.LogInformation("Enqueued {EnqueuedCount} scheduled collections for refresh", enqueuedCount);
-                return Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to refresh scheduled collections");
-                return Task.CompletedTask;
+                    ListId = string.IsNullOrEmpty(list.Id) ? Guid.NewGuid().ToString() : list.Id,
+                    ListName = list.Name,
+                    ListType = list.Type,
+                    OperationType = RefreshOperationType.Refresh,
+                    ListData = list,
+                    UserId = list.UserId,
+                    TriggerType = Core.Enums.RefreshTriggerType.Scheduled
+                });
             }
         }
 

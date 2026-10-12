@@ -1252,11 +1252,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             return GetAllUserMediaForPlaylist(user, mediaTypes, null, null);
         }
 
-        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto = null)
-        {
-            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
-        }
-
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartPlaylistDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
         {
             // Validate media types before processing (always validate, not just when dto is provided)

@@ -69,15 +69,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             _itemRepository = itemRepository;
         }
 
-        /// <summary>
-        /// Gets all user media for a collection, filtered by media types.
-        /// Uses the owner user context to query media items.
-        /// </summary>
-        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto = null)
-        {
-            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
-        }
-
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
         {
             // Validate media types before processing
@@ -98,7 +89,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         /// <summary>
         /// Processes a collection refresh with pre-cached media for efficient batch processing.
-        /// Implements ISmartListService interface (generic method name for both playlists and collections).
         /// </summary>
         public async Task<(bool Success, string Message, string JellyfinPlaylistId)> ProcessPlaylistRefreshWithCachedMediaAsync(
             SmartCollectionDto dto,
@@ -215,6 +205,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             Action<int, int>? progressCallback = null,
             CancellationToken cancellationToken = default)
         {
+                // The queue reloads the DTO before processing: a collection disabled while its refresh
+                // was waiting must not be rebuilt (playlists have the same guard in their shared core).
+                if (!dto.Enabled)
+                {
+                    _logger.LogDebug("Smart collection '{CollectionName}' is disabled. Skipping refresh.", dto.Name);
+                    return (true, "Collection is disabled", string.Empty);
+                }
+
                 var smartCollection = new Core.SmartList(dto)
                 {
                     UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution
