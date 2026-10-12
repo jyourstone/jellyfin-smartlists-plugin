@@ -209,7 +209,7 @@ An entry in `ongoingOperations` (and in `Status/Ongoing`) contains:
 
 `listId`, `listName`, `listType`, `triggerType`, `startTime` (ISO 8601),
 `totalItems`, `processedItems`, `estimatedTimeRemaining` (seconds), `elapsedTime` (seconds),
-`errorMessage`, `batchCurrentIndex`, `batchTotalCount`.
+`errorMessage`.
 
 A `history` entry contains `listId`, `listName`, `listType`, `triggerType`, `startTime`,
 `endTime`, `duration` (seconds), `success`, `errorMessage`.

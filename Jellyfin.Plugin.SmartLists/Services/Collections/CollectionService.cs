@@ -69,15 +69,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             _itemRepository = itemRepository;
         }
 
-        /// <summary>
-        /// Gets all user media for a collection, filtered by media types.
-        /// Uses the owner user context to query media items.
-        /// </summary>
-        public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto = null)
-        {
-            return GetAllUserMediaForPlaylist(user, mediaTypes, dto, null);
-        }
-
         public IEnumerable<BaseItem> GetAllUserMediaForPlaylist(User user, List<string> mediaTypes, SmartCollectionDto? dto, ConcurrentDictionary<Guid, Guid>? extraOwnerMap)
         {
             // Validate media types before processing
@@ -98,7 +89,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         /// <summary>
         /// Processes a collection refresh with pre-cached media for efficient batch processing.
-        /// Implements ISmartListService interface (generic method name for both playlists and collections).
         /// </summary>
         public async Task<(bool Success, string Message, string JellyfinPlaylistId)> ProcessPlaylistRefreshWithCachedMediaAsync(
             SmartCollectionDto dto,
@@ -134,78 +124,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             return (success, message, collectionId);
         }
 
-        public async Task<(bool Success, string Message, string Id)> RefreshAsync(SmartCollectionDto dto, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(dto);
-
-            var stopwatch = Stopwatch.StartNew();
-            try
-            {
-                _logger.LogDebug("Refreshing single smart collection: {CollectionName}", dto.Name);
-                _logger.LogDebug("CollectionService.RefreshAsync called with: Name={Name}, Enabled={Enabled}, ExpressionSets={ExpressionSetCount}, MediaTypes={MediaTypes}",
-                    dto.Name, dto.Enabled, dto.ExpressionSets?.Count ?? 0,
-                    dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "None");
-
-                // Validate media types before processing
-                _logger.LogDebug("Validating media types for collection '{CollectionName}': {MediaTypes}", dto.Name, dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "null");
-
-                // Note: Series media type is supported in Collections (unlike Playlists where it causes playback issues)
-                
-                if (dto.MediaTypes == null || dto.MediaTypes.Count == 0)
-                {
-                    _logger.LogError("Smart collection '{CollectionName}' has no media types specified. At least one media type must be selected. Skipping collection refresh.", dto.Name);
-                    return (false, "No media types specified. At least one media type must be selected.", string.Empty);
-                }
-
-                // Check if collection is enabled
-                if (!dto.Enabled)
-                {
-                    _logger.LogDebug("Smart collection '{CollectionName}' is disabled. Skipping refresh.", dto.Name);
-                    return (true, "Collection is disabled", string.Empty);
-                }
-
-                // Collections use an owner user for rule context (IsPlayed, IsFavorite, etc.)
-                // The collection is server-wide (visible to all), but rules evaluate in the owner's context
-                // and the query must be executed in the owner's context to get the correct media items
-                if (!Guid.TryParse(dto.UserId, out var ownerUserId) || ownerUserId == Guid.Empty)
-                {
-                    _logger.LogError("Collection owner user ID is invalid or empty: {User}", dto.UserId);
-                    return (false, $"Collection owner user is required. Please set a valid owner.", string.Empty);
-                }
-                
-                var ownerUser = _userManager.GetUserById(ownerUserId);
-                
-                if (ownerUser == null)
-                {
-                    _logger.LogError("Collection owner user {User} not found - cannot filter collection items", dto.UserId);
-                    return (false, $"Collection owner user not found. Please set a valid owner.", string.Empty);
-                }
-
-                // Get all media items using the owner user's context
-                var allMedia = GetAllMedia(dto.MediaTypes, dto, ownerUser).ToArray();
-                _logger.LogDebug("Found {MediaCount} total media items for collection using owner user {OwnerUsername}", allMedia.Length, ownerUser.Username);
-
-                // Create a temporary RefreshCache for this refresh (fallback path when queue service unavailable)
-                var refreshCache = new RefreshQueueService.RefreshCache();
-
-                // Process collection refresh with the media
-                return await ProcessCollectionRefreshAsync(dto, ownerUser, allMedia, refreshCache, progressCallback, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing collection refresh for '{CollectionName}': {ErrorMessage}", dto.Name, ex.Message);
-                return (false, $"Error processing collection '{dto.Name}': {ex.Message}", string.Empty);
-            }
-            finally
-            {
-                stopwatch.Stop();
-                _logger.LogDebug("Collection refresh completed in {ElapsedMs}ms: {CollectionName}", stopwatch.ElapsedMilliseconds, dto.Name);
-            }
-        }
-
         /// <summary>
         /// Core method to process a collection refresh with provided media items.
-        /// This is the shared logic used by both RefreshAsync and ProcessCollectionRefreshWithCachedMediaAsync.
         /// </summary>
         private async Task<(bool Success, string Message, string Id)> ProcessCollectionRefreshAsync(
             SmartCollectionDto dto,
@@ -215,6 +135,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             Action<int, int>? progressCallback = null,
             CancellationToken cancellationToken = default)
         {
+                // The queue reloads the DTO before processing: a collection disabled while its refresh
+                // was waiting must not be rebuilt (playlists have the same guard in their shared core).
+                if (!dto.Enabled)
+                {
+                    _logger.LogDebug("Smart collection '{CollectionName}' is disabled. Skipping refresh.", dto.Name);
+                    return (true, "Collection is disabled", string.Empty);
+                }
+
                 var smartCollection = new Core.SmartList(dto)
                 {
                     UserManager = _userManager, // Set UserManager for Jellyfin 10.11+ user resolution

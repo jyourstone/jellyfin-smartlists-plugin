@@ -1,24 +1,11 @@
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.SmartLists.Core.Models;
-using Jellyfin.Plugin.SmartLists.Services.ExternalList;
 using Jellyfin.Plugin.SmartLists.Services.Playlists;
-using Jellyfin.Plugin.SmartLists.Services.Collections;
-using Jellyfin.Plugin.SmartLists.Services.Shared;
-using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller;
-using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Playlists;
-using MediaBrowser.Controller.Collections;
-using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SmartLists.Services.Shared
@@ -100,63 +87,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
     /// This consolidates logic for both individual playlist refreshes and "refresh all" operations.
     /// </summary>
     public class ManualRefreshService(
-        IUserManager userManager,
-        ILibraryManager libraryManager,
         IServerApplicationPaths applicationPaths,
-        IPlaylistManager playlistManager,
-        ICollectionManager collectionManager,
-        IUserDataManager userDataManager,
-        IProviderManager providerManager,
         ILogger<ManualRefreshService> logger,
-        Microsoft.Extensions.Logging.ILoggerFactory loggerFactory,
-        RefreshQueueService refreshQueueService,
-        ExternalListService externalListService,
-        MediaBrowser.Controller.Persistence.IItemRepository? itemRepository = null) : IManualRefreshService
+        RefreshQueueService refreshQueueService) : IManualRefreshService
     {
-        private readonly IUserManager _userManager = userManager;
-        private readonly ILibraryManager _libraryManager = libraryManager;
         private readonly IServerApplicationPaths _applicationPaths = applicationPaths;
-        private readonly IPlaylistManager _playlistManager = playlistManager;
-        private readonly ICollectionManager _collectionManager = collectionManager;
-        private readonly IUserDataManager _userDataManager = userDataManager;
-        private readonly IProviderManager _providerManager = providerManager;
         private readonly ILogger<ManualRefreshService> _logger = logger;
-        private readonly Microsoft.Extensions.Logging.ILoggerFactory _loggerFactory = loggerFactory;
         private readonly RefreshQueueService _refreshQueueService = refreshQueueService;
-        private readonly ExternalListService _externalListService = externalListService;
-        private readonly MediaBrowser.Controller.Persistence.IItemRepository? _itemRepository = itemRepository;
-
-        /// <summary>
-        /// Gets the user for a playlist, handling migration from old User field to new UserId field.
-        /// </summary>
-        /// <param name="playlist">The playlist.</param>
-        /// <returns>The user, or null if not found.</returns>
-        private async Task<User?> GetPlaylistUserAsync(SmartPlaylistDto playlist)
-        {
-            var userId = await GetPlaylistUserIdAsync(playlist);
-            if (userId == Guid.Empty)
-            {
-                return null;
-            }
-
-            return _userManager.GetUserById(userId);
-        }
-
-        /// <summary>
-        /// Gets the user ID for a playlist.
-        /// </summary>
-        /// <param name="playlist">The playlist.</param>
-        /// <returns>The user ID, or Guid.Empty if not found.</returns>
-        private static Task<Guid> GetPlaylistUserIdAsync(SmartPlaylistDto playlist)
-        {
-            // DEPRECATED: playlist.UserId is for backwards compatibility with old single-user playlists.
-            // It is planned to be removed in version 10.12. Use UserPlaylists array instead.
-            if (!string.IsNullOrEmpty(playlist.UserId) && Guid.TryParse(playlist.UserId, out var userId))
-            {
-                return Task.FromResult(userId);
-            }
-            return Task.FromResult(Guid.Empty);
-        }
 
         /// <summary>
         /// Formats elapsed time for user notifications. Shows seconds if under 60 seconds (rounded to integer if >= 1 second), minutes if 60+ seconds.
@@ -194,43 +131,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private static bool HasActualFailures(RefreshResult? result)
         {
             return result != null && (!result.Success || result.FailureCount > 0);
-        }
-
-        /// <summary>
-        /// Creates a PlaylistService instance for playlist operations.
-        /// </summary>
-        private Services.Playlists.PlaylistService GetPlaylistService()
-        {
-            // Create a logger specifically for PlaylistService
-            var playlistServiceLogger = _loggerFactory.CreateLogger<PlaylistService>();
-
-            return new PlaylistService(
-                _userManager,
-                _libraryManager,
-                _playlistManager,
-                _userDataManager,
-                playlistServiceLogger,
-                externalListService: _externalListService,
-                itemRepository: _itemRepository);
-        }
-
-        /// <summary>
-        /// Creates a CollectionService instance for collection operations.
-        /// </summary>
-        private Services.Collections.CollectionService GetCollectionService()
-        {
-            // Create a logger specifically for CollectionService
-            var collectionServiceLogger = _loggerFactory.CreateLogger<Services.Collections.CollectionService>();
-
-            return new Services.Collections.CollectionService(
-                _libraryManager,
-                _collectionManager,
-                _userManager,
-                _userDataManager,
-                collectionServiceLogger,
-                _providerManager,
-                externalListService: _externalListService,
-                itemRepository: _itemRepository);
         }
 
         /// <summary>

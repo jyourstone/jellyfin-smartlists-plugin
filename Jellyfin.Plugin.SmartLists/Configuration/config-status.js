@@ -82,7 +82,7 @@
      */
     function renderStatusPage(data) {
         renderOngoingOperations(data.ongoingOperations || []);
-        renderStatistics(data.statistics || {}, data.ongoingOperations || []);
+        renderStatistics(data.statistics || {});
         renderRefreshHistory(data.history || []);
 
         // Auto-refresh polling: Poll every 1 second when operations are active, every 30 seconds when idle
@@ -164,7 +164,7 @@
     /**
      * Render statistics
      */
-    function renderStatistics(stats, ongoingOperations) {
+    function renderStatistics(stats) {
         // Query within the visible page to avoid duplicate container issues
         // Query within the visible page to avoid duplicate container issues
         const page = getActiveConfigPage();
@@ -177,18 +177,7 @@
         const lastRefresh = stats?.lastRefreshTime ? formatDateTime(stats.lastRefreshTime) : 'Never';
         const avgDuration = stats?.averageRefreshDuration ? formatDuration(stats.averageRefreshDuration) : 'N/A';
 
-        // Find batch progress info from ongoing operations
-        // Show the highest batch index (current operation being processed) or count of ongoing operations
-        const batchOps = ongoingOperations?.filter(op => op.batchCurrentIndex != null && op.batchTotalCount != null) || [];
-        let ongoingOpsText;
-        if (batchOps.length > 0) {
-            // Find the highest batch index to show current progress
-            const maxIndex = Math.max(...batchOps.map(op => op.batchCurrentIndex));
-            const totalCount = batchOps[0].batchTotalCount; // All should have same total
-            ongoingOpsText = `${maxIndex} of ${totalCount}`;
-        } else {
-            ongoingOpsText = stats.ongoingOperationsCount || 0;
-        }
+        const ongoingOpsText = stats.ongoingOperationsCount || 0;
 
         // Get queue count from statistics
         const queuedCount = stats.queuedOperationsCount || 0;

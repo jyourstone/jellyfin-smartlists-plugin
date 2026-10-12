@@ -74,6 +74,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         private readonly ConcurrentQueue<RefreshQueueItem> _queue = new();
         private readonly ConcurrentDictionary<string, RefreshQueueItem> _queuedItems = new(); // For deduplication by ListId
         private readonly SemaphoreSlim _processingLock = new(1, 1); // Single-threaded processing
+        private readonly Lock _queuedItemsLock = new(); // Dedup check, scope merge and dequeue-removal are atomic
 
         // Cache management - per-user caches to avoid rebuilding when switching between users
         private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<MediaTypesKey, Lazy<BaseItem[]>>> _userCaches = new();
@@ -132,19 +133,35 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return;
             }
 
-            // Deduplication: Use TryAdd as atomic gate to prevent race conditions
-            if (!_queuedItems.TryAdd(item.ListId, item))
+            // Deduplication by list. Under the same lock as the processor's removal, so a pending item's
+            // scope can only change while it is still pending, never after the processor has taken it.
+            lock (_queuedItemsLock)
             {
-                _logger.LogDebug("List {ListId} ({ListName}) is already queued, skipping duplicate", item.ListId, item.ListName);
-                return;
-            }
+                if (_queuedItems.TryGetValue(item.ListId, out var pending))
+                {
+                    // A pending refresh scoped to some users must not swallow a broader one (e.g. a scheduled
+                    // full refresh arriving behind a user-data auto refresh): widen the pending item instead.
+                    pending.TriggeringUserIds = MergeTriggeringUserIds(pending.TriggeringUserIds, item.TriggeringUserIds);
+                    _logger.LogDebug("List {ListId} ({ListName}) is already queued, skipping duplicate", item.ListId, item.ListName);
+                    return;
+                }
 
-            item.QueuedAt = DateTime.UtcNow;
-            _queue.Enqueue(item);
+                _queuedItems[item.ListId] = item;
+                item.QueuedAt = DateTime.UtcNow;
+                _queue.Enqueue(item);
+            }
 
             _logger.LogDebug("Enqueued {OperationType} operation for list {ListId} ({ListName}) of type {ListType}",
                 item.OperationType, item.ListId, item.ListName, item.ListType);
         }
+
+        /// <summary>
+        /// Combines the user scopes of two refreshes of the same list. Null means all users.
+        /// </summary>
+        internal static List<string>? MergeTriggeringUserIds(List<string>? pending, List<string>? incoming)
+            => pending == null || incoming == null
+                ? null
+                : [.. pending.Union(incoming, StringComparer.OrdinalIgnoreCase)];
 
         /// <summary>
         /// Gets the count of items waiting in the queue (excludes currently processing item).
@@ -216,7 +233,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     if (_queue.TryDequeue(out var item))
                     {
                         // Remove from deduplication dictionary
-                        _queuedItems.TryRemove(item.ListId, out _);
+                        lock (_queuedItemsLock)
+                        {
+                            _queuedItems.TryRemove(item.ListId, out _);
+                        }
 
                         // Acquire processing lock (single-threaded)
                         await _processingLock.WaitAsync(_cancellationTokenSource.Token);
