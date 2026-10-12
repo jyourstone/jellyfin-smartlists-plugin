@@ -805,16 +805,18 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
                 }
 
-                // Record only the groups whose Collections rules the series passes. When there are none, the
-                // episode matched only through a skipped Collections rule and keeps those groups, so it still
-                // has a mapping like every other returned item.
-                if (matchingGroups != null && seriesGroups is { Count: > 0 })
+                bool anyGroupMatched = matchingGroups is { Count: > 0 };
+
+                // Record only the groups whose Collections rules the series passes - possibly none, when the
+                // episode matched only through another group's skipped Collections rule. Whether it matches
+                // stays the same as without tracking.
+                if (matchingGroups != null && seriesGroups != null)
                 {
                     matchingGroups.Clear();
                     matchingGroups.AddRange(seriesGroups);
                 }
 
-                return matchingGroups is { Count: > 0 }; // False when no groups matched,
+                return anyGroupMatched; // False when no groups matched,
             }
             catch (Exception ex)
             {
@@ -2679,7 +2681,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         if (matches)
                         {
                             matchingEpisodes.Add(episode);
-                            if (episodeGroups != null)
+                            if (episodeGroups is { Count: > 0 })
                             {
                                 TrackContainerGroupMapping(episode.Id, episodeGroups);
                             }

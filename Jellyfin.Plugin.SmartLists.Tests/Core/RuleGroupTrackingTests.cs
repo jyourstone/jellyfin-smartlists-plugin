@@ -154,6 +154,32 @@ public class RuleGroupTrackingTests
         Assert.All(promos, e => Assert.Equal([1], list.ItemGroupMappings[e.Id]));
     }
 
+    // E02 of the Idents series passes only the Promos group's name rule, and only because the
+    // Collections rule is skipped for expanded episodes. Its series is not in Promos, so it must not
+    // map to that group - it would join the wrong bumper pool or use the wrong group's Max Items.
+    [Fact]
+    public void Tracking_ExpandedEpisode_NotMappedToGroupWhoseCollectionsRuleItsSeriesFails()
+    {
+        var cache = new RefreshQueueService.RefreshCache();
+        var (identsShow, idents) = SeriesInCollection(cache, "Idents", 2);
+
+        static ExpressionSet CollectionAndName(string collection, string name) => new()
+        {
+            Expressions =
+            [
+                new Expression("Collections", "Equal", collection) { IncludeEpisodesWithinSeries = true },
+                new Expression("Name", "Contains", name),
+            ],
+        };
+
+        var list = MakeList(MediaTypeConstants.Episode, trackRuleGroups: true, CollectionAndName("Idents", "E01"), CollectionAndName("Promos", "E02"));
+
+        Filter(list, cache, identsShow);
+
+        Assert.Equal([0], list.ItemGroupMappings[idents[0].Id]);
+        Assert.False(list.ItemGroupMappings.ContainsKey(idents[1].Id));
+    }
+
     // Tracking must not change which episodes match: the untracked pass returns the same episodes.
     [Fact]
     public void NoTracking_ExpandedEpisodes_SameResultAsTracked()
