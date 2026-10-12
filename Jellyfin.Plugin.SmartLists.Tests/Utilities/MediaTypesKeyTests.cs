@@ -1,3 +1,4 @@
+using Jellyfin.Plugin.SmartLists.Core.Constants;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
 using Jellyfin.Plugin.SmartLists.Utilities;
@@ -19,8 +20,8 @@ public class MediaTypesKeyTests
     [Fact]
     public void LibraryNameRule_GetsItsOwnPool()
     {
-        var plain = MediaTypesKey.Create(["Movie"], List(new Expression("Name", "Contains", "a")));
-        var libraryName = MediaTypesKey.Create(["Movie"], List(new Expression("LibraryName", "Equal", "Movies")));
+        var plain = MediaTypesKey.Create([MediaTypes.Movie], List(new Expression("Name", "Contains", "a")));
+        var libraryName = MediaTypesKey.Create([MediaTypes.Movie], List(new Expression("LibraryName", "Equal", "Movies")));
 
         Assert.NotEqual(plain, libraryName);
     }
@@ -28,8 +29,8 @@ public class MediaTypesKeyTests
     [Fact]
     public void ListsWithTheSamePoolQuery_ShareTheKey()
     {
-        var a = MediaTypesKey.Create(["Movie", "Episode"], List(new Expression("LibraryName", "Equal", "Movies")));
-        var b = MediaTypesKey.Create(["Episode", "Movie"], List(new Expression("libraryname", "NotEqual", "Kids")));
+        var a = MediaTypesKey.Create([MediaTypes.Movie, MediaTypes.Episode], List(new Expression("LibraryName", "Equal", "Movies")));
+        var b = MediaTypesKey.Create([MediaTypes.Episode, MediaTypes.Movie], List(new Expression("libraryname", "NotEqual", "Kids")));
 
         Assert.Equal(a, b);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
