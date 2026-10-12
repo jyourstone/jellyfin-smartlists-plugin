@@ -1382,6 +1382,213 @@
         });
     };
 
+    // ===== MISSING ITEMS (admin page only) =====
+    // Shows the external-list entries that are not in the library, from
+    // GET /Plugins/SmartLists/{id}/missing-items.
+
+    var MUTED_DASH = '<span style="opacity: 0.6;">&mdash;</span>';
+
+    // Applied over STYLES.modal.container: wider and scrollable, to fit the table
+    var MISSING_ITEMS_MODAL_STYLES = {
+        maxWidth: '900px',
+        maxHeight: '85vh',
+        overflowY: 'auto',
+        boxSizing: 'border-box'
+    };
+
+    var missingItemsTypeLabel = function (kind) {
+        return kind === 'Movie' ? 'Movie' : kind === 'Show' ? 'Series' : kind === 'Episode' ? 'Episode' : '';
+    };
+
+    var externalLinkHtml = function (href, text) {
+        return '<a href="' + SmartLists.escapeHtmlAttribute(href) + '" target="_blank" rel="noopener noreferrer">' + SmartLists.escapeHtml(text) + '</a>';
+    };
+
+    var renderMissingEntryIds = function (entry) {
+        const isMovie = entry.Kind === 'Movie';
+        const isShow = entry.Kind === 'Show';
+        const parts = [];
+        if (entry.ImdbId) {
+            parts.push(externalLinkHtml('https://www.imdb.com/title/' + encodeURIComponent(entry.ImdbId) + '/', 'IMDb ' + entry.ImdbId));
+        }
+        // TMDB and TVDB pages differ for movies and series, so other entries get plain text
+        if (entry.TmdbId) {
+            parts.push(isMovie || isShow
+                ? externalLinkHtml('https://www.themoviedb.org/' + (isMovie ? 'movie' : 'tv') + '/' + encodeURIComponent(entry.TmdbId), 'TMDB ' + entry.TmdbId)
+                : SmartLists.escapeHtml('TMDB ' + entry.TmdbId));
+        }
+        if (entry.TvdbId) {
+            parts.push(isMovie || isShow
+                ? externalLinkHtml('https://thetvdb.com/dereferrer/' + (isMovie ? 'movie' : 'series') + '/' + encodeURIComponent(entry.TvdbId), 'TVDB ' + entry.TvdbId)
+                : SmartLists.escapeHtml('TVDB ' + entry.TvdbId));
+        }
+        return parts.length > 0 ? parts.join('<br>') : MUTED_DASH;
+    };
+
+    // The table is styled by the .missing-items-table rules in config.html
+    var renderMissingItemsTable = function (missing) {
+        let html = '<div style="overflow-x: auto;"><table class="missing-items-table">' +
+            '<thead><tr><th>#</th><th>Title</th><th>Type</th><th>IDs</th></tr></thead><tbody>';
+        missing.forEach(function (entry) {
+            const typeLabel = missingItemsTypeLabel(entry.Kind);
+            const titleHtml = entry.Title
+                ? SmartLists.escapeHtml(entry.Title) + (entry.Year ? ' (' + SmartLists.escapeHtml(entry.Year) + ')' : '')
+                : MUTED_DASH;
+            html += '<tr>' +
+                '<td>' + (entry.Position + 1) + '</td>' +
+                '<td>' + titleHtml + '</td>' +
+                '<td>' + (typeLabel ? SmartLists.escapeHtml(typeLabel) : MUTED_DASH) + '</td>' +
+                '<td>' + renderMissingEntryIds(entry) + '</td>' +
+                '</tr>';
+        });
+        return html + '</tbody></table></div>';
+    };
+
+    var renderMissingItemsList = function (list) {
+        // Rule URLs are user input: only link real web URLs, so a javascript: href is impossible
+        const urlHtml = /^https?:\/\//i.test(list.Url) ? externalLinkHtml(list.Url, list.Url) : SmartLists.escapeHtml(list.Url);
+        let html = '<div style="margin-top: 1.5em;">' +
+            '<h3 style="margin: 0 0 0.5em 0; font-size: 1.05em; word-break: break-all;">' + urlHtml + '</h3>';
+
+        // No fetch time means no successful fetch since the server started
+        if (!list.FetchedAt) {
+            return html + '<p>No data yet: this external list hasn\'t been fetched successfully since the server started. ' +
+                'Refresh the list, wait for the refresh to finish, then open Missing items again.</p></div>';
+        }
+        if (list.IsMusic) {
+            return html + '<p>Music lists are not supported.</p></div>';
+        }
+
+        const fetched = SmartLists.escapeHtml(SmartLists.formatRelativeTimeFromIso(list.FetchedAt, 'unknown time').toLowerCase());
+        if (list.TotalEntries === 0) {
+            return html + '<p>The external list returned no entries when it was last fetched (' + fetched + ').</p></div>';
+        }
+
+        html += '<p style="margin: 0 0 0.5em 0;">' + list.Missing.length + ' of ' + list.TotalEntries + ' entries missing &middot; fetched ' + fetched + '</p>';
+        if (!list.IsComplete) {
+            html += '<p style="margin: 0 0 0.5em 0; color: var(--jf-palette-warning-main);">The list data is partial: the last fetch stopped before the end of the external list, so later entries were not checked.</p>';
+        }
+        html += list.Missing.length > 0 ? renderMissingItemsTable(list.Missing) : '<p>Nothing missing.</p>';
+        return html + '</div>';
+    };
+
+    var renderMissingItems = function (lists) {
+        let html = '<p style="margin-top: 0; opacity: 0.8;">Checked against the whole server library. Uses each external list as it was last fetched.</p>';
+        if (lists.length === 0) {
+            return html + '<p>This list has no External List rules that include items.</p>';
+        }
+        lists.forEach(function (list) {
+            html += renderMissingItemsList(list);
+        });
+        return html;
+    };
+
+    var csvCell = function (value) {
+        let s = value == null ? '' : String(value);
+        // Titles come from external lists: stop spreadsheets from evaluating them as formulas
+        if (/^[=+\-@\t\r]/.test(s)) {
+            s = '\'' + s;
+        }
+        return '"' + s.replace(/"/g, '""') + '"';
+    };
+
+    var downloadMissingItemsCsv = function (lists, listName) {
+        const rows = [['List URL', 'Position', 'Type', 'Title', 'Year', 'IMDb ID', 'TMDB ID', 'TVDB ID']];
+        lists.forEach(function (list) {
+            list.Missing.forEach(function (entry) {
+                rows.push([list.Url, entry.Position + 1, missingItemsTypeLabel(entry.Kind),
+                    entry.Title, entry.Year, entry.ImdbId, entry.TmdbId, entry.TvdbId]);
+            });
+        });
+        // The byte-order mark makes Excel read the file as UTF-8
+        const csv = '﻿' + rows.map(function (row) {
+            return row.map(csvCell).join(',');
+        }).join('\r\n');
+
+        SmartLists.downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+            (String(listName || '').replace(/[^A-Za-z0-9 _-]/g, '').trim() || 'list') + '-missing-items.csv');
+    };
+
+    // The modal exists only in config.html, so this is a no-op on the user page
+    SmartLists.showMissingItems = function (page, listId, listName) {
+        const modal = page.querySelector('#missing-items-modal');
+        if (!modal) return;
+
+        // Clean up any existing modal listeners
+        SmartLists.cleanupModalListeners(modal);
+
+        const modalContainer = modal.querySelector('.custom-modal-container');
+        SmartLists.applyStyles(modalContainer, SmartLists.STYLES.modal.container);
+        SmartLists.applyStyles(modalContainer, MISSING_ITEMS_MODAL_STYLES);
+        SmartLists.applyStyles(modal, SmartLists.STYLES.modal.backdrop);
+
+        const bodyEl = modal.querySelector('#missing-items-body');
+        const csvBtn = modal.querySelector('#missing-items-csv-btn');
+        modal.querySelector('#missing-items-title').textContent = 'Missing items: ' + (listName || '');
+        bodyEl.innerHTML = '<p>Loading...</p>';
+        csvBtn.disabled = true;
+        modal.classList.remove('hide');
+
+        // A response is ignored once the modal has been closed or opened again
+        const token = (modal._missingItemsToken || 0) + 1;
+        modal._missingItemsToken = token;
+        let data = null;
+
+        // Create AbortController for modal event listeners
+        const modalAbortController = SmartLists.createAbortController();
+        const modalSignal = modalAbortController ? modalAbortController.signal : null;
+
+        const cleanupAndClose = function () {
+            modal.classList.add('hide');
+            SmartLists.cleanupModalListeners(modal);
+            modal._missingItemsToken = (modal._missingItemsToken || 0) + 1;
+        };
+
+        modal.querySelector('#missing-items-close-btn').addEventListener('click', function () {
+            cleanupAndClose();
+        }, SmartLists.getEventListenerOptions(modalSignal));
+
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) {
+                cleanupAndClose();
+            }
+        }, SmartLists.getEventListenerOptions(modalSignal));
+
+        csvBtn.addEventListener('click', function () {
+            if (data) {
+                downloadMissingItemsCsv(data, listName);
+            }
+        }, SmartLists.getEventListenerOptions(modalSignal));
+
+        // Store abort controller for cleanup
+        modal._modalAbortController = modalAbortController;
+
+        const apiClient = SmartLists.getApiClient();
+        apiClient.ajax({
+            type: 'GET',
+            url: apiClient.getUrl(SmartLists.ENDPOINTS.base + '/' + encodeURIComponent(listId) + '/missing-items'),
+            contentType: 'application/json'
+        }).then(function (response) {
+            if (!response.ok) {
+                // handleApiError reads the error body from the Response
+                throw response;
+            }
+            return response.json();
+        }).then(function (lists) {
+            if (modal._missingItemsToken !== token) return;
+            data = lists;
+            bodyEl.innerHTML = renderMissingItems(lists);
+            csvBtn.disabled = !lists.some(function (list) {
+                return list.Missing.length > 0;
+            });
+        }).catch(function (err) {
+            if (modal._missingItemsToken !== token) return;
+            cleanupAndClose();
+            console.error('Missing items error:', err);
+            SmartLists.handleApiError(err, 'Failed to load missing items');
+        });
+    };
+
     SmartLists.deletePlaylist = async function (page, listId, listName) {
         await SmartLists.performListAction(page, listId, listName, {
             actionType: 'delete',
@@ -1746,6 +1953,16 @@
         return rulesHtml;
     };
 
+    // True when the list has an External List rule. The server reports its "equals" rules, and says
+    // so when there are none. Only main rule groups count, not bumpers.
+    var hasMissingItemsAction = function (playlist) {
+        return (playlist.ExpressionSets || []).some(function (set) {
+            return (set.Expressions || []).some(function (expr) {
+                return expr.MemberName === 'ExternalList';
+            });
+        });
+    };
+
     // ===== GENERATE PLAYLIST CARD HTML =====
     SmartLists.generatePlaylistCardHtml = function (playlist, rulesHtml, resolvedUserName, createdByUserName) {
         // Dynamically detect if we're on the user page (instead of relying on global flag)
@@ -1776,6 +1993,9 @@
         const userName = resolvedUserName || 'Unknown User';
         const createdBy = createdByUserName || 'Unknown';
         const playlistId = playlist.Id || 'NO_ID';
+        // Missing items is admin-only: lists are fetched with admin-configured keys, so the
+        // full external list contents must not be shown on the user page.
+        const showMissingItems = !isUserPage && hasMissingItemsAction(playlist);
 
         // Collections are server-wide, no library assignment needed
         // Create individual media type labels - filter out collection-only types for playlists (not supported due to Jellyfin limitations)
@@ -2007,6 +2227,12 @@
             (isEnabled ? '' : ' title="Cannot refresh disabled list"') + '>' +
             '<span class="material-icons">refresh</span><span>Refresh</span>' +
             '</button>' +
+            (showMissingItems ?
+                '<button type="button" class="playlist-kebab-menu-item kebab-missing-items-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">' +
+                '<span class="material-icons">playlist_remove</span><span>Missing items</span>' +
+                '</button>' :
+                ''
+            ) +
             (isEnabled ?
                 '<button type="button" class="playlist-kebab-menu-item kebab-disable-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">' +
                 '<span class="material-icons">pause_circle</span><span>Disable</span>' +
@@ -2194,6 +2420,10 @@
             '<button is="emby-button" type="button" class="emby-button raised clone-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Clone</button>' +
             '<button is="emby-button" type="button" class="emby-button raised refresh-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '"' + 
             (isEnabled ? '' : ' disabled title="Cannot refresh disabled list. Enable the list first." style="opacity: 0.4; cursor: not-allowed;"') + '>Refresh</button>' +
+            (showMissingItems ?
+                '<button is="emby-button" type="button" class="emby-button raised missing-items-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Missing items</button>' :
+                ''
+            ) +
             (isEnabled ?
                 '<button is="emby-button" type="button" class="emby-button raised disable-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Disable</button>' :
                 '<button is="emby-button" type="button" class="emby-button raised enable-playlist-btn" data-playlist-id="' + SmartLists.escapeHtmlAttribute(playlistId) + '" data-playlist-name="' + SmartLists.escapeHtmlAttribute(playlist.Name || '') + '">Enable</button>'

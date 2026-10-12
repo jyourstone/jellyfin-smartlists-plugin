@@ -571,6 +571,18 @@
         return signal ? { signal: signal } : {};
     };
 
+    // Saves a Blob as a file through a temporary download link
+    SmartLists.downloadBlob = function (blob, filename) {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(a);
+    };
+
     // Centralized styling configuration
     SmartLists.STYLES = {
         scheduleBox: {

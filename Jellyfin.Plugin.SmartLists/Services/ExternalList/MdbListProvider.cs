@@ -254,12 +254,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return query.ToString();
         }
 
-        private static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
+        internal static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
         {
             // Add IMDb ID from top-level or nested ids (TryAdd keeps first/lowest position for duplicates)
             var imdbId = item.ImdbId ?? item.Ids?.Imdb;
             var tvdbId = item.TvdbId ?? item.Ids?.Tvdb;
-            result.AddProviderIds(kind, imdbId, item.Ids?.Tmdb, tvdbId, position);
+            result.AddProviderIds(kind, imdbId, item.Ids?.Tmdb, tvdbId, position, item.Title, item.ReleaseYear);
             position++;
         }
 

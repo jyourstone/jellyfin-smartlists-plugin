@@ -60,5 +60,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
         [JsonPropertyName("media_type")]
         public string? MediaType { get; set; }
+
+        [JsonPropertyName("release_date")]
+        public string? ReleaseDate { get; set; }
+
+        [JsonPropertyName("first_air_date")]
+        public string? FirstAirDate { get; set; }
     }
 }

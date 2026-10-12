@@ -188,6 +188,10 @@ Result: Track 1 from Album A, Track 1 from Album B, Track 2 from Album A, Track 
 - **External List** = `https://www.imdb.com/event/ev0000003/2024/1/` AND **Playback Status** = Unplayed
 - Combine an awards event list with other filters to find unwatched nominees in your library
 
+### What's Missing From the IMDb Top 250
+- **External List** = `https://www.imdb.com/chart/top/`
+- After the list refreshes, open **Missing items** from the list card on the admin page to see the chart entries that aren't in your library, with their chart positions, and **Download CSV** to save them (see [Missing Items](../user-guide/external-lists.md#missing-items))
+
 ## Balanced Mix with Per-Group Limits
 
 These examples use the **Max Items for this rule group** feature to create perfectly balanced playlists:

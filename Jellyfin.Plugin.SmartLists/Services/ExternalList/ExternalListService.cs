@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,6 +10,13 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 {
     /// <summary>
+    /// The last successfully fetched result for an external list URL.
+    /// </summary>
+    /// <param name="Result">The fetched result. Never modified after the provider returns it.</param>
+    /// <param name="FetchedAtUtc">When the fetch completed, in UTC.</param>
+    public sealed record ExternalListSnapshot(ExternalListResult Result, DateTime FetchedAtUtc);
+
+    /// <summary>
     /// Orchestrates fetching external lists from various providers and caching results.
     /// Resolves URLs to the appropriate <see cref="IExternalListProvider"/> and handles errors gracefully.
     /// </summary>
@@ -16,6 +24,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
     {
         private readonly IEnumerable<IExternalListProvider> _providers;
         private readonly ILogger<ExternalListService> _logger;
+        private readonly ConcurrentDictionary<string, ExternalListSnapshot> _snapshots = new(StringComparer.OrdinalIgnoreCase);
 
         public ExternalListService(
             IEnumerable<IExternalListProvider> providers,
@@ -24,6 +33,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             _providers = providers;
             _logger = logger;
         }
+
+        /// <summary>
+        /// Gets the last successful fetch of an external list URL, held in memory only (empty after a restart).
+        /// </summary>
+        /// <param name="url">The external list URL (case-insensitive).</param>
+        /// <returns>The snapshot, or null when the URL has not been fetched successfully since startup.</returns>
+        public ExternalListSnapshot? GetSnapshot(string url) => _snapshots.TryGetValue(url, out var snapshot) ? snapshot : null;
 
         /// <summary>
         /// Pre-fetches all external lists referenced by the given URLs and caches the results.
@@ -83,6 +99,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     var result = await provider.FetchListAsync(url, cancellationToken, maxItems).ConfigureAwait(false);
                     cache.ExternalListData[url] = result;
+                    _snapshots[url] = new ExternalListSnapshot(result, DateTime.UtcNow);
                     _logger.LogDebug("Cached external list {Url}: {Count} items (complete: {IsComplete})", url, result.TotalItems, result.IsComplete);
                 }
                 catch (OperationCanceledException)

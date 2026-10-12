@@ -3867,6 +3867,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// </summary>
         public List<string> ExternalListUrls { get; } = [];
 
+        /// <summary>
+        /// External list URLs from ExternalList "Equal" rules, the ones that include items. Used by Missing items.
+        /// </summary>
+        public List<string> IncludedExternalListUrls { get; } = [];
+
         // Computed accessors for cheap extraction groups
         public bool NeedsFileInfo => RequiredGroups.HasFlag(ExtractionGroup.FileInfo);
         public bool NeedsLibraryInfo => RequiredGroups.HasFlag(ExtractionGroup.LibraryInfo);
@@ -3933,7 +3938,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 // Collect external list URLs for pre-fetching
                 if (expr.MemberName == "ExternalList" && !string.IsNullOrWhiteSpace(expr.TargetValue))
+                {
                     requirements.ExternalListUrls.Add(expr.TargetValue);
+                    if (expr.Operator == "Equal")
+                        requirements.IncludedExternalListUrls.Add(expr.TargetValue);
+                }
 
                 // Collect user IDs from user-specific rules (normalize to "N" format for consistency)
                 // Skip invalid user IDs - validation will catch them later during processing

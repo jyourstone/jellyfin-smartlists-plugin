@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -127,7 +128,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (item.Id is int id and > 0)
                     {
                         // TryAdd keeps first/lowest position for duplicates
-                        result.AddProviderIds(GetItemKind(item.MediaType, item), null, id, null, position);
+                        var (title, year) = GetTitleAndYear(item);
+                        result.AddProviderIds(GetItemKind(item.MediaType, item), null, id, null, position, title, year);
                         totalFetched++;
                         position++;
                     }
@@ -194,7 +196,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     if (item.Id is int id and > 0)
                     {
                         // TryAdd keeps first/lowest position for duplicates
-                        result.AddProviderIds(GetItemKind(item.MediaType, item, fallbackKind), null, id, null, position);
+                        var (title, year) = GetTitleAndYear(item);
+                        result.AddProviderIds(GetItemKind(item.MediaType, item, fallbackKind), null, id, null, position, title, year);
                         totalFetched++;
                         position++;
                     }
@@ -260,7 +263,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                 if (item.Id is int id and > 0)
                 {
-                    result.AddProviderIds(ExternalListItemKind.Movie, null, id, null, position);
+                    var (title, year) = GetTitleAndYear(item);
+                    result.AddProviderIds(ExternalListItemKind.Movie, null, id, null, position, title, year);
                     position++;
                 }
             }
@@ -345,6 +349,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             return (null, TmdbEndpointType.Paginated, ExternalListItemKind.Unknown);
+        }
+
+        /// <summary>
+        /// Reads the display title and year: movies carry title/release_date, TV shows name/first_air_date.
+        /// </summary>
+        internal static (string? Title, int? Year) GetTitleAndYear(TmdbItem item)
+        {
+            var title = !string.IsNullOrEmpty(item.Title) ? item.Title : item.Name;
+            var date = !string.IsNullOrEmpty(item.ReleaseDate) ? item.ReleaseDate : item.FirstAirDate;
+            int? year = date is { Length: >= 4 } && int.TryParse(date.AsSpan(0, 4), CultureInfo.InvariantCulture, out var y) ? y : null;
+            return (title, year);
         }
 
         private static ExternalListItemKind GetItemKind(string? mediaType, TmdbItem? item = null, ExternalListItemKind fallbackKind = ExternalListItemKind.Unknown)
