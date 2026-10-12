@@ -38,6 +38,11 @@ Configure individual lists with their own refresh schedules:
 !!! tip "Multiple Schedules"
     You can add multiple schedules to a single list. For example, you could set both a Daily schedule at 6:00 AM and an Interval schedule every 4 hours to refresh the list both at a specific time and at regular intervals throughout the day.
 
+!!! note "Time Zone"
+    Daily, Weekly, Monthly and Yearly schedules use the Jellyfin **server's** time zone, not your browser's. Docker containers run on UTC unless the `TZ` environment variable is set (e.g. `TZ=Europe/Stockholm`).
+
+    Interval schedules count from midnight UTC. For example, every 6 hours runs at 00:00, 06:00, 12:00 and 18:00 UTC.
+
 ## Visibility Scheduling
 
 Control when lists appear and disappear in Jellyfin automatically:
@@ -117,6 +122,7 @@ Perfect for randomized lists:
 
 - Use the **"Refresh All Lists"** button in the Settings tab to trigger a refresh of all lists
 - Use the **"Refresh"** button next to each list in the Manage Lists tab to refresh individual lists
+- Creating, saving or enabling a list also refreshes it right away. The Status page logs these runs as **Manual**, while runs started by a schedule show as **Scheduled**
 
 !!! note "Refresh Time"
     A full refresh of all lists can take some time depending on how many media items and lists you have. Large libraries with many lists may take several minutes or even hours to complete, depending on the hardware. Individual list refreshes are typically faster.
