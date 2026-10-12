@@ -1,0 +1,31 @@
+# .github/workflows/awaiting-reply.yml
+# Drops "awaiting reply" (and "stale") once someone other than the maintainers answers,
+# so stale-questions.yml stops counting down on issues that got their reply.
+name: Clear awaiting reply
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  unlabel:
+    if: >-
+      !github.event.issue.pull_request &&
+      contains(github.event.issue.labels.*.name, 'awaiting reply') &&
+      github.event.comment.user.type != 'Bot' &&
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh issue edit "$NUMBER" --repo "$REPO" --remove-label "awaiting reply"
+          if [ "$HAS_STALE" = "true" ]; then
+            gh issue edit "$NUMBER" --repo "$REPO" --remove-label stale
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          HAS_STALE: ${{ contains(github.event.issue.labels.*.name, 'stale') }}
