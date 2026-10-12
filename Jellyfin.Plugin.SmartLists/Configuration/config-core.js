@@ -43,7 +43,7 @@
         LIST_FIELDS: ['Collections', 'People', 'Actors', 'Directors', 'Writers', 'Producers', 'GuestStars', 'Genres', 'Studios', 'Tags', 'Artists', 'AlbumArtists', 'AudioLanguages', 'SubtitleLanguages', 'ProductionLocations'],
         NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Rating', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels'],
         DATE_FIELDS: ['DateCreated', 'DateLastRefreshed', 'DateLastSaved', 'DateModified', 'ReleaseDate', 'LastPlayedDate', 'LastEpisodeAirDate'],
-        BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched'],
+        BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched', 'Is3D'],
         SIMPLE_FIELDS: ['ItemType', 'SeriesStatus'],
         RESOLUTION_FIELDS: ['Resolution'],
         ASPECT_RATIO_FIELDS: ['AspectRatio'],
@@ -69,7 +69,7 @@
 
     // Audio and video field lists for visibility gating
     SmartLists.AUDIO_FIELD_NAMES = ['AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioCodec', 'AudioProfile', 'AudioChannels', 'AudioLanguages', 'SubtitleLanguages'];
-    SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'AspectRatio', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType'];
+    SmartLists.VIDEO_FIELD_NAMES = ['Resolution', 'AspectRatio', 'Framerate', 'VideoCodec', 'VideoProfile', 'VideoRange', 'VideoRangeType', 'Is3D'];
 
     // Debounce delay for media type change updates (milliseconds)
     SmartLists.MEDIA_TYPE_UPDATE_DEBOUNCE_MS = 200;

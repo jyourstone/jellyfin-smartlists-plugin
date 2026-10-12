@@ -629,6 +629,22 @@ public class EngineOperatorTests
     }
 
     /// <summary>
+    /// Is3D is a plain (not user-specific) boolean property, so it compiles without any user ID.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "Equal", "true", true)]
+    [InlineData(false, "Equal", "true", false)]
+    [InlineData(false, "Equal", "false", true)]
+    [InlineData(true, "NotEqual", "true", false)]
+    [InlineData(false, "NotEqual", "true", true)]
+    public void CompileRule_Is3D_MatchesPlainBoolean(bool is3D, string op, string target, bool expected)
+    {
+        var operand = new Operand("item") { Is3D = is3D };
+
+        Assert.Equal(expected, Compile("Is3D", op, target)(operand));
+    }
+
+    /// <summary>
     /// Boolean targets are parsed leniently for whitespace and JSON quoting, but anything that is
     /// not true/false is rejected at compile time rather than silently treated as false.
     /// </summary>

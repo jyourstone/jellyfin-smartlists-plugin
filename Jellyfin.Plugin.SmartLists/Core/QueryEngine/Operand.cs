@@ -89,6 +89,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public string VideoProfile { get; set; } = string.Empty;  // e.g., Main 10, High
         public string VideoRange { get; set; } = string.Empty;  // e.g., SDR, HDR
         public string VideoRangeType { get; set; } = string.Empty;  // e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG
+        public bool Is3D { get; set; } = false;  // Jellyfin stores a 3D format (SBS, TAB, MVC) for the video
 
         // Collections field - indicates which collections this item belongs to
         public List<string> Collections { get; set; } = [];
