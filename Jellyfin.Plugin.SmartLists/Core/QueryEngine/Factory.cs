@@ -2814,6 +2814,9 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 operand.SeriesStatus = series.Status?.ToString() ?? string.Empty;
             }
 
+            // Extract Is3D (zero cost - direct property access for Video items)
+            operand.Is3D = baseItem is MediaBrowser.Controller.Entities.Video video && video.Video3DFormat.HasValue;
+
             // Extract series name for episodes - only when needed for performance
             if (extractSeriesName)
             {

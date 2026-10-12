@@ -245,6 +245,7 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "VideoProfile", "Video Profile", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoRange", "Video Range", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
             AddField(fields, "VideoRangeType", "Video Range Type", FieldType.Text, FieldCategory.Video, StringOperators, ExtractionGroup.VideoQuality);
+            AddField(fields, "Is3D", "Is 3D", FieldType.Boolean, FieldCategory.Video, BooleanOperators);
 
             // Audio Fields
             AddField(fields, "AudioLanguages", "Audio Languages", FieldType.List, FieldCategory.Audio, MultiValueOperators, ExtractionGroup.AudioLanguages);
