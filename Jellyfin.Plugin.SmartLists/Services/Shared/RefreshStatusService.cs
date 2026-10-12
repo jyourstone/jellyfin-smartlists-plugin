@@ -22,8 +22,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         public int ProcessedItems { get; set; }
         public TimeSpan? EstimatedTimeRemaining { get; set; }
         public string? ErrorMessage { get; set; }
-        public int? BatchCurrentIndex { get; set; }
-        public int? BatchTotalCount { get; set; }
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private TimeSpan? _preservedElapsedTime;
 
@@ -128,9 +126,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             string listName,
             SmartListType listType,
             RefreshTriggerType triggerType,
-            int totalItems = 0,
-            int? batchCurrentIndex = null,
-            int? batchTotalCount = null)
+            int totalItems = 0)
         {
             var operation = new RefreshOperation
             {
@@ -140,9 +136,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 TriggerType = triggerType,
                 StartTime = DateTime.UtcNow,
                 TotalItems = totalItems,
-                ProcessedItems = 0,
-                BatchCurrentIndex = batchCurrentIndex,
-                BatchTotalCount = batchTotalCount
+                ProcessedItems = 0
             };
 
             _ongoingOperations.AddOrUpdate(listId, operation, (key, existing) =>
@@ -152,36 +146,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                 return operation;
             });
 
-            _logger.LogDebug("Started tracking refresh operation for list {ListId} ({ListName})" + 
-                (batchCurrentIndex.HasValue && batchTotalCount.HasValue 
-                    ? $" - Batch {batchCurrentIndex.Value} of {batchTotalCount.Value}" 
-                    : ""), 
-                listId, listName);
-        }
-
-        /// <summary>
-        /// Updates the batch index for an ongoing operation
-        /// </summary>
-        public void UpdateBatchIndex(string listId, int batchCurrentIndex)
-        {
-            if (_ongoingOperations.TryGetValue(listId, out var operation))
-            {
-                operation.BatchCurrentIndex = batchCurrentIndex;
-            }
-        }
-
-        /// <summary>
-        /// Updates the batch index for all ongoing operations in a batch (same total count)
-        /// </summary>
-        public void UpdateBatchIndexForAll(int batchCurrentIndex, int batchTotalCount)
-        {
-            foreach (var operation in _ongoingOperations.Values)
-            {
-                if (operation.BatchTotalCount == batchTotalCount)
-                {
-                    operation.BatchCurrentIndex = batchCurrentIndex;
-                }
-            }
+            _logger.LogDebug("Started tracking refresh operation for list {ListId} ({ListName})", listId, listName);
         }
 
         /// <summary>
@@ -272,9 +237,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
                     TotalItems = op.TotalItems,
                     ProcessedItems = op.ProcessedItems,
                     EstimatedTimeRemaining = op.EstimatedTimeRemaining,
-                    ErrorMessage = op.ErrorMessage,
-                    BatchCurrentIndex = op.BatchCurrentIndex,
-                    BatchTotalCount = op.BatchTotalCount
+                    ErrorMessage = op.ErrorMessage
                 };
                 
                 // Preserve the elapsed time from the original operation

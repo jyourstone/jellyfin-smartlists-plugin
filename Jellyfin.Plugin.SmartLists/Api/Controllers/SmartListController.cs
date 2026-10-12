@@ -2874,9 +2874,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     processedItems = op.ProcessedItems,
                     estimatedTimeRemaining = op.EstimatedTimeRemaining?.TotalSeconds,
                     elapsedTime = op.ElapsedTime.TotalSeconds,
-                    errorMessage = op.ErrorMessage,
-                    batchCurrentIndex = op.BatchCurrentIndex,
-                    batchTotalCount = op.BatchTotalCount
+                    errorMessage = op.ErrorMessage
                 }).ToList();
 
                 var history = _refreshStatusService.GetRefreshHistory().Select(h => new
@@ -2970,9 +2968,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     processedItems = op.ProcessedItems,
                     estimatedTimeRemaining = op.EstimatedTimeRemaining?.TotalSeconds,
                     elapsedTime = op.ElapsedTime.TotalSeconds,
-                    errorMessage = op.ErrorMessage,
-                    batchCurrentIndex = op.BatchCurrentIndex,
-                    batchTotalCount = op.BatchTotalCount
+                    errorMessage = op.ErrorMessage
                 }).ToList();
 
                 return Ok(ongoing);
