@@ -1213,11 +1213,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         {
             var baseItemKinds = MediaTypeConverter.GetBaseItemKindsFromMediaTypes(mediaTypes, dto, _logger);
 
-            // Build a set of valid TopParentIds from VirtualFolder physical locations.
-            // VirtualFolderInfo.ItemId is the CollectionFolder ID which differs from items' TopParentId
-            // (which points to the physical folder). We resolve physical folder IDs via FindByPath.
-            var validTopParentIds = GetLibraryTopParentIds();
-
             var includeVirtualItems = SmartListUtilities.UsesLibraryNameRule(dto);
             var query = new InternalItemsQuery(user)
             {
@@ -1225,7 +1220,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 Recursive = true,
             };
 
-            LibraryManagerHelper.ApplyVirtualItemQueryScope(query, includeVirtualItems, validTopParentIds);
+            LibraryManagerHelper.ApplyVirtualItemQueryScope(_libraryManager, query, user, includeVirtualItems);
 
             var items = _libraryManager.GetItemsResult(query).Items;
 
@@ -1235,12 +1230,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
 
             var extras = LibraryManagerHelper.FetchExtras(
-                _libraryManager, user, validTopParentIds, items, extraOwnerMap, _logger, dto.Name);
+                _libraryManager, user, items, extraOwnerMap, _logger, dto.Name);
 
             return items.Concat(extras);
         }
-
-        private Guid[] GetLibraryTopParentIds() => LibraryManagerHelper.GetLibraryTopParentIds(_libraryManager);
 
         /// <summary>
         /// Builds the ordered bumper item pool by running the playlist's bumper rule sets

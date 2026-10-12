@@ -58,6 +58,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// <summary>
         /// Gets TopParentIds for actual user libraries by resolving VirtualFolder physical paths
         /// to their folder BaseItem IDs. Excludes internal folders like live TV recordings.
+        /// User-neutral: to scope a user's query use <see cref="ApplyVirtualItemQueryScope"/>.
         /// </summary>
         /// <param name="libraryManager">The library manager instance</param>
         /// <returns>Array of Guid IDs for library top parent folders</returns>
@@ -93,6 +94,27 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             }
 
             return ids.ToArray();
+        }
+
+        /// <summary>
+        /// Gets the library TopParentIds the user is allowed to see. Jellyfin applies a user's
+        /// library access only to queries whose TopParentIds are empty, so a user query that sets
+        /// TopParentIds without this returns items from every library.
+        /// </summary>
+        private static Guid[] GetLibraryTopParentIds(ILibraryManager libraryManager, User user)
+        {
+            var access = new InternalItemsQuery(user);
+            libraryManager.ConfigureUserAccess(access, user);
+            return IntersectTopParentIds(GetLibraryTopParentIds(libraryManager), access.TopParentIds);
+        }
+
+        internal static Guid[] IntersectTopParentIds(Guid[] libraryIds, Guid[] userIds)
+        {
+            var scoped = libraryIds.Intersect(userIds).ToArray();
+
+            // An empty TopParentIds lifts the restriction instead of matching nothing,
+            // so mirror Jellyfin's own guard and scope to an ID no item has.
+            return scoped.Length > 0 ? scoped : [Guid.NewGuid()];
         }
 
         /// <summary>
@@ -178,13 +200,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             return folders.AsReadOnly();
         }
 
-        public static void ApplyVirtualItemQueryScope(InternalItemsQuery query, bool includeVirtualItems, Guid[] validTopParentIds)
+        public static void ApplyVirtualItemQueryScope(ILibraryManager libraryManager, InternalItemsQuery query, User user, bool includeVirtualItems)
         {
             query.IsVirtualItem = includeVirtualItems ? null : false;
 
             if (!includeVirtualItems)
             {
-                query.TopParentIds = validTopParentIds;
+                query.TopParentIds = GetLibraryTopParentIds(libraryManager, user);
             }
         }
 
@@ -225,8 +247,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         /// through standard library queries.
         /// </summary>
         /// <param name="libraryManager">The library manager instance</param>
-        /// <param name="user">User context for the query</param>
-        /// <param name="topParentIds">TopParentIds to scope the parent query</param>
+        /// <param name="user">User context for the query; also limits it to the user's libraries</param>
         /// <param name="existingItems">Already-fetched items used to deduplicate extras</param>
         /// <param name="extraOwnerMap">Optional map to populate with extra ID → owning series ID</param>
         /// <param name="logger">Optional logger for diagnostics</param>
@@ -235,7 +256,6 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         public static List<BaseItem> FetchExtras(
             ILibraryManager libraryManager,
             User user,
-            Guid[] topParentIds,
             IReadOnlyList<BaseItem> existingItems,
             ConcurrentDictionary<Guid, Guid>? extraOwnerMap = null,
             ILogger? logger = null,
@@ -248,7 +268,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                 IncludeItemTypes = ExtrasParentKinds,
                 Recursive = true,
                 IsVirtualItem = false,
-                TopParentIds = topParentIds,
+                TopParentIds = GetLibraryTopParentIds(libraryManager, user),
             };
             var parents = libraryManager.GetItemsResult(parentQuery).Items;
 
