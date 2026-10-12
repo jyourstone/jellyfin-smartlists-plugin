@@ -1,4 +1,3 @@
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.SmartLists.Core.Models;
@@ -11,13 +10,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Abstractions
     /// <typeparam name="TDto">The DTO type (SmartPlaylistDto or SmartCollectionDto)</typeparam>
     public interface ISmartListService<TDto> where TDto : SmartListDto
     {
-        /// <summary>
-        /// Refreshes a single smart list
-        /// This method is called by the queue processor and assumes no locking is needed.
-        /// </summary>
-        Task<(bool Success, string Message, string Id)> RefreshAsync(
-            TDto dto, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-
         /// <summary>
         /// Deletes a smart list
         /// </summary>

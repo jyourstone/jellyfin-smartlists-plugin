@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -527,71 +526,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 return (false, $"Error processing playlist '{dto.Name}': {ex.Message}", string.Empty);
             }
         }
-
-        public async Task<(bool Success, string Message, string Id)> RefreshAsync(SmartPlaylistDto dto, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(dto);
-
-            // This is the internal method that assumes the lock is already held
-            var stopwatch = Stopwatch.StartNew();
-            try
-            {
-                _logger.LogDebug("Refreshing single smart playlist: {PlaylistName}", dto.Name);
-                _logger.LogDebug("PlaylistService.RefreshSinglePlaylistAsync called with: Name={Name}, User={User}, Public={Public}, Enabled={Enabled}, ExpressionSets={ExpressionSetCount}, MediaTypes={MediaTypes}",
-                    dto.Name, dto.UserId, dto.Public, dto.Enabled, dto.ExpressionSets?.Count ?? 0,
-                    dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "None");
-
-                // Validate media types before processing
-                _logger.LogDebug("Validating media types for playlist '{PlaylistName}': {MediaTypes}", dto.Name, dto.MediaTypes != null ? string.Join(",", dto.MediaTypes) : "null");
-
-                var validation = ValidateUnsupportedMediaTypes(dto.MediaTypes, dto.Name);
-                if (!validation.IsValid)
-                {
-                    return validation;
-                }
-
-                if (dto.MediaTypes == null || dto.MediaTypes.Count == 0)
-                {
-                    _logger.LogError("Smart playlist '{PlaylistName}' has no media types specified. At least one media type must be selected. Skipping playlist refresh.", dto.Name);
-                    return (false, "No media types specified. At least one media type must be selected.", string.Empty);
-                }
-
-                // Get the user for this playlist
-                var user = GetPlaylistUser(dto);
-                if (user == null)
-                {
-                    _logger.LogWarning("No user found for playlist '{PlaylistName}'. Skipping.", dto.Name);
-                    return (false, "No user found for playlist", string.Empty);
-                }
-
-                var allUserMedia = GetAllUserMedia(user, dto.MediaTypes, dto).ToArray();
-
-                // Create a temporary RefreshCache for this refresh (fallback path when queue service unavailable)
-                var refreshCache = new RefreshQueueService.RefreshCache();
-
-                var (success, message, jellyfinPlaylistId) = await ProcessPlaylistRefreshAsync(dto, user, allUserMedia, refreshCache, _logger, null, progressCallback, cancellationToken);
-
-                // Update LastRefreshed timestamp for successful refreshes (any trigger)
-                if (success)
-                {
-                    dto.LastRefreshed = DateTime.UtcNow;
-                    _logger.LogDebug("Updated LastRefreshed timestamp for playlist: {PlaylistName}", dto.Name);
-                }
-
-                stopwatch.Stop();
-                _logger.LogDebug("Single playlist refresh completed in {ElapsedMs}ms: {Message}", stopwatch.ElapsedMilliseconds, message);
-
-                return (success, message, jellyfinPlaylistId);
-            }
-            catch (Exception ex)
-            {
-                stopwatch.Stop();
-                _logger.LogError(ex, "Error in RefreshSinglePlaylistAsync for '{PlaylistName}' after {ElapsedMs}ms: {ErrorMessage}",
-                    dto.Name, stopwatch.ElapsedMilliseconds, ex.Message);
-                return (false, $"Error refreshing playlist '{dto.Name}': {ex.Message}", string.Empty);
-            }
-        }
-
 
         public Task DeleteAsync(SmartPlaylistDto dto, CancellationToken cancellationToken = default)
         {
