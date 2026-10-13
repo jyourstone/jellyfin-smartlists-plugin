@@ -167,7 +167,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         var fetchLimit = ExternalListService.ComputeFetchLimit();
                         logger.LogDebug("Pre-fetching {Count} external list(s) for playlist '{PlaylistName}' (fetchLimit: {FetchLimit})", fieldReqs.ExternalListUrls.Count, dto.Name, fetchLimit);
-                        await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);
+                        var failedLists = await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);
+                        if (failedLists.Count > 0)
+                        {
+                            // Without the list's entries the refresh would write a wrong (often empty) playlist
+                            var failedMessage = $"Could not fetch external list(s) {string.Join(", ", failedLists)}; playlist '{dto.Name}' was left unchanged";
+                            logger.LogWarning("{Message}", failedMessage);
+                            return (false, failedMessage, string.Empty);
+                        }
                     }
                 }
 

@@ -1156,6 +1156,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
             // External list caches - pre-fetched list data and per-item membership
             // Maps external list URL → fetched provider ID sets (populated by ExternalListService before filtering)
             public ConcurrentDictionary<string, ExternalListResult> ExternalListData { get; } = new(StringComparer.OrdinalIgnoreCase);
+            // External list URLs whose fetch failed in this drain (ExternalListData holds an empty result for them)
+            public ConcurrentDictionary<string, byte> FailedExternalLists { get; } = new(StringComparer.OrdinalIgnoreCase);
             // Maps ItemId → list of external list URLs this item appears in (per-item cache)
             public ConcurrentDictionary<Guid, List<string>> ItemExternalLists { get; } = new();
             // Maps ItemId → best (lowest) position across the active external lists (for External List Order sorting)

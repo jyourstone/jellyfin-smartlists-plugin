@@ -164,7 +164,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     {
                         var fetchLimit = ExternalListService.ComputeFetchLimit();
                         _logger.LogDebug("Pre-fetching {Count} external list(s) for collection '{CollectionName}' (fetchLimit: {FetchLimit})", fieldReqs.ExternalListUrls.Count, dto.Name, fetchLimit);
-                        await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);
+                        var failedLists = await _externalListService.PreFetchListsAsync(fieldReqs.ExternalListUrls, refreshCache, cancellationToken, fetchLimit).ConfigureAwait(false);
+                        if (failedLists.Count > 0)
+                        {
+                            // Without the list's entries the refresh would write a wrong (often empty) collection
+                            var failedMessage = $"Could not fetch external list(s) {string.Join(", ", failedLists)}; collection '{dto.Name}' was left unchanged";
+                            _logger.LogWarning("{Message}", failedMessage);
+                            return (false, failedMessage, string.Empty);
+                        }
                     }
                 }
 
