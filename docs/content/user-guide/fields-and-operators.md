@@ -62,7 +62,7 @@ The more fields selected, the more comprehensive but potentially stricter the ma
 | **Video Profile** | `VideoProfile` | Codec profile (e.g., Main 10, High) |
 | **Video Range** | `VideoRange` | Dynamic range (e.g., SDR, HDR) |
 | **Video Range Type** | `VideoRangeType` | Specific HDR format (e.g., HDR10, DOVIWithHDR10, HDR10Plus, HLG) |
-| **Is 3D** | `Is3D` | Whether Jellyfin has a 3D format (side-by-side, top-and-bottom or MVC) for the video. Jellyfin detects 3D from tags in the file name (see [Jellyfin's movie naming](https://jellyfin.org/docs/general/server/media/movies/)), so a 3D file without one counts as not 3D. For a movie with several versions, only the primary version is checked. |
+| **Is 3D** | `Is3D` | Whether Jellyfin has a 3D format (side-by-side, top-and-bottom or MVC) for the video. Jellyfin detects 3D from tags in the file name (see [Jellyfin's movie naming](https://jellyfin.org/docs/general/server/media/movies/)), so a 3D file without one counts as not 3D. For a movie with several versions, only the primary version is checked unless [Match alternate versions](media-types.md#alternate-versions) is on. |
 
 #### Aspect Ratio
 

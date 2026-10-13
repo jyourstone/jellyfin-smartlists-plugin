@@ -7,6 +7,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
@@ -74,6 +75,15 @@ public class TestLibraryManager : DispatchProxy
     /// </summary>
     internal static readonly ConcurrentDictionary<Guid, List<BaseItem>> ItemListByParentId = new();
 
+    /// <summary>
+    /// A video's alternate versions, keyed by the primary's id: local ones as ids (resolved through
+    /// <see cref="Items"/>, like the server does) and linked ones as items. Together they answer
+    /// <c>GetItemIdsWithAlternateVersions</c>, <c>GetLocalAlternateVersionIds</c> and
+    /// <c>GetLinkedAlternateVersions</c> for Match alternate versions.
+    /// </summary>
+    internal static readonly ConcurrentDictionary<Guid, List<Guid>> LocalAlternateVersionIds = new();
+    internal static readonly ConcurrentDictionary<Guid, List<Video>> LinkedAlternateVersions = new();
+
     /// <summary>Total <c>GetItemById</c> calls recorded for the given ids.</summary>
     internal static int CallsFor(params Guid[] ids)
         => ids.Sum(id => GetItemByIdCalls.TryGetValue(id, out var count) ? count : 0);
@@ -114,9 +124,32 @@ public class TestLibraryManager : DispatchProxy
                     $"TestLibraryManager: GetItemsResult called for unregistered ParentId {resultQuery.ParentId}. Seed ItemListByParentId first.");
         }
 
+        if (targetMethod?.Name == "GetItemIdsWithAlternateVersions" && args is { Length: 1 } && args[0] is IReadOnlyList<Guid> poolIds)
+        {
+            return poolIds.Where(i => LocalAlternateVersionIds.ContainsKey(i) || LinkedAlternateVersions.ContainsKey(i)).ToHashSet();
+        }
+
+        if (targetMethod?.Name == "GetLocalAlternateVersionIds" && args is { Length: 1 } && args[0] is Video localOf)
+        {
+            return LocalAlternateVersionIds.TryGetValue(localOf.Id, out var localIds) ? localIds : new List<Guid>();
+        }
+
+        if (targetMethod?.Name == "GetLinkedAlternateVersions" && args is { Length: 1 } && args[0] is Video linkedOf)
+        {
+            return LinkedAlternateVersions.TryGetValue(linkedOf.Id, out var linked) ? linked : new List<Video>();
+        }
+
         throw new NotSupportedException(
             $"TestLibraryManager: {targetMethod?.Name} is not stubbed. Add it deliberately - see Support/TestItems.cs.");
     }
+}
+
+/// <summary>
+/// An <see cref="IRecordingsManager"/> with no active recordings: every call returns null.
+/// </summary>
+public class NoRecordingsManager : DispatchProxy
+{
+    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
 }
 
 /// <summary>
@@ -187,6 +220,10 @@ public static class TestItems
     internal static void InstallLibraryManager()
     {
         BaseItem.LibraryManager = DispatchProxy.Create<ILibraryManager, TestLibraryManager>();
+
+        // Video.SourceType (read by IsVisibleStandalone) asks the recordings manager whether the file is
+        // being recorded; no recordings are ever active in tests
+        Video.RecordingsManager = DispatchProxy.Create<IRecordingsManager, NoRecordingsManager>();
     }
 
     public static readonly User User = new("tester", "authProviderId", "pwResetProviderId");

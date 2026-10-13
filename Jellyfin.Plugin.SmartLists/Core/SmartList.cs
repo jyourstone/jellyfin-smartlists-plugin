@@ -35,6 +35,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         public List<string>? MediaTypes { get; set; }
         public int CollectionSearchDepth { get; set; }  // Depth for traversing nested collections/playlists (0 = no recursion, 1-10 = levels)
         public bool MatchByMembers { get; set; }  // Container candidates (Collection/Playlist media types) match when at least one member item passes the rules
+        public bool MatchAlternateVersions { get; set; }  // A video also matches when one of its alternate versions does (version file/stream fields, primary metadata)
         public bool GroupIntoCollections { get; set; }  // Collections only: matched items are replaced by the collections that directly contain them
         public List<ExpressionSet> ExpressionSets { get; set; }
         public int MaxItems { get; set; }
@@ -64,6 +65,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// returns. Populated only while group tracking is on (see <see cref="TrackRuleGroups"/>).
         /// </summary>
         internal IReadOnlyDictionary<Guid, List<int>> ItemGroupMappings => _itemGroupMappings;
+
+        // Match alternate versions, per filter run: the pool videos that have alternate versions, and how an
+        // alternate's version operand is built. Empty/null when the option is off or no video has versions.
+        private IReadOnlySet<Guid> _multiVersionIds = new HashSet<Guid>();
+        private Func<BaseItem, Operand>? _versionOperandFactory;
 
         // OPTIMIZATION: Static cache for compiled rules to avoid recompilation
         private static readonly ConcurrentDictionary<string, List<List<Func<Operand, bool>>>> _ruleCache = new();
@@ -219,6 +225,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             MediaTypes = dto.MediaTypes != null ? new List<string>(dto.MediaTypes) : null; // Create defensive copy to prevent corruption
             MatchByMembers = dto.MatchByMembers;
+            MatchAlternateVersions = dto.MatchAlternateVersions;
             GroupIntoCollections = dto.GroupIntoCollections;
             MaxItems = dto.MaxItems ?? 0; // Default to 0 (unlimited) for backwards compatibility
             MaxPlayTimeMinutes = dto.MaxPlayTimeMinutes ?? 0; // Default to 0 (unlimited) for backwards compatibility
@@ -683,6 +690,173 @@ namespace Jellyfin.Plugin.SmartLists.Core
         }
 
         /// <summary>
+        /// Checks an item against the rules and records a match: its similarity score and, when group tracking
+        /// is on, the rule groups it matched. With Match alternate versions on, a video with alternates is
+        /// checked once per version (see <see cref="GetVersionOperands"/>) and matches when any version does.
+        /// Group tracking checks every version and records the groups any version matched.
+        /// </summary>
+        private bool MatchAndRecord(
+            BaseItem item,
+            Operand operand,
+            bool hasAnyRules,
+            List<List<Func<Operand, bool>>> compiledRules,
+            IReadOnlyDictionary<int, OperandFactory.ReferenceMetadata>? groupReferenceMetadata,
+            List<string> similarityComparisonFields,
+            ILibraryManager libraryManager,
+            User user,
+            ILogger? logger)
+        {
+            bool matches = false;
+            List<int>? matchingGroups = null;
+            float similarityScore = 0f;
+
+            if (!hasAnyRules)
+            {
+                matches = true;
+            }
+            else if (NeedsGroupTracking())
+            {
+                foreach (var versionOperand in GetVersionOperands(item, operand, libraryManager, user, logger))
+                {
+                    var groups = GetMatchingGroupIndices(compiledRules, versionOperand, groupReferenceMetadata, similarityComparisonFields, logger, out var score);
+                    if (groups.Count > 0)
+                    {
+                        matchingGroups = matchingGroups == null ? groups : [.. matchingGroups.Union(groups).Order()];
+                        similarityScore = Math.Max(similarityScore, score);
+                    }
+                }
+
+                matches = matchingGroups != null;
+            }
+            else
+            {
+                foreach (var versionOperand in GetVersionOperands(item, operand, libraryManager, user, logger))
+                {
+                    if (EvaluateLogicGroups(compiledRules, versionOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore))
+                    {
+                        matches = true;
+                        break;
+                    }
+                }
+            }
+
+            if (matches)
+            {
+                // Store similarity score for potential sorting
+                if (groupReferenceMetadata != null)
+                {
+                    _similarityScores[item.Id] = similarityScore;
+                }
+
+                // Track which groups this item matched for per-group limiting
+                if (matchingGroups != null)
+                {
+                    _itemGroupMappings[item.Id] = matchingGroups;
+                }
+            }
+
+            return matches;
+        }
+
+        /// <summary>
+        /// The operands to check an item with: its own, then, when it has alternate versions to check, one
+        /// per alternate version: the item's operand with that version's file and stream fields
+        /// (<see cref="Operand.WithVersionFields"/>). An alternate that fails to load is skipped.
+        /// </summary>
+        private IEnumerable<Operand> GetVersionOperands(BaseItem item, Operand operand, ILibraryManager libraryManager, User user, ILogger? logger)
+        {
+            yield return operand;
+
+            if (!HasAlternateVersionsToCheck(item) || item is not Video video)
+            {
+                yield break;
+            }
+
+            List<Video> versions = [];
+            try
+            {
+                versions = GetAlternateVersions(video, libraryManager, user).ToList();
+            }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "Could not load the alternate versions of '{ItemName}'; only its primary version is checked", item.Name);
+            }
+
+            foreach (var version in versions)
+            {
+                Operand? versionOperand = null;
+                try
+                {
+                    versionOperand = operand.WithVersionFields(_versionOperandFactory!(version));
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogDebug(ex, "Could not read alternate version '{Path}' of '{ItemName}'; skipping it", version.Path, item.Name);
+                }
+
+                if (versionOperand != null)
+                {
+                    yield return versionOperand;
+                }
+            }
+        }
+
+        /// <summary>
+        /// A video's alternate versions: local ones (other files of the same movie) and linked ones (versions
+        /// merged in Jellyfin), excluding the video itself. A linked version can sit in another library, so it
+        /// only counts when <paramref name="user"/> can see it; local versions share the video's folder.
+        /// </summary>
+        internal static IEnumerable<Video> GetAlternateVersions(Video video, ILibraryManager libraryManager, User user)
+        {
+            return libraryManager.GetLocalAlternateVersionIds(video)
+                .Select(id => libraryManager.GetItemById(id))
+                .OfType<Video>()
+                .Concat(libraryManager.GetLinkedAlternateVersions(video).Where(version => version.IsVisibleStandalone(user)))
+                .Where(version => !version.Id.Equals(video.Id))
+                .DistinctBy(version => version.Id);
+        }
+
+        private bool HasAlternateVersionsToCheck(BaseItem item)
+        {
+            return _versionOperandFactory != null && _multiVersionIds.Contains(item.Id);
+        }
+
+        /// <summary>
+        /// Match alternate versions: finds the pool videos that have alternate versions (one query) and sets
+        /// up how an alternate's version operand is built, extracting only its file and stream fields.
+        /// On failure only primary versions are checked.
+        /// </summary>
+        internal void PrepareAlternateVersionMatching(BaseItem[] items, ILibraryManager libraryManager, User user,
+            IUserDataManager? userDataManager, FieldRequirements fieldReqs, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+        {
+            // An alternate differs from the primary only in its version fields, so without such a rule there is nothing to check
+            if (!ExpressionSets.Any(set => set?.Expressions?.Any(expr => expr != null && FieldRegistry.VersionFields.Contains(expr.MemberName)) == true))
+            {
+                return;
+            }
+
+            try
+            {
+                _multiVersionIds = libraryManager.GetItemIdsWithAlternateVersions([.. items.OfType<Video>().Select(video => video.Id)]);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Could not look up alternate versions for '{PlaylistName}'; only primary versions are checked", Name);
+                return;
+            }
+
+            logger?.LogDebug("Match alternate versions for '{PlaylistName}': {Count} item(s) have alternate versions", Name, _multiVersionIds.Count);
+            if (_multiVersionIds.Count == 0)
+            {
+                return;
+            }
+
+            var versionOptions = MediaTypeExtractionOptions.FromRequirements(fieldReqs, Origin, CollectionSearchDepth);
+            versionOptions.RequiredGroups &= FieldRegistry.VersionExtractionGroups;
+            _versionOperandFactory = version => OperandFactory.GetMediaType(libraryManager, version, user, userDataManager, UserManager, logger, versionOptions, refreshCache);
+        }
+
+        /// <summary>
         /// Evaluates an episode against the rule groups (OR between groups). When
         /// <paramref name="matchingGroups"/> is given, every group is evaluated and each matching group
         /// index is added to it; otherwise evaluation stops at the first matching group.
@@ -836,6 +1010,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
             
             // Clear item-group mappings from any previous runs
             _itemGroupMappings.Clear();
+            _multiVersionIds = new HashSet<Guid>();
+            _versionOperandFactory = null;
 
             try
             {
@@ -996,6 +1172,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 catch (Exception ex)
                 {
                     logger?.LogDebug(ex, "Error merging SimilarTo comparison fields into expensive-field requirements");
+                }
+
+                if (MatchAlternateVersions)
+                {
+                    PrepareAlternateVersionMatching(itemsArray, libraryManager, user, userDataManager, fieldReqs, refreshCache, logger);
                 }
 
                 // Early validation of additional users to prevent exceptions during item processing
@@ -3076,7 +3257,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     continue;
                 }
 
-                if (candidateSet.Contains(item.Id) || IsPrefilterExempt(item, hasCollectionsRules))
+                // Candidate queries see only the primary version, so videos with alternates to check stay
+                if (candidateSet.Contains(item.Id) || IsPrefilterExempt(item, hasCollectionsRules) || HasAlternateVersionsToCheck(item))
                 {
                     kept.Add(item);
                 }
@@ -3261,45 +3443,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                             {
                                 var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
-                                bool matches = false;
-                                List<int>? matchingGroups = null;
-                                float similarityScore = 0f;
-
-                                if (!hasAnyRules)
-                                {
-                                    matches = true;
-                                }
-                                else
-                                {
-                                    // Check if we need per-group tracking for limits or Rule Block Order sorting
-                                    bool needsGroupTracking = NeedsGroupTracking();
-
-                                    if (needsGroupTracking)
-                                    {
-                                        matchingGroups = GetMatchingGroupIndices(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                                        matches = matchingGroups.Count > 0;
-                                    }
-                                    else
-                                    {
-                                        matches = EvaluateLogicGroups(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                                    }
-                                }
-
-                                if (matches)
+                                if (MatchAndRecord(item, operand, hasAnyRules, compiledRules, groupReferenceMetadata, similarityComparisonFields, libraryManager, user, logger))
                                 {
                                     results.Add(item);
-
-                                    // Store similarity score for potential sorting
-                                    if (groupReferenceMetadata != null)
-                                    {
-                                        _similarityScores[item.Id] = similarityScore;
-                                    }
-
-                                    // Track which groups this item matched for per-group limiting
-                                    if (matchingGroups != null && matchingGroups.Count > 0)
-                                    {
-                                        _itemGroupMappings[item.Id] = matchingGroups;
-                                    }
                                 }
                                 // Note: Series expansion logic is now handled in ExpandCollectionsBasedOnMediaType based on media type selection
                             }
@@ -3403,8 +3549,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                                 // Only proceed to Phase 2 if:
                                 // 1. Passed non-expensive evaluation OR
-                                // 2. There are expensive-only rule sets that still need to be checked
-                                if (passesNonExpensiveRules || hasExpensiveOnlyRuleSets)
+                                // 2. There are expensive-only rule sets that still need to be checked OR
+                                // 3. Phase 1 saw only the primary version and Phase 2 checks the alternates
+                                if (passesNonExpensiveRules || hasExpensiveOnlyRuleSets || HasAlternateVersionsToCheck(item))
                                 {
                                     phase1Survivors.Add(item);
                                 }
@@ -3494,45 +3641,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                                     }
                                 }
 
-                                bool matches = false;
-                                List<int>? matchingGroups = null;
-                                float similarityScore = 0f;
-
-                                if (!hasAnyRules)
-                                {
-                                    matches = true;
-                                }
-                                else
-                                {
-                                    // Check if we need per-group tracking for limits or Rule Block Order sorting
-                                    bool needsGroupTracking = NeedsGroupTracking();
-
-                                    if (needsGroupTracking)
-                                    {
-                                        matchingGroups = GetMatchingGroupIndices(compiledRules, fullOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                                        matches = matchingGroups.Count > 0;
-                                    }
-                                    else
-                                    {
-                                        matches = EvaluateLogicGroups(compiledRules, fullOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                                    }
-                                }
-
-                                if (matches)
+                                if (MatchAndRecord(item, fullOperand, hasAnyRules, compiledRules, groupReferenceMetadata, similarityComparisonFields, libraryManager, user, logger))
                                 {
                                     results.Add(item);
-
-                                    // Store similarity score for potential sorting
-                                    if (groupReferenceMetadata != null)
-                                    {
-                                        _similarityScores[item.Id] = similarityScore;
-                                    }
-
-                                    // Track which groups this item matched for per-group limiting
-                                    if (matchingGroups != null && matchingGroups.Count > 0)
-                                    {
-                                        _itemGroupMappings[item.Id] = matchingGroups;
-                                    }
                                 }
                                 // Note: Series expansion logic is now handled in ExpandCollectionsBasedOnMediaType based on media type selection
                             }
@@ -3618,45 +3729,9 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     {
                         var operand = OperandFactory.GetMediaType(libraryManager, item, user, userDataManager, UserManager, logger, extractionOptions, refreshCache);
 
-                        bool matches = false;
-                        List<int>? matchingGroups = null;
-                        float similarityScore = 0f;
-
-                        if (!hasAnyRules)
-                        {
-                            matches = true;
-                        }
-                        else
-                        {
-                            // Check if we need per-group tracking for limits or Rule Block Order sorting
-                            bool needsGroupTracking = NeedsGroupTracking();
-
-                            if (needsGroupTracking)
-                            {
-                                matchingGroups = GetMatchingGroupIndices(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                                matches = matchingGroups.Count > 0;
-                            }
-                            else
-                            {
-                                matches = EvaluateLogicGroups(compiledRules, operand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore);
-                            }
-                        }
-
-                        if (matches)
+                        if (MatchAndRecord(item, operand, hasAnyRules, compiledRules, groupReferenceMetadata, similarityComparisonFields, libraryManager, user, logger))
                         {
                             results.Add(item);
-
-                            // Store similarity score for potential sorting
-                            if (groupReferenceMetadata != null)
-                            {
-                                _similarityScores[item.Id] = similarityScore;
-                            }
-
-                            // Track which groups this item matched for per-group limiting
-                            if (matchingGroups != null && matchingGroups.Count > 0)
-                            {
-                                _itemGroupMappings[item.Id] = matchingGroups;
-                            }
                         }
                         else if (item is Series series && ShouldExpandEpisodesForCollections())
                         {

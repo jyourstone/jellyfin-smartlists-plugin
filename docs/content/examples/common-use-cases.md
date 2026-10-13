@@ -28,6 +28,15 @@ Here are some popular playlist and collection types you can create:
 To target particular formats instead, use **Aspect Ratio is in** with values such as `9:16` and
 `4:5`. Aspect ratios are entered as `width:height`.
 
+### 3D Movies, Including 3D Versions
+- **Media Types**: Movie, with **Match alternate versions** on
+- **Is 3D** = Yes
+- Also picks up movies whose 3D file is an alternate version behind a 4K or 1080p primary; pick the 3D version when playing
+
+The same works for resolution: **Resolution** = 1080p with **Match alternate versions** lists every
+movie that has a 1080p version, even when a 4K version is the primary. See
+[Alternate Versions](../user-guide/media-types.md#alternate-versions).
+
 ### Continue Watching (In Progress)
 - **Playback Status** = In Progress
 - Shows all movies and episodes that have been started but not finished
