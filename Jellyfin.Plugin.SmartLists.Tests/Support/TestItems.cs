@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
+using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using Movie = MediaBrowser.Controller.Entities.Movies.Movie;
@@ -145,6 +146,26 @@ public class TestLibraryManager : DispatchProxy
 }
 
 /// <summary>
+/// Answers <c>GetMediaStreams(MediaStreamQuery)</c> from <see cref="Streams"/>, keyed by item id; an item
+/// without an entry has no streams. Every other member throws, as in <see cref="TestLibraryManager"/>.
+/// </summary>
+public class TestMediaSourceManager : DispatchProxy
+{
+    internal static readonly ConcurrentDictionary<Guid, List<MediaStream>> Streams = new();
+
+    protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+    {
+        if (targetMethod?.Name == "GetMediaStreams" && args is { Length: 1 } && args[0] is MediaStreamQuery query)
+        {
+            return Streams.TryGetValue(query.ItemId, out var streams) ? streams : new List<MediaStream>();
+        }
+
+        throw new NotSupportedException(
+            $"TestMediaSourceManager: {targetMethod?.Name} is not stubbed. Add it deliberately - see Support/TestItems.cs.");
+    }
+}
+
+/// <summary>
 /// An <see cref="IRecordingsManager"/> with no active recordings: every call returns null.
 /// </summary>
 public class NoRecordingsManager : DispatchProxy
@@ -224,6 +245,9 @@ public static class TestItems
         // Video.SourceType (read by IsVisibleStandalone) asks the recordings manager whether the file is
         // being recorded; no recordings are ever active in tests
         Video.RecordingsManager = DispatchProxy.Create<IRecordingsManager, NoRecordingsManager>();
+
+        // BaseItem.GetMediaStreams() reads streams through the media source manager
+        BaseItem.MediaSourceManager = DispatchProxy.Create<IMediaSourceManager, TestMediaSourceManager>();
     }
 
     public static readonly User User = new("tester", "authProviderId", "pwResetProviderId");

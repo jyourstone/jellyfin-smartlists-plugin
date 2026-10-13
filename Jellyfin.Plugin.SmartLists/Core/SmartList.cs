@@ -730,12 +730,17 @@ namespace Jellyfin.Plugin.SmartLists.Core
             }
             else
             {
+                // Similarity sorts by the best score of the matching versions; without it the first match settles it
                 foreach (var versionOperand in GetVersionOperands(item, operand, libraryManager, user, logger))
                 {
-                    if (EvaluateLogicGroups(compiledRules, versionOperand, groupReferenceMetadata, similarityComparisonFields, logger, out similarityScore))
+                    if (EvaluateLogicGroups(compiledRules, versionOperand, groupReferenceMetadata, similarityComparisonFields, logger, out var score))
                     {
+                        similarityScore = matches ? Math.Max(similarityScore, score) : score;
                         matches = true;
-                        break;
+                        if (groupReferenceMetadata == null)
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -827,10 +832,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// On failure only primary versions are checked.
         /// </summary>
         internal void PrepareAlternateVersionMatching(BaseItem[] items, ILibraryManager libraryManager, User user,
-            IUserDataManager? userDataManager, FieldRequirements fieldReqs, RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
+            IUserDataManager? userDataManager, FieldRequirements fieldReqs, List<string> similarityComparisonFields,
+            RefreshQueueService.RefreshCache refreshCache, ILogger? logger)
         {
-            // An alternate differs from the primary only in its version fields, so without such a rule there is nothing to check
-            if (!ExpressionSets.Any(set => set?.Expressions?.Any(expr => expr != null && FieldRegistry.VersionFields.Contains(expr.MemberName)) == true))
+            // An alternate differs from the primary only in its version fields, so there is nothing to check unless a rule
+            // uses one or Similar To compares Audio Languages (the one version field among the comparison fields)
+            var usesVersionField =
+                ExpressionSets.Any(set => set?.Expressions?.Any(expr => expr != null && FieldRegistry.VersionFields.Contains(expr.MemberName)) == true)
+                || (fieldReqs.NeedsSimilarTo && similarityComparisonFields.Contains("Audio Languages", StringComparer.OrdinalIgnoreCase));
+            if (!usesVersionField)
             {
                 return;
             }
@@ -1176,7 +1186,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
                 if (MatchAlternateVersions)
                 {
-                    PrepareAlternateVersionMatching(itemsArray, libraryManager, user, userDataManager, fieldReqs, refreshCache, logger);
+                    PrepareAlternateVersionMatching(itemsArray, libraryManager, user, userDataManager, fieldReqs, similarityComparisonFields, refreshCache, logger);
                 }
 
                 // Early validation of additional users to prevent exceptions during item processing

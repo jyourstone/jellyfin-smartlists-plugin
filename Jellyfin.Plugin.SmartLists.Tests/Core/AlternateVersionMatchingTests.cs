@@ -130,6 +130,36 @@ public class AlternateVersionMatchingTests
     }
 
     /// <summary>
+    /// Similar To comparing Audio Languages reads each version's own audio, so it turns on the version
+    /// check even without a version-field rule.
+    /// </summary>
+    [Fact]
+    public void On_SimilarToComparingAudioLanguagesChecksVersions()
+    {
+        var reference = Movie("German Reference");
+        TestMediaSourceManager.Streams[reference.Id] = [Audio("ger")];
+        var version = Movie("Dubbed");
+        TestMediaSourceManager.Streams[version.Id] = [Audio("ger")];
+        var movie = WithLocalVersion(Movie("Dubbed"), version);
+        TestMediaSourceManager.Streams[movie.Id] = [Audio("eng")];
+
+        SmartList List(bool matchAlternateVersions) => new(new SmartPlaylistDto
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Similar Audio List",
+            MediaTypes = [MediaTypeConstants.Movie],
+            ExpressionSets = [Block(new Expression("SimilarTo", "Equal", "German Reference"))],
+            SimilarityComparisonFields = ["Audio Languages"],
+            MatchAlternateVersions = matchAlternateVersions,
+        });
+
+        Assert.DoesNotContain(movie.Id, Filter(List(false), reference, movie));
+        Assert.Contains(movie.Id, Filter(List(true), reference, movie));
+    }
+
+    private static MediaStream Audio(string language) => new() { Type = MediaStreamType.Audio, Language = language, Index = 1 };
+
+    /// <summary>
     /// DB prefilters query only the primary version, so a video with versions to check survives the
     /// candidate set. Without a version-field rule every version gives the same result, so nothing is checked.
     /// </summary>
@@ -141,7 +171,7 @@ public class AlternateVersionMatchingTests
         var movie = WithLocalVersion(Movie("Prefiltered"), Movie("Prefiltered", is3D: true));
         var list = MovieList(true, Block(versionRule ? Is3D : new Expression("Genres", "Contains", "Action")));
         list.PrepareAlternateVersionMatching([movie], BaseItem.LibraryManager, TestItems.User, null,
-            new FieldRequirements(), new RefreshQueueService.RefreshCache(), null);
+            new FieldRequirements(), [], new RefreshQueueService.RefreshCache(), null);
 
         Assert.Equal(kept, list.FilterByCandidateSet([movie], [], null, "test").Contains(movie));
     }
