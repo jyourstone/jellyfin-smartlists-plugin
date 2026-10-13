@@ -49,7 +49,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// <param name="cache">The refresh cache to populate with results.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <param name="maxItems">Maximum number of items to fetch per list (0 = unlimited).</param>
-        public async Task PreFetchListsAsync(
+        /// <returns>
+        /// The URLs that could not be fetched, in this call or earlier in the same refresh drain. A list using one
+        /// would match nothing from it, so callers leave that list unchanged.
+        /// </returns>
+        public async Task<IReadOnlyList<string>> PreFetchListsAsync(
             IEnumerable<string> urls,
             RefreshQueueService.RefreshCache cache,
             CancellationToken cancellationToken,
@@ -58,7 +62,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             var urlList = urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (urlList.Count == 0)
             {
-                return;
+                return [];
             }
 
             _logger.LogInformation("Pre-fetching {Count} external list(s) (maxItems: {MaxItems})", urlList.Count, maxItems);
@@ -99,6 +103,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     var result = await provider.FetchListAsync(url, cancellationToken, maxItems).ConfigureAwait(false);
                     cache.ExternalListData[url] = result;
+                    cache.FailedExternalLists.TryRemove(url, out _);
                     _snapshots[url] = new ExternalListSnapshot(result, DateTime.UtcNow);
                     _logger.LogDebug("Cached external list {Url}: {Count} items (complete: {IsComplete})", url, result.TotalItems, result.IsComplete);
                 }
@@ -110,11 +115,14 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 catch (Exception ex)
                 {
                     var msg = "Failed to fetch external list: " + url + " (" + ex.Message + ")";
-                    _logger.LogWarning(ex, "Failed to fetch external list: {Url}. Treating as empty list.", url);
+                    _logger.LogWarning(ex, "Failed to fetch external list: {Url}. Lists using it are left unchanged this refresh.", url);
                     cache.Warnings.Add(msg);
                     cache.ExternalListData[url] = new ExternalListResult();
+                    cache.FailedExternalLists[url] = 0;
                 }
             }
+
+            return [.. urlList.Where(cache.FailedExternalLists.ContainsKey)];
         }
 
         /// <summary>
