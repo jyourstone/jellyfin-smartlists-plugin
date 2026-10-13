@@ -367,6 +367,11 @@
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
         }
+
+        // 5) Update Match alternate versions checkbox visibility based on media types
+        if (SmartLists.updateMatchAlternateVersionsVisibility) {
+            SmartLists.updateMatchAlternateVersionsVisibility(page);
+        }
     };
 
     // ===== MEDIA TYPE CHECKBOXES GENERATION =====
@@ -475,6 +480,7 @@
         SmartLists.setElementChecked(page, '#playlistIsPublic', config.DefaultMakePublic || false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#matchByMembers', false);
+        SmartLists.setElementChecked(page, '#matchAlternateVersions', false);
         SmartLists.setElementChecked(page, '#groupIntoCollections', false);
         // Cache the resolved default so template application can read it even
         // after the field has been edited (e.g. by a previous template)
@@ -535,6 +541,7 @@
         SmartLists.setElementChecked(page, '#playlistIsPublic', false);
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', false);
         SmartLists.setElementChecked(page, '#matchByMembers', false);
+        SmartLists.setElementChecked(page, '#matchAlternateVersions', false);
         SmartLists.setElementChecked(page, '#groupIntoCollections', false);
         page._defaultMinItems = SmartLists.getDefaultMinItems(null);
         SmartLists.setElementValue(page, '#playlistMinItems', page._defaultMinItems);
@@ -3004,6 +3011,11 @@
         // Update Include Extras checkbox visibility based on media types
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
+        }
+
+        // Update Match alternate versions checkbox visibility based on media types
+        if (SmartLists.updateMatchAlternateVersionsVisibility) {
+            SmartLists.updateMatchAlternateVersionsVisibility(page);
         }
 
         // Update Match by members toggle visibility (container types are collection-only,

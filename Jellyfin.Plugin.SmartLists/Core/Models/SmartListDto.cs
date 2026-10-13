@@ -84,6 +84,14 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public bool MatchByMembers { get; set; } = false;
 
         /// <summary>
+        /// When true, a video whose primary version fails the rules is still included when one of
+        /// its alternate versions matches. Each alternate is checked with its own file and stream
+        /// fields (file name, resolution, codecs, 3D, audio and subtitle languages, runtime) and the
+        /// primary's metadata for everything else. The primary item is what gets added.
+        /// </summary>
+        public bool MatchAlternateVersions { get; set; } = false;
+
+        /// <summary>
         /// Collections only. When true, every matched item that is a direct member of one or more
         /// Jellyfin collections is replaced by those collections. Items in no collection - and results
         /// that are themselves collections/playlists - pass through unchanged. Grouping runs before

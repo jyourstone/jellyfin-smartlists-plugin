@@ -350,6 +350,8 @@
             // Only meaningful when a container media type is selected; the checkbox is
             // reset whenever the toggle is hidden, so reading it directly is safe
             const matchByMembers = SmartLists.getElementChecked(page, '#matchByMembers', false);
+            // Reset whenever the toggle is hidden (no video media type), so reading it directly is safe
+            const matchAlternateVersions = SmartLists.getElementChecked(page, '#matchAlternateVersions', false);
             const minItemsInput = SmartLists.getElementValue(page, '#playlistMinItems', '');
             const minItems = minItemsInput === '' ? null : parseInt(minItemsInput, 10);
             // Collection-only: the flag is never sent for a playlist regardless of UI state
@@ -453,6 +455,7 @@
                 Enabled: isEnabled,
                 IncludeExtras: includeExtras,
                 MatchByMembers: matchByMembers,
+                MatchAlternateVersions: matchAlternateVersions,
                 GroupIntoCollections: groupIntoCollections,
                 MinItems: minItems,
                 MediaTypes: selectedMediaTypes,
@@ -991,6 +994,7 @@
         SmartLists.setElementChecked(page, '#playlistIsEnabled', playlist.Enabled !== false); // Default to true for backward compatibility
         SmartLists.setElementChecked(page, '#playlistIncludeExtras', playlist.IncludeExtras || false);
         SmartLists.setElementChecked(page, '#matchByMembers', playlist.MatchByMembers || false);
+        SmartLists.setElementChecked(page, '#matchAlternateVersions', playlist.MatchAlternateVersions || false);
         SmartLists.setElementChecked(page, '#groupIntoCollections', playlist.GroupIntoCollections || false);
         SmartLists.setElementValue(page, '#playlistMinItems', playlist.MinItems !== undefined && playlist.MinItems !== null ? playlist.MinItems : '');
 
@@ -1038,6 +1042,11 @@
         // Update Include Extras visibility based on loaded media types
         if (SmartLists.updateIncludeExtrasVisibility) {
             SmartLists.updateIncludeExtrasVisibility(page);
+        }
+
+        // Update Match alternate versions visibility based on loaded media types
+        if (SmartLists.updateMatchAlternateVersionsVisibility) {
+            SmartLists.updateMatchAlternateVersionsVisibility(page);
         }
 
         // Update Match by members toggle visibility based on loaded media types
@@ -2321,6 +2330,13 @@
             (playlist.IncludeExtras ?
                 '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
                 '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Include Extras</td>' +
+                '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
+                '</tr>' :
+                ''
+            ) +
+            (playlist.MatchAlternateVersions ?
+                '<tr style="border-bottom: 1px solid var(--jf-palette-divider);">' +
+                '<td style="padding: 0.5em 0.75em; font-weight: bold; opacity: 0.8; width: 40%; border-right: 1px solid var(--jf-palette-divider);">Match Alternate Versions</td>' +
                 '<td style="padding: 0.5em 0.75em; ">Yes</td>' +
                 '</tr>' :
                 ''

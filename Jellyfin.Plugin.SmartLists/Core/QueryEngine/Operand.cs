@@ -176,5 +176,39 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         {
             return LastPlayedDateByUser.TryGetValue(userId, out var value) ? value : -1;
         }
+
+        /// <summary>
+        /// A copy of this operand (a video's primary version) carrying <paramref name="version"/>'s own
+        /// file and stream fields, for checking an alternate version against the rules. Everything else
+        /// (metadata, user data, memberships) stays the primary's: alternates carry their own metadata,
+        /// which can differ from the movie's. The version operand needs only
+        /// <see cref="FieldRegistry.VersionExtractionGroups"/> extracted.
+        /// </summary>
+        public Operand WithVersionFields(Operand version)
+        {
+            var merged = (Operand)MemberwiseClone();
+            merged.FileName = version.FileName;
+            merged.FolderPath = version.FolderPath;
+            merged.DateModified = version.DateModified;
+            merged.RuntimeMinutes = version.RuntimeMinutes;
+            merged.Resolution = version.Resolution;
+            merged.AspectRatio = version.AspectRatio;
+            merged.Framerate = version.Framerate;
+            merged.VideoCodec = version.VideoCodec;
+            merged.VideoProfile = version.VideoProfile;
+            merged.VideoRange = version.VideoRange;
+            merged.VideoRangeType = version.VideoRangeType;
+            merged.Is3D = version.Is3D;
+            merged.AudioLanguages = version.AudioLanguages;
+            merged.DefaultAudioLanguages = version.DefaultAudioLanguages;
+            merged.SubtitleLanguages = version.SubtitleLanguages;
+            merged.AudioBitrate = version.AudioBitrate;
+            merged.AudioSampleRate = version.AudioSampleRate;
+            merged.AudioBitDepth = version.AudioBitDepth;
+            merged.AudioCodec = version.AudioCodec;
+            merged.AudioProfile = version.AudioProfile;
+            merged.AudioChannels = version.AudioChannels;
+            return merged;
+        }
     }
 }

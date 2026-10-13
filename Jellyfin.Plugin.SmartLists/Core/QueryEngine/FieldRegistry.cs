@@ -168,6 +168,27 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             ExtractionGroup.AudioMetadata | ExtractionGroup.TextContent |
             ExtractionGroup.ItemLists | ExtractionGroup.UserData | ExtractionGroup.Dates;
 
+        /// <summary>
+        /// Extraction groups holding a video version's own file and stream fields. With Match alternate
+        /// versions on, an alternate is extracted with only these; <see cref="Operand.WithVersionFields"/>
+        /// takes the version fields from it (Is3D is always extracted).
+        /// </summary>
+        public const ExtractionGroup VersionExtractionGroups =
+            ExtractionGroup.FileInfo | ExtractionGroup.TextContent |
+            ExtractionGroup.VideoQuality | ExtractionGroup.AudioQuality | ExtractionGroup.AudioLanguages;
+
+        /// <summary>
+        /// Rule fields read from a video version's own file and streams: the ones
+        /// <see cref="Operand.WithVersionFields"/> takes from an alternate version. A list whose rules use
+        /// none of them gets the same result from every version.
+        /// </summary>
+        internal static readonly IReadOnlySet<string> VersionFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "FileName", "FolderPath", "DateModified", "RuntimeMinutes",
+            "Resolution", "AspectRatio", "Framerate", "VideoCodec", "VideoProfile", "VideoRange", "VideoRangeType", "Is3D",
+            "AudioLanguages", "SubtitleLanguages", "AudioBitrate", "AudioSampleRate", "AudioBitDepth", "AudioCodec", "AudioProfile", "AudioChannels",
+        };
+
         // Operator arrays for reuse
         private static readonly string[] StringOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];
         private static readonly string[] MultiValueOperators = ["Equal", "NotEqual", "Contains", "NotContains", "IsIn", "IsNotIn", "MatchRegex"];

@@ -104,6 +104,18 @@ Selecting an **Extra Type** rule will automatically enable the **Include Extras*
 !!! tip "Including Trailers"
     Trailers are extras attached to movies and shows. To include them, select the **Video** media type, enable **Include Extras**, and optionally add an **Extra Type** = Trailer rule to filter for trailers specifically.
 
+## Alternate Versions {#alternate-versions}
+
+Jellyfin can keep several versions of one movie or episode, for example a 4K file, a 1080p file and a 3D file, and shows them as one item with a version picker. Rules normally see only the primary version (the one Jellyfin lists first), so a 3D or 1080p copy behind a 4K primary never matches.
+
+Enable **Match alternate versions** (shown when a video media type is selected) to also check each alternate version. The video is added when any of its versions matches the rules. The list gets the video itself, and the version is picked when playing it.
+
+Each version is checked with its own file and stream fields: File Name, Folder Path, Date Modified, Runtime, Resolution, Aspect Ratio, Framerate, Video Codec, Video Profile, Video Range, Video Range Type, Is 3D, the audio quality fields, and Audio and Subtitle Languages. Everything else (genres, tags, people, ratings, playback status, collections) comes from the video itself, so `Genre` = Action AND `Is 3D` = Yes matches an action movie that has a 3D version.
+
+Both kinds of versions count: files Jellyfin groups in the same folder, and versions merged with Jellyfin's **Merge versions**. A merged version only counts when the list's user can access its library.
+
+Episodes added through a Collections rule's **include episodes within series** option, and the members checked by [Match by members](#match-by-members), are still checked by their primary version only.
+
 ## Important Notes
 
 !!! warning "Library Content Type Matters"

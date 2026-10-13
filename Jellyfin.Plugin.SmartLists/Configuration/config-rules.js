@@ -2657,6 +2657,32 @@
         }
     };
 
+    // ===== MATCH ALTERNATE VERSIONS VISIBILITY =====
+    // Show/hide "Match alternate versions" based on selected media types (only videos have versions)
+    SmartLists.updateMatchAlternateVersionsVisibility = function (page) {
+        if (!page) return;
+        var container = page.querySelector('#matchAlternateVersionsContainer');
+        if (!container) return;
+
+        var selectedMediaTypes = SmartLists.getSelectedMediaTypes
+            ? SmartLists.getSelectedMediaTypes(page)
+            : [];
+
+        var hasVideoType = selectedMediaTypes.some(function (type) {
+            return SmartLists.VIDEO_CAPABLE_TYPES.indexOf(type) !== -1;
+        });
+
+        container.style.display = hasVideoType ? '' : 'none';
+
+        // Uncheck if hiding
+        if (!hasVideoType) {
+            var checkbox = page.querySelector('#matchAlternateVersions');
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+        }
+    };
+
     // ===== MATCH BY MEMBERS VISIBILITY =====
     // Show/hide the "Match by members" toggle based on selected media types
     // (only meaningful when a container type - Collection/Playlist - is selected)
