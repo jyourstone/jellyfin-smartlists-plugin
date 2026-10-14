@@ -188,6 +188,16 @@ A Toonami-style block where every break is *ident → commercial → ident*:
 
 Result: Show, ident, commercial, ident, next show… Idents and commercials each cycle through their own pool. See [Multi-Bumper Breaks](../user-guide/bumpers.md#multi-bumper-breaks) for how the turns work.
 
+### Longer Breaks: Ident, Three Commercials, Ident
+Every break is *ident → commercial → commercial → commercial → ident*, all different:
+
+- **Bumpers**: Bumper order **Random**, Every **1** items, Bumpers per break **5**, **Take turns between bumper rule groups** on
+    - Rule group 1: `Tags contains "ident"`, Max Items for this rule group **20**
+    - Rule groups 2, 3 and 4: `Tags contains "commercial"`, Max Items for this rule group **30** each
+    - Rule group 5: `Tags contains "ident"`, Max Items for this rule group **20**
+
+Each slot of a break takes its turn from the next group, so the five groups give the five slots. Identical groups would pick the same bumper, so the per-group **Max Items** split the bumpers between them: each group takes the next ones the earlier groups didn't, and every bumper lands in one group only. Size the limits to your library, here 40 idents and 90 commercials. With Random order the split changes on every refresh.
+
 ### Music Album Sampler (Round Robin)
 Create a playlist that samples tracks from different albums:
 
