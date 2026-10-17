@@ -1354,10 +1354,7 @@
             SmartLists.updateSimilarityOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updatePeopleOptionsVisibility(newRuleRow, fieldSelect.value);
             SmartLists.updateRegexHelp(newRuleRow);
-            // Update sort options when rules change (e.g., Similar To, External List)
-            SmartLists.updateAllSortOptionsVisibility(page);
-            // Auto-resolve "Default" sort to match the new rules
-            SmartLists.resolveDefaultSortForRules(page);
+            SmartLists.onRulesChanged(page);
             // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
             if (newField === 'ExtraType' && SmartLists.getRowScope(newRuleRow) === 'main') {
                 SmartLists.autoCheckIncludeExtras(page);
@@ -1448,10 +1445,7 @@
             SmartLists.updateRuleButtonVisibility(page);
         }
 
-        // Update sort options in case a Similar To rule was removed
-        SmartLists.updateAllSortOptionsVisibility(page);
-        // Re-resolve default sort in case the last special rule was removed
-        SmartLists.resolveDefaultSortForRules(page);
+        SmartLists.onRulesChanged(page);
     };
 
     // Extract rule configuration from a rule row element
@@ -1664,10 +1658,7 @@
         // Update button visibility
         SmartLists.updateRuleButtonVisibility(page);
 
-        // Update sort options in case a Similar To rule was added
-        SmartLists.updateAllSortOptionsVisibility(page);
-        // Auto-resolve "Default" sort to match the new rules
-        SmartLists.resolveDefaultSortForRules(page);
+        SmartLists.onRulesChanged(page);
     };
 
     SmartLists.cloneLogicGroup = function (page, logicGroup) {
@@ -1734,10 +1725,7 @@
         // Update button visibility
         SmartLists.updateRuleButtonVisibility(page);
 
-        // Update sort options in case Similar To rules were added
-        SmartLists.updateAllSortOptionsVisibility(page);
-        // Auto-resolve "Default" sort to match the new rules
-        SmartLists.resolveDefaultSortForRules(page);
+        SmartLists.onRulesChanged(page);
     };
 
     SmartLists.moveLogicGroup = function (page, logicGroup, direction) {
@@ -1815,10 +1803,7 @@
             SmartLists.updateRuleButtonVisibility(page);
         }
 
-        // Update sort options in case a Similar To rule was removed
-        SmartLists.updateAllSortOptionsVisibility(page);
-        // Re-resolve default sort in case the last special rule was removed
-        SmartLists.resolveDefaultSortForRules(page);
+        SmartLists.onRulesChanged(page);
     };
 
     SmartLists.updateLogicGroupMoveButtonVisibility = function (page) {
@@ -1962,10 +1947,7 @@
                     SmartLists.updateSimilarityOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updatePeopleOptionsVisibility(ruleRow, fieldSelect.value);
                     SmartLists.updateRegexHelp(ruleRow);
-                    // Update sort options when rules change (e.g., Similar To, External List)
-                    SmartLists.updateAllSortOptionsVisibility(page);
-                    // Auto-resolve "Default" sort to match the new rules
-                    SmartLists.resolveDefaultSortForRules(page);
+                    SmartLists.onRulesChanged(page);
                     // Auto-check Include Extras when ExtraType rule is selected (main-scope rules only)
                     if (newField === 'ExtraType' && SmartLists.getRowScope(ruleRow) === 'main') {
                         SmartLists.autoCheckIncludeExtras(page);
@@ -2540,6 +2522,10 @@
             checkbox.value = field.Value;
             checkbox.className = 'similarity-field-checkbox';
             checkbox.checked = selectedFields.indexOf(field.Value) !== -1;
+            // The compared fields decide whether "Match alternate versions" applies (Audio Languages)
+            checkbox.addEventListener('change', function () {
+                SmartLists.updateMatchAlternateVersionsVisibility(checkbox.closest('[data-role="page"]'));
+            });
 
             const label = document.createElement('span');
             label.textContent = field.Label;
@@ -2658,29 +2644,22 @@
     };
 
     // ===== MATCH ALTERNATE VERSIONS VISIBILITY =====
-    // Show/hide "Match alternate versions" based on selected media types (only videos have versions)
+    // Show "Match alternate versions" only when it can change the result. The box keeps its tick while
+    // hidden; the form saves it as off then (see isMatchAlternateVersionsApplicable).
     SmartLists.updateMatchAlternateVersionsVisibility = function (page) {
         if (!page) return;
         var container = page.querySelector('#matchAlternateVersionsContainer');
         if (!container) return;
+        container.style.display = SmartLists.isMatchAlternateVersionsApplicable(page) ? '' : 'none';
+    };
 
-        var selectedMediaTypes = SmartLists.getSelectedMediaTypes
-            ? SmartLists.getSelectedMediaTypes(page)
-            : [];
-
-        var hasVideoType = selectedMediaTypes.some(function (type) {
-            return SmartLists.VIDEO_CAPABLE_TYPES.indexOf(type) !== -1;
-        });
-
-        container.style.display = hasVideoType ? '' : 'none';
-
-        // Uncheck if hiding
-        if (!hasVideoType) {
-            var checkbox = page.querySelector('#matchAlternateVersions');
-            if (checkbox) {
-                checkbox.checked = false;
-            }
-        }
+    // Refresh everything that depends on the rules; call after a rule is added, removed or changed
+    SmartLists.onRulesChanged = function (page) {
+        // Sort options depend on rules such as Similar To and External List
+        SmartLists.updateAllSortOptionsVisibility(page);
+        SmartLists.updateMatchAlternateVersionsVisibility(page);
+        // Auto-resolve "Default" sort to match the new rules
+        SmartLists.resolveDefaultSortForRules(page);
     };
 
     // ===== MATCH BY MEMBERS VISIBILITY =====

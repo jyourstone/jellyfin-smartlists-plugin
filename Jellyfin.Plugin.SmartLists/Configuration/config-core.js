@@ -254,6 +254,42 @@
         return false;
     };
 
+    // The list's Similar To comparison fields: the first Similar To rule's settings apply to the whole list.
+    // Null when no Similar To rule overrides the defaults.
+    SmartLists.getListSimilarityComparisonFields = function (page) {
+        const allRules = page.querySelectorAll('#rules-container .rule-row');
+        for (var i = 0; i < allRules.length; i++) {
+            const ruleRow = allRules[i];
+            const fieldSelect = ruleRow.querySelector('.rule-field-select');
+            if (fieldSelect && fieldSelect.value === 'SimilarTo') {
+                const fields = SmartLists.getSimilarityComparisonFields(ruleRow);
+                if (fields && fields.length > 0) {
+                    return fields;
+                }
+            }
+        }
+        return null;
+    };
+
+    // True when "Match alternate versions" can change the result, mirroring when the backend matches
+    // alternate versions: a video media type is selected and a main rule uses a field read per version
+    // (VersionFields from the Fields API), or the list's Similar To compares Audio Languages
+    SmartLists.isMatchAlternateVersionsApplicable = function (page) {
+        const hasVideoType = SmartLists.getSelectedMediaTypes(page).some(function (type) {
+            return SmartLists.VIDEO_CAPABLE_TYPES.indexOf(type) !== -1;
+        });
+        if (!hasVideoType) {
+            return false;
+        }
+        const versionFields = SmartLists.availableFields.VersionFields || [];
+        const fieldSelects = page.querySelectorAll('#rules-container .rule-row .rule-field-select');
+        const usesVersionField = Array.prototype.some.call(fieldSelects, function (fieldSelect) {
+            return versionFields.indexOf(fieldSelect.value) !== -1;
+        });
+        const comparedFields = SmartLists.getListSimilarityComparisonFields(page) || [];
+        return usesVersionField || comparedFields.indexOf('Audio Languages') !== -1;
+    };
+
     /**
      * Escape HTML entities for safe insertion into HTML content.
      * Returns empty string for null/undefined, converts to string, then escapes:

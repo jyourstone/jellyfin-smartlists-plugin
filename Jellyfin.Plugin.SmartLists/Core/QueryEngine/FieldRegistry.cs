@@ -552,6 +552,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                     .ToArray(),
                 CollectionFields = GetFieldsForCategoryAsApiFormat(FieldCategory.Collection),
                 SimilarityComparisonFields = GetSimilarityComparisonFieldsForApi(),
+                // The UI shows "Match alternate versions" only when a rule uses one of these
+                VersionFields = VersionFields.Order(StringComparer.Ordinal).ToArray(),
                 Operators = Constants.Operators.AllOperators,
                 FieldOperators = GetFieldOperatorsDictionary(),
                 OrderOptions = GetOrderOptionsForApi(),

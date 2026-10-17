@@ -179,7 +179,8 @@ public class AlternateVersionMatchingTests
     [Fact]
     public void VersionFields_AreAllRegisteredRuleFields()
     {
-        Assert.All(FieldRegistry.VersionFields, field => Assert.NotNull(FieldRegistry.GetField(field)));
+        // Exact casing: the config UI compares rule field values against this list as sent by the Fields API
+        Assert.All(FieldRegistry.VersionFields, field => Assert.Equal(field, FieldRegistry.GetField(field)?.Name));
     }
 
     [Fact]

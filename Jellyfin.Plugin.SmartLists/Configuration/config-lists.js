@@ -350,8 +350,9 @@
             // Only meaningful when a container media type is selected; the checkbox is
             // reset whenever the toggle is hidden, so reading it directly is safe
             const matchByMembers = SmartLists.getElementChecked(page, '#matchByMembers', false);
-            // Reset whenever the toggle is hidden (no video media type), so reading it directly is safe
-            const matchAlternateVersions = SmartLists.getElementChecked(page, '#matchAlternateVersions', false);
+            // Saved as off whenever it can't change the result; the box keeps its tick while hidden
+            const matchAlternateVersions = SmartLists.getElementChecked(page, '#matchAlternateVersions', false)
+                && SmartLists.isMatchAlternateVersionsApplicable(page);
             const minItemsInput = SmartLists.getElementValue(page, '#playlistMinItems', '');
             const minItems = minItemsInput === '' ? null : parseInt(minItemsInput, 10);
             // Collection-only: the flag is never sent for a playlist regardless of UI state
@@ -419,19 +420,7 @@
             // Collections are server-wide and don't have library assignments
 
             // Collect similarity comparison fields from SimilarTo rules
-            let similarityComparisonFields = null;
-            const allRules = page.querySelectorAll('#rules-container .rule-row');
-            for (var i = 0; i < allRules.length; i++) {
-                const ruleRow = allRules[i];
-                const fieldSelect = ruleRow.querySelector('.rule-field-select');
-                if (fieldSelect && fieldSelect.value === 'SimilarTo') {
-                    const fields = SmartLists.getSimilarityComparisonFields(ruleRow);
-                    if (fields && fields.length > 0) {
-                        similarityComparisonFields = fields;
-                        break; // Use the first SimilarTo rule's settings for the entire playlist
-                    }
-                }
-            }
+            const similarityComparisonFields = SmartLists.getListSimilarityComparisonFields(page);
 
             // Get metadata fields
             var sortTitleVal = SmartLists.getElementValue(page, '#metadataSortTitle');
@@ -1044,11 +1033,6 @@
             SmartLists.updateIncludeExtrasVisibility(page);
         }
 
-        // Update Match alternate versions visibility based on loaded media types
-        if (SmartLists.updateMatchAlternateVersionsVisibility) {
-            SmartLists.updateMatchAlternateVersionsVisibility(page);
-        }
-
         // Update Match by members toggle visibility based on loaded media types
         if (SmartLists.updateMatchByMembersVisibility) {
             SmartLists.updateMatchByMembersVisibility(page);
@@ -1115,6 +1099,7 @@
 
         // Update field selects first, then per-field options visibility based on selected media types
         SmartLists.updateAllFieldSelects(page);
+        SmartLists.updateMatchAlternateVersionsVisibility(page);
         SmartLists.updateAllTagsOptionsVisibility(page);
         SmartLists.updateAllStudiosOptionsVisibility(page);
         SmartLists.updateAllGenresOptionsVisibility(page);

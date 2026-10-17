@@ -185,8 +185,8 @@ as *Trending Now (Trakt)*) are only shown to users who are allowed to create
 collections, so regular users may see fewer templates than an administrator.
 
 !!! note "More options"
-    Fields beyond List Type, Name, Media Types (with its Include Extras and Match alternate versions options), Rules,
-    Sort Options, and Users live in a collapsed **More options** section on the create/edit form. The collapsed
+    Fields beyond List Type, Name, Media Types (with its Include Extras option), Rules (with its Match alternate
+    versions option), Sort Options, and Users live in a collapsed **More options** section on the create/edit form. The collapsed
     header always shows a summary of what applies (e.g. `500 items max · refresh on
     library changes`, or `Bumpers · 2 schedules` when editing a configured list), and
     the section expands automatically when you edit a list that uses advanced features.
@@ -198,7 +198,7 @@ collections, so regular users may see fewer templates than an administrator.
   - **For Playlists**: You can select one or more users. Each selected user will get their own personalized Jellyfin playlist based on their playback data. This allows the same smart playlist to show different content for each user (e.g., "My Favorites" showing each user's actual favorites).
   - **For Collections**: Select a single reference user whose context will be used for rule evaluation and library access permissions
 - Include extras (behind the scenes, deleted scenes, featurettes, trailers) in the item pool — this option is only visible when the Video media type is selected
-- Match alternate versions: also add a movie or episode when one of its other versions matches (see [Alternate Versions](media-types.md#alternate-versions)) — only visible when a video media type is selected
+- Match alternate versions: also add a movie or episode when one of its other versions matches (see [Alternate Versions](media-types.md#alternate-versions)) — shown below the rules, only when a video media type is selected and a rule uses a field that can differ between versions, such as Resolution or Is 3D
 
 The remaining fields live inside the collapsed **More options** section, grouped as:
 
