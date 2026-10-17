@@ -13,6 +13,22 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.0.4.2-rc
+
+*2026-10-17 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.2-rc)*
+
+**Features**
+
+- **Is 3D** rule field for videos. Jellyfin detects 3D from tags in the file name, such as `[3D MVC]` or `.3D.hsbs` ([Fields](../user-guide/fields-and-operators.md#video), [#538](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/538)).
+- **Match alternate versions**: rules can also check each alternate version of a movie or episode, such as a 3D or 1080p copy behind a 4K version. The video is added when any of its versions matches ([Alternate Versions](../user-guide/media-types.md#alternate-versions), [#538](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/538)).
+- The **SmartLists** sidebar entry is now hidden from users who can't use the user page: while it's disabled, or when they're not in **Allowed Users**. Administrators always see it. Requires Plugin Pages 3.0.0.0 or later ([User Page Access Control](../user-guide/configuration.md#user-page-access-control), [#558](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/558)).
+
+**Bug Fixes**
+
+- When an external list can't be fetched (for example the provider is down or there's a network error), lists that use it are now left unchanged for that refresh instead of being emptied, and the refresh shows as failed ([External Lists](../user-guide/external-lists.md#how-it-works), [#555](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/555)).
+- The page shown to users without access to the user page no longer breaks the Jellyfin layout.
+
+
 ## v12.0.4.1-rc
 
 *2026-10-12 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.1-rc)*
