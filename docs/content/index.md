@@ -84,7 +84,7 @@ SmartLists works with all media types supported by Jellyfin:
 
 1. **Install the Plugin**: See [Installation Guide](getting-started/installation.md)
 2. **Access SmartLists**:
-    - **Regular Users**: Click "SmartLists" in your home screen sidebar (requires administrator to configure allowed users in Dashboard → My Plugins → SmartLists → User Selection)
+    - **Regular Users**: Click "SmartLists" in your home screen sidebar (shown when an administrator has enabled the user page for you, see [User Page Access Control](user-guide/configuration.md#user-page-access-control))
     - **Administrators**: Go to Dashboard → Plugins → SmartLists
 3. **Create Your First List**: Use the "Create List" tab
 4. **Example**: Create a playlist or collection for "Unwatched Action Movies" with:

@@ -1,10 +1,6 @@
-using System;
 using System.IO;
 using System.Reflection;
-using Jellyfin.Data;
-using Jellyfin.Database.Implementations.Entities;
-using Jellyfin.Database.Implementations.Enums;
-using Jellyfin.Extensions;
+using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,48 +29,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpGet("UserPlaylists")]
         public ActionResult GetUserPlaylistsPage()
         {
-            // Check if user page is enabled
-            var config = Plugin.Instance?.Configuration;
-            var isEnabled = config?.EnableUserPage ?? false; // Default to disabled if config not available (fail closed)
-
-            // Check if user is admin
-            var userId = User.GetUserId();
-            bool isAdmin = false;
-            
-            if (userId != Guid.Empty)
-            {
-                var user = _userManager.GetUserById(userId);
-                isAdmin = user?.HasPermission(PermissionKind.IsAdministrator) ?? false;
-            }
-
-            // If disabled and user is not admin, show disabled page
-            if (!isEnabled && !isAdmin)
+            if (UserPageAccess.Evaluate(_userManager, User.GetUserId(), Plugin.Instance?.Configuration) != UserPageAccessResult.Allowed)
             {
                 return GetFeatureDisabledPage();
-            }
-
-            // If enabled, check if user is in allowed list (if list is populated)
-            if (isEnabled && !isAdmin)
-            {
-                var allowedUsers = config?.AllowedUserPageUsers;
-                if (allowedUsers != null && allowedUsers.Count > 0)
-                {
-                    // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
-                    bool isAllowed = false;
-                    foreach (var allowedUserStr in allowedUsers)
-                    {
-                        if (Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == userId)
-                        {
-                            isAllowed = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!isAllowed)
-                    {
-                        return GetFeatureDisabledPage();
-                    }
-                }
             }
 
             var assembly = Assembly.GetExecutingAssembly();
