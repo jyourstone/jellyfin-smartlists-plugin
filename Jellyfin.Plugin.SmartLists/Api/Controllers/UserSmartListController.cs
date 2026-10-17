@@ -43,6 +43,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     // Rewrites this controller's new { message } / new { error } / string error bodies to
     // RFC 7807 ProblemDetails. See SmartListsProblemDetailsAttribute.
     [SmartListsProblemDetails]
+    // Every action requires user page access (admins, or allowed users while the page is enabled);
+    // [AllowAnonymous] actions opt out. See RequireUserPageAccessAttribute.
+    [RequireUserPageAccess]
     public class UserSmartListController : ControllerBase
     {
         private const int MaxMediaTypesLimit = 50;
@@ -110,41 +113,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
-        /// Verifies the current user may use the user page (rule in UserPageAccess).
-        /// Returns Unauthorized if not authenticated, Forbidden if access is denied.
-        /// </summary>
-        private ActionResult? CheckUserPageAccess()
-        {
-            // Get current user ID without throwing
-            var currentUserId = GetCurrentUserId();
-            
-            // Check authentication first
-            if (currentUserId == Guid.Empty)
-            {
-                return Unauthorized(new 
-                { 
-                    message = "User not authenticated. Please log in to access SmartLists." 
-                });
-            }
-
-            switch (UserPageAccess.Evaluate(_userManager, currentUserId, Plugin.Instance?.Configuration))
-            {
-                case UserPageAccessResult.PageDisabled:
-                    return StatusCode(StatusCodes.Status403Forbidden, new 
-                    { 
-                        message = "The user page is currently disabled by an administrator. Please contact your administrator for access to SmartLists." 
-                    });
-                case UserPageAccessResult.UserNotAllowed:
-                    return StatusCode(StatusCodes.Status403Forbidden, new 
-                    { 
-                        message = "You do not have permission to access the SmartLists user page. Please contact your administrator for access." 
-                    });
-                default:
-                    return null;
-            }
-        }
-
-        /// <summary>
         /// Checks if the current user has permission to manage collections.
         /// </summary>
         private bool CanUserManageCollections()
@@ -182,10 +150,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<SmartListDto>>> GetUserPlaylistsBase()
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             // Delegate to the main GetUserPlaylists method
             return await GetUserPlaylists().ConfigureAwait(false);
         }
@@ -201,10 +165,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<SmartListDto>> CreateUserSmartList([FromBody] SmartPlaylistDto? list)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             if (list == null)
             {
                 return BadRequest(new { error = "List data is required" });
@@ -388,10 +348,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<SmartListDto>>> GetUserPlaylists()
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -476,10 +432,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<SmartListDto>> GetSmartList([FromRoute, Required] string id)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -539,10 +491,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SmartPlaylistDto>> CreateUserPlaylist([FromBody] CreatePlaylistRequest request)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -663,10 +611,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<object> GetFields()
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 // Use the shared field definitions (DRY principle)
@@ -687,10 +631,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         public ActionResult<object> GetUserCapabilities()
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var canManageCollections = CanUserManageCollections();
@@ -797,10 +737,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("refresh-direct")]
         public async Task<ActionResult> RefreshUserLists()
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -872,10 +808,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("{id}/enable")]
         public async Task<ActionResult> EnableSmartList([FromRoute, Required] string id)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -961,10 +893,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpPost("{id}/disable")]
         public async Task<ActionResult> DisableSmartList([FromRoute, Required] string id)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 return await ExecuteListAction(
@@ -1042,9 +970,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<SmartListDto>> UpdateSmartList([FromRoute, Required] string id, [FromBody, Required] SmartListDto list)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
             if (list == null)
             {
                 return BadRequest(new { message = "List data is required" });
@@ -1284,10 +1209,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteSmartList([FromRoute, Required] string id, [FromQuery] bool deleteJellyfinList = true)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -1387,10 +1308,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult> RefreshSmartList([FromRoute, Required] string id)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             try
             {
                 var userId = GetCurrentUserId();
@@ -1787,10 +1704,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             IFormFile file,
             [FromForm, Required] string imageType)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             if (file == null || file.Length == 0)
             {
                 return BadRequest(new { message = "No file uploaded" });
@@ -1907,10 +1820,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             [FromRoute, Required] string id,
             [FromRoute, Required] string imageType)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             // Validate imageType to prevent path traversal
             if (!SmartListImageService.ValidImageTypes.Contains(imageType))
             {
@@ -2058,10 +1967,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<List<SmartListImageDto>>> GetImages([FromRoute, Required] string id)
         {
-            // Check if user page is enabled
-            var accessCheck = CheckUserPageAccess();
-            if (accessCheck != null) return accessCheck;
-
             if (!Guid.TryParse(id, out var guidId))
             {
                 return BadRequest(new { message = "Invalid smart list ID format" });
