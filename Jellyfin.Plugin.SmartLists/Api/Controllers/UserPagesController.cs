@@ -61,41 +61,32 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
     <meta charset=""UTF-8"">
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
     <title>SmartLists - Feature Disabled</title>
+    <!-- Plugin Pages appends this markup into the Jellyfin web client's own DOM, keeping the style
+         element, so every rule is scoped to .smartlists-disabled and colours come from the theme. -->
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: #101010;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .container {
+        .smartlists-disabled {
             max-width: 600px;
-            padding: 40px;
+            margin: 0 auto;
+            padding: 40px 0;
             text-align: center;
         }
-        .icon {
+        .smartlists-disabled .icon {
             font-size: 80px;
             margin-bottom: 20px;
             opacity: 0.6;
         }
-        h1 {
+        .smartlists-disabled h1 {
             font-size: 28px;
             font-weight: 500;
             margin: 0 0 16px 0;
-            color: #ffffff;
         }
-        p {
+        .smartlists-disabled p {
             font-size: 16px;
             line-height: 1.6;
             margin: 0 0 24px 0;
-            color: #cccccc;
+            opacity: 0.8;
         }
-        .info-box {
+        .smartlists-disabled .info-box {
             background: var(--jf-palette-background-paper);
             border: 1px solid var(--jf-palette-divider);
             border-radius: 8px;
@@ -103,17 +94,17 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             margin-top: 30px;
             text-align: left;
         }
-        .info-box h2 {
+        .smartlists-disabled .info-box h2 {
             font-size: 18px;
             font-weight: 500;
             margin: 0 0 12px 0;
             color: var(--jf-palette-primary-main);
         }
-        .info-box p {
+        .smartlists-disabled .info-box p {
             margin: 0;
             font-size: 14px;
         }
-        .back-link {
+        .smartlists-disabled .back-link {
             display: inline-block;
             margin-top: 24px;
             color: var(--jf-palette-primary-main);
@@ -121,13 +112,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             font-size: 14px;
             font-weight: 500;
         }
-        .back-link:hover {
+        .smartlists-disabled .back-link:hover {
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class=""container"">
+    <div class=""smartlists-disabled"">
         <div class=""icon"">🚫</div>
         <h1>SmartLists User Page is currently disabled</h1>
         <p>
