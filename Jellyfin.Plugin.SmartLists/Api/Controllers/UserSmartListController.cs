@@ -110,36 +110,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         }
 
         /// <summary>
-        /// Checks if the user page feature is enabled in configuration.
-        /// </summary>
-        private static bool IsUserPageEnabled()
-        {
-            var config = Plugin.Instance?.Configuration;
-            return config?.EnableUserPage ?? false; // Default to disabled if config not available (fail closed)
-        }
-
-        /// <summary>
-        /// Checks if the specified user is an administrator.
-        /// </summary>
-        /// <param name="userId">The user ID to check.</param>
-        /// <returns>True if the user is an admin, false otherwise.</returns>
-        private bool IsUserAdmin(Guid userId)
-        {
-            if (userId == Guid.Empty)
-            {
-                return false;
-            }
-            
-            var user = _userManager.GetUserById(userId);
-            return user?.HasPermission(PermissionKind.IsAdministrator) ?? false;
-        }
-
-        /// <summary>
-        /// Verifies that the user page is enabled and the current user has access.
-        /// Admins always have access. For non-admins:
-        /// - User page must be enabled
-        /// - If AllowedUserPageUsers is empty/null, all users have access
-        /// - If AllowedUserPageUsers is populated, user must be in the list
+        /// Verifies the current user may use the user page (rule in UserPageAccess).
         /// Returns Unauthorized if not authenticated, Forbidden if access is denied.
         /// </summary>
         private ActionResult? CheckUserPageAccess()
@@ -155,43 +126,22 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     message = "User not authenticated. Please log in to access SmartLists." 
                 });
             }
-            
-            // Admins always have access, even if user page is disabled
-            if (IsUserAdmin(currentUserId))
-            {
-                return null;
-            }
 
-            // For non-admin users, check if user page is enabled
-            if (!IsUserPageEnabled())
+            switch (UserPageAccess.Evaluate(_userManager, currentUserId, Plugin.Instance?.Configuration))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new 
-                { 
-                    message = "The user page is currently disabled by an administrator. Please contact your administrator for access to SmartLists." 
-                });
-            }
-
-            // Check if specific users are allowed
-            var config = Plugin.Instance?.Configuration;
-            var allowedUsers = config?.AllowedUserPageUsers;
-            
-            // If list is populated, check if current user is in it
-            if (allowedUsers != null && allowedUsers.Count > 0)
-            {
-                // Parse each allowed user GUID and compare (handles both dashed and non-dashed formats)
-                bool isAllowed = allowedUsers.Any(allowedUserStr => 
-                    Guid.TryParse(allowedUserStr, out var allowedUserId) && allowedUserId == currentUserId);
-                
-                if (!isAllowed)
-                {
+                case UserPageAccessResult.PageDisabled:
+                    return StatusCode(StatusCodes.Status403Forbidden, new 
+                    { 
+                        message = "The user page is currently disabled by an administrator. Please contact your administrator for access to SmartLists." 
+                    });
+                case UserPageAccessResult.UserNotAllowed:
                     return StatusCode(StatusCodes.Status403Forbidden, new 
                     { 
                         message = "You do not have permission to access the SmartLists user page. Please contact your administrator for access." 
                     });
-                }
+                default:
+                    return null;
             }
-
-            return null;
         }
 
         /// <summary>
@@ -2226,23 +2176,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             }
 
             return new FileInfo(imagePath).Length;
-        }
-    }
-
-    /// <summary>
-    /// Extension methods for user claims.
-    /// </summary>
-    internal static class UserExtensions
-    {
-        public static Guid GetUserId(this System.Security.Claims.ClaimsPrincipal user)
-        {
-            // Jellyfin uses the "Jellyfin-UserId" claim for authenticated users
-            var userIdClaim = user.FindFirst("Jellyfin-UserId");
-            if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
-            {
-                return userId;
-            }
-            return Guid.Empty;
         }
     }
 }

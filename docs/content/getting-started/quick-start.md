@@ -7,7 +7,7 @@ SmartLists can be accessed in two ways depending on your user permissions:
 **For Regular Users:**
 
 - Navigate to your Jellyfin home screen
-- Click **"SmartLists"** in the main sidebar
+- Click **"SmartLists"** in the main sidebar (shown only when an administrator has enabled the user page for you, see [User Page Access Control](../user-guide/configuration.md#user-page-access-control))
 - This gives you access to create and manage your own playlists and collections
 
 !!! warning "Required Plugins for User Page"

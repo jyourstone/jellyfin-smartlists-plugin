@@ -288,11 +288,12 @@ Configure global settings for the plugin:
 Administrators can enable or disable the user-facing SmartLists page in the Settings tab:
 
 - **Enable User Page** (default: enabled): When checked, regular users can access SmartLists from their home screen sidebar
+- **Allowed Users** (default: all users): Limit the user page to the selected users. With no users selected, every user can use it while the user page is enabled
 - **Requires**: Plugin Pages and File Transformation plugins must be installed (see [Installation Guide](../getting-started/installation.md#required-plugins-for-user-page))
 - **When disabled**: Users can only access SmartLists through the admin dashboard
 
-!!! note "Server Restart Required"
-    After changing the Enable User Page setting, you may need to restart the Jellyfin server for the change to fully take effect in the Plugin Pages integration.
+!!! info "Sidebar Entry"
+    The **SmartLists** entry in the sidebar is only shown to users who can use the user page: it is hidden from everyone while the user page is disabled, and from users who aren't in the Allowed Users list. Administrators always see it. Changes don't need a server restart; users see them the next time the Jellyfin web client loads (for example after refreshing the browser).
 
 ## Flexible Deletion Options
 
