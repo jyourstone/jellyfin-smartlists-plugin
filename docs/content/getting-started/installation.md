@@ -4,7 +4,7 @@
 
 For regular users to access SmartLists from their home screen, the following plugins are **required**:
 
-1. **Plugin Pages** - Enables custom pages in the Jellyfin sidebar
+1. **Plugin Pages** (3.0.0.0 or later) - Enables custom pages in the Jellyfin sidebar
     - Repository: [https://github.com/IAmParadox27/jellyfin-plugin-pages](https://github.com/IAmParadox27/jellyfin-plugin-pages)
    
 2. **File Transformation** - Required dependency for Plugin Pages

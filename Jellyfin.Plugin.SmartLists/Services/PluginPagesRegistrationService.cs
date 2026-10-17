@@ -92,7 +92,7 @@ namespace Jellyfin.Plugin.SmartLists.Services
                 var parse = registerPage?.GetParameters().SingleOrDefault()?.ParameterType.GetMethod("Parse", [typeof(string)]);
                 if (registerPage == null || parse == null)
                 {
-                    _logger.LogWarning("Plugin Pages does not provide PluginInterface.RegisterPage. Update Plugin Pages to show SmartLists in the sidebar.");
+                    _logger.LogWarning("Plugin Pages does not provide PluginInterface.RegisterPage. Update Plugin Pages to 3.0.0.0 or later to show SmartLists in the sidebar.");
                     return;
                 }
 
