@@ -13,6 +13,15 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.0.4.3-rc
+
+*2026-10-17 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.3-rc)*
+
+**Improvements**
+
+- **Match alternate versions** now only appears when it can change the list: when a rule checks something that can differ between versions of a video, such as **Is 3D**, **Resolution**, **File Name** or audio languages. It is now shown below the rules and stays off by default ([Alternate Versions](../user-guide/media-types.md#alternate-versions)).
+
+
 ## v12.0.4.2-rc
 
 *2026-10-17 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.2-rc)*
