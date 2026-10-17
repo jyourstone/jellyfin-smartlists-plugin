@@ -59,9 +59,11 @@ namespace Jellyfin.Plugin.SmartLists.Services
             var service = _instance;
             try
             {
-                return service != null && UserPageAccess.Evaluate(
+                // No identifiable user (e.g. an unauthenticated request) can't open the [Authorize] page
+                var userId = service?._httpContextAccessor.HttpContext?.User.GetUserId() ?? Guid.Empty;
+                return service != null && userId != Guid.Empty && UserPageAccess.Evaluate(
                     service._userManager,
-                    service._httpContextAccessor.HttpContext?.User.GetUserId() ?? Guid.Empty,
+                    userId,
                     Plugin.Instance?.Configuration) == UserPageAccessResult.Allowed;
             }
             catch (Exception ex)
