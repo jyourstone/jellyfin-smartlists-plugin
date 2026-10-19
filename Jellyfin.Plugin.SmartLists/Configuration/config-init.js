@@ -1273,7 +1273,11 @@
                         // Position the menu using fixed positioning to avoid clipping
                         var btnRect = kebabBtn.getBoundingClientRect();
                         kebabMenu.style.position = 'fixed';
-                        kebabMenu.style.top = (btnRect.bottom + 4) + 'px';
+                        // Open upward when the menu would run past the bottom of the viewport and fits above
+                        var menuHeight = kebabMenu.offsetHeight;
+                        var below = btnRect.bottom + 4;
+                        var above = btnRect.top - 8 - menuHeight; // 4px gap + the menu's 0.25em margin-top
+                        kebabMenu.style.top = (below + menuHeight > window.innerHeight && above >= 0 ? above : below) + 'px';
                         kebabMenu.style.right = (window.innerWidth - btnRect.right) + 'px';
                         kebabMenu.style.left = 'auto';
                     } else {
