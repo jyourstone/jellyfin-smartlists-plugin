@@ -1,7 +1,7 @@
 ---
 name: release
-description: Create and push a release tag for the SmartLists plugin with a changelog in the annotated tag message. Project-specific version scheme — RC number lives in the Revision segment with a bare -rc suffix (e.g. v12.0.0.3-rc); stable releases bump the Build segment and reset Revision to 0 (e.g. v12.0.1.0). Use when the user wants to tag a release or create an RC.
-argument-hint: stable|rc
+description: Create and push a release tag for the SmartLists plugin with a changelog in the annotated tag message. Project-specific version scheme — RC number lives in the Revision segment with a bare -rc suffix (e.g. v12.2.0.3-rc); feature releases bump Minor, fixes-only releases bump Build, and stables reset Revision to 0 (e.g. v12.2.1.0). Use when the user wants to tag a release or create an RC.
+argument-hint: minor|patch|stable|rc [minor|patch]
 allowed-tools: Bash
 ---
 
@@ -13,20 +13,34 @@ Create a new git version tag with a changelog generated from commits and PR titl
 
 ### 1. Validate input
 
-`$ARGUMENTS` must be `stable` or `rc`. `patch` and `minor` are accepted as synonyms for `stable` — the four-part scheme doesn't distinguish bump sizes, so every stable is a Build bump regardless of how large the change is.
+`$ARGUMENTS` must be one of:
 
-If `$ARGUMENTS` is `major`, stop and explain: the Major/Minor segments are pinned to the `12.x` line and only move as a deliberate manual decision, not something this skill infers from a bump type.
+| Argument | Meaning |
+|---|---|
+| `minor` | Stable release with new features (Minor bump) |
+| `patch` | Stable fixes-only release (Build bump) |
+| `stable` | Promote the open RC cycle to its stable. With no RC since the last stable, ask `minor or patch?` |
+| `rc minor` | First RC of the next minor |
+| `rc patch` | First fixes-only RC |
+| `rc` | Next RC of the open RC cycle. With no RC since the last stable, ask `rc minor or rc patch?` |
+
+Below, "`stable`" means any of `minor`, `patch` or `stable`, and "`rc`" any `rc` form.
+
+If `$ARGUMENTS` is `major`, stop and explain: the Major segment only moves as a deliberate manual decision, not something this skill infers from a bump type.
 
 **If `$ARGUMENTS` is empty**, present this prompt and wait for the user's answer before proceeding:
 
 ```text
 What type of release do you want to create?
 
-  stable — Stable release (tagged on 12-release, e.g. v12.0.1.0)
-  rc     — Release candidate (tagged on main, e.g. v12.0.0.3-rc)
+  minor     — Stable with new features   (tagged on 12-release, e.g. v12.2.1.0)
+  patch     — Stable, fixes only         (tagged on 12-release, e.g. v12.2.2.0)
+  rc minor  — RC for the next minor      (tagged on main, e.g. v12.3.0.1-rc)
+  rc patch  — Fixes-only RC              (tagged on main, e.g. v12.2.2.1-rc)
+  rc        — Next RC of the open cycle  (tagged on main)
 ```
 
-Use the user's answer as `$ARGUMENTS` and continue. If `$ARGUMENTS` is present but doesn't match `stable`, `patch`, `minor`, or `rc`, stop and tell the user: "Usage: /release stable|rc".
+Use the user's answer as `$ARGUMENTS` and continue. If `$ARGUMENTS` is present but matches none of these, stop and tell the user: "Usage: /release minor|patch|stable|rc [minor|patch]".
 
 ### 2. Sync and check working tree
 
@@ -169,21 +183,41 @@ The version scheme is .NET's four-part `Major.Minor.Build.Revision`. Ordering is
 - **Revision > 0** with a bare `-rc` git-tag suffix marks a release candidate; the Revision number *is* the RC number. The `-rc` suffix exists only as a workflow routing marker (it sends the build to the unstable manifest branch and marks the GitHub release as a prerelease) — it is never part of the actual .NET version.
 - **Never** produce `-rc.N`-style suffixes (e.g. `v12.0.0.1-rc.2`). Two such tags would strip to the identical manifest version `12.0.0.1` and break plugin auto-update ordering. Each RC increments the Revision segment itself.
 
-**`rc`**: base = highest `v12.*` tag (from step 3).
-- If the base is itself an RC (ends in `-rc`), increment Revision: `v12.0.0.2-rc` → `v12.0.0.3-rc`.
-- If the base is a stable v12 tag (a future state, once Jellyfin 12 has shipped and this line has stable releases), start a new RC cycle: bump Build, set Revision to 1: `v12.0.1.0` → `v12.0.2.1-rc`.
-- If there is no `v12.*` tag yet, ask the user for the starting Major.Minor before proceeding — this skill has no basis to guess it.
+**The rule: an RC is `X.Y.B.N`, and its stable is `X.Y.(B+1).0`.** Minor bumps for releases with new features, Build for fixes-only releases (see "Version Format" in `CLAUDE.md`). A new minor's RCs start at Build 0 (`v12.2.0.1-rc`), so its first stable is `v12.2.1.0`; a fixes-only RC sits on the current stable's Build (`v12.2.2.0` → `v12.2.2.1-rc` → `v12.2.3.0`).
 
-**`stable`**: base = highest `v12.*` tag of **any** kind — RCs included.
+Let `S` = the last stable `vX.Y.B.0` (the changelog base for a stable, from step 3). If there is no `v12.*` tag at all, ask the user for the starting version — this skill has no basis to guess it.
 
-> **Two different bases, do not confuse them.** The *changelog* base (step 3) is the last **stable** tag, so the release notes span everything since the previous stable. The *version* base here is the highest tag of **any** kind, including RCs. Using the changelog base to compute the version produces a version that sorts **below** the RCs it supersedes.
+**`rc`** — pick the RC *lane* (`X.Y.B`), then take the next Revision in it:
 
-- Bump Build, reset Revision to 0: `v12.0.2.2-rc` → `v12.0.3.0`; `v12.0.1.0` → `v12.0.2.0`.
+- `rc minor` → lane `X.(Y+1).0`.
+- `rc patch` → lane `X.Y.B` (S's own Build).
+- `rc` → the lane of the highest `v12.*` tag, if that tag is an RC. Otherwise ask `rc minor or rc patch?`.
+- Revision = highest existing Revision in that lane + 1, or 1 if the lane has no tags yet:
+
+  ```bash
+  git tag --list "v<lane>.*-rc" --sort=-v:refname | head -1
+  ```
+
+Examples: S `v12.1.0.0` + `rc minor` → `v12.2.0.1-rc`; then `rc` → `v12.2.0.2-rc`. S `v12.2.2.0` + `rc patch` → `v12.2.2.1-rc`.
+
+**`stable`** — pick the target minor `M`, then the Build:
+
+- `minor` → `M = Y+1`.
+- `patch` → `M = Y`.
+- `stable` → the Minor of the highest `v12.*` tag, if that tag is an RC (promotes the open cycle). Otherwise ask `minor or patch?`.
+- If any `vX.M.*` tag exists, the version is `vX.M.(highest Build among them + 1).0`; otherwise `vX.M.0.0`:
+
+  ```bash
+  git tag --list "vX.M.*" --sort=-v:refname | head -1
+  ```
+
+Examples: S `v12.1.0.0`, RCs `v12.2.0.1-rc`…`v12.2.0.3-rc` → `stable` or `minor` → `v12.2.1.0`. S `v12.2.2.0`, RC `v12.2.2.1-rc` → `stable` or `patch` → `v12.2.3.0`. S `v12.2.1.0`, no RC → `patch` → `v12.2.2.0`, `minor` → `v12.3.0.0`.
+
+> **Never bump from S alone when RCs exist in the target minor.** The RCs carry a Build at least as high as S's, so S's Build + 1 can land at or below them: from S `v12.0.3.0` with RCs at `v12.0.4.N` (the pre-2026-10-24 layout), `v12.0.4.0` sorts **below** `12.0.4.3` and RC users would never be offered it. Taking the highest Build of *any* tag in the target minor avoids this. Likewise `vX.M.0.0` is only valid while the minor has no tags at all — after RCs at `vX.M.0.N` it would sort below them.
+
 - Never put a hotfix counter in Revision — Revision is reserved exclusively for RC numbers.
 
-Why any-kind: suppose the last stable is `v12.0.1.0` and the RC cycle since then produced `v12.0.2.1-rc` and `v12.0.2.2-rc`. Bumping Build from the last *stable* gives `v12.0.2.0`, whose manifest version `12.0.2.0` sorts **below** `12.0.2.2` — every RC user is already on a higher version and would never be offered the stable. Bumping from the highest tag of any kind gives `v12.0.3.0`, which sorts above the whole cycle and pulls RC users onto it.
-
-**Sanity check before tagging** — the new version must sort above every existing `v12.*` tag:
+**Sanity check before tagging** — the new version must sort above every existing `v12.*` tag. The one expected exception is a `patch` while an RC cycle for the next minor is open: that hotfix is for stable users and sorts below RCs they already run, so check it against the tags of its own minor (`vX.Y.*`) instead.
 
 ```bash
 printf '%s\n%s\n' "$(git tag --list 'v12.*' --sort=-v:refname | head -1 | sed 's/-rc$//')" "<new-version>" \

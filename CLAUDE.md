@@ -129,20 +129,27 @@ Jellyfin plugins use .NET `System.Version` (`Major.Minor.Build.Revision` — fou
 - **Revision > 0** → Release Candidate (the revision number is the RC number)
 - **Revision = 0** → Stable release
 
+What each segment means:
+
+- **Minor** bumps for a release with new features. **Build** bumps for a fixes-only release. **Major** only moves as a deliberate decision.
+- **An RC is `X.Y.B.N`; its stable is `X.Y.(B+1).0`.** A new minor's RCs start at Build 0 (`12.2.0.1-rc`), so its first stable is `12.2.1.0`. A fixes-only RC sits on the current stable's Build (`12.2.2.0` → `12.2.2.1-rc` → `12.2.3.0`).
+
 The `-rc` suffix on the git tag is only a workflow marker — it routes the build to the **unstable** manifest branch and marks the GitHub release as a prerelease. It is stripped before building (the .NET version is the four-part number).
 
 ### Tag Examples
 
 | Git Tag | Manifest Version | Manifest Branch | Notes |
 |---|---|---|---|
-| `v12.0.0.1-rc` | `12.0.0.1` | unstable | First RC for 12.0 |
-| `v12.0.0.2-rc` | `12.0.0.2` | unstable | Second RC |
-| `v12.0.1.0` | `12.0.1.0` | stable (main) | Final stable release |
-| `v12.0.2.0` | `12.0.2.0` | stable (main) | Hotfix (no RC) |
-| `v12.1.0.1-rc` | `12.1.0.1` | unstable | RC for next minor |
-| `v12.1.1.0` | `12.1.1.0` | stable (main) | Stable for next minor |
+| `v12.2.0.1-rc` | `12.2.0.1` | unstable | First RC for the next minor |
+| `v12.2.0.2-rc` | `12.2.0.2` | unstable | Second RC |
+| `v12.2.1.0` | `12.2.1.0` | stable (main) | Stable for that minor |
+| `v12.2.2.0` | `12.2.2.0` | stable (main) | Fixes-only release (no RC) |
+| `v12.2.2.1-rc` | `12.2.2.1` | unstable | Fixes-only RC |
+| `v12.2.3.0` | `12.2.3.0` | stable (main) | Its stable |
 
-Ordering always holds: `12.0.0.1 < 12.0.0.2 < 12.0.1.0` — so RC users auto-update through RCs and into the final stable release. Because Revision is reserved for RC numbers, stable releases always bump the **Build** component (never use Revision for stable).
+Ordering always holds: `12.2.0.1 < 12.2.0.2 < 12.2.1.0 < 12.2.2.0 < 12.2.2.1 < 12.2.3.0` — so RC users auto-update through RCs and into the final stable release. Never use Revision for a stable, and never tag `X.Y.0.0` after RCs at `X.Y.0.N`: it sorts below them, so RC users would never be offered it.
+
+Until `v12.0.4.3-rc` every release bumped Build, features included (`v12.0.3.0` → RCs `v12.0.4.1-rc`…`v12.0.4.3-rc`). `v12.1.0.0` (2026-10-24) switched feature releases to Minor bumps; it is the one stable at Build 0, since no `12.1.0.x` RCs existed.
 
 ### Release Line — single `12.x` line (decided 2026-08-14)
 
@@ -170,12 +177,12 @@ Releases now **ship forward to Jellyfin 12 only** — `TARGETS` in release.yml i
   git fetch origin main
   git merge --ff-only origin/main   # origin/main, not local main — a stale local ref ships old code
   git push origin 12-release        # the docs Worker publishes from this branch
-  git tag -a v12.0.X.0 -m "..."     # Build bumps; Revision resets to 0
+  git tag -a v12.Y.B.0 -m "..."     # see Version Format; Revision resets to 0
   ```
 
   `--ff-only` is deliberate: `12-release` must never carry commits of its own, or it stops being a pointer at a `main` commit and the next fast-forward fails. This is the key difference from `10.11-release`, which did carry its own commits and needed merging both ways.
 
-Bump the **Build** segment for stables; Revision is reserved exclusively for RC numbers. Ordering holds across the whole line, so RC users now roll straight into stables — the old trade-off where a `10.11.X.0` stable sorted *below* the `12.x` RCs and was never offered to RC users is gone with the split.
+Stables bump Minor (features) or Build (fixes only), per Version Format; Revision is reserved exclusively for RC numbers. Ordering holds across the whole line, so RC users now roll straight into stables — the old trade-off where a `10.11.X.0` stable sorted *below* the `12.x` RCs and was never offered to RC users is gone with the split.
 
 Smoke testing the 10.11 ABI is no longer a routine pre-stable step, since 10.11 is no longer shipped by normal releases. 10.11 can't be smoke-tested from `main` any more (no `net9.0` target); when preparing a 10.11 hotfix, check out `10.11-release` and use that branch's own `build-local.sh` with `JELLYFIN_ABI=10.11.0`.
 
