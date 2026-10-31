@@ -140,7 +140,7 @@ SmartLists allows you to upload custom images for your playlists and collections
 
 The **Metadata** section lets you set additional properties on the Jellyfin playlist or collection:
 
-- **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top).
+- **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top). The Manage lists page can also sort by it (**Sort Title (A-Z/Z-A)**); lists without a Sort Title sort by their name.
 - **Overview** – Sets a custom description that appears in Jellyfin's item detail view.
 - **Tags** – Sets tags on the generated Jellyfin playlist or collection. Enter each tag and press Enter, or paste multiple tags separated by semicolons.
 - **Favorite** – Optionally marks the generated list as favorite or not favorite. Leave it unchanged if you do not want SmartLists to manage favorite state.
@@ -229,7 +229,7 @@ View and edit your smart playlists and collections:
 - **Organized Interface**: Clean, modern layout with grouped actions and filters
 - **Advanced Filtering**: Filter by list type, media type, visibility and user
 - **Real-time Search**: Search all properties in real-time
-- **Flexible Sorting**: Sort by name, list creation date, last refreshed, or enabled status
+- **Flexible Sorting**: Sort by name, sort title, list creation date, last refreshed, or enabled status
 - **Bulk Operations**: Select multiple lists to enable, disable, delete, or convert them simultaneously
 - **Detailed View**: Expand lists to see rules, settings, creation date, and other properties
 - **Quick Actions**: Edit, clone, refresh, or delete individual lists with confirmation dialogs
