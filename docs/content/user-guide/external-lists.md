@@ -56,6 +56,9 @@ External List / equals / https://mdblist.com/lists/linaspurinis/top-watched-movi
 External List / equals / https://mdblist.com/lists/official/movies/justwatch-streaming-charts?locale=en_US&rank=7&provider=nfx
 ```
 
+!!! note "Episode-Level Lists"
+    MDBList lists that contain individual episodes are supported. MDBList identifies episodes by TMDB episode ID only (no IMDb or TVDB ID), so your library's episodes need TMDB provider IDs to match. Season entries are skipped. Use **External List Order Ascending** sort to maintain the list creator's intended episode order.
+
 ---
 
 ### IMDb

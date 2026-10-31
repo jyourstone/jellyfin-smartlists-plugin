@@ -4,7 +4,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 {
     /// <summary>
     /// Response wrapper for MDBList API list items endpoint.
-    /// The API returns items in separate "movies" and "shows" arrays.
+    /// The API returns items in separate "movies", "shows", "seasons" and "episodes" arrays;
+    /// seasons are only counted for paging, because there is no Season kind to match them against.
     /// </summary>
     public class MdbListResponse
     {
@@ -13,6 +14,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
         [JsonPropertyName("shows")]
         public MdbListItem[]? Shows { get; set; }
+
+        [JsonPropertyName("seasons")]
+        public MdbListItem[]? Seasons { get; set; }
+
+        [JsonPropertyName("episodes")]
+        public MdbListItem[]? Episodes { get; set; }
     }
 
     /// <summary>
