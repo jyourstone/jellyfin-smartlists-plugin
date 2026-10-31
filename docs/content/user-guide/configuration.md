@@ -85,6 +85,7 @@ To make smart playlists and collections easy to spot when browsing, SmartLists s
 - Applied to auto-generated covers as well as Primary and Thumb images uploaded through SmartLists
 - Uploaded originals are stored untouched — the badge is only stamped on the copy handed to Jellyfin, so toggling the badge off restores clean covers
 - Can be turned off in the Settings tab of the admin page (**Show smart list badge on covers**); changes take effect on each list's next refresh
+- Deleting a list's configuration while keeping the Jellyfin playlist or collection removes the badge: generated covers are regenerated without it, and covers uploaded through SmartLists are restored from the stored original
 - Uploaded images are badged and cropped only when they are JPEG, PNG or WebP; uploads in other formats (e.g. GIF, BMP, TIFF, AVIF, SVG) are used as-is, without a badge or crop. An animated WebP upload keeps only its first frame while the badge is enabled
 
 !!! note "Covers are cropped to Jellyfin's tile proportions while the badge is enabled"
