@@ -2111,8 +2111,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                     else
                     {
-                        var playlistService = GetPlaylistService();
-                        await playlistService.RemoveSmartSuffixFromAllPlaylistsAsync(playlist);
+                        await GetPlaylistService().RemoveSmartSuffixFromAllPlaylistsAsync(playlist);
                         logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
                     }
 

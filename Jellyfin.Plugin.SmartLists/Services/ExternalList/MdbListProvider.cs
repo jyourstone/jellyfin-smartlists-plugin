@@ -73,7 +73,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             var httpClient = _httpClientFactory.CreateClient("MdbList");
             int offset = 0;
-            int totalFetched = 0;
             int position = 0;
 
             try
@@ -124,8 +123,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         }
                     }
 
-                    totalFetched += itemsInPage;
-
                     // Stop early if we have enough items
                     if (maxItems > 0 && position >= maxItems)
                     {
@@ -155,10 +152,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 _logger.LogWarning(ex, "Unexpected error fetching MDBList {Username}/{ListName}", username, listname);
             }
 
-            result.TotalItems = totalFetched;
-            result.IsComplete = maxItems <= 0 || totalFetched < maxItems;
+            // position counts list entries; itemsInPage also counts the skipped season rows
+            result.TotalItems = position;
+            result.IsComplete = maxItems <= 0 || position < maxItems;
             _logger.LogInformation("Fetched {Count} items from MDBList {Username}/{ListName} (IMDb: {ImdbCount}, TMDB: {TmdbCount}, TVDB: {TvdbCount})",
-                totalFetched, username, listname, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
+                position, username, listname, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
 
             return result;
         }
@@ -243,27 +241,30 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         /// </summary>
         internal static int AddWrapperItems(MdbListResponse? wrapper, ExternalListResult result, ref int position)
         {
-            int count = 0;
+            if (wrapper == null)
+            {
+                return 0;
+            }
 
-            foreach (var item in wrapper?.Movies ?? [])
+            // AddItemIds advances position once per item
+            var start = position;
+
+            foreach (var item in wrapper.Movies ?? [])
             {
                 AddItemIds(item, result, ref position, ExternalListItemKind.Movie);
-                count++;
             }
 
-            foreach (var item in wrapper?.Shows ?? [])
+            foreach (var item in wrapper.Shows ?? [])
             {
                 AddItemIds(item, result, ref position, ExternalListItemKind.Show);
-                count++;
             }
 
-            foreach (var item in wrapper?.Episodes ?? [])
+            foreach (var item in wrapper.Episodes ?? [])
             {
                 AddItemIds(item, result, ref position, ExternalListItemKind.Episode);
-                count++;
             }
 
-            return count + (wrapper?.Seasons?.Length ?? 0);
+            return position - start + (wrapper.Seasons?.Length ?? 0);
         }
 
         internal static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
