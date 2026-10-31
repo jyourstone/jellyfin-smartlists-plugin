@@ -176,39 +176,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.Shared
         }
 
         /// <summary>
-        /// Deletes the entire smart list folder, including config.json and all images.
-        /// This method is intended to be called when a smart list is being permanently deleted.
-        /// </summary>
-        /// <param name="smartListId">The smart list ID.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>A completed task.</returns>
-        public Task DeleteSmartListFolderAsync(string smartListId, CancellationToken cancellationToken = default)
-        {
-            if (string.IsNullOrEmpty(smartListId))
-            {
-                return Task.CompletedTask;
-            }
-
-            var smartListImagePath = GetSmartListImageDirectory(smartListId);
-            if (!Directory.Exists(smartListImagePath))
-            {
-                return Task.CompletedTask;
-            }
-
-            try
-            {
-                Directory.Delete(smartListImagePath, recursive: true);
-                _logger.LogDebug("Deleted smart list folder for {SmartListId}", smartListId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to delete smart list folder for {SmartListId}", smartListId);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
         /// Gets the full path to a specific image for a smart list.
         /// Checks new unified location first, then legacy location for backward compatibility.
         /// </summary>

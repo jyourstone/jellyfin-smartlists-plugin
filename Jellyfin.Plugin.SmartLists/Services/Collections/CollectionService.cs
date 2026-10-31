@@ -515,6 +515,38 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
         }
 
+        /// <summary>
+        /// Deletes a smart collection: deletes or keeps its Jellyfin collection, then removes its store
+        /// folder (config and images) and auto-refresh cache entry. The keep path must run before the store
+        /// delete, since restoring un-badged covers re-copies the original uploads from that folder.
+        /// </summary>
+        /// <param name="id">The smart collection ID the store is keyed by</param>
+        /// <param name="collection">The smart collection to delete</param>
+        /// <param name="deleteJellyfinList">True to delete the Jellyfin collection; false to keep it as a regular collection</param>
+        /// <param name="store">The store to remove the smart collection from</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        public async Task DeleteSmartListAsync(Guid id, SmartCollectionDto collection, bool deleteJellyfinList, ISmartListStore<SmartCollectionDto> store, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(collection);
+            ArgumentNullException.ThrowIfNull(store);
+
+            var normalizedId = id.ToString("D");
+
+            if (deleteJellyfinList)
+            {
+                await DeleteAsync(collection, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("Deleted smart collection: {CollectionName}", collection.Name);
+            }
+            else
+            {
+                await RemoveSmartSuffixAsync(collection, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("Deleted smart collection configuration: {CollectionName}", collection.Name);
+            }
+
+            await store.DeleteAsync(id).ConfigureAwait(false);
+            AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
+        }
+
         public async Task RemoveSmartSuffixAsync(SmartCollectionDto dto, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(dto);

@@ -2081,7 +2081,6 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
         /// <param name="deleteJellyfinList">Whether to also delete the corresponding Jellyfin playlist/collection. Defaults to true for backward compatibility.</param>
         /// <returns>No content.</returns>
         [HttpDelete("{id}")]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "ID is validated as GUID before use, preventing path injection")]
         public async Task<ActionResult> DeleteSmartList([FromRoute, Required] string id, [FromQuery] bool deleteJellyfinList = true)
         {
             try
@@ -2095,31 +2094,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 // would otherwise finish after the delete and recreate what was just removed.
                 using var processingLock = await _refreshQueueService.AcquireProcessingLockAsync().ConfigureAwait(false);
 
-                // Normalize ID to dashed format for consistent image folder operations
-                var normalizedId = guidId.ToString("D");
-
                 // Try playlist first
                 var playlistStore = GetPlaylistStore();
                 var playlist = await playlistStore.GetByIdAsync(guidId);
                 if (playlist != null)
                 {
-                    if (deleteJellyfinList)
-                    {
-                        var playlistService = GetPlaylistService();
-                        await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
-                        logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
-                    }
-                    else
-                    {
-                        await GetPlaylistService().RemoveSmartSuffixFromAllPlaylistsAsync(playlist);
-                        logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
-                    }
-
-                    // Delete smart list folder (config and images)
-                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
-
-                    await playlistStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
+                    await GetPlaylistService().DeleteSmartListAsync(guidId, playlist, deleteJellyfinList, playlistStore).ConfigureAwait(false);
                     return NoContent();
                 }
 
@@ -2128,23 +2108,7 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 var collection = await collectionStore.GetByIdAsync(guidId);
                 if (collection != null)
                 {
-                    var collectionService = GetCollectionService();
-                    if (deleteJellyfinList)
-                    {
-                        await collectionService.DeleteAsync(collection);
-                        logger.LogInformation("Deleted smart collection: {CollectionName}", collection.Name);
-                    }
-                    else
-                    {
-                        await collectionService.RemoveSmartSuffixAsync(collection);
-                        logger.LogInformation("Deleted smart collection configuration: {CollectionName}", collection.Name);
-                    }
-
-                    // Delete smart list folder (config and images)
-                    await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
-
-                    await collectionStore.DeleteAsync(guidId).ConfigureAwait(false);
-                    AutoRefreshService.Instance?.RemoveCollectionFromCache(normalizedId);
+                    await GetCollectionService().DeleteSmartListAsync(guidId, collection, deleteJellyfinList, collectionStore).ConfigureAwait(false);
                     return NoContent();
                 }
 

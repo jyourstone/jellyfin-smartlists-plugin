@@ -1992,6 +1992,38 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         }
 
         /// <summary>
+        /// Deletes a smart playlist: deletes or keeps its Jellyfin playlists, then removes its store
+        /// folder (config and images) and auto-refresh cache entry. The keep path must run before the store
+        /// delete, since restoring un-badged covers re-copies the original uploads from that folder.
+        /// </summary>
+        /// <param name="id">The smart playlist ID the store is keyed by</param>
+        /// <param name="playlist">The smart playlist to delete</param>
+        /// <param name="deleteJellyfinList">True to delete the Jellyfin playlists; false to keep them as regular playlists</param>
+        /// <param name="store">The store to remove the smart playlist from</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        public async Task DeleteSmartListAsync(Guid id, SmartPlaylistDto playlist, bool deleteJellyfinList, ISmartListStore<SmartPlaylistDto> store, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(playlist);
+            ArgumentNullException.ThrowIfNull(store);
+
+            var normalizedId = id.ToString("D");
+
+            if (deleteJellyfinList)
+            {
+                await DeleteAllJellyfinPlaylistsForUsersAsync(playlist, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
+            }
+            else
+            {
+                await RemoveSmartSuffixFromAllPlaylistsAsync(playlist, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
+            }
+
+            await store.DeleteAsync(id).ConfigureAwait(false);
+            AutoRefreshService.Instance?.RemovePlaylistFromCache(normalizedId);
+        }
+
+        /// <summary>
         /// Scopes a multi-user smart playlist to one user's Jellyfin playlist, for the per-user
         /// delete and keep paths. CustomImages is carried so the keep path can restore un-badged covers.
         /// </summary>
