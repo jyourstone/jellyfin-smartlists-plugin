@@ -77,15 +77,14 @@ public class MdbListProviderTests
                 {"id": 62247, "rank": 1, "show_id": 456, "mediatype": "episode", "imdb_id": null, "tvdb_id": null, "title": "Treehouse of Horror", "release_year": 1990, "season_number": 2, "episode_number": 3, "parent_title": "The Simpsons"},
                 {"id": 62266, "rank": 2, "show_id": 456, "mediatype": "episode", "imdb_id": null, "tvdb_id": null, "title": "Treehouse of Horror II", "release_year": 1991, "season_number": 3, "episode_number": 7, "parent_title": "The Simpsons"}
               ],
-              "pagination": {"page": 1, "page_size": 1000, "total": 2}
+              "pagination": {"offset": 0, "limit": 1000, "total": 2, "has_more": false}
             }
             """;
         var result = new ExternalListResult();
         var position = 0;
 
-        var count = MdbListProvider.AddWrapperItems(JsonSerializer.Deserialize<MdbListResponse>(json), result, ref position);
+        MdbListProvider.AddWrapperItems(JsonSerializer.Deserialize<MdbListResponse>(json), result, ref position);
 
-        Assert.Equal(2, count);
         Assert.Equal(2, position);
         Assert.Equal(
             new ExternalListEntry(0, ExternalListItemKind.Episode, null, "62247", null, "Treehouse of Horror", 1990),
@@ -107,27 +106,23 @@ public class MdbListProviderTests
         var result = new ExternalListResult();
         var position = 0;
 
-        var count = MdbListProvider.AddWrapperItems(wrapper, result, ref position);
+        MdbListProvider.AddWrapperItems(wrapper, result, ref position);
 
-        Assert.Equal(3, count);
         Assert.Equal(
             [(0, ExternalListItemKind.Movie), (1, ExternalListItemKind.Show), (2, ExternalListItemKind.Episode)],
             result.Entries.Select(e => (e.Position, e.Kind)));
     }
 
-    // Seasons take page slots, so they must count toward the page size or paging stops early.
+    // There is no Season kind to match against, so season rows take no list position.
     [Fact]
-    public void AddWrapperItems_CountsSeasonsWithoutAddingThem()
+    public void AddWrapperItems_SkipsSeasons()
     {
-        var wrapper = new MdbListResponse
-        {
-            Seasons = [new MdbListItem { Id = 3624, Title = "Season 1" }],
-            Episodes = [new MdbListItem { Id = 62247, Title = "Treehouse of Horror" }],
-        };
+        const string json = """{"seasons": [{"id": 3624, "title": "Season 1"}], "episodes": [{"id": 62247, "title": "Treehouse of Horror"}]}""";
         var result = new ExternalListResult();
         var position = 0;
 
-        Assert.Equal(2, MdbListProvider.AddWrapperItems(wrapper, result, ref position));
+        MdbListProvider.AddWrapperItems(JsonSerializer.Deserialize<MdbListResponse>(json), result, ref position);
+
         Assert.Equal(1, position);
         Assert.Equal(ExternalListItemKind.Episode, Assert.Single(result.Entries).Kind);
     }
@@ -138,8 +133,26 @@ public class MdbListProviderTests
         var result = new ExternalListResult();
         var position = 0;
 
-        Assert.Equal(0, MdbListProvider.AddWrapperItems(null, result, ref position));
+        MdbListProvider.AddWrapperItems(null, result, ref position);
+
         Assert.Equal(0, position);
+    }
+
+    // Paging follows next_cursor until it is absent (offset is deprecated). The response shapes are the API's own:
+    // a middle page carries next_cursor, the last page drops it.
+    [Theory]
+    [InlineData("""{"offset": 0, "limit": 1000, "total": 1043, "has_more": true, "next_cursor": "abc"}""", null, null, "abc")]
+    [InlineData("""{"offset": 0, "limit": 1000, "total": 1043, "has_more": false}""", null, "abc", null)]  // last page
+    [InlineData("""{"has_more": true, "next_cursor": "abc"}""", null, "abc", null)]  // repeated cursor would loop
+    [InlineData("""{"has_more": true, "next_cursor": ""}""", null, null, null)]
+    [InlineData("""{"has_more": true, "next_cursor": "abc"}""", "xyz", null, "abc")]  // body wins over header
+    [InlineData(null, "xyz", "abc", "xyz")]  // flat-array page: header only
+    [InlineData(null, null, "abc", null)]
+    public void GetNextCursor_FollowsNextCursorUntilAbsent(string? paginationJson, string? headerCursor, string? currentCursor, string? expected)
+    {
+        var pagination = paginationJson == null ? null : JsonSerializer.Deserialize<MdbListPagination>(paginationJson);
+
+        Assert.Equal(expected, MdbListProvider.GetNextCursor(pagination, headerCursor, currentCursor));
     }
 
     // The top-level "id" is a TMDB id only for episodes; ids.tmdb wins when both are present.
