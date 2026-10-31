@@ -632,6 +632,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             }
 
                             playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            StripSmartName(playlistToClear, dto);
                             await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                             await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                             handledPlaylistIds.Add(guid);
@@ -657,6 +658,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         foreach (var playlistToClear in remainingTethered)
                         {
                             playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            StripSmartName(playlistToClear, dto);
                             await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                             await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                             _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
@@ -709,52 +711,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // regardless of whether the name still matches an expected smart format, so the
                     // weekly cleanup sweep doesn't delete an item the user chose to keep.
                     existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
-
-                    // Get the current smart playlist name format to see what needs to be removed
-                    var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
-
-                    // Check if the playlist name matches the current smart format
-                    if (oldName == currentSmartName)
-                    {
-                        // Remove the smart playlist naming and keep just the base name
-                        existingPlaylist.Name = dto.Name;
-
-                        _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}'",
-                            oldName, dto.Name, user.Username);
-                    }
-                    else
-                    {
-                        // Try to remove prefix and suffix even if they don't match current settings
-                        // This handles cases where the user changed their prefix/suffix settings
-                        var config = Plugin.Instance?.Configuration;
-                        if (config != null)
-                        {
-                            var prefix = config.PlaylistNamePrefix ?? "";
-                            var suffix = config.PlaylistNameSuffix ?? "[Smart]";
-
-                            var baseName = dto.Name;
-                            var expectedName = NameFormatter.FormatPlaylistNameWithSettings(baseName, prefix, suffix);
-
-                            // If the playlist name matches this pattern, remove the prefix and suffix
-                            if (oldName == expectedName)
-                            {
-                                existingPlaylist.Name = baseName;
-
-                                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}' (removed prefix/suffix)",
-                                    oldName, baseName, user.Username);
-                            }
-                            else
-                            {
-                                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
-                                    oldName, expectedName);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
-                                oldName, currentSmartName);
-                        }
-                    }
+                    StripSmartName(existingPlaylist, dto);
 
                     // Save the changes (tether removal always applies; name change applies only when matched above)
                     await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
@@ -781,6 +738,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     foreach (var playlistToClear in remainingTethered)
                     {
                         playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        StripSmartName(playlistToClear, dto);
                         await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
                         await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                         _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
@@ -792,6 +750,43 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 _logger.LogError(ex, "Error removing smart suffix from playlist {PlaylistName}", dto.Name);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Renames a kept playlist back to the list's base name when its name still carries the smart
+        /// prefix/suffix - the current format, or the configured prefix/suffix if the user changed them.
+        /// </summary>
+        private void StripSmartName(Playlist playlist, SmartPlaylistDto dto)
+        {
+            var oldName = playlist.Name;
+            var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
+
+            if (oldName == currentSmartName)
+            {
+                playlist.Name = dto.Name;
+                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}'", oldName, dto.Name);
+                return;
+            }
+
+            var config = Plugin.Instance?.Configuration;
+            if (config == null)
+            {
+                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
+                    oldName, currentSmartName);
+                return;
+            }
+
+            var expectedName = NameFormatter.FormatPlaylistNameWithSettings(dto.Name, config.PlaylistNamePrefix ?? "", config.PlaylistNameSuffix ?? "[Smart]");
+            if (oldName == expectedName)
+            {
+                playlist.Name = dto.Name;
+                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' (removed prefix/suffix)", oldName, dto.Name);
+            }
+            else
+            {
+                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
+                    oldName, expectedName);
             }
         }
 
