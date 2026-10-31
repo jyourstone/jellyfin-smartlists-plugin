@@ -57,7 +57,7 @@ External List / equals / https://mdblist.com/lists/official/movies/justwatch-str
 ```
 
 !!! note "Episode-Level Lists"
-    MDBList lists that contain individual episodes are supported. MDBList identifies episodes by TMDB episode ID only (no IMDb or TVDB ID), so your library's episodes need TMDB provider IDs to match. Season entries are skipped. Use **External List Order Ascending** sort to maintain the list creator's intended episode order.
+    MDBList lists that contain individual episodes are supported. MDBList identifies episodes by TMDB episode ID only (no IMDb or TVDB ID), so your library's episodes need TMDB provider IDs to match. Jellyfin's TMDB metadata provider stores these on episodes since Jellyfin 12; episodes scanned on an earlier version or with another metadata provider get them after a metadata refresh with TMDB enabled. Season entries are skipped. Use **External List Order Ascending** sort to maintain the list creator's intended episode order.
 
 ---
 

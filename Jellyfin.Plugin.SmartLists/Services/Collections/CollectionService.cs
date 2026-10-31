@@ -663,7 +663,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 await ApplyCustomImagesToCollectionAsync(collection, dto, applyBadge: false, cancellationToken).ConfigureAwait(false);
                 await SetPhotoForCollection(collection, null, applyBadge: false, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Failed to remove the cover badge from kept collection '{CollectionName}'", collection.Name);
             }

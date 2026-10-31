@@ -801,7 +801,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 await ApplyPlaylistCoversAsync(playlist, dto, applyBadge: false, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Failed to remove the cover badge from kept playlist '{PlaylistName}'", playlist.Name);
             }
@@ -1995,7 +1995,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// Scopes a multi-user smart playlist to one user's Jellyfin playlist, for the per-user
         /// delete and keep paths. CustomImages is carried so the keep path can restore un-badged covers.
         /// </summary>
-        private static SmartPlaylistDto ForUser(SmartPlaylistDto playlist, SmartPlaylistDto.UserPlaylistMapping userMapping)
+        internal static SmartPlaylistDto ForUser(SmartPlaylistDto playlist, SmartPlaylistDto.UserPlaylistMapping userMapping)
         {
             return new SmartPlaylistDto
             {
