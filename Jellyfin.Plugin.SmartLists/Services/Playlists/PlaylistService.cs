@@ -1944,5 +1944,52 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             }
         }
 
+        /// <summary>
+        /// Removes the smart prefix/suffix, provider-ID tether and lock from every Jellyfin playlist of a
+        /// smart playlist, so the playlists survive as regular lists when the smart list is deleted.
+        /// Handles both multi-user playlists (UserPlaylists array) and legacy single-user playlists.
+        /// </summary>
+        /// <param name="playlist">The smart playlist DTO whose Jellyfin playlists should be handed back</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        public async Task RemoveSmartSuffixFromAllPlaylistsAsync(SmartPlaylistDto playlist, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(playlist);
+
+            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
+            {
+                _logger.LogDebug("Removing smart suffix from {Count} Jellyfin playlists for multi-user playlist '{PlaylistName}'",
+                    playlist.UserPlaylists.Count, playlist.Name);
+
+                foreach (var userMapping in playlist.UserPlaylists)
+                {
+                    if (!string.IsNullOrEmpty(userMapping.JellyfinPlaylistId))
+                    {
+                        try
+                        {
+                            var tempDto = new SmartPlaylistDto
+                            {
+                                Id = playlist.Id,
+                                Name = playlist.Name,
+                                UserId = userMapping.UserId,
+                                JellyfinPlaylistId = userMapping.JellyfinPlaylistId
+                            };
+                            await RemoveSmartSuffixAsync(tempDto, cancellationToken).ConfigureAwait(false);
+                            _logger.LogDebug("Removed smart suffix from Jellyfin playlist {JellyfinPlaylistId} for user {UserId}",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to remove smart suffix from Jellyfin playlist {JellyfinPlaylistId} for user {UserId}, continuing",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                await RemoveSmartSuffixAsync(playlist, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
     }
 }
