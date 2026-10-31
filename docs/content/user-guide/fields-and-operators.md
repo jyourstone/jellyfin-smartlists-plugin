@@ -245,7 +245,7 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | Field | JSON name | Description |
 |-------|-----------|-------------|
 | **Genres** | `Genres` | Content genres. [See parent metadata options below.](#parent-metadata-options) |
-| **Studios** | `Studios` | Production studios. [See parent metadata options below.](#parent-metadata-options) |
+| **Studios** | `Studios` | Production studios. With TMDB metadata, series also list their TV network here (e.g. Netflix). [See parent metadata options below.](#parent-metadata-options) |
 | **Tags** | `Tags` | Custom tags assigned to media items. [See parent metadata options below.](#parent-metadata-options) |
 | **Album** | `Album` | Album name (music) |
 | **Artists** | `Artists` | Track-level artists (music) |
