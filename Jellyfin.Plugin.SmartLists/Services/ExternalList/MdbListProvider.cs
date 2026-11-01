@@ -73,7 +73,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
             var httpClient = _httpClientFactory.CreateClient("MdbList");
             int offset = 0;
-            int totalFetched = 0;
             int position = 0;
 
             try
@@ -94,30 +93,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
 
                     var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-                    // The API can return either an array directly or a wrapper object with movies/shows arrays
+                    // The API can return either an array directly or a wrapper object with movies/shows/episodes arrays
                     int itemsInPage = 0;
 
                     try
                     {
                         // Try parsing as wrapper object first (newer API format)
-                        var wrapper = JsonSerializer.Deserialize<MdbListResponse>(json);
-                        if (wrapper?.Movies != null)
-                        {
-                            foreach (var item in wrapper.Movies)
-                            {
-                                AddItemIds(item, result, ref position, ExternalListItemKind.Movie);
-                                itemsInPage++;
-                            }
-                        }
-
-                        if (wrapper?.Shows != null)
-                        {
-                            foreach (var item in wrapper.Shows)
-                            {
-                                AddItemIds(item, result, ref position, ExternalListItemKind.Show);
-                                itemsInPage++;
-                            }
-                        }
+                        itemsInPage = AddWrapperItems(JsonSerializer.Deserialize<MdbListResponse>(json), result, ref position);
                     }
                     catch (JsonException)
                     {
@@ -140,8 +122,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                             break;
                         }
                     }
-
-                    totalFetched += itemsInPage;
 
                     // Stop early if we have enough items
                     if (maxItems > 0 && position >= maxItems)
@@ -172,10 +152,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 _logger.LogWarning(ex, "Unexpected error fetching MDBList {Username}/{ListName}", username, listname);
             }
 
-            result.TotalItems = totalFetched;
-            result.IsComplete = maxItems <= 0 || totalFetched < maxItems;
+            // position counts list entries; itemsInPage also counts the skipped season rows
+            result.TotalItems = position;
+            result.IsComplete = maxItems <= 0 || position < maxItems;
             _logger.LogInformation("Fetched {Count} items from MDBList {Username}/{ListName} (IMDb: {ImdbCount}, TMDB: {TmdbCount}, TVDB: {TvdbCount})",
-                totalFetched, username, listname, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
+                position, username, listname, result.ImdbIds.Count, result.TmdbIds.Count, result.TvdbIds.Count);
 
             return result;
         }
@@ -254,12 +235,46 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             return query.ToString();
         }
 
+        /// <summary>
+        /// Adds the movies, shows and episodes of one wrapper-format page and returns how many items it held.
+        /// Seasons are skipped but still counted, so a page they partly fill doesn't look like the last one.
+        /// </summary>
+        internal static int AddWrapperItems(MdbListResponse? wrapper, ExternalListResult result, ref int position)
+        {
+            if (wrapper == null)
+            {
+                return 0;
+            }
+
+            // AddItemIds advances position once per item
+            var start = position;
+
+            foreach (var item in wrapper.Movies ?? [])
+            {
+                AddItemIds(item, result, ref position, ExternalListItemKind.Movie);
+            }
+
+            foreach (var item in wrapper.Shows ?? [])
+            {
+                AddItemIds(item, result, ref position, ExternalListItemKind.Show);
+            }
+
+            foreach (var item in wrapper.Episodes ?? [])
+            {
+                AddItemIds(item, result, ref position, ExternalListItemKind.Episode);
+            }
+
+            return position - start + (wrapper.Seasons?.Length ?? 0);
+        }
+
         internal static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
         {
             // Add IMDb ID from top-level or nested ids (TryAdd keeps first/lowest position for duplicates)
             var imdbId = item.ImdbId ?? item.Ids?.Imdb;
             var tvdbId = item.TvdbId ?? item.Ids?.Tvdb;
-            result.AddProviderIds(kind, imdbId, item.Ids?.Tmdb, tvdbId, position, item.Title, item.ReleaseYear);
+            // MDBList episodes carry no ids object; their top-level id is the TMDB episode id
+            var tmdbId = item.Ids?.Tmdb ?? (kind == ExternalListItemKind.Episode ? item.Id : null);
+            result.AddProviderIds(kind, imdbId, tmdbId, tvdbId, position, item.Title, item.ReleaseYear);
             position++;
         }
 

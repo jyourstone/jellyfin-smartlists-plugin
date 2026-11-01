@@ -615,6 +615,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     // Save the changes (tether removal/unlock always applies; name change applies only when matched above)
                     await existingCollection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                    await RestoreUnbadgedCoversAsync(existingCollection, dto, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Fallback sweep: find any remaining collections still tethered to this dto (e.g. the
@@ -637,6 +638,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         collectionToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
                         collectionToClear.IsLocked = false;
                         await collectionToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        await RestoreUnbadgedCoversAsync(collectionToClear, dto, cancellationToken).ConfigureAwait(false);
                         _logger.LogInformation("Stripped smart list tether from collection '{CollectionName}' (ID: {CollectionId}) via fallback sweep; stored ID was stale or mismatched.",
                             collectionToClear.Name, collectionToClear.Id);
                     }
@@ -646,6 +648,24 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             {
                 _logger.LogError(ex, "Error removing smart suffix from collection {CollectionName}", dto.Name);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Rewrites a kept collection's covers without the smart list badge once the list is no longer
+        /// managed: SmartLists uploads are re-copied from their un-badged originals, otherwise the
+        /// generated covers are regenerated clean. Best effort - a failure never fails the delete.
+        /// </summary>
+        private async Task RestoreUnbadgedCoversAsync(BaseItem collection, SmartCollectionDto dto, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await ApplyCustomImagesToCollectionAsync(collection, dto, applyBadge: false, cancellationToken).ConfigureAwait(false);
+                await SetPhotoForCollection(collection, null, applyBadge: false, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to remove the cover badge from kept collection '{CollectionName}'", collection.Name);
             }
         }
 
@@ -703,7 +723,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             // Always call ApplyCustomImagesToCollectionAsync - it handles both:
             // 1. Applying custom images if any exist
             // 2. Cleaning up orphaned images when custom images are deleted
-            await ApplyCustomImagesToCollectionAsync(collection, dto, cancellationToken).ConfigureAwait(false);
+            await ApplyCustomImagesToCollectionAsync(collection, dto, CoverBadgeHelper.IsEnabled, cancellationToken).ConfigureAwait(false);
 
             // Only trigger auto-generation if no custom Primary AND no custom Thumb uploaded
             // (RefreshCollectionMetadataAsync already checks for manually uploaded images in Jellyfin)
@@ -958,7 +978,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // Always call ApplyCustomImagesToCollectionAsync - it handles both:
                 // 1. Applying custom images if any exist
                 // 2. Cleaning up orphaned images when custom images are deleted
-                await ApplyCustomImagesToCollectionAsync(retrievedItem, dto, cancellationToken).ConfigureAwait(false);
+                await ApplyCustomImagesToCollectionAsync(retrievedItem, dto, CoverBadgeHelper.IsEnabled, cancellationToken).ConfigureAwait(false);
 
                 // No direct metadata refresh here: CollectionManager already queued one for the new
                 // collection, and a second refresh running in parallel is what produced concurrent
@@ -1048,7 +1068,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             }
 
             // Auto-generate collection images (SetPhotoForCollection handles per-type manual image checks).
-            await SetPhotoForCollection(collection, linkedChildren, cancellationToken).ConfigureAwait(false);
+            await SetPhotoForCollection(collection, linkedChildren, CoverBadgeHelper.IsEnabled, cancellationToken).ConfigureAwait(false);
 
             // Every create/refresh path funnels through here, so this is the one place that
             // guarantees smart collections stay locked and carry no stray TMDB ID. A stray
@@ -1145,8 +1165,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// </summary>
         /// <param name="collection">The Jellyfin collection item.</param>
         /// <param name="dto">The smart collection DTO.</param>
+        /// <param name="applyBadge">Whether to stamp the smart list badge on Primary/Thumb uploads.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        private async Task ApplyCustomImagesToCollectionAsync(BaseItem collection, SmartCollectionDto dto, CancellationToken cancellationToken)
+        private async Task ApplyCustomImagesToCollectionAsync(BaseItem collection, SmartCollectionDto dto, bool applyBadge, CancellationToken cancellationToken)
         {
             if (_imageService == null || string.IsNullOrEmpty(dto.Id))
             {
@@ -1205,7 +1226,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                         // copied untouched. Raw copy fallback when CollageBuilder cannot decode
                         // or re-encode the upload.
                         var stamped = false;
-                        if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
+                        if (applyBadge && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {
                             stamped = await CollageBuilder.TryCreateBadgedTileCoverAsync(sourcePath, destPath, imageType, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false);
                         }
@@ -1483,9 +1504,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// <param name="collection">The collection to set the image for</param>
         /// <param name="knownLinkedChildren">Optional pre-fetched LinkedChildren to use instead of querying from the collection.
         /// This is used when items were just added and the collection object may have stale data.</param>
+        /// <param name="applyBadge">Whether to stamp the smart list badge on the generated covers</param>
         /// <param name="cancellationToken">Cancellation token</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA3003:Review code for file path injection vulnerabilities", Justification = "File path comes from Jellyfin's internal ItemImageInfo.Path property, which is validated by Jellyfin")]
-        private async Task SetPhotoForCollection(BaseItem collection, LinkedChild[]? knownLinkedChildren, CancellationToken cancellationToken)
+        private async Task SetPhotoForCollection(BaseItem collection, LinkedChild[]? knownLinkedChildren, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
@@ -1552,7 +1574,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // Create primary image if no manual Primary exists
                 if (!hasManualPrimary)
                 {
-                    await CreateCollectionImageAsync(collection, itemsWithPrimaryImages, cancellationToken).ConfigureAwait(false);
+                    await CreateCollectionImageAsync(collection, itemsWithPrimaryImages, applyBadge, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Create thumb image if no manual Thumb exists
@@ -1561,7 +1583,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     var itemsWithThumbImages = GetItemsWithThumbImages(items);
                     if (itemsWithThumbImages.Count > 0)
                     {
-                        await CreateCollectionThumbAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
+                        await CreateCollectionThumbAsync(collection, itemsWithThumbImages, applyBadge, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
@@ -2052,7 +2074,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// Creates and sets the collection image: single image for 1 item, 4-image collage for 2+ items.
         /// Always uses the first item(s) with images from the collection.
         /// </summary>
-        private async Task CreateCollectionImageAsync(BaseItem collection, List<BaseItem> itemsWithImages, CancellationToken cancellationToken)
+        private async Task CreateCollectionImageAsync(BaseItem collection, List<BaseItem> itemsWithImages, bool applyBadge, CancellationToken cancellationToken)
         {
             if (itemsWithImages.Count == 0)
             {
@@ -2092,7 +2114,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     // (stamping it would deface the item's poster) - stamp a 2:3 cropped copy
                     // instead, matching Jellyfin's poster tiles.
                     // The smartlist-collage.jpg name keeps it classified as auto-generated.
-                    if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
+                    if (applyBadge && !string.IsNullOrEmpty(collectionPath))
                     {
                         var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.CollageFileName);
                         if (await CollageBuilder.TryCreateBadgedTileCoverAsync(imageInfo.Path, badgedPath, ImageType.Primary, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
@@ -2119,7 +2141,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             else
             {
                 // 2+ items: create 4-image collage using the first items
-                await CreateImageCollageAsync(collection, itemsWithImages, cancellationToken).ConfigureAwait(false);
+                await CreateImageCollageAsync(collection, itemsWithImages, applyBadge, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -2127,7 +2149,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// Creates and sets the collection thumb image: single image for 1 item, 4-image collage for 2+ items.
         /// Only uses actual thumb images from the collection items (no fallback to primary images).
         /// </summary>
-        private async Task CreateCollectionThumbAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, CancellationToken cancellationToken)
+        private async Task CreateCollectionThumbAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, bool applyBadge, CancellationToken cancellationToken)
         {
             if (itemsWithThumbImages.Count == 0)
             {
@@ -2165,7 +2187,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
                     // Same as Primary: stamp a 16:9 cropped copy rather than referencing the
                     // item's own file.
-                    if (CoverBadgeHelper.IsEnabled && !string.IsNullOrEmpty(collectionPath))
+                    if (applyBadge && !string.IsNullOrEmpty(collectionPath))
                     {
                         var badgedPath = System.IO.Path.Combine(collectionPath, CollageBuilder.ThumbCollageFileName);
                         if (await CollageBuilder.TryCreateBadgedTileCoverAsync(thumbImageInfo.Path, badgedPath, ImageType.Thumb, forPlaylist: false, 0, _logger, cancellationToken).ConfigureAwait(false))
@@ -2192,7 +2214,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
             else
             {
                 // 2+ items: create 4-image thumb collage using the first items
-                await CreateThumbCollageAsync(collection, itemsWithThumbImages, cancellationToken).ConfigureAwait(false);
+                await CreateThumbCollageAsync(collection, itemsWithThumbImages, applyBadge, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -2200,7 +2222,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// Creates a 4-image collage from collection items and sets it as the collection's primary image.
         /// Uses the first items with valid images (duplicates if needed to fill 4 slots).
         /// </summary>
-        private async Task CreateImageCollageAsync(BaseItem collection, List<BaseItem> itemsWithImages, CancellationToken cancellationToken)
+        private async Task CreateImageCollageAsync(BaseItem collection, List<BaseItem> itemsWithImages, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
@@ -2254,7 +2276,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     metadataPath,
                     600,
                     900,
-                    CoverBadgeHelper.IsEnabled,
+                    applyBadge,
                     _logger,
                     cancellationToken).ConfigureAwait(false);
                 _logger.LogDebug("Created collage image at {ImagePath}", metadataPath);
@@ -2284,7 +2306,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         /// Uses the first items with valid thumb images (duplicates if needed to fill 4 slots).
         /// Creates a 16:9 aspect ratio image suitable for landscape views.
         /// </summary>
-        private async Task CreateThumbCollageAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, CancellationToken cancellationToken)
+        private async Task CreateThumbCollageAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
@@ -2338,7 +2360,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                     metadataPath,
                     1920,
                     1080,
-                    CoverBadgeHelper.IsEnabled,
+                    applyBadge,
                     _logger,
                     cancellationToken).ConfigureAwait(false);
                 _logger.LogDebug("Created thumb collage image at {ImagePath}", metadataPath);

@@ -1243,6 +1243,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(playlist);
                         _logger.LogInformation("Deleted smart playlist: {PlaylistName}", playlist.Name);
                     }
+                    else
+                    {
+                        await _playlistService.RemoveSmartSuffixFromAllPlaylistsAsync(playlist);
+                        _logger.LogInformation("Deleted smart playlist configuration: {PlaylistName}", playlist.Name);
+                    }
 
                     // Delete smart list folder (config and images)
                     await _imageService.DeleteSmartListFolderAsync(normalizedId).ConfigureAwait(false);
@@ -1277,6 +1282,11 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         await collectionService.DeleteAsync(collection);
                         _logger.LogInformation("Deleted smart collection: {CollectionName}", collection.Name);
+                    }
+                    else
+                    {
+                        await collectionService.RemoveSmartSuffixAsync(collection);
+                        _logger.LogInformation("Deleted smart collection configuration: {CollectionName}", collection.Name);
                     }
 
                     // Delete smart list folder (config and images)

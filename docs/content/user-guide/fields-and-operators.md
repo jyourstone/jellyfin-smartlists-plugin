@@ -245,7 +245,7 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | Field | JSON name | Description |
 |-------|-----------|-------------|
 | **Genres** | `Genres` | Content genres. [See parent metadata options below.](#parent-metadata-options) |
-| **Studios** | `Studios` | Production studios. [See parent metadata options below.](#parent-metadata-options) |
+| **Studios** | `Studios` | Production studios. With TMDB metadata, series also list their TV network here (e.g. Netflix). [See parent metadata options below.](#parent-metadata-options) |
 | **Tags** | `Tags` | Custom tags assigned to media items. [See parent metadata options below.](#parent-metadata-options) |
 | **Album** | `Album` | Album name (music) |
 | **Artists** | `Artists` | Track-level artists (music) |
@@ -380,15 +380,15 @@ For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlist
 
 | Operator | JSON name | Description |
 |----------|-----------|-------------|
-| **equals** | `Equal` | The list contains **only** this value and nothing else |
-| **not equals** | `NotEqual` | The list does **not** contain only this value |
+| **equals** | `Equal` | Any entry in the list is exactly this value (other entries may also be present) |
+| **not equals** | `NotEqual` | No entry in the list is exactly this value |
 | **contains** / **not contains** | `Contains` / `NotContains` | Any entry in the list contains the text (partial match) |
 | **is in** / **is not in** | `IsIn` / `IsNotIn` | Any entry in the list matches one of the semicolon-separated values |
 | **matches regex** | `MatchRegex` | Any entry in the list matches the regex pattern |
 
 !!! tip "Equals vs Contains on list fields"
-    - **Studios equals "Marvel Studios"** — matches items where Marvel Studios is the *only* studio
-    - **Studios contains "Marvel Studios"** — matches items that *include* Marvel Studios (even if other studios are also listed)
+    - **Studios equals "Marvel"** — matches items with a studio named exactly "Marvel", even if other studios are also listed
+    - **Studios contains "Marvel"** — also matches partial names such as "Marvel Studios" and "Marvel Entertainment"
 
 ### Numeric Operators
 

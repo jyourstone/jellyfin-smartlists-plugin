@@ -153,7 +153,7 @@ All routes are relative to your Jellyfin server root, e.g.
     - **`DELETE` defaults to `deleteJellyfinList=true`**, which removes the real Jellyfin
       playlist/collection as well as the smart-list configuration and any uploaded images. Pass
       `?deleteJellyfinList=false` to keep the Jellyfin object — it stays behind, minus the
-      `[Smart]` suffix.
+      `[Smart]` suffix and the cover badge.
     - **`skipRefresh=true`** stores the configuration without queueing a refresh. Useful when you
       are about to make several writes and want a single refresh at the end.
 

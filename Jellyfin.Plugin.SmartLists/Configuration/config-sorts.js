@@ -786,6 +786,11 @@
         }
     };
     
+    // The list's Sort Title, or its Name when none is set
+    function getListSortTitleKey(list) {
+        return ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
+    }
+
     SmartLists.sortPlaylists = function(playlists, sortBy) {
         if (!sortBy || !playlists) return playlists || [];
         
@@ -811,6 +816,14 @@
                 const nameA = (a.Name || '').toLowerCase();
                 const nameB = (b.Name || '').toLowerCase();
                 return nameB.localeCompare(nameA);
+            });
+        } else if (sortBy === 'sorttitle-asc') {
+            return sortedPlaylists.sort(function(a, b) {
+                return getListSortTitleKey(a).localeCompare(getListSortTitleKey(b));
+            });
+        } else if (sortBy === 'sorttitle-desc') {
+            return sortedPlaylists.sort(function(a, b) {
+                return getListSortTitleKey(b).localeCompare(getListSortTitleKey(a));
             });
         } else if (sortBy === 'created-desc') {
             return sortedPlaylists.sort(function(a, b) {

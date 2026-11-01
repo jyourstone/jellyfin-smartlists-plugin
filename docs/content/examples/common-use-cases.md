@@ -115,6 +115,14 @@ movie that has a 1080p version, even when a 4K version is the primary. See
 - **List Type**: Collection
 - Curate a collection of completed, highly-rated series perfect for binge-watching
 
+### Streaming Service Originals
+- **Media Types**: Series, Movie
+- **Studios** contains "Netflix"
+- **List Type**: Collection
+- With TMDB metadata, a series lists its TV network under **Studios**, so this matches the shows a service aired, i.e. its originals. Movies only match when TMDB lists the service as a production company
+- **Contains** also catches name variants such as "Netflix Studios"; use **is in** (e.g. "Netflix;Hulu") for several services, or **equals** for one exact studio name (see [List Operators](../user-guide/fields-and-operators.md#list-operators))
+- This finds where a show originated, not what is "currently available on" a service, which depends on region and changes daily
+
 ### TV Channel Playlist (Round Robin)
 Create a playlist that cycles through episodes from multiple shows, like a TV channel:
 

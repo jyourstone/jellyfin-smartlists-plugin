@@ -632,7 +632,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                             }
 
                             playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            StripSmartName(playlistToClear, dto);
                             await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                             handledPlaylistIds.Add(guid);
                         }
                     }
@@ -656,7 +658,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         foreach (var playlistToClear in remainingTethered)
                         {
                             playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                            StripSmartName(playlistToClear, dto);
                             await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                             _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
                                 playlistToClear.Name, playlistToClear.Id);
                         }
@@ -707,55 +711,11 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // regardless of whether the name still matches an expected smart format, so the
                     // weekly cleanup sweep doesn't delete an item the user chose to keep.
                     existingPlaylist.ProviderIds?.Remove(ProviderKeys.SmartLists);
-
-                    // Get the current smart playlist name format to see what needs to be removed
-                    var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
-
-                    // Check if the playlist name matches the current smart format
-                    if (oldName == currentSmartName)
-                    {
-                        // Remove the smart playlist naming and keep just the base name
-                        existingPlaylist.Name = dto.Name;
-
-                        _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}'",
-                            oldName, dto.Name, user.Username);
-                    }
-                    else
-                    {
-                        // Try to remove prefix and suffix even if they don't match current settings
-                        // This handles cases where the user changed their prefix/suffix settings
-                        var config = Plugin.Instance?.Configuration;
-                        if (config != null)
-                        {
-                            var prefix = config.PlaylistNamePrefix ?? "";
-                            var suffix = config.PlaylistNameSuffix ?? "[Smart]";
-
-                            var baseName = dto.Name;
-                            var expectedName = NameFormatter.FormatPlaylistNameWithSettings(baseName, prefix, suffix);
-
-                            // If the playlist name matches this pattern, remove the prefix and suffix
-                            if (oldName == expectedName)
-                            {
-                                existingPlaylist.Name = baseName;
-
-                                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' for user '{UserName}' (removed prefix/suffix)",
-                                    oldName, baseName, user.Username);
-                            }
-                            else
-                            {
-                                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
-                                    oldName, expectedName);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
-                                oldName, currentSmartName);
-                        }
-                    }
+                    StripSmartName(existingPlaylist, dto);
 
                     // Save the changes (tether removal always applies; name change applies only when matched above)
                     await existingPlaylist.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                    await RestoreUnbadgedCoversAsync(existingPlaylist, dto, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Fallback sweep: find any remaining playlists still tethered to this dto (e.g. the
@@ -778,7 +738,9 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     foreach (var playlistToClear in remainingTethered)
                     {
                         playlistToClear.ProviderIds?.Remove(ProviderKeys.SmartLists);
+                        StripSmartName(playlistToClear, dto);
                         await playlistToClear.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        await RestoreUnbadgedCoversAsync(playlistToClear, dto, cancellationToken).ConfigureAwait(false);
                         _logger.LogInformation("Stripped smart list tether from playlist '{PlaylistName}' (ID: {PlaylistId}) via fallback sweep; stored ID was stale or mismatched.",
                             playlistToClear.Name, playlistToClear.Id);
                     }
@@ -788,6 +750,75 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             {
                 _logger.LogError(ex, "Error removing smart suffix from playlist {PlaylistName}", dto.Name);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Renames a kept playlist back to the list's base name when its name still carries the smart
+        /// prefix/suffix - the current format, or the configured prefix/suffix if the user changed them.
+        /// </summary>
+        private void StripSmartName(Playlist playlist, SmartPlaylistDto dto)
+        {
+            var oldName = playlist.Name;
+            var currentSmartName = NameFormatter.FormatPlaylistName(dto.Name);
+
+            if (oldName == currentSmartName)
+            {
+                playlist.Name = dto.Name;
+                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}'", oldName, dto.Name);
+                return;
+            }
+
+            var config = Plugin.Instance?.Configuration;
+            if (config == null)
+            {
+                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
+                    oldName, currentSmartName);
+                return;
+            }
+
+            var expectedName = NameFormatter.FormatPlaylistNameWithSettings(dto.Name, config.PlaylistNamePrefix ?? "", config.PlaylistNameSuffix ?? "[Smart]");
+            if (oldName == expectedName)
+            {
+                playlist.Name = dto.Name;
+                _logger.LogDebug("Successfully renamed playlist from '{OldName}' to '{NewName}' (removed prefix/suffix)", oldName, dto.Name);
+            }
+            else
+            {
+                _logger.LogWarning("Playlist name '{OldName}' doesn't match expected smart format '{ExpectedName}'. Skipping rename.",
+                    oldName, expectedName);
+            }
+        }
+
+        /// <summary>
+        /// Rewrites a kept playlist's covers without the smart list badge once the list is no longer
+        /// managed: SmartLists uploads are re-copied from their un-badged originals, otherwise the
+        /// generated cover is regenerated clean. Best effort - a failure never fails the delete.
+        /// </summary>
+        private async Task RestoreUnbadgedCoversAsync(Playlist playlist, SmartPlaylistDto dto, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await ApplyPlaylistCoversAsync(playlist, dto, applyBadge: false, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to remove the cover badge from kept playlist '{PlaylistName}'", playlist.Name);
+            }
+        }
+
+        /// <summary>
+        /// Applies the list's custom images (or cleans up orphaned ones), then auto-generates the
+        /// Primary cover only if no custom Primary image exists.
+        /// </summary>
+        private async Task ApplyPlaylistCoversAsync(Playlist playlist, SmartPlaylistDto dto, bool applyBadge, CancellationToken cancellationToken)
+        {
+            var hasCustomPrimaryImage = dto.CustomImages != null && dto.CustomImages.ContainsKey("Primary");
+            await ApplyCustomImagesToPlaylistAsync(playlist, dto, applyBadge, cancellationToken).ConfigureAwait(false);
+
+            if (!hasCustomPrimaryImage)
+            {
+                await GeneratePlaylistCoverAsync(playlist, applyBadge, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -861,15 +892,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
             _logger.LogDebug("Playlist {PlaylistName} updated: OpenAccess = {OpenAccess}, Shares count = {SharesCount}",
                 playlist.Name, isFinallyPublic, playlist.Shares?.Count ?? 0);
 
-            // Handle custom images (apply if any exist, or clean up orphaned images)
-            var hasCustomPrimaryImage = dto.CustomImages != null && dto.CustomImages.ContainsKey("Primary");
-            await ApplyCustomImagesToPlaylistAsync(playlist, dto, cancellationToken).ConfigureAwait(false);
-
-            // Auto-generate Primary cover only if NO custom PRIMARY image exists
-            if (!hasCustomPrimaryImage)
-            {
-                await GeneratePlaylistCoverAsync(playlist, cancellationToken).ConfigureAwait(false);
-            }
+            await ApplyPlaylistCoversAsync(playlist, dto, CoverBadgeHelper.IsEnabled, cancellationToken).ConfigureAwait(false);
 
             // Apply custom metadata after metadata refresh to prevent providers from overwriting
             await ApplyCustomMetadataAsync(playlist, dto, user, cancellationToken).ConfigureAwait(false);
@@ -914,15 +937,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 _logger.LogDebug("After update - Playlist {PlaylistName}: Shares count = {SharesCount}, Public = {Public}",
                     newPlaylist.Name, newPlaylist.Shares?.Count ?? 0, (newPlaylist.Shares?.Any() ?? false));
 
-                // Handle custom images (apply if any exist)
-                var hasCustomPrimaryImage = dto.CustomImages != null && dto.CustomImages.ContainsKey("Primary");
-                await ApplyCustomImagesToPlaylistAsync(newPlaylist, dto, cancellationToken).ConfigureAwait(false);
-
-                // Auto-generate Primary cover only if NO custom PRIMARY image exists
-                if (!hasCustomPrimaryImage)
-                {
-                    await GeneratePlaylistCoverAsync(newPlaylist, cancellationToken).ConfigureAwait(false);
-                }
+                await ApplyPlaylistCoversAsync(newPlaylist, dto, CoverBadgeHelper.IsEnabled, cancellationToken).ConfigureAwait(false);
 
                 // Apply custom metadata after metadata refresh to prevent providers from overwriting
                 await ApplyCustomMetadataAsync(newPlaylist, dto, user, cancellationToken).ConfigureAwait(false);
@@ -953,7 +968,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// Applies custom images from the smart list configuration to the Jellyfin playlist.
         /// Also removes images that are no longer in CustomImages (e.g., after image type change).
         /// </summary>
-        private async Task ApplyCustomImagesToPlaylistAsync(Playlist playlist, SmartPlaylistDto dto, CancellationToken cancellationToken)
+        private async Task ApplyCustomImagesToPlaylistAsync(Playlist playlist, SmartPlaylistDto dto, bool applyBadge, CancellationToken cancellationToken)
         {
             if (_imageService == null || string.IsNullOrEmpty(dto.Id))
             {
@@ -1012,7 +1027,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         // proportions). With the badge disabled, uploads are copied untouched.
                         // Raw copy fallback when CollageBuilder cannot decode or re-encode the upload.
                         var stamped = false;
-                        if (CoverBadgeHelper.IsEnabled && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
+                        if (applyBadge && (imageType == ImageType.Primary || imageType == ImageType.Thumb))
                         {
                             stamped = await CollageBuilder.TryCreateBadgedTileCoverAsync(sourcePath, destPath, imageType, forPlaylist: true, 0, _logger, cancellationToken).ConfigureAwait(false);
                         }
@@ -1459,7 +1474,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
         /// refresh-based generation) so covers are consistent with collections and can carry
         /// the smart list badge. Only called when no custom Primary image is uploaded via Smart List.
         /// </summary>
-        private async Task GeneratePlaylistCoverAsync(Playlist playlist, CancellationToken cancellationToken)
+        private async Task GeneratePlaylistCoverAsync(Playlist playlist, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
@@ -1541,7 +1556,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     // ratio cover); with it disabled, or when the source can't be decoded,
                     // reference the item's image untouched (native Jellyfin behavior). Never
                     // modifies the item's own file.
-                    coverPath = CoverBadgeHelper.IsEnabled
+                    coverPath = applyBadge
                         && await CollageBuilder.TryCreateBadgedTileCoverAsync(imagePaths[0], collagePath, ImageType.Primary, forPlaylist: true, 600, _logger, cancellationToken).ConfigureAwait(false)
                         ? collagePath
                         : imagePaths[0];
@@ -1561,7 +1576,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                         collagePath,
                         600,
                         600,
-                        CoverBadgeHelper.IsEnabled,
+                        applyBadge,
                         _logger,
                         cancellationToken).ConfigureAwait(false);
                     coverPath = collagePath;
@@ -1901,15 +1916,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     {
                         try
                         {
-                            // Create a temporary DTO for deletion
-                            var tempDto = new SmartPlaylistDto
-                            {
-                                Id = playlistDto.Id,
-                                Name = playlistDto.Name,
-                                UserId = userMapping.UserId,
-                                JellyfinPlaylistId = userMapping.JellyfinPlaylistId
-                            };
-                            await DeleteAsync(tempDto, cancellationToken).ConfigureAwait(false);
+                            await DeleteAsync(ForUser(playlistDto, userMapping), cancellationToken).ConfigureAwait(false);
                             _logger.LogDebug("Deleted Jellyfin playlist {JellyfinPlaylistId} for user {UserId}",
                                 userMapping.JellyfinPlaylistId, userMapping.UserId);
                             // Clear the mapping only on successful deletion; a failed delete keeps
@@ -1942,6 +1949,62 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                     _logger.LogWarning(ex, "Failed to delete Jellyfin playlist for '{PlaylistName}'", playlistDto.Name);
                 }
             }
+        }
+
+        /// <summary>
+        /// Removes the smart prefix/suffix, provider-ID tether and lock from every Jellyfin playlist of a
+        /// smart playlist, so the playlists survive as regular lists when the smart list is deleted.
+        /// Handles both multi-user playlists (UserPlaylists array) and legacy single-user playlists.
+        /// </summary>
+        /// <param name="playlist">The smart playlist DTO whose Jellyfin playlists should be handed back</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        public async Task RemoveSmartSuffixFromAllPlaylistsAsync(SmartPlaylistDto playlist, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(playlist);
+
+            if (playlist.UserPlaylists != null && playlist.UserPlaylists.Count > 0)
+            {
+                _logger.LogDebug("Removing smart suffix from {Count} Jellyfin playlists for multi-user playlist '{PlaylistName}'",
+                    playlist.UserPlaylists.Count, playlist.Name);
+
+                foreach (var userMapping in playlist.UserPlaylists)
+                {
+                    if (!string.IsNullOrEmpty(userMapping.JellyfinPlaylistId))
+                    {
+                        try
+                        {
+                            await RemoveSmartSuffixAsync(ForUser(playlist, userMapping), cancellationToken).ConfigureAwait(false);
+                            _logger.LogDebug("Removed smart suffix from Jellyfin playlist {JellyfinPlaylistId} for user {UserId}",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to remove smart suffix from Jellyfin playlist {JellyfinPlaylistId} for user {UserId}, continuing",
+                                userMapping.JellyfinPlaylistId, userMapping.UserId);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                await RemoveSmartSuffixAsync(playlist, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Scopes a multi-user smart playlist to one user's Jellyfin playlist, for the per-user
+        /// delete and keep paths. CustomImages is carried so the keep path can restore un-badged covers.
+        /// </summary>
+        internal static SmartPlaylistDto ForUser(SmartPlaylistDto playlist, SmartPlaylistDto.UserPlaylistMapping userMapping)
+        {
+            return new SmartPlaylistDto
+            {
+                Id = playlist.Id,
+                Name = playlist.Name,
+                UserId = userMapping.UserId,
+                JellyfinPlaylistId = userMapping.JellyfinPlaylistId,
+                CustomImages = playlist.CustomImages
+            };
         }
 
     }

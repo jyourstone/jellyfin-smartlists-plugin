@@ -85,6 +85,7 @@ To make smart playlists and collections easy to spot when browsing, SmartLists s
 - Applied to auto-generated covers as well as Primary and Thumb images uploaded through SmartLists
 - Uploaded originals are stored untouched — the badge is only stamped on the copy handed to Jellyfin, so toggling the badge off restores clean covers
 - Can be turned off in the Settings tab of the admin page (**Show smart list badge on covers**); changes take effect on each list's next refresh
+- Deleting a list's configuration while keeping the Jellyfin playlist or collection removes the badge: generated covers are regenerated without it, and covers uploaded through SmartLists are restored from the stored original
 - Uploaded images are badged and cropped only when they are JPEG, PNG or WebP; uploads in other formats (e.g. GIF, BMP, TIFF, AVIF, SVG) are used as-is, without a badge or crop. An animated WebP upload keeps only its first frame while the badge is enabled
 
 !!! note "Covers are cropped to Jellyfin's tile proportions while the badge is enabled"
@@ -140,7 +141,7 @@ SmartLists allows you to upload custom images for your playlists and collections
 
 The **Metadata** section lets you set additional properties on the Jellyfin playlist or collection:
 
-- **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top).
+- **Sort Title** – Overrides the default sort title. Useful for controlling where the list appears when sorting alphabetically (e.g., set it to `_Movies` to force it to the top). The Manage lists page can also sort by it (**Sort Title (A-Z/Z-A)**); lists without a Sort Title sort by their name.
 - **Overview** – Sets a custom description that appears in Jellyfin's item detail view.
 - **Tags** – Sets tags on the generated Jellyfin playlist or collection. Enter each tag and press Enter, or paste multiple tags separated by semicolons.
 - **Favorite** – Optionally marks the generated list as favorite or not favorite. Leave it unchanged if you do not want SmartLists to manage favorite state.
@@ -229,7 +230,7 @@ View and edit your smart playlists and collections:
 - **Organized Interface**: Clean, modern layout with grouped actions and filters
 - **Advanced Filtering**: Filter by list type, media type, visibility and user
 - **Real-time Search**: Search all properties in real-time
-- **Flexible Sorting**: Sort by name, list creation date, last refreshed, or enabled status
+- **Flexible Sorting**: Sort by name, sort title, list creation date, last refreshed, or enabled status
 - **Bulk Operations**: Select multiple lists to enable, disable, delete, or convert them simultaneously
 - **Detailed View**: Expand lists to see rules, settings, creation date, and other properties
 - **Quick Actions**: Edit, clone, refresh, or delete individual lists with confirmation dialogs

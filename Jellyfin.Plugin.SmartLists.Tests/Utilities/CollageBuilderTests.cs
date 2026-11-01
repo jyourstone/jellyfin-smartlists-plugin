@@ -208,6 +208,28 @@ public sealed class CollageBuilderTests : IDisposable
     }
 
     [Fact]
+    public async Task TryCreateCroppedCoverAsync_WithoutBadge_LeavesCornerClean()
+    {
+        using var source = Solid(400, 200, SKColors.White);
+        var sourcePath = Write("source.png", source, SKEncodedImageFormat.Png);
+
+        // Same crops as the badged test, but applyBadge false: the corner pixels stay the source color
+        var nativePath = Path.Combine(_dir, "native-clean.jpg");
+        Assert.True(await CollageBuilder.TryCreateCroppedCoverAsync(sourcePath, nativePath, 1, 1, 0, applyBadge: false, NullLogger.Instance, CancellationToken.None));
+        using (var native = SKBitmap.Decode(nativePath))
+        {
+            AssertNear(SKColors.White, native.GetPixel(20, 20));
+        }
+
+        var scaledPath = Path.Combine(_dir, "scaled-clean.jpg");
+        Assert.True(await CollageBuilder.TryCreateCroppedCoverAsync(sourcePath, scaledPath, 1, 1, 600, applyBadge: false, NullLogger.Instance, CancellationToken.None));
+        using (var scaled = SKBitmap.Decode(scaledPath))
+        {
+            AssertNear(SKColors.White, scaled.GetPixel(60, 60));
+        }
+    }
+
+    [Fact]
     public async Task SaveCoverAsync_InterruptedSave_KeepsExistingCover_AndRemovesTempFile()
     {
         var coverPath = Path.Combine(_dir, "cover.jpg");
