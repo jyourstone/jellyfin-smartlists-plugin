@@ -5,7 +5,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
     /// <summary>
     /// Response wrapper for MDBList API list items endpoint.
     /// The API returns items in separate "movies", "shows", "seasons" and "episodes" arrays;
-    /// seasons are only counted for paging, because there is no Season kind to match them against.
+    /// seasons are not read, because there is no Season kind to match them against.
     /// </summary>
     public class MdbListResponse
     {
@@ -15,11 +15,20 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         [JsonPropertyName("shows")]
         public MdbListItem[]? Shows { get; set; }
 
-        [JsonPropertyName("seasons")]
-        public MdbListItem[]? Seasons { get; set; }
-
         [JsonPropertyName("episodes")]
         public MdbListItem[]? Episodes { get; set; }
+
+        [JsonPropertyName("pagination")]
+        public MdbListPagination? Pagination { get; set; }
+    }
+
+    /// <summary>
+    /// Paging state of a list items response. Pages are followed with next_cursor, which is absent on the last page.
+    /// </summary>
+    public class MdbListPagination
+    {
+        [JsonPropertyName("next_cursor")]
+        public string? NextCursor { get; set; }
     }
 
     /// <summary>

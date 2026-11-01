@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -70,9 +71,10 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             }
 
             var mediaTypeFilter = mediaType == null ? string.Empty : "&mediatype=" + mediaType;
+            var firstPageUrl = $"{ApiBaseUrl}/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={PageSize}{mediaTypeFilter}";
 
             var httpClient = _httpClientFactory.CreateClient("MdbList");
-            int offset = 0;
+            string? cursor = null;
             int position = 0;
 
             try
@@ -81,7 +83,7 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var apiUrl = $"{ApiBaseUrl}/lists/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(listname)}/items?apikey={Uri.EscapeDataString(apiKey)}&limit={PageSize}&offset={offset}{mediaTypeFilter}";
+                    var apiUrl = cursor == null ? firstPageUrl : firstPageUrl + "&cursor=" + Uri.EscapeDataString(cursor);
 
                     using var response = await httpClient.GetAsync(apiUrl, cancellationToken).ConfigureAwait(false);
 
@@ -94,12 +96,13 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                     var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
                     // The API can return either an array directly or a wrapper object with movies/shows/episodes arrays
-                    int itemsInPage = 0;
+                    MdbListResponse? wrapper = null;
 
                     try
                     {
                         // Try parsing as wrapper object first (newer API format)
-                        itemsInPage = AddWrapperItems(JsonSerializer.Deserialize<MdbListResponse>(json), result, ref position);
+                        wrapper = JsonSerializer.Deserialize<MdbListResponse>(json);
+                        AddWrapperItems(wrapper, result, ref position);
                     }
                     catch (JsonException)
                     {
@@ -112,7 +115,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                                 foreach (var item in items)
                                 {
                                     AddItemIds(item, result, ref position, GetItemKind(item.MediaType));
-                                    itemsInPage++;
                                 }
                             }
                         }
@@ -129,13 +131,12 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                         break;
                     }
 
-                    // If we got fewer items than page size, we've reached the end
-                    if (itemsInPage < PageSize)
+                    var headerCursor = response.Headers.TryGetValues("X-Next-Cursor", out var cursorValues) ? cursorValues.FirstOrDefault() : null;
+                    cursor = GetNextCursor(wrapper?.Pagination, headerCursor, cursor);
+                    if (cursor == null)
                     {
                         break;
                     }
-
-                    offset += PageSize;
                 }
             }
             catch (OperationCanceledException)
@@ -152,7 +153,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
                 _logger.LogWarning(ex, "Unexpected error fetching MDBList {Username}/{ListName}", username, listname);
             }
 
-            // position counts list entries; itemsInPage also counts the skipped season rows
             result.TotalItems = position;
             result.IsComplete = maxItems <= 0 || position < maxItems;
             _logger.LogInformation("Fetched {Count} items from MDBList {Username}/{ListName} (IMDb: {ImdbCount}, TMDB: {TmdbCount}, TVDB: {TvdbCount})",
@@ -236,18 +236,26 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
         }
 
         /// <summary>
-        /// Adds the movies, shows and episodes of one wrapper-format page and returns how many items it held.
-        /// Seasons are skipped but still counted, so a page they partly fill doesn't look like the last one.
+        /// Picks the cursor for the next page: the body's pagination.next_cursor, else the X-Next-Cursor header
+        /// (a flat-array page has no pagination object). Null ends paging: the cursor is absent on the last page,
+        /// and getting back the cursor just used would loop forever.
         /// </summary>
-        internal static int AddWrapperItems(MdbListResponse? wrapper, ExternalListResult result, ref int position)
+        internal static string? GetNextCursor(MdbListPagination? pagination, string? headerCursor, string? currentCursor)
+        {
+            var next = pagination?.NextCursor ?? headerCursor;
+            return string.IsNullOrEmpty(next) || next == currentCursor ? null : next;
+        }
+
+        /// <summary>
+        /// Adds the movies, shows and episodes of one wrapper-format page. Seasons are skipped,
+        /// because there is no Season kind to match them against.
+        /// </summary>
+        internal static void AddWrapperItems(MdbListResponse? wrapper, ExternalListResult result, ref int position)
         {
             if (wrapper == null)
             {
-                return 0;
+                return;
             }
-
-            // AddItemIds advances position once per item
-            var start = position;
 
             foreach (var item in wrapper.Movies ?? [])
             {
@@ -263,8 +271,6 @@ namespace Jellyfin.Plugin.SmartLists.Services.ExternalList
             {
                 AddItemIds(item, result, ref position, ExternalListItemKind.Episode);
             }
-
-            return position - start + (wrapper.Seasons?.Length ?? 0);
         }
 
         internal static void AddItemIds(MdbListItem item, ExternalListResult result, ref int position, ExternalListItemKind kind)
