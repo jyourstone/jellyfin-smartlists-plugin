@@ -1302,6 +1302,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             collectionDto.DateCreated = existingPlaylist.DateCreated;
                         }
 
+                        // Preserve existing CustomImages (images are managed separately via upload/delete endpoints)
+                        if (existingPlaylist.CustomImages != null && existingPlaylist.CustomImages.Count > 0)
+                        {
+                            collectionDto.CustomImages = new Dictionary<string, string>(existingPlaylist.CustomImages);
+                        }
+
                         // A converted playlist becomes a collection, so it must clear the same folder-collision
                         // check as a created or renamed one - and it must clear it before the delete-first block
                         // below destroys the playlist, or a rejected conversion would lose the original.
@@ -1323,13 +1329,14 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         var playlistService = GetPlaylistService();
                         await playlistService.DeleteAllJellyfinPlaylistsForUsersAsync(existingPlaylist);
 
-                        // Delete old playlist configuration from store
-                        await playlistStore.DeleteAsync(guidId);
-                        
-                        // Save new collection configuration (only after successful cleanup)
+                        // Save new collection configuration (only after successful cleanup). No store delete first:
+                        // both types share /smartlists/{guid}/, so SaveAsync overwrites config.json, and a delete
+                        // would wipe the uploaded images kept in that folder.
                         var newCollectionStore = GetCollectionStore();
                         await newCollectionStore.SaveAsync(collectionDto);
-                        
+                        AutoRefreshService.Instance?.UpdateCollectionInCache(collectionDto);
+                        AutoRefreshService.Instance?.RemovePlaylistFromCache(guidId.ToString("D"));
+
                         // Enqueue refresh operation for the converted collection only if enabled
                         if (collectionDto.Enabled)
                         {
@@ -1401,6 +1408,12 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                             playlistDto.DateCreated = existingCollection.DateCreated;
                         }
 
+                        // Preserve existing CustomImages (images are managed separately via upload/delete endpoints)
+                        if (existingCollection.CustomImages != null && existingCollection.CustomImages.Count > 0)
+                        {
+                            playlistDto.CustomImages = new Dictionary<string, string>(existingCollection.CustomImages);
+                        }
+
                         if (!playlistDto.AllUsers && (playlistDto.UserPlaylists == null || playlistDto.UserPlaylists.Count == 0))
                         {
                             if (!string.IsNullOrEmpty(playlistDto.UserId) && Guid.TryParse(playlistDto.UserId, out var playlistUserId) && playlistUserId != Guid.Empty)
@@ -1431,13 +1444,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                         var collectionService = GetCollectionService();
                         await collectionService.DeleteAsync(existingCollection);
 
-                        // Delete old collection configuration from store
-                        await collectionStore.DeleteAsync(guidId);
-
-                        // Save new playlist configuration (only after successful cleanup)
+                        // Save new playlist configuration (only after successful cleanup). No store delete first,
+                        // same as the playlist → collection branch: it would wipe the uploaded images.
                         var newPlaylistStore = GetPlaylistStore();
                         await newPlaylistStore.SaveAsync(playlistDto);
-                        
+                        AutoRefreshService.Instance?.UpdatePlaylistInCache(playlistDto);
+                        AutoRefreshService.Instance?.RemoveCollectionFromCache(guidId.ToString("D"));
+
                         // Enqueue refresh operation for the converted playlist only if enabled
                         if (playlistDto.Enabled)
                         {

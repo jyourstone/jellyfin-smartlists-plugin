@@ -1435,7 +1435,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 collectionDto.DateCreated = existingPlaylist.DateCreated;
             }
-            
+
+            // Preserve existing CustomImages (images are managed separately via upload/delete endpoints)
+            if (existingPlaylist.CustomImages != null && existingPlaylist.CustomImages.Count > 0)
+            {
+                collectionDto.CustomImages = new Dictionary<string, string>(existingPlaylist.CustomImages);
+            }
+
             // Preserve creator information
             if (string.IsNullOrEmpty(collectionDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
             {
@@ -1564,7 +1570,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
             {
                 playlistDto.DateCreated = existingCollection.DateCreated;
             }
-            
+
+            // Preserve existing CustomImages (images are managed separately via upload/delete endpoints)
+            if (existingCollection.CustomImages != null && existingCollection.CustomImages.Count > 0)
+            {
+                playlistDto.CustomImages = new Dictionary<string, string>(existingCollection.CustomImages);
+            }
+
             // Preserve creator information
             if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingCollection.CreatedByUserId))
             {
