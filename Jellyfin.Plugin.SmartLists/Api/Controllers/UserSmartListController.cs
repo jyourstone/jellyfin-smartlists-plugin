@@ -1040,7 +1040,13 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     {
                         playlistDto.DateCreated = existingPlaylist.DateCreated;
                     }
-                    
+
+                    // Preserve existing CustomImages (images are managed separately via upload/delete endpoints)
+                    if (existingPlaylist.CustomImages != null && existingPlaylist.CustomImages.Count > 0)
+                    {
+                        playlistDto.CustomImages = new Dictionary<string, string>(existingPlaylist.CustomImages);
+                    }
+
                     // Preserve creator information if not already set
                     if (string.IsNullOrEmpty(playlistDto.CreatedByUserId) && !string.IsNullOrEmpty(existingPlaylist.CreatedByUserId))
                     {
