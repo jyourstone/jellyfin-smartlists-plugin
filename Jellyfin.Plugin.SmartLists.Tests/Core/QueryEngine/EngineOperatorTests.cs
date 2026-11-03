@@ -914,19 +914,24 @@ public class EngineOperatorTests
     }
 
     /// <summary>
-    /// Framerate is nullable and every rule is ANDed with HasValue, so items whose framerate
-    /// could not be read are excluded from positive AND negative rules alike.
+    /// Nullable numbers (Framerate, Season/Episode/Track/Disc Number) are null when the item has no
+    /// such value, and every rule is ANDed with HasValue, so those items are excluded from positive
+    /// AND negative rules alike.
     /// </summary>
     [Theory]
-    [InlineData("Equal")]
-    [InlineData("NotEqual")]
-    [InlineData("GreaterThan")]
-    [InlineData("LessThan")]
-    public void CompileRule_FramerateNull_MatchesNothingIncludingNotEqual(string op)
+    [InlineData("Framerate", "Equal")]
+    [InlineData("Framerate", "NotEqual")]
+    [InlineData("Framerate", "GreaterThan")]
+    [InlineData("Framerate", "LessThan")]
+    [InlineData("SeasonNumber", "Equal")]
+    [InlineData("SeasonNumber", "NotEqual")]
+    [InlineData("EpisodeNumber", "LessThanOrEqual")]
+    [InlineData("TrackNumber", "GreaterThanOrEqual")]
+    [InlineData("DiscNumber", "NotEqual")]
+    public void CompileRule_NullableNumberMissing_MatchesNothingIncludingNotEqual(string field, string op)
     {
-        var rule = Compile("Framerate", op, "24");
+        var rule = Compile(field, op, "3");
 
-        Assert.Null(new Operand("item").Framerate);
         Assert.False(rule(new Operand("item")));
     }
 
@@ -943,28 +948,13 @@ public class EngineOperatorTests
         Assert.Equal(expected, rule(new Operand("item") { Framerate = actual }));
     }
 
-    [Fact]
-    public void CompileRule_Framerate_RejectsNonNumericTarget()
-    {
-        Assert.Throws<ArgumentException>(() => Compile("Framerate", "Equal", "twenty-four"));
-    }
-
-    /// <summary>
-    /// Season/episode/track/disc numbers are null on items that have none (movies, series, songs
-    /// without tags), so a rule on them must not match those items, NotEqual included.
-    /// </summary>
     [Theory]
-    [InlineData("SeasonNumber", "Equal")]
-    [InlineData("SeasonNumber", "NotEqual")]
-    [InlineData("EpisodeNumber", "LessThan")]
-    [InlineData("EpisodeNumber", "LessThanOrEqual")]
-    [InlineData("TrackNumber", "GreaterThanOrEqual")]
-    [InlineData("DiscNumber", "NotEqual")]
-    public void CompileRule_NumberMissing_MatchesNothingIncludingNotEqual(string field, string op)
+    [InlineData("Framerate", "twenty-four")]
+    [InlineData("SeasonNumber", "three")]
+    [InlineData("EpisodeNumber", "1.5")]
+    public void CompileRule_NullableNumber_RejectsNonNumericTarget(string field, string target)
     {
-        var rule = Compile(field, op, "3");
-
-        Assert.False(rule(new Operand("movie")));
+        Assert.Throws<ArgumentException>(() => Compile(field, "Equal", target));
     }
 
     [Theory]
@@ -980,16 +970,6 @@ public class EngineOperatorTests
         var rule = Compile("SeasonNumber", op, target);
 
         Assert.Equal(expected, rule(new Operand("episode") { SeasonNumber = season }));
-    }
-
-    [Fact]
-    public void CompileRule_NumberFields_AreIndependent()
-    {
-        var rule = Compile("EpisodeNumber", "Equal", "2");
-        var episode = new Operand("episode") { SeasonNumber = 2, EpisodeNumber = 5 };
-
-        Assert.False(rule(episode));
-        Assert.True(Compile("DiscNumber", "Equal", "2")(new Operand("track") { TrackNumber = 7, DiscNumber = 2 }));
     }
 
     // ---------------------------------------------------------------------------------------
