@@ -1205,7 +1205,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 targetValue = wholeNumber;
             }
-            else if (numberType == typeof(float) && float.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber))
+            else if (numberType == typeof(float) && float.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+                && float.IsFinite(decimalNumber))
             {
                 targetValue = decimalNumber;
             }

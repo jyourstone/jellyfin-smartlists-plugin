@@ -182,6 +182,7 @@ Want to watch whole seasons back to back, but jump to the other show for a cross
 - Group 3: **Series Name** equals "NCIS" AND **Season Number** = 13 AND **Episode Number** = 12
 - Group 4: **Series Name** equals "NCIS: New Orleans" AND **Season Number** = 2 AND **Episode Number** = 12
 - Group 5: **Series Name** equals "NCIS" AND **Season Number** = 13 AND **Episode Number** greater than 12
+- Group 6: **Series Name** equals "NCIS: New Orleans" AND **Season Number** = 2 AND **Episode Number** greater than 12
 - **Sort by**: Rule Group Order, then Season Number, then Episode Number
 
 Result: The list follows the groups top to bottom, and each group plays in episode order. The numbers come from Jellyfin's metadata, so this works however your files are named.

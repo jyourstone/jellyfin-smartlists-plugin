@@ -950,6 +950,8 @@ public class EngineOperatorTests
 
     [Theory]
     [InlineData("Framerate", "twenty-four")]
+    [InlineData("Framerate", "NaN")]
+    [InlineData("Framerate", "Infinity")]
     [InlineData("SeasonNumber", "three")]
     [InlineData("EpisodeNumber", "1.5")]
     public void CompileRule_NullableNumber_RejectsNonNumericTarget(string field, string target)
