@@ -41,7 +41,7 @@
     // Field type constants to avoid duplication
     SmartLists.FIELD_TYPES = {
         LIST_FIELDS: ['Collections', 'People', 'Actors', 'Directors', 'Writers', 'Producers', 'GuestStars', 'Genres', 'Studios', 'Tags', 'Artists', 'AlbumArtists', 'AudioLanguages', 'SubtitleLanguages', 'ProductionLocations'],
-        NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Rating', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels'],
+        NUMERIC_FIELDS: ['ProductionYear', 'CommunityRating', 'CriticRating', 'RuntimeMinutes', 'PlayCount', 'Rating', 'Framerate', 'AudioBitrate', 'AudioSampleRate', 'AudioBitDepth', 'AudioChannels', 'SeasonNumber', 'EpisodeNumber', 'TrackNumber', 'DiscNumber'],
         DATE_FIELDS: ['DateCreated', 'DateLastRefreshed', 'DateLastSaved', 'DateModified', 'ReleaseDate', 'LastPlayedDate', 'LastEpisodeAirDate'],
         BOOLEAN_FIELDS: ['IsFavorite', 'NextUnwatched', 'Is3D'],
         SIMPLE_FIELDS: ['ItemType', 'SeriesStatus'],

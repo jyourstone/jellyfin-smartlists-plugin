@@ -1612,6 +1612,18 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             {
                 logger?.LogDebug("SmartLists {Operator} IS a built-in ExpressionType: {ExpressionType}", r.Operator, tBinary);
                 var targetValue = GetStandardComparisonTargetValue(r, logger);
+
+                // Nullable numbers (season/episode/track/disc) are null when the item has none: AND the
+                // comparison with HasValue so those items match no rule, NotEqual included.
+                var underlyingType = Nullable.GetUnderlyingType(tProp);
+                if (underlyingType != null)
+                {
+                    var target = System.Linq.Expressions.Expression.Constant(Convert.ChangeType(targetValue, underlyingType, System.Globalization.CultureInfo.InvariantCulture));
+                    return System.Linq.Expressions.Expression.AndAlso(
+                        System.Linq.Expressions.Expression.Property(left, "HasValue"),
+                        System.Linq.Expressions.Expression.MakeBinary(tBinary, System.Linq.Expressions.Expression.Property(left, "Value"), target));
+                }
+
                 var right = System.Linq.Expressions.Expression.Constant(Convert.ChangeType(targetValue, tProp, System.Globalization.CultureInfo.InvariantCulture));
                 // use a binary operation, e.g. 'Equal' -> 'u.Age == 15'
                 return System.Linq.Expressions.Expression.MakeBinary(tBinary, left, right);

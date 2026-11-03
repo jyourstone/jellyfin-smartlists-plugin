@@ -949,6 +949,49 @@ public class EngineOperatorTests
         Assert.Throws<ArgumentException>(() => Compile("Framerate", "Equal", "twenty-four"));
     }
 
+    /// <summary>
+    /// Season/episode/track/disc numbers are null on items that have none (movies, series, songs
+    /// without tags), so a rule on them must not match those items, NotEqual included.
+    /// </summary>
+    [Theory]
+    [InlineData("SeasonNumber", "Equal")]
+    [InlineData("SeasonNumber", "NotEqual")]
+    [InlineData("EpisodeNumber", "LessThan")]
+    [InlineData("EpisodeNumber", "LessThanOrEqual")]
+    [InlineData("TrackNumber", "GreaterThanOrEqual")]
+    [InlineData("DiscNumber", "NotEqual")]
+    public void CompileRule_NumberMissing_MatchesNothingIncludingNotEqual(string field, string op)
+    {
+        var rule = Compile(field, op, "3");
+
+        Assert.False(rule(new Operand("movie")));
+    }
+
+    [Theory]
+    [InlineData(13, "Equal", "13", true)]
+    [InlineData(13, "NotEqual", "13", false)]
+    [InlineData(11, "LessThanOrEqual", "11", true)]
+    [InlineData(12, "LessThanOrEqual", "11", false)]
+    [InlineData(12, "GreaterThan", "11", true)]
+    [InlineData(0, "Equal", "0", true)]
+    [InlineData(0, "LessThan", "1", true)]
+    public void CompileRule_SeasonNumber_ComparesTheParsedNumber(int season, string op, string target, bool expected)
+    {
+        var rule = Compile("SeasonNumber", op, target);
+
+        Assert.Equal(expected, rule(new Operand("episode") { SeasonNumber = season }));
+    }
+
+    [Fact]
+    public void CompileRule_NumberFields_AreIndependent()
+    {
+        var rule = Compile("EpisodeNumber", "Equal", "2");
+        var episode = new Operand("episode") { SeasonNumber = 2, EpisodeNumber = 5 };
+
+        Assert.False(rule(episode));
+        Assert.True(Compile("DiscNumber", "Equal", "2")(new Operand("track") { TrackNumber = 7, DiscNumber = 2 }));
+    }
+
     // ---------------------------------------------------------------------------------------
     // Parent-aware list fields (Tags / Studios / Genres)
     // ---------------------------------------------------------------------------------------

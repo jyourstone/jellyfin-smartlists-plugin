@@ -14,6 +14,8 @@ The **JSON name** column shows each field's internal identifier — the value us
 |-------|-----------|-------------|
 | **Name** | `Name` | Title of the media item |
 | **Series Name** | `SeriesName` | Name of the parent series (episodes only) |
+| **Season Number** | `SeasonNumber` | Season number as Jellyfin parsed it (episodes and seasons). Specials are season 0. |
+| **Episode Number** | `EpisodeNumber` | Episode number as Jellyfin parsed it (episodes only). A double episode such as E11-E12 uses its first number. |
 | **Parental Rating** | `OfficialRating` | Age rating (G, PG, PG-13, R, etc.) |
 | **Custom Rating** | `CustomRating` | Custom/user-defined rating string |
 | **Overview** | `Overview` | Description/summary of the content |
@@ -250,6 +252,8 @@ Filter by cast and crew members. Select "People" in the field dropdown, then cho
 | **Album** | `Album` | Album name (music) |
 | **Artists** | `Artists` | Track-level artists (music) |
 | **Album Artists** | `AlbumArtists` | Album-level primary artists (music) |
+| **Track Number** | `TrackNumber` | Track number from the file's tags (music) |
+| **Disc Number** | `DiscNumber` | Disc number from the file's tags (music) |
 | **External List** | `ExternalList` | Match items from an external list (MDBList, IMDb, Letterboxd, Trakt, TMDB, ListenBrainz, Scrob). [See details below.](#external-list) |
 
 #### Parent metadata options {#parent-metadata-options}
@@ -397,6 +401,8 @@ For list fields (Genres, Studios, Tags, Actors, Directors, Collections, Playlist
 | **equals** / **not equals** | `Equal` / `NotEqual` | Exact match |
 | **greater than** / **less than** | `GreaterThan` / `LessThan` | Comparison |
 | **greater than or equal** / **less than or equal** | `GreaterThanOrEqual` / `LessThanOrEqual` | Comparison |
+
+Season Number, Episode Number, Track Number and Disc Number only match items that have that number, so a rule on them never matches anything else (a movie, or a song without a track tag), even with **not equals**.
 
 Aspect Ratio supports these numeric operators using `width:height` values. It additionally supports
 **is in**, **is not in**, and **matches regex**, as described in the Aspect Ratio section above.
