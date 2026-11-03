@@ -914,19 +914,24 @@ public class EngineOperatorTests
     }
 
     /// <summary>
-    /// Framerate is nullable and every rule is ANDed with HasValue, so items whose framerate
-    /// could not be read are excluded from positive AND negative rules alike.
+    /// Nullable numbers (Framerate, Season/Episode/Track/Disc Number) are null when the item has no
+    /// such value, and every rule is ANDed with HasValue, so those items are excluded from positive
+    /// AND negative rules alike.
     /// </summary>
     [Theory]
-    [InlineData("Equal")]
-    [InlineData("NotEqual")]
-    [InlineData("GreaterThan")]
-    [InlineData("LessThan")]
-    public void CompileRule_FramerateNull_MatchesNothingIncludingNotEqual(string op)
+    [InlineData("Framerate", "Equal")]
+    [InlineData("Framerate", "NotEqual")]
+    [InlineData("Framerate", "GreaterThan")]
+    [InlineData("Framerate", "LessThan")]
+    [InlineData("SeasonNumber", "Equal")]
+    [InlineData("SeasonNumber", "NotEqual")]
+    [InlineData("EpisodeNumber", "LessThanOrEqual")]
+    [InlineData("TrackNumber", "GreaterThanOrEqual")]
+    [InlineData("DiscNumber", "NotEqual")]
+    public void CompileRule_NullableNumberMissing_MatchesNothingIncludingNotEqual(string field, string op)
     {
-        var rule = Compile("Framerate", op, "24");
+        var rule = Compile(field, op, "3");
 
-        Assert.Null(new Operand("item").Framerate);
         Assert.False(rule(new Operand("item")));
     }
 
@@ -943,10 +948,31 @@ public class EngineOperatorTests
         Assert.Equal(expected, rule(new Operand("item") { Framerate = actual }));
     }
 
-    [Fact]
-    public void CompileRule_Framerate_RejectsNonNumericTarget()
+    [Theory]
+    [InlineData("Framerate", "twenty-four")]
+    [InlineData("Framerate", "NaN")]
+    [InlineData("Framerate", "Infinity")]
+    [InlineData("Framerate", "-Infinity")]
+    [InlineData("SeasonNumber", "three")]
+    [InlineData("EpisodeNumber", "1.5")]
+    public void CompileRule_NullableNumber_RejectsNonNumericTarget(string field, string target)
     {
-        Assert.Throws<ArgumentException>(() => Compile("Framerate", "Equal", "twenty-four"));
+        Assert.Throws<ArgumentException>(() => Compile(field, "Equal", target));
+    }
+
+    [Theory]
+    [InlineData(13, "Equal", "13", true)]
+    [InlineData(13, "NotEqual", "13", false)]
+    [InlineData(11, "LessThanOrEqual", "11", true)]
+    [InlineData(12, "LessThanOrEqual", "11", false)]
+    [InlineData(12, "GreaterThan", "11", true)]
+    [InlineData(0, "Equal", "0", true)]
+    [InlineData(0, "LessThan", "1", true)]
+    public void CompileRule_SeasonNumber_ComparesTheParsedNumber(int season, string op, string target, bool expected)
+    {
+        var rule = Compile("SeasonNumber", op, target);
+
+        Assert.Equal(expected, rule(new Operand("episode") { SeasonNumber = season }));
     }
 
     // ---------------------------------------------------------------------------------------

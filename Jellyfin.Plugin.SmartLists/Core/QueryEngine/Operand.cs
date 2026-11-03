@@ -13,6 +13,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public string FolderPath { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public int ProductionYear { get; set; } = 0;
+        // Null when the item has no such number (only episodes, seasons and audio tracks carry them);
+        // season 0 is Specials, so 0 cannot stand in for "none".
+        public int? SeasonNumber { get; set; }
+        public int? EpisodeNumber { get; set; }
+        public int? TrackNumber { get; set; }
+        public int? DiscNumber { get; set; }
         public List<string> Studios { get; set; } = [];
         public string MediaType { get; set; } = string.Empty;
         public string ItemType { get; set; } = string.Empty;

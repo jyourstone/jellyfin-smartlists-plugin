@@ -2242,8 +2242,18 @@
         const hasMusicVideo = selectedMediaTypes.indexOf('MusicVideo') !== -1;
 
         // Episode-only fields
-        if (fieldValue === 'NextUnwatched') {
+        if (fieldValue === 'NextUnwatched' || fieldValue === 'EpisodeNumber') {
             return hasEpisode;
+        }
+
+        // Season Number: episodes and season items carry it
+        if (fieldValue === 'SeasonNumber') {
+            return hasEpisode || selectedMediaTypes.indexOf('Season') !== -1;
+        }
+
+        // Track/Disc Number: audio tracks only (AudioBook derives from Audio; music videos have none)
+        if (fieldValue === 'TrackNumber' || fieldValue === 'DiscNumber') {
+            return hasAudio || hasAudioBook;
         }
 
         // Series Name: available for Episodes (direct) and Video (extras attached to series)

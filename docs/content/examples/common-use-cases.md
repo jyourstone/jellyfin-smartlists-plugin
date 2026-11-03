@@ -173,6 +173,20 @@ Have franchise collections like NCIS or One Chicago where crossover episodes spa
 
 Result: Each collection becomes one slot in the rotation and plays chronologically across its shows — crossovers stay in order, and a spinoff only starts appearing once the timeline reaches its premiere. Episodes from different shows that aired within the **Air Window** (default 3 days) play back-to-back, so a crossover night comes as one run instead of being spread across rotation cycles. Shows not in any collection rotate as themselves. Watch anything in a franchise and the whole franchise moves to the back of the rotation — unless you stopped mid-way through a crossover block, in which case the collection stays at the front until you finish it.
 
+### Hand-Picked Crossover Watch Order
+Want to watch whole seasons back to back, but jump to the other show for a crossover? Write one rule group per stretch, in viewing order:
+
+- **Media Types**: Episode
+- Group 1: **Series Name** equals "NCIS" AND **Season Number** = 13 AND **Episode Number** less than 12
+- Group 2: **Series Name** equals "NCIS: New Orleans" AND **Season Number** = 2 AND **Episode Number** less than 12
+- Group 3: **Series Name** equals "NCIS" AND **Season Number** = 13 AND **Episode Number** = 12
+- Group 4: **Series Name** equals "NCIS: New Orleans" AND **Season Number** = 2 AND **Episode Number** = 12
+- Group 5: **Series Name** equals "NCIS" AND **Season Number** = 13 AND **Episode Number** greater than 12
+- Group 6: **Series Name** equals "NCIS: New Orleans" AND **Season Number** = 2 AND **Episode Number** greater than 12
+- **Sort by**: Rule Group Order, then Season Number, then Episode Number
+
+Result: The list follows the groups top to bottom, and each group plays in episode order. The numbers come from Jellyfin's metadata, so this works however your files are named.
+
 ### TV Channel with Commercials (Bumpers)
 Take any of the TV Channel playlists above and weave "commercial break" clips between the episodes:
 

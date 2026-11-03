@@ -248,6 +248,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             // Content Fields
             AddField(fields, "Name", "Name", FieldType.Text, FieldCategory.Content, StringOperators);
             AddField(fields, "SeriesName", "Series Name", FieldType.Text, FieldCategory.Content, StringOperators, ExtractionGroup.SeriesName);
+            AddField(fields, "SeasonNumber", "Season Number", FieldType.Numeric, FieldCategory.Content, NumericOperators);
+            AddField(fields, "EpisodeNumber", "Episode Number", FieldType.Numeric, FieldCategory.Content, NumericOperators);
             AddField(fields, "SimilarTo", "Similar To", FieldType.Similarity, FieldCategory.Content, SimilarityOperators, ExtractionGroup.SimilarTo);
             AddField(fields, "OfficialRating", "Parental Rating", FieldType.Text, FieldCategory.Content, StringOperators);
             AddField(fields, "CustomRating", "Custom Rating", FieldType.Text, FieldCategory.Content, StringOperators);
@@ -309,6 +311,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             AddField(fields, "Album", "Album", FieldType.Text, FieldCategory.Collection, StringOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "Artists", "Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
             AddField(fields, "AlbumArtists", "Album Artists", FieldType.List, FieldCategory.Collection, MultiValueOperators, ExtractionGroup.AudioMetadata);
+            AddField(fields, "TrackNumber", "Track Number", FieldType.Numeric, FieldCategory.Collection, NumericOperators);
+            AddField(fields, "DiscNumber", "Disc Number", FieldType.Numeric, FieldCategory.Collection, NumericOperators);
             AddField(fields, "ExternalList", "External List", FieldType.List, FieldCategory.Collection, SimpleOperators, ExtractionGroup.ExternalLists);
 
             // Provider ID Fields (direct BaseItem property access - zero cost)

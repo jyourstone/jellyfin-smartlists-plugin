@@ -238,10 +238,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 return BuildAspectRatioExpression(r, left, logger);
             }
 
-            // Check framerate fields (nullable float type)
-            if (tProp == typeof(float?) && IsFramerateField(r.MemberName))
+            // Nullable numbers (Framerate, season/episode/track/disc numbers)
+            if (Nullable.GetUnderlyingType(tProp) != null)
             {
-                return BuildFramerateExpression(r, left, logger);
+                return BuildNullableNumberExpression(r, left, logger);
             }
 
             if (tProp == typeof(string))
@@ -1181,35 +1181,46 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         }
 
         /// <summary>
-        /// Builds expressions for framerate fields that support numeric comparisons with null handling.
-        /// Items with null framerate are ignored (filtered out).
+        /// Builds expressions for nullable numeric fields (int? or float?). Null means the item has no
+        /// such value, so it matches no rule, NotEqual included.
         /// </summary>
-        private static BinaryExpression BuildFramerateExpression(Expression r, MemberExpression left, ILogger? logger)
+        private static BinaryExpression BuildNullableNumberExpression(Expression r, MemberExpression left, ILogger? logger)
         {
-            logger?.LogDebug("SmartLists handling framerate field {Field} with value {Value}", r.MemberName, r.TargetValue);
+            logger?.LogDebug("SmartLists handling nullable numeric field {Field} with value {Value}", r.MemberName, r.TargetValue);
 
-            // Enforce per-field operator whitelist for framerate fields
+            // Enforce per-field operator whitelist
             var allowedOps = Operators.GetOperatorsForField(r.MemberName);
             if (!allowedOps.Contains(r.Operator))
             {
-                logger?.LogError("SmartLists unsupported operator '{Operator}' for framerate field '{Field}'. Allowed: {Allowed}",
+                logger?.LogError("SmartLists unsupported operator '{Operator}' for field '{Field}'. Allowed: {Allowed}",
                     r.Operator, r.MemberName, string.Join(", ", allowedOps));
                 var supportedOperators = Operators.GetSupportedOperatorsString(r.MemberName);
-                throw new ArgumentException($"Operator '{r.Operator}' is not supported for framerate field '{r.MemberName}'. Supported operators: {supportedOperators}");
+                throw new ArgumentException($"Operator '{r.Operator}' is not supported for field '{r.MemberName}'. Supported operators: {supportedOperators}");
             }
 
-            // Parse target value as float using culture-invariant parsing
-            if (!float.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var targetValue))
+            // Parse target value as the field's number type using culture-invariant parsing
+            var numberType = Nullable.GetUnderlyingType(left.Type);
+            object? targetValue = null;
+            if (numberType == typeof(int) && int.TryParse(r.TargetValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var wholeNumber))
             {
-                logger?.LogError("SmartLists framerate comparison failed: Invalid numeric value '{Value}' for field '{Field}'", r.TargetValue, r.MemberName);
-                throw new ArgumentException($"Invalid numeric value '{r.TargetValue}' for field '{r.MemberName}'. Expected a decimal number.");
+                targetValue = wholeNumber;
+            }
+            else if (numberType == typeof(float) && float.TryParse(r.TargetValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+                && float.IsFinite(decimalNumber))
+            {
+                targetValue = decimalNumber;
             }
 
-            // For all framerate comparisons, we need to ensure the framerate field is not null
-            // This means items with null framerate will be ignored
+            if (targetValue == null)
+            {
+                logger?.LogError("SmartLists comparison failed: Invalid numeric value '{Value}' for field '{Field}'", r.TargetValue, r.MemberName);
+                throw new ArgumentException($"Invalid numeric value '{r.TargetValue}' for field '{r.MemberName}'. Expected a number.");
+            }
+
+            // Items with a null value are ignored
             var hasValueCheck = System.Linq.Expressions.Expression.Property(left, "HasValue");
             var valueProperty = System.Linq.Expressions.Expression.Property(left, "Value");
-            var targetConstant = System.Linq.Expressions.Expression.Constant(targetValue);
+            var targetConstant = System.Linq.Expressions.Expression.Constant(targetValue, numberType!);
 
             // Handle different operators with null check
             BinaryExpression comparisonExpression = r.Operator switch
@@ -1220,10 +1231,10 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 "LessThan" => System.Linq.Expressions.Expression.LessThan(valueProperty, targetConstant),
                 "GreaterThanOrEqual" => System.Linq.Expressions.Expression.GreaterThanOrEqual(valueProperty, targetConstant),
                 "LessThanOrEqual" => System.Linq.Expressions.Expression.LessThanOrEqual(valueProperty, targetConstant),
-                _ => throw new ArgumentException($"Operator '{r.Operator}' is not supported for framerate field '{r.MemberName}'. Supported operators: {string.Join(", ", allowedOps)}"),
+                _ => throw new ArgumentException($"Operator '{r.Operator}' is not supported for field '{r.MemberName}'. Supported operators: {string.Join(", ", allowedOps)}"),
             };
 
-            // Combine: framerate must have a value (not null) AND meet the comparison criteria
+            // Combine: the field must have a value (not null) AND meet the comparison criteria
             return System.Linq.Expressions.Expression.AndAlso(hasValueCheck, comparisonExpression);
         }
 
@@ -1691,11 +1702,6 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         private static bool IsResolutionField(string fieldName)
         {
             return FieldRegistry.IsResolutionField(fieldName);
-        }
-
-        private static bool IsFramerateField(string fieldName)
-        {
-            return FieldRegistry.IsFramerateField(fieldName);
         }
 
         /// <summary>
