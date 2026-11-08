@@ -286,4 +286,56 @@ public sealed class CollageBuilderTests : IDisposable
         AssertNear(SKColors.Black, collage.GetPixel(50, 225));
         AssertNear(SKColors.Blue, collage.GetPixel(150, 225));
     }
+
+    [Fact]
+    public async Task CreateGridCollageAsync_TwoSources_RendersCheckerboard()
+    {
+        using var red = Solid(100, 100, SKColors.Red);
+        using var blue = Solid(100, 100, SKColors.Blue);
+        var sources = new[]
+        {
+            Write("red.png", red, SKEncodedImageFormat.Png),
+            Write("blue.png", blue, SKEncodedImageFormat.Png),
+        };
+
+        var outputPath = Path.Combine(_dir, "collage.jpg");
+        await CollageBuilder.CreateGridCollageAsync(sources, outputPath, 200, 200, applyBadge: false, NullLogger.Instance, CancellationToken.None);
+
+        using var collage = SKBitmap.Decode(outputPath);
+        AssertNear(SKColors.Red, collage.GetPixel(50, 50));
+        AssertNear(SKColors.Blue, collage.GetPixel(150, 50));
+        AssertNear(SKColors.Blue, collage.GetPixel(50, 150));
+        AssertNear(SKColors.Red, collage.GetPixel(150, 150));
+    }
+
+    [Fact]
+    public void SelectCollageImages_SkipsMissingAndDuplicatePaths_AndKeepsLaterImages()
+    {
+        var a = Path.Combine(_dir, "a.jpg");
+        var b = Path.Combine(_dir, "b.jpg");
+        var c = Path.Combine(_dir, "c.jpg");
+        var d = Path.Combine(_dir, "d.jpg");
+        var e = Path.Combine(_dir, "e.jpg");
+        foreach (var path in new[] { a, b, c, d, e })
+        {
+            File.WriteAllText(path, "x");
+        }
+
+        var missing = Path.Combine(_dir, "missing.jpg");
+        var selected = CollageBuilder.SelectCollageImages([a, missing, null, a.ToUpperInvariant(), "", b, a, c, d, e]);
+
+        Assert.Equal([a, b, c, d], selected);
+    }
+
+    [Theory]
+    [InlineData("A", "AAAA")]
+    [InlineData("AB", "ABBA")]   // checkerboard: neither image sits above its own copy
+    [InlineData("ABC", "ABCA")]
+    [InlineData("ABCD", "ABCD")]
+    [InlineData("ABCDE", "ABCD")]
+    public void FillQuadrants_CyclesSources_AndCheckerboardsTwo(string sources, string expected)
+    {
+        var paths = sources.Select(c => c.ToString()).ToArray();
+        Assert.Equal(expected, string.Concat(CollageBuilder.FillQuadrants(paths)));
+    }
 }

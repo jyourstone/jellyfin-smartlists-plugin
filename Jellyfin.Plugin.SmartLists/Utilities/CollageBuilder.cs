@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -74,11 +75,48 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         }
 
         /// <summary>
-        /// Creates a 2x2 collage from up to four source images and saves it as a JPEG.
-        /// Images are center-cropped to fill their quadrant. Unreadable sources are
-        /// skipped (their quadrant stays black), matching previous behavior.
+        /// Picks the first four distinct image paths that exist on disk, in order. Existing paths
+        /// compare case-insensitively, like playlist cover selection; exact duplicates are dropped
+        /// before the disk check, so a missing path never hides a case variant that exists.
+        /// Stops checking the disk once four are found.
         /// </summary>
-        /// <param name="imagePaths">Source image paths (first four are used).</param>
+        /// <param name="imagePaths">Candidate image paths in priority order; null or empty entries are skipped.</param>
+        /// <returns>Up to four collage source paths.</returns>
+        internal static List<string> SelectCollageImages(IEnumerable<string?> imagePaths)
+        {
+            return [.. imagePaths
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .Where(path => path.Length > 0 && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(4)];
+        }
+
+        /// <summary>
+        /// Picks the image for each of the four collage quadrants (left-to-right,
+        /// top-to-bottom), cycling when there are fewer than four. Two images are laid out
+        /// as a checkerboard (A B / B A) so neither sits directly above its own copy.
+        /// </summary>
+        /// <param name="imagePaths">One or more image paths, in priority order.</param>
+        /// <returns>The four quadrant image paths.</returns>
+        internal static string[] FillQuadrants(IReadOnlyList<string> imagePaths)
+        {
+            if (imagePaths.Count == 2)
+            {
+                return [imagePaths[0], imagePaths[1], imagePaths[1], imagePaths[0]];
+            }
+
+            var count = imagePaths.Count;
+            return [imagePaths[0], imagePaths[1 % count], imagePaths[2 % count], imagePaths[3 % count]];
+        }
+
+        /// <summary>
+        /// Creates a 2x2 collage from one or more source images and saves it as a JPEG.
+        /// Fewer than four images repeat to fill the grid (see <see cref="FillQuadrants"/>).
+        /// Images are center-cropped to fill their quadrant. Unreadable sources are
+        /// skipped (their quadrant stays black).
+        /// </summary>
+        /// <param name="imagePaths">Distinct source image paths, at least one (first four are used).</param>
         /// <param name="outputPath">Destination .jpg path.</param>
         /// <param name="width">Collage width in pixels (quadrants are width/2).</param>
         /// <param name="height">Collage height in pixels (quadrants are height/2).</param>
@@ -102,12 +140,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
             {
                 canvas.Clear(SKColors.Black);
 
-                for (int i = 0; i < 4 && i < imagePaths.Count; i++)
+                var quadrants = FillQuadrants(imagePaths);
+                for (int i = 0; i < quadrants.Length; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     try
                     {
-                        using var sourceImage = LoadOrientedBitmap(imagePaths[i], quadrantWidth, quadrantHeight);
+                        using var sourceImage = LoadOrientedBitmap(quadrants[i], quadrantWidth, quadrantHeight);
 
                         // Quadrants fill left-to-right, top-to-bottom. Scale to cover each while
                         // maintaining aspect ratio, cropping the overflow.
@@ -115,7 +154,7 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        logger.LogWarning(ex, "Failed to load image {ImagePath} for collage, skipping", imagePaths[i]);
+                        logger.LogWarning(ex, "Failed to load image {ImagePath} for collage, skipping", quadrants[i]);
                     }
                 }
             }

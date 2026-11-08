@@ -1564,15 +1564,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Playlists
                 else
                 {
                     // Square 2x2 collage, matching the covers Jellyfin generates for playlists.
-                    // Cycle the available images to fill all four quadrants (like collections do).
-                    var collageSources = new List<string>(4);
-                    for (int i = 0; i < 4; i++)
-                    {
-                        collageSources.Add(imagePaths[i % imagePaths.Count]);
-                    }
-
                     await CollageBuilder.CreateGridCollageAsync(
-                        collageSources,
+                        imagePaths,
                         collagePath,
                         600,
                         600,
