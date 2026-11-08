@@ -2252,33 +2252,23 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         /// <summary>
         /// Creates a 4-image collage from collection items and sets it as the collection's primary image.
-        /// Uses the first items with valid images (duplicates if needed to fill 4 slots).
+        /// Uses the first items with valid images (repeated to fill 4 slots when there are fewer).
         /// </summary>
         private async Task CreateImageCollageAsync(BaseItem collection, List<BaseItem> itemsWithImages, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
-                // Select up to 4 items from the first items with images (duplicate if needed to fill 4 slots)
-                var selectedItems = new List<BaseItem>();
-                for (int i = 0; i < 4; i++)
-                {
-                    selectedItems.Add(itemsWithImages[i % itemsWithImages.Count]);
-                }
-
                 _logger.LogDebug("Creating 4-image collage for collection {CollectionName} from {ItemCount} items (using first items: {ItemNames})", 
                     collection.Name, itemsWithImages.Count,
-                    string.Join(", ", selectedItems.Take(Math.Min(4, itemsWithImages.Count)).Select(i => i.Name)));
+                    string.Join(", ", itemsWithImages.Take(4).Select(i => i.Name)));
 
-                // Get image paths
-                var imagePaths = new List<string>();
-                foreach (var item in selectedItems)
-                {
-                    var imageInfo = item.ImageInfos!.First(i => i.Type == ImageType.Primary);
-                    if (!string.IsNullOrEmpty(imageInfo.Path) && System.IO.File.Exists(imageInfo.Path))
-                    {
-                        imagePaths.Add(imageInfo.Path);
-                    }
-                }
+                // First four distinct images that exist on disk; the collage repeats them to fill the grid
+                var imagePaths = itemsWithImages
+                    .Select(item => item.ImageInfos!.First(i => i.Type == ImageType.Primary).Path)
+                    .Where(path => !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                    .Distinct()
+                    .Take(4)
+                    .ToList();
 
                 if (imagePaths.Count == 0)
                 {
@@ -2335,34 +2325,25 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
 
         /// <summary>
         /// Creates a 4-image thumb collage from collection items and sets it as the collection's thumb image.
-        /// Uses the first items with valid thumb images (duplicates if needed to fill 4 slots).
+        /// Uses the first items with valid thumb images (repeated to fill 4 slots when there are fewer).
         /// Creates a 16:9 aspect ratio image suitable for landscape views.
         /// </summary>
         private async Task CreateThumbCollageAsync(BaseItem collection, List<BaseItem> itemsWithThumbImages, bool applyBadge, CancellationToken cancellationToken)
         {
             try
             {
-                // Select up to 4 items from the first items with images (duplicate if needed to fill 4 slots)
-                var selectedItems = new List<BaseItem>();
-                for (int i = 0; i < 4; i++)
-                {
-                    selectedItems.Add(itemsWithThumbImages[i % itemsWithThumbImages.Count]);
-                }
-
                 _logger.LogDebug("Creating 4-image thumb collage for collection {CollectionName} from {ItemCount} items (using first items: {ItemNames})", 
                     collection.Name, itemsWithThumbImages.Count,
-                    string.Join(", ", selectedItems.Take(Math.Min(4, itemsWithThumbImages.Count)).Select(i => i.Name)));
+                    string.Join(", ", itemsWithThumbImages.Take(4).Select(i => i.Name)));
 
-                // Get thumb image paths only
-                var imagePaths = new List<string>();
-                foreach (var item in selectedItems)
-                {
-                    var thumbImageInfo = item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb);
-                    if (thumbImageInfo != null && !string.IsNullOrEmpty(thumbImageInfo.Path) && System.IO.File.Exists(thumbImageInfo.Path))
-                    {
-                        imagePaths.Add(thumbImageInfo.Path);
-                    }
-                }
+                // First four distinct thumb images that exist on disk; the collage repeats them to fill the grid
+                var imagePaths = itemsWithThumbImages
+                    .Select(item => item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb)?.Path)
+                    .OfType<string>()
+                    .Where(path => path.Length > 0 && System.IO.File.Exists(path))
+                    .Distinct()
+                    .Take(4)
+                    .ToList();
 
                 if (imagePaths.Count == 0)
                 {

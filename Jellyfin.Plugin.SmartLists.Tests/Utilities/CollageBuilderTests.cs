@@ -286,4 +286,16 @@ public sealed class CollageBuilderTests : IDisposable
         AssertNear(SKColors.Black, collage.GetPixel(50, 225));
         AssertNear(SKColors.Blue, collage.GetPixel(150, 225));
     }
+
+    [Theory]
+    [InlineData("A", "AAAA")]
+    [InlineData("AB", "ABBA")]   // checkerboard: neither image sits above its own copy
+    [InlineData("ABC", "ABCA")]
+    [InlineData("ABCD", "ABCD")]
+    [InlineData("ABCDE", "ABCD")]
+    public void FillQuadrants_CyclesSources_AndCheckerboardsTwo(string sources, string expected)
+    {
+        var paths = sources.Select(c => c.ToString()).ToArray();
+        Assert.Equal(expected, string.Concat(CollageBuilder.FillQuadrants(paths)));
+    }
 }
