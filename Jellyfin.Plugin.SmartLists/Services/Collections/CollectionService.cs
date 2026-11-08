@@ -2265,8 +2265,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 // First four distinct images that exist on disk; the collage repeats them to fill the grid
                 var imagePaths = itemsWithImages
                     .Select(item => item.ImageInfos!.First(i => i.Type == ImageType.Primary).Path)
-                    .Where(path => !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
                     .Distinct()
+                    .Where(path => !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
                     .Take(4)
                     .ToList();
 
@@ -2340,8 +2340,8 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
                 var imagePaths = itemsWithThumbImages
                     .Select(item => item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb)?.Path)
                     .OfType<string>()
-                    .Where(path => path.Length > 0 && System.IO.File.Exists(path))
                     .Distinct()
+                    .Where(path => path.Length > 0 && System.IO.File.Exists(path))
                     .Take(4)
                     .ToList();
 

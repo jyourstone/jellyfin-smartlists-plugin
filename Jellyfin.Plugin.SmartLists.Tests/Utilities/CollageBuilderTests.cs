@@ -287,6 +287,27 @@ public sealed class CollageBuilderTests : IDisposable
         AssertNear(SKColors.Blue, collage.GetPixel(150, 225));
     }
 
+    [Fact]
+    public async Task CreateGridCollageAsync_TwoSources_RendersCheckerboard()
+    {
+        using var red = Solid(100, 100, SKColors.Red);
+        using var blue = Solid(100, 100, SKColors.Blue);
+        var sources = new[]
+        {
+            Write("red.png", red, SKEncodedImageFormat.Png),
+            Write("blue.png", blue, SKEncodedImageFormat.Png),
+        };
+
+        var outputPath = Path.Combine(_dir, "collage.jpg");
+        await CollageBuilder.CreateGridCollageAsync(sources, outputPath, 200, 200, applyBadge: false, NullLogger.Instance, CancellationToken.None);
+
+        using var collage = SKBitmap.Decode(outputPath);
+        AssertNear(SKColors.Red, collage.GetPixel(50, 50));
+        AssertNear(SKColors.Blue, collage.GetPixel(150, 50));
+        AssertNear(SKColors.Blue, collage.GetPixel(50, 150));
+        AssertNear(SKColors.Red, collage.GetPixel(150, 150));
+    }
+
     [Theory]
     [InlineData("A", "AAAA")]
     [InlineData("AB", "ABBA")]   // checkerboard: neither image sits above its own copy
