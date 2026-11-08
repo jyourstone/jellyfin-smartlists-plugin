@@ -75,8 +75,10 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         }
 
         /// <summary>
-        /// Picks the first four distinct image paths that exist on disk, in order. Paths compare
-        /// case-insensitively, like playlist cover selection. Stops checking the disk once four are found.
+        /// Picks the first four distinct image paths that exist on disk, in order. Existing paths
+        /// compare case-insensitively, like playlist cover selection; exact duplicates are dropped
+        /// before the disk check, so a missing path never hides a case variant that exists.
+        /// Stops checking the disk once four are found.
         /// </summary>
         /// <param name="imagePaths">Candidate image paths in priority order; null or empty entries are skipped.</param>
         /// <returns>Up to four collage source paths.</returns>
@@ -84,8 +86,9 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         {
             return [.. imagePaths
                 .OfType<string>()
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(StringComparer.Ordinal)
                 .Where(path => path.Length > 0 && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(4)];
         }
 
