@@ -2258,23 +2258,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         {
             try
             {
-                _logger.LogDebug("Creating 4-image collage for collection {CollectionName} from {ItemCount} items (using first items: {ItemNames})", 
-                    collection.Name, itemsWithImages.Count,
-                    string.Join(", ", itemsWithImages.Take(4).Select(i => i.Name)));
-
-                // First four distinct images that exist on disk; the collage repeats them to fill the grid
-                var imagePaths = itemsWithImages
-                    .Select(item => item.ImageInfos!.First(i => i.Type == ImageType.Primary).Path)
-                    .Distinct()
-                    .Where(path => !string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                    .Take(4)
-                    .ToList();
+                var imagePaths = CollageBuilder.SelectCollageImages(
+                    itemsWithImages.Select(item => item.ImageInfos!.First(i => i.Type == ImageType.Primary).Path));
 
                 if (imagePaths.Count == 0)
                 {
                     _logger.LogWarning("No valid image paths found for collage creation for collection {CollectionName}", collection.Name);
                     return;
                 }
+
+                _logger.LogDebug("Creating 4-image collage for collection {CollectionName} from {ItemCount} items (using images: {ImagePaths})",
+                    collection.Name, itemsWithImages.Count, string.Join(", ", imagePaths));
 
                 // Get collection's metadata directory
                 var collectionPath = collection.Path;
@@ -2332,24 +2326,17 @@ namespace Jellyfin.Plugin.SmartLists.Services.Collections
         {
             try
             {
-                _logger.LogDebug("Creating 4-image thumb collage for collection {CollectionName} from {ItemCount} items (using first items: {ItemNames})", 
-                    collection.Name, itemsWithThumbImages.Count,
-                    string.Join(", ", itemsWithThumbImages.Take(4).Select(i => i.Name)));
-
-                // First four distinct thumb images that exist on disk; the collage repeats them to fill the grid
-                var imagePaths = itemsWithThumbImages
-                    .Select(item => item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb)?.Path)
-                    .OfType<string>()
-                    .Distinct()
-                    .Where(path => path.Length > 0 && System.IO.File.Exists(path))
-                    .Take(4)
-                    .ToList();
+                var imagePaths = CollageBuilder.SelectCollageImages(
+                    itemsWithThumbImages.Select(item => item.ImageInfos?.FirstOrDefault(i => i.Type == ImageType.Thumb)?.Path));
 
                 if (imagePaths.Count == 0)
                 {
                     _logger.LogWarning("No valid image paths found for thumb collage creation for collection {CollectionName}", collection.Name);
                     return;
                 }
+
+                _logger.LogDebug("Creating 4-image thumb collage for collection {CollectionName} from {ItemCount} items (using images: {ImagePaths})",
+                    collection.Name, itemsWithThumbImages.Count, string.Join(", ", imagePaths));
 
                 // Get collection's metadata directory
                 var collectionPath = collection.Path;

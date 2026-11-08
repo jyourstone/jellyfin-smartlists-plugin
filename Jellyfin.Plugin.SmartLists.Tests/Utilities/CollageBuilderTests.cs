@@ -308,6 +308,25 @@ public sealed class CollageBuilderTests : IDisposable
         AssertNear(SKColors.Red, collage.GetPixel(150, 150));
     }
 
+    [Fact]
+    public void SelectCollageImages_SkipsMissingAndDuplicatePaths_AndKeepsLaterImages()
+    {
+        var a = Path.Combine(_dir, "a.jpg");
+        var b = Path.Combine(_dir, "b.jpg");
+        var c = Path.Combine(_dir, "c.jpg");
+        var d = Path.Combine(_dir, "d.jpg");
+        var e = Path.Combine(_dir, "e.jpg");
+        foreach (var path in new[] { a, b, c, d, e })
+        {
+            File.WriteAllText(path, "x");
+        }
+
+        var missing = Path.Combine(_dir, "missing.jpg");
+        var selected = CollageBuilder.SelectCollageImages([a, missing, null, a.ToUpperInvariant(), "", b, a, c, d, e]);
+
+        Assert.Equal([a, b, c, d], selected);
+    }
+
     [Theory]
     [InlineData("A", "AAAA")]
     [InlineData("AB", "ABBA")]   // checkerboard: neither image sits above its own copy

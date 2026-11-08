@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -71,6 +72,21 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
         {
             var (aspectWidth, aspectHeight) = GetTileAspect(imageType, forPlaylist);
             return TryCreateCroppedCoverAsync(sourcePath, outputPath, aspectWidth, aspectHeight, targetWidth, applyBadge: true, logger, cancellationToken);
+        }
+
+        /// <summary>
+        /// Picks the first four distinct image paths that exist on disk, in order. Paths compare
+        /// case-insensitively, like playlist cover selection. Stops checking the disk once four are found.
+        /// </summary>
+        /// <param name="imagePaths">Candidate image paths in priority order; null or empty entries are skipped.</param>
+        /// <returns>Up to four collage source paths.</returns>
+        internal static List<string> SelectCollageImages(IEnumerable<string?> imagePaths)
+        {
+            return [.. imagePaths
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(path => path.Length > 0 && File.Exists(path))
+                .Take(4)];
         }
 
         /// <summary>
