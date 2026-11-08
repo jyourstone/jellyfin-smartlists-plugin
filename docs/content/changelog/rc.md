@@ -13,6 +13,29 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.2.0.1-rc
+
+*2026-11-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.2.0.1-rc)*
+
+**Features**
+
+- **Season Number**, **Episode Number**, **Track Number** and **Disc Number** rule fields, for example to pick specific episodes of a show or the first track of each album. Specials are season 0 ([Fields](../user-guide/fields-and-operators.md#fields), [#573](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/573)).
+- **Manage lists** can now sort by **Sort Title (A-Z/Z-A)**. Lists without a Sort Title sort by their name ([Metadata](../user-guide/configuration.md#metadata), [#566](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/566)).
+- Keeping the Jellyfin playlist or collection when you delete a smart list now removes the smart list badge from its covers ([Smart List Badge](../user-guide/configuration.md#smart-list-badge), [#567](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/567)).
+
+**Improvements**
+
+- Covers made from two images now place them diagonally, so neither image sits directly above its own copy ([Automatic Image Generation](../user-guide/configuration.md#automatic-image-generation), [#576](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/576)).
+
+**Bug Fixes**
+
+- MDBList lists made up of individual episodes no longer refresh as empty. Your episodes need TMDB IDs to match ([MDBList](../user-guide/external-lists.md#mdblist), [#565](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/565)).
+- Deleting a list from the user page while keeping its Jellyfin playlist or collection could still delete it later, during cleanup. The kept list now stays.
+- A playlist kept after deleting its smart list could still carry the smart list name prefix or suffix.
+- Converting a list between playlist and collection no longer loses its uploaded cover images, and the converted list keeps refreshing automatically without a Jellyfin restart ([Converting Between Types](../user-guide/configuration.md#converting-between-types)).
+- Collection covers no longer show a black square when one of the item images is missing from disk.
+
+
 ## v12.0.4.3-rc
 
 *2026-10-17 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.0.4.3-rc)*
