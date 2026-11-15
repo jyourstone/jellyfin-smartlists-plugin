@@ -13,6 +13,20 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.3.0.1-rc
+
+*2026-11-15 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.3.0.1-rc)*
+
+**Features**
+
+- **Least Recently Watched Round Robin** can now be given a starting order: a sort added after it decides the order of the shows it leaves tied, most often shows nobody has watched yet. Add **Release Date** to start with the oldest show, for example. Without a second sort they stay alphabetical ([Least Recently Watched Round Robin](../user-guide/sorting-and-limits.md#least-recently-watched-round-robin-interleave), [#578](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/578)).
+
+**Bug Fixes**
+
+- **Round Robin Descending** combined with another sort played the whole list backwards, last episodes first. It now plays the same order with or without additional sorts.
+- **Max Items** on a rule group, combined with a **Similarity** sort, kept the first matches found instead of the most similar ones.
+
+
 ## v12.2.0.1-rc
 
 *2026-11-08 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.2.0.1-rc)*
