@@ -163,6 +163,8 @@ Like the TV Channel playlist above, but the show rotation follows your watch his
 
 Result: Shows you have never watched come first, and the show you watched most recently goes to the back of the rotation. Watch an episode of Show A, and on the next refresh Show A moves to the end while the other shows shift forward — the rotation "continues where you left off".
 
+Shows you have never watched start in alphabetical order. Add **Release Date** as a second sort to start with the oldest show instead, see [Choosing the starting order](../user-guide/sorting-and-limits.md#least-recently-watched-round-robin-interleave).
+
 ### Franchise TV Channel (crossovers in air-date order)
 Have franchise collections like NCIS or One Chicago where crossover episodes span several shows? Group the rotation by collection and play each franchise in airing order:
 

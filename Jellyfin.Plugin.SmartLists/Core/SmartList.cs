@@ -1439,6 +1439,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // unconfigured aggregate users.
                 ConfigureAggregateUserOrders(user, logger);
 
+                // Same reason: Similarity orders need their scores before the per-group sort, or
+                // each rule group keeps whichever items come first instead of its best matches.
+                foreach (var order in Orders)
+                {
+                    if (order is SimilarityOrder similarityOrder)
+                    {
+                        similarityOrder.Scores = _similarityScores;
+                    }
+                    else if (order is SimilarityOrderAsc similarityOrderAsc)
+                    {
+                        similarityOrderAsc.Scores = _similarityScores;
+                    }
+                }
+
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
                 {
@@ -1449,19 +1463,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Apply ordering and limits with error handling
                 try
                 {
-                    // If using Similarity order, set the scores before sorting
-                    // If using RuleBlock order, set the group mappings before sorting
+                    // If using RuleBlock order, set the group mappings before sorting. Only now:
+                    // the per-group sort above must order each block by the other sorts alone.
                     foreach (var order in Orders)
                     {
-                        if (order is SimilarityOrder similarityOrder)
-                        {
-                            similarityOrder.Scores = _similarityScores;
-                        }
-                        else if (order is SimilarityOrderAsc similarityOrderAsc)
-                        {
-                            similarityOrderAsc.Scores = _similarityScores;
-                        }
-                        else if (order is Orders.RuleBlockOrder ruleBlockOrder)
+                        if (order is Orders.RuleBlockOrder ruleBlockOrder)
                         {
                             ruleBlockOrder.GroupMappings = _itemGroupMappings;
                         }
@@ -1472,7 +1478,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     }
 
                     // Pre-compute Round Robin positions before sorting
-                    PrepareRoundRobinPositions(expandedResults, logger);
+                    PrepareRoundRobinPositions(expandedResults, user, userDataManager, logger, refreshCache);
 
                     // Apply multiple orders in cascade
                     var orderedResults = ApplyMultipleOrders(expandedResults, user, userDataManager, logger, refreshCache);
@@ -1730,7 +1736,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
                     //   then the global sort applies the Rule Block order while preserving these secondary sorts.
                     // For non-Rule Block ordering: this creates a minor redundancy (items sorted twice),
                     //   but per-group limits are primarily designed for Rule Block scenarios.
-                    PrepareRoundRobinPositions(groupItems, logger);
+                    PrepareRoundRobinPositions(groupItems, user, userDataManager, logger, refreshCache);
                     var sortedGroupItems = ApplyMultipleOrders(groupItems, user, userDataManager, logger, refreshCache).ToList();
 
                     // Filter out items that were already consumed by previous blocks
@@ -2900,10 +2906,15 @@ namespace Jellyfin.Plugin.SmartLists.Core
         /// <summary>
         /// Pre-computes Round Robin interleave positions for any <see cref="RoundRobinBase"/> orders.
         /// Must be called before ApplyMultipleOrders() so ItemPositions are fresh for the given item set.
+        /// The user context is only for Least Recently Watched, whose groups tied on recency are
+        /// ordered by the sorts listed after it.
         /// </summary>
         /// <param name="items">The items to compute positions for.</param>
+        /// <param name="user">User for user-specific sorting.</param>
+        /// <param name="userDataManager">User data manager for user-specific sorting.</param>
         /// <param name="logger">Optional logger for debugging.</param>
-        private void PrepareRoundRobinPositions(IEnumerable<BaseItem> items, ILogger? logger)
+        /// <param name="refreshCache">Refresh cache for performance.</param>
+        internal void PrepareRoundRobinPositions(IEnumerable<BaseItem> items, User user, IUserDataManager? userDataManager, ILogger? logger, RefreshQueueService.RefreshCache refreshCache)
         {
             if (Orders == null || Orders.Count == 0)
             {
@@ -2912,11 +2923,29 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
             List<BaseItem>? materializedItems = null;
 
-            foreach (var order in Orders)
+            // Last to first: a round robin listed after another must have its positions ready
+            // before the earlier one uses it as a tie-break.
+            for (int i = Orders.Count - 1; i >= 0; i--)
             {
-                if (order is RoundRobinBase roundRobin)
+                if (Orders[i] is not RoundRobinBase roundRobin)
                 {
-                    materializedItems ??= items as List<BaseItem> ?? items.ToList();
+                    continue;
+                }
+
+                materializedItems ??= items as List<BaseItem> ?? items.ToList();
+
+                if (roundRobin is RoundRobinLeastRecentlyWatchedOrder leastRecentlyWatched && i < Orders.Count - 1)
+                {
+                    // The sorts listed after it order the groups it leaves tied on recency.
+                    // Wrap before slicing: child aggregation pairs orders with SortOptions by index.
+                    var laterOrders = WrapOrdersWithChildAggregation(Orders, logger).Skip(i + 1).ToList();
+                    leastRecentlyWatched.PreComputePositionsWithTieBreak(
+                        materializedItems,
+                        heads => ApplySortingCore(heads, laterOrders, user, userDataManager, logger, refreshCache),
+                        logger);
+                }
+                else
+                {
                     roundRobin.PreComputePositions(materializedItems, logger: logger);
                 }
             }
@@ -3129,6 +3158,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         /// <summary>
         /// Determines if an order is descending based on its type.
+        /// Round Robin Descending is deliberately not one: its positions already hold the Z-A
+        /// group order, so sorting them descending would reverse the whole playlist.
         /// </summary>
         internal static bool IsDescendingOrder(Order order)
         {
@@ -3160,7 +3191,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is Orders.RuleBlockOrderDesc ||
                    order is ExternalListOrderDesc ||
                    order is LastEpisodeAirDateOrderDesc ||
-                   order is RoundRobinOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 

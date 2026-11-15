@@ -6,6 +6,7 @@ using Jellyfin.Plugin.SmartLists.Core.Orders;
 using Jellyfin.Plugin.SmartLists.Services.Shared;
 using Jellyfin.Plugin.SmartLists.Tests.Support;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 
 namespace Jellyfin.Plugin.SmartLists.Tests.Core;
 
@@ -530,8 +531,183 @@ public class MultiSortPipelineTests
     public void IsDescendingOrder_MatchesTheDescendingSuffix_ForEveryRegisteredSortName(string sortName)
     {
         var order = OrderFactory.CreateOrder(sortName);
-        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal);
+
+        // Round Robin Descending is the one exception: its positions already hold the Z-A
+        // group order, so they are always sorted ascending.
+        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal)
+            && sortName != "Round Robin Descending";
 
         Assert.Equal(expected, SmartList.IsDescendingOrder(order));
+    }
+
+    // ---------------------------------------------------------------------------------
+    // PrepareRoundRobinPositions - sorts listed AFTER Least Recently Watched Round Robin
+    //
+    // The ranking itself is covered in RoundRobinLeastRecentlyWatchedTests; these drive the
+    // real wiring: which orders count as "later", in what state they reach the ranking, and
+    // that every pass rebuilds it.
+    // ---------------------------------------------------------------------------------
+
+    private static string[] PrepareAndSort(SmartList list, List<BaseItem> items, RefreshQueueService.RefreshCache? cache = null)
+    {
+        cache ??= new RefreshQueueService.RefreshCache();
+        list.PrepareRoundRobinPositions(items, TestItems.User, null, null, cache);
+        return Names(list.ApplyMultipleOrders(items, TestItems.User, null, null, cache));
+    }
+
+    /// <summary>Three never-watched shows whose alphabetical order differs from their premiere order.</summary>
+    private static List<BaseItem> ThreeNeverWatchedShows() =>
+    [
+        TestItems.Mov("Alpha", aired: new DateTime(2020, 1, 1)),
+        TestItems.Mov("Bravo", aired: new DateTime(2010, 1, 1)),
+        TestItems.Mov("Charlie", aired: new DateTime(2015, 1, 1)),
+    ];
+
+    [Fact]
+    public void PrepareRoundRobinPositions_LeastRecentlyWatchedThenReleaseDate_StartsTheRotationInPremiereOrder()
+    {
+        var items = new List<BaseItem>
+        {
+            TestItems.Ep("Alpha", 1, 1, aired: new DateTime(2020, 1, 1)),
+            TestItems.Ep("Alpha", 1, 2, aired: new DateTime(2020, 1, 8)),
+            TestItems.Ep("Bravo", 1, 1, aired: new DateTime(2010, 1, 1)),
+            TestItems.Ep("Bravo", 1, 2, aired: new DateTime(2010, 1, 8)),
+            TestItems.Ep("Charlie", 1, 1, aired: new DateTime(2015, 1, 1)),
+            TestItems.Ep("Charlie", 1, 2, aired: new DateTime(2015, 1, 8)),
+        };
+        var list = MakeSmartList([new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" }, new ReleaseDateOrder()]);
+
+        var result = PrepareAndSort(list, items);
+
+        Assert.Equal(
+            ["Bravo S01E01", "Charlie S01E01", "Alpha S01E01", "Bravo S01E02", "Charlie S01E02", "Alpha S01E02"],
+            result);
+    }
+
+    [Fact]
+    public void PrepareRoundRobinPositions_LaterDescendingSort_RanksTheGroupsDescending()
+    {
+        var list = MakeSmartList([new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" }, new ReleaseDateOrderDesc()]);
+
+        Assert.Equal(["Alpha", "Charlie", "Bravo"], PrepareAndSort(list, ThreeNeverWatchedShows()));
+    }
+
+    /// <summary>
+    /// The compatibility guarantee: with no sort listed after it, nothing is ranked and the
+    /// order is exactly the alphabetical tie-break it has always been.
+    /// </summary>
+    [Fact]
+    public void PrepareRoundRobinPositions_LeastRecentlyWatchedAlone_KeepsTheAlphabeticalTieBreak()
+    {
+        var roundRobin = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        var list = MakeSmartList([roundRobin]);
+
+        var result = PrepareAndSort(list, ThreeNeverWatchedShows());
+
+        Assert.Null(roundRobin.GroupTieBreakRanks);
+        Assert.Equal(["Alpha", "Bravo", "Charlie"], result);
+    }
+
+    /// <summary>Only sorts listed AFTER the round robin rank its groups - one before it never does.</summary>
+    [Fact]
+    public void PrepareRoundRobinPositions_SortListedBeforeTheRoundRobin_IsNotATieBreak()
+    {
+        var roundRobin = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        var list = MakeSmartList([new ReleaseDateOrder(), roundRobin]);
+
+        list.PrepareRoundRobinPositions(ThreeNeverWatchedShows(), TestItems.User, null, null, new RefreshQueueService.RefreshCache());
+
+        Assert.Null(roundRobin.GroupTieBreakRanks);
+    }
+
+    /// <summary>
+    /// Per-group limits run this once per rule group before the final pass over the whole list,
+    /// so each pass must rank the items it was given and leave nothing behind for the next.
+    /// </summary>
+    [Fact]
+    public void PrepareRoundRobinPositions_RanksAreRebuiltForEveryPass()
+    {
+        var all = ThreeNeverWatchedShows();
+        var subset = new List<BaseItem> { all[0], all[2] };
+        var list = MakeSmartList([new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" }, new ReleaseDateOrder()]);
+
+        Assert.Equal(["Charlie", "Alpha"], PrepareAndSort(list, subset));
+        Assert.Equal(["Bravo", "Charlie", "Alpha"], PrepareAndSort(list, all));
+    }
+
+    /// <summary>
+    /// The later sorts must be wrapped for child aggregation BEFORE they are sliced off the list:
+    /// WrapOrdersWithChildAggregation pairs Orders with SortOptions by index, so wrapping the
+    /// slice would pair the Production Year order with the round robin's sort option and leave
+    /// it unwrapped. Unwrapped, both collections have no year of their own, tie, and fall back to
+    /// alphabetical (Alpha first); wrapped, they rank by their children's year (Bravo first).
+    /// </summary>
+    [Fact]
+    public void PrepareRoundRobinPositions_LaterSort_KeepsItsChildAggregation()
+    {
+        var alpha = new BoxSet { Id = Guid.NewGuid(), Name = "Alpha" };
+        var bravo = new BoxSet { Id = Guid.NewGuid(), Name = "Bravo" };
+        var cache = new RefreshQueueService.RefreshCache();
+        cache.CollectionChildItems[alpha.Id] = [new Movie { Id = Guid.NewGuid(), Name = "Alpha Movie", ProductionYear = 2020 }];
+        cache.CollectionChildItems[bravo.Id] = [new Movie { Id = Guid.NewGuid(), Name = "Bravo Movie", ProductionYear = 2010 }];
+
+        var list = MakeSmartList(
+            [new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" }, new ProductionYearOrder()],
+            [
+                new() { SortBy = "Least Recently Watched Round Robin", SortOrder = SortOrder.Ascending },
+                new() { SortBy = "ProductionYear", SortOrder = SortOrder.Ascending },
+            ],
+            collectionSearchDepth: 1);
+
+        Assert.Equal(["Bravo", "Alpha"], PrepareAndSort(list, [alpha, bravo], cache));
+    }
+
+    /// <summary>
+    /// A second round robin listed after the first is a legal (if odd) later sort, and its sort
+    /// key IS its pre-computed position - so its positions must exist before the first one ranks
+    /// its groups. Processing the orders in list order would rank against empty positions, tie
+    /// every group and fall back to alphabetical (Alpha first). The later one groups by genre,
+    /// and the genres run opposite to the names, so ready positions put Charlie first.
+    /// </summary>
+    [Fact]
+    public void PrepareRoundRobinPositions_LaterRoundRobin_HasItsPositionsReadyBeforeItIsUsedAsTieBreak()
+    {
+        var items = new List<BaseItem>
+        {
+            TestItems.Mov("Alpha", genres: ["Western"]),
+            TestItems.Mov("Bravo", genres: ["Drama"]),
+            TestItems.Mov("Charlie", genres: ["Action"]),
+        };
+        var list = MakeSmartList(
+        [
+            new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" },
+            new RoundRobinOrder { GroupByField = "Genres" },
+        ]);
+
+        Assert.Equal(["Charlie", "Bravo", "Alpha"], PrepareAndSort(list, items));
+    }
+
+    /// <summary>
+    /// Round Robin Descending already puts its groups Z-A when it computes positions. Sorting
+    /// those positions descending as well reversed the whole playlist - last episodes first -
+    /// as soon as any second sort moved it onto the multi-sort path.
+    /// </summary>
+    [Fact]
+    public void RoundRobinDescending_WithALaterSort_PlaysTheSameOrderAsOnItsOwn()
+    {
+        var items = new List<BaseItem>
+        {
+            TestItems.Mov("Action 1", genres: ["Action"]),
+            TestItems.Mov("Action 2", genres: ["Action"]),
+            TestItems.Mov("Drama 1", genres: ["Drama"]),
+            TestItems.Mov("Drama 2", genres: ["Drama"]),
+        };
+        string[] expected = ["Drama 1", "Action 1", "Drama 2", "Action 2"];
+
+        var alone = MakeSmartList([new RoundRobinOrderDesc { GroupByField = "Genres" }]);
+        var withLaterSort = MakeSmartList([new RoundRobinOrderDesc { GroupByField = "Genres" }, new NameOrder()]);
+
+        Assert.Equal(expected, PrepareAndSort(alone, items));
+        Assert.Equal(expected, PrepareAndSort(withLaterSort, items));
     }
 }

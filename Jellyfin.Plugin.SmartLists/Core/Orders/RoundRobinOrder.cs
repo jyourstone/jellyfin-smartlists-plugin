@@ -509,7 +509,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
 
     /// <summary>
     /// Round Robin sort with groups ordered by how recently the user watched anything in them:
-    /// least recently watched first, never-watched groups first of all (alphabetical tie-break).
+    /// least recently watched first, never-watched groups first of all. Groups tied on recency are
+    /// ordered by the sorts listed after this one, then alphabetically.
     /// The rotation "continues where the user left off" with no persisted state - it is derived
     /// entirely from per-user LastPlayedDate data, so it is deterministic for a given watch history.
     /// </summary>
@@ -534,8 +535,58 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         {
             return keys
                 .OrderBy(k => HeldGroups.Contains(k) || !GroupRecency.TryGetValue(k, out var d) ? DateTime.MinValue : d)
+                .ThenBy(k => GroupTieBreakRanks != null && GroupTieBreakRanks.TryGetValue(k, out var rank) ? rank : int.MaxValue)
                 .ThenBy(k => k, OrderUtilities.SharedNaturalComparer)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Group key → rank among groups with equal recency (the never-watched tier above all),
+        /// from the sorts the user listed after this one. Null when there are none, which leaves
+        /// the alphabetical tie-break in <see cref="OrderGroupKeys"/> as the only one. Like
+        /// <see cref="HeldGroups"/>, recomputed on every <see cref="PreComputePositions"/>
+        /// call so the final pass over the playlist's real item set wins.
+        /// </summary>
+        internal Dictionary<string, int>? GroupTieBreakRanks { get; private set; }
+
+        /// <summary>
+        /// Ranks the groups by the sorts listed after this one. Each group is represented by the
+        /// item it plays first, and <paramref name="sortGroupHeads"/> puts those items in order.
+        /// It must be a stable sort: the heads go in alphabetically by group, so groups it
+        /// leaves tied stay alphabetical.
+        /// </summary>
+        private Dictionary<string, int>? RankGroups(List<BaseItem> items, Func<List<BaseItem>, IEnumerable<BaseItem>> sortGroupHeads)
+        {
+            // The shared interleave with groups in alphabetical order: each group's first item
+            // in it is the item that group plays first, whatever the within-group order.
+            var alphabetical = BuildInterleavedPositions(
+                items,
+                GroupByField,
+                keys => keys.OrderBy(k => k, OrderUtilities.SharedNaturalComparer).ToList(),
+                Name,
+                logger: null,
+                ShuffleWithinGroups,
+                CollectionGroupKeys,
+                OrderWithinGroupsByAirDate,
+                AirBlockWindowDays);
+
+            if (alphabetical.IsEmpty)
+            {
+                return null; // no items or no GroupByField - nothing is grouped
+            }
+
+            var heads = items
+                .OrderBy(item => alphabetical[item.Id])
+                .DistinctBy(item => ExtractGroupKey(item, GroupByField, CollectionGroupKeys), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var ranks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var head in sortGroupHeads(heads))
+            {
+                ranks[ExtractGroupKey(head, GroupByField, CollectionGroupKeys)] = ranks.Count;
+            }
+
+            return ranks;
         }
 
         /// <summary>
@@ -666,8 +717,19 @@ namespace Jellyfin.Plugin.SmartLists.Core.Orders
         /// </summary>
         public override void PreComputePositions(IEnumerable<BaseItem> items, ILogger? logger = null)
         {
+            PreComputePositionsWithTieBreak(items, sortGroupHeads: null, logger);
+        }
+
+        /// <summary>
+        /// As <see cref="PreComputePositions"/>, with
+        /// <paramref name="sortGroupHeads"/> (the sorts listed after this one, null when there
+        /// are none) deciding the order of groups tied on recency - see <see cref="RankGroups"/>.
+        /// </summary>
+        internal void PreComputePositionsWithTieBreak(IEnumerable<BaseItem> items, Func<List<BaseItem>, IEnumerable<BaseItem>>? sortGroupHeads, ILogger? logger)
+        {
             var itemsList = items as List<BaseItem> ?? items.ToList();
             ApplyMidBlockHold(itemsList, logger);
+            GroupTieBreakRanks = sortGroupHeads == null ? null : RankGroups(itemsList, sortGroupHeads);
             base.PreComputePositions(itemsList, logger);
         }
 

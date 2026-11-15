@@ -6,6 +6,9 @@ You can add up to **3 sorting options** for both playlists and collections to cr
 
 **Example**: Sort by "Production Year" descending, then "Community Rating" descending to group movies by year with highest-rated movies first within each year.
 
+!!! note "Round Robin and additional sorts"
+    A Round Robin sort gives every item its own position, so there are no equal values left for a sort added after it to decide. The exception is **Least Recently Watched Round Robin**, which uses the sorts after it to [order the groups you haven't watched yet](#least-recently-watched-round-robin-interleave). Put a Round Robin sort first — listed after another sort, it only breaks that sort's ties.
+
 ## Sort Fields
 
 The **Sort By** dropdown is searchable and its options are grouped into sections: General, Dates, Ratings & Playback, TV, Music, Media Info, Rule-Based, and Round Robin.
@@ -277,10 +280,12 @@ Unlike Random Round Robin, the rotation is not shuffled — it is derived entire
 1. Add the rule `Playback Status = Unplayed` — watched episodes drop off, and each show's next unwatched episode surfaces automatically
 2. Select **Least Recently Watched Round Robin (Interleave)** as your sort
 3. Choose the **Group By** field (e.g., Series Name for TV episodes)
-4. No Sort Order is needed — group order always follows watch recency (never watched first, most recently watched last, alphabetical tie-break)
+4. No Sort Order is needed — group order always follows watch recency (never watched first, most recently watched last)
 5. Set [Auto Refresh](auto-refresh.md) to **On All Changes** so the rotation advances right after you finish watching something
 
 With other auto-refresh modes the rotation still advances, but only at the next refresh (scheduled or on library changes).
+
+**Choosing the starting order**: Groups you have never watched all tie for the front of the rotation, and by default they go in alphabetical order. To choose a different order, add another sort **below** this one — for example **Release Date** ascending to start with the oldest show. Each group is ranked by the item it would play first, and groups that are still tied go alphabetically. This only decides between groups with the same watch recency: once you have watched something from a group, its place follows your watch history. Watch the playlist in order and the rotation keeps the order it started in. A **Random** sort here reshuffles the tied groups on every refresh.
 
 With **Group By: Collection**, the whole franchise carries one recency — watching any member sends the entire collection group to the back of the rotation. The exception is an unfinished air block: with **Order Within Group: Air Date**, a collection stays at the front while the air block you just watched from still has unwatched episodes **in the playlist**, so watching part 1 of a crossover night never pushes parts 2 and 3 to the bottom. Once the block is finished, the collection rotates to the back as usual — episodes hidden by the playlist's other rules never keep a collection at the front.
 

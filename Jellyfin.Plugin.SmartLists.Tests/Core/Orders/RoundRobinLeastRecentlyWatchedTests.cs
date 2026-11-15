@@ -224,6 +224,150 @@ public class RoundRobinLeastRecentlyWatchedTests
     }
 
     // =================================================================================
+    // Tie-break ranks - the sorts listed after this one order groups tied on recency
+    // =================================================================================
+
+    /// <summary>Stand-in for "the sorts listed after this one": a stable sort by premiere date.</summary>
+    private static IEnumerable<BaseItem> ByPremiereDate(List<BaseItem> heads) => heads.OrderBy(h => h.PremiereDate);
+
+    /// <summary>
+    /// The rank only decides between groups with EQUAL recency. "Show A" premiered first (best
+    /// rank) but was watched most recently, so it still goes last; the two never-watched shows
+    /// lead, ordered between themselves by the rank rather than alphabetically.
+    /// </summary>
+    [Fact]
+    public void TieBreakRanks_OrderGroupsTiedOnRecency_ButNeverOverrideRecency()
+    {
+        var showA = TestItems.Mov("Show A", aired: new DateTime(2000, 1, 1));
+        var showB = TestItems.Mov("Show B", aired: new DateTime(2020, 1, 1));
+        var showC = TestItems.Mov("Show C", aired: new DateTime(2010, 1, 1));
+        var showD = TestItems.Mov("Show D", aired: new DateTime(2005, 1, 1));
+        var items = new BaseItem[] { showA, showB, showC, showD };
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        order.GroupRecency["Show A"] = new DateTime(2024, 6, 1);
+        order.GroupRecency["Show D"] = new DateTime(2024, 1, 1);
+        order.PreComputePositionsWithTieBreak(items, ByPremiereDate, logger: null);
+
+        Assert.Equal(["Show C", "Show B", "Show D", "Show A"], TestItems.Names(order.OrderBy(items)));
+    }
+
+    /// <summary>
+    /// Each group is ranked by the item it plays FIRST, which depends on Order Within Group.
+    /// Show A's S01E02 carries an earlier air date than its S01E01: in natural order the group
+    /// leads with S01E01 (2020, so Show B's 2010 wins), in air-date order with S01E02 (2001, so
+    /// Show A wins). Items go in with the later episode first to prove input order is irrelevant.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "Show B S01E01")]
+    [InlineData(true, "Show A S01E02")]
+    public void TieBreakRanks_RepresentEachGroupByTheItemItPlaysFirst(bool airDateWithinGroups, string expectedFirst)
+    {
+        var a2 = TestItems.Ep("Show A", 1, 2, aired: new DateTime(2001, 1, 1));
+        var a1 = TestItems.Ep("Show A", 1, 1, aired: new DateTime(2020, 1, 1));
+        var b1 = TestItems.Ep("Show B", 1, 1, aired: new DateTime(2010, 1, 1));
+        var items = new BaseItem[] { a2, a1, b1 };
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName", OrderWithinGroupsByAirDate = airDateWithinGroups };
+        order.PreComputePositionsWithTieBreak(items, ByPremiereDate, logger: null);
+
+        Assert.Equal(expectedFirst, order.OrderBy(items).First().Name);
+    }
+
+    /// <summary>
+    /// With air blocks (Collections + air-date order) a group opens with a whole block, and its
+    /// head is that block's first item. Both franchises are never watched; "Bravo Franchise"
+    /// aired first, so it leads even though it is second alphabetically, and each franchise's
+    /// two-show block stays together.
+    /// </summary>
+    [Fact]
+    public void TieBreakRanks_WithAirBlocks_RankEachCollectionByTheFirstItemOfItsFirstBlock()
+    {
+        var a = TestItems.Ep("Show A", 1, 1, aired: new DateTime(2020, 1, 1));
+        var b = TestItems.Ep("Show B", 1, 1, aired: new DateTime(2020, 1, 2));
+        var c = TestItems.Ep("Show C", 1, 1, aired: new DateTime(2010, 1, 1));
+        var d = TestItems.Ep("Show D", 1, 1, aired: new DateTime(2010, 1, 2));
+        var items = new BaseItem[] { b, a, d, c };
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder
+        {
+            GroupByField = "Collections",
+            OrderWithinGroupsByAirDate = true,
+            CollectionGroupKeys = TestItems.CollectionMap(
+                ("Alpha Franchise", new BaseItem[] { a, b }),
+                ("Bravo Franchise", new BaseItem[] { c, d })),
+        };
+        order.PreComputePositionsWithTieBreak(items, ByPremiereDate, logger: null);
+
+        Assert.Equal(
+            ["Show C S01E01", "Show D S01E01", "Show A S01E01", "Show B S01E01"],
+            TestItems.Names(order.OrderBy(items)));
+    }
+
+    /// <summary>
+    /// Groups the later sorts leave tied stay alphabetical (natural, numeric-aware): the heads
+    /// are handed to the sort alphabetically by group, and a stable sort keeps that order.
+    /// </summary>
+    [Fact]
+    public void TieBreakRanks_GroupsTheSortLeavesTied_StayAlphabetical()
+    {
+        var sameDay = new DateTime(2020, 1, 1);
+        var show10 = TestItems.Mov("10 Show", aired: sameDay);
+        var show2 = TestItems.Mov("2 Show", aired: sameDay);
+        var oldest = TestItems.Mov("Zzz Show", aired: new DateTime(1990, 1, 1));
+        var items = new BaseItem[] { show10, show2, oldest };
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        order.PreComputePositionsWithTieBreak(items, ByPremiereDate, logger: null);
+
+        Assert.Equal(["Zzz Show", "2 Show", "10 Show"], TestItems.Names(order.OrderBy(items)));
+    }
+
+    /// <summary>
+    /// Ranks are rebuilt on every pass, so a pass with no later sorts never inherits ranks from
+    /// an earlier one.
+    /// </summary>
+    [Fact]
+    public void TieBreakRanks_PassWithoutLaterSorts_ClearsRanksFromAnEarlierPass()
+    {
+        var showA = TestItems.Mov("Show A", aired: new DateTime(2020, 1, 1));
+        var showB = TestItems.Mov("Show B", aired: new DateTime(2010, 1, 1));
+        var items = new BaseItem[] { showA, showB };
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        order.PreComputePositionsWithTieBreak(items, ByPremiereDate, logger: null);
+        Assert.NotNull(order.GroupTieBreakRanks);
+
+        order.PreComputePositions(items);
+
+        Assert.Null(order.GroupTieBreakRanks);
+        Assert.Equal(["Show A", "Show B"], TestItems.Names(order.OrderBy(items)));
+    }
+
+    /// <summary>
+    /// A held group shares the never-watched tier (see the HeldGroups test above), so the rank
+    /// decides between it and a never-watched group exactly as it does between two never-watched
+    /// groups - here it puts the never-watched "Zzz" show ahead of the held "Aaa" show, the
+    /// reverse of the alphabetical fallback. Reflection for the same reason as above; the hold
+    /// is seeded after PreComputePositions, which builds the ranks but clears HeldGroups.
+    /// </summary>
+    [Fact]
+    public void OrderGroupKeys_HeldGroup_IsOrderedAgainstTheNeverWatchedTier_ByTheTieBreakRank()
+    {
+        var held = TestItems.Mov("Aaa Held Show", aired: new DateTime(2020, 1, 1));
+        var unwatched = TestItems.Mov("Zzz Unwatched Show", aired: new DateTime(2010, 1, 1));
+
+        var order = new RoundRobinLeastRecentlyWatchedOrder { GroupByField = "SeriesName" };
+        order.PreComputePositionsWithTieBreak(new BaseItem[] { held, unwatched }, ByPremiereDate, logger: null);
+        order.GroupRecency["Aaa Held Show"] = new DateTime(2026, 1, 1);
+        order.HeldGroups.Add("Aaa Held Show");
+
+        var result = InvokeOrderGroupKeys(order, ["Aaa Held Show", "Zzz Unwatched Show"]);
+
+        Assert.Equal(["Zzz Unwatched Show", "Aaa Held Show"], result);
+    }
+
+    // =================================================================================
     // BuildGroupRecencyAndHoldState
     // =================================================================================
 
