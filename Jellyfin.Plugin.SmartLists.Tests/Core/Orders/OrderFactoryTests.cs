@@ -237,7 +237,11 @@ public class OrderFactoryTests
     public void IsDescendingOrder_MatchesTheDescendingSuffixForEveryRegisteredName(string sortName)
     {
         var order = OrderFactory.CreateOrder(sortName);
-        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal);
+
+        // Round Robin Descending is the one exception: its positions already hold the Z-A
+        // group order, so they are always sorted ascending.
+        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal)
+            && sortName != "Round Robin Descending";
 
         Assert.Equal(expected, IsDescendingOrder(order));
     }

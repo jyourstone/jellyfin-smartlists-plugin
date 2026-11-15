@@ -3152,6 +3152,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
 
         /// <summary>
         /// Determines if an order is descending based on its type.
+        /// Round Robin Descending is deliberately not one: its positions already hold the Z-A
+        /// group order, so sorting them descending would reverse the whole playlist.
         /// </summary>
         internal static bool IsDescendingOrder(Order order)
         {
@@ -3183,7 +3185,6 @@ namespace Jellyfin.Plugin.SmartLists.Core
                    order is Orders.RuleBlockOrderDesc ||
                    order is ExternalListOrderDesc ||
                    order is LastEpisodeAirDateOrderDesc ||
-                   order is RoundRobinOrderDesc ||
                    order is SimilarityOrder; // Similarity descending is the default,
         }
 

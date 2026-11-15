@@ -531,7 +531,11 @@ public class MultiSortPipelineTests
     public void IsDescendingOrder_MatchesTheDescendingSuffix_ForEveryRegisteredSortName(string sortName)
     {
         var order = OrderFactory.CreateOrder(sortName);
-        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal);
+
+        // Round Robin Descending is the one exception: its positions already hold the Z-A
+        // group order, so they are always sorted ascending.
+        var expected = sortName.EndsWith(" Descending", StringComparison.Ordinal)
+            && sortName != "Round Robin Descending";
 
         Assert.Equal(expected, SmartList.IsDescendingOrder(order));
     }
@@ -681,5 +685,29 @@ public class MultiSortPipelineTests
         ]);
 
         Assert.Equal(["Charlie", "Bravo", "Alpha"], PrepareAndSort(list, items));
+    }
+
+    /// <summary>
+    /// Round Robin Descending already puts its groups Z-A when it computes positions. Sorting
+    /// those positions descending as well reversed the whole playlist - last episodes first -
+    /// as soon as any second sort moved it onto the multi-sort path.
+    /// </summary>
+    [Fact]
+    public void RoundRobinDescending_WithALaterSort_PlaysTheSameOrderAsOnItsOwn()
+    {
+        var items = new List<BaseItem>
+        {
+            TestItems.Mov("Action 1", genres: ["Action"]),
+            TestItems.Mov("Action 2", genres: ["Action"]),
+            TestItems.Mov("Drama 1", genres: ["Drama"]),
+            TestItems.Mov("Drama 2", genres: ["Drama"]),
+        };
+        string[] expected = ["Drama 1", "Action 1", "Drama 2", "Action 2"];
+
+        var alone = MakeSmartList([new RoundRobinOrderDesc { GroupByField = "Genres" }]);
+        var withLaterSort = MakeSmartList([new RoundRobinOrderDesc { GroupByField = "Genres" }, new NameOrder()]);
+
+        Assert.Equal(expected, PrepareAndSort(alone, items));
+        Assert.Equal(expected, PrepareAndSort(withLaterSort, items));
     }
 }
