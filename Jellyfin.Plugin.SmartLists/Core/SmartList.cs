@@ -1439,6 +1439,20 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // unconfigured aggregate users.
                 ConfigureAggregateUserOrders(user, logger);
 
+                // Same reason: Similarity orders need their scores before the per-group sort, or
+                // each rule group keeps whichever items come first instead of its best matches.
+                foreach (var order in Orders)
+                {
+                    if (order is SimilarityOrder similarityOrder)
+                    {
+                        similarityOrder.Scores = _similarityScores;
+                    }
+                    else if (order is SimilarityOrderAsc similarityOrderAsc)
+                    {
+                        similarityOrderAsc.Scores = _similarityScores;
+                    }
+                }
+
                 // Apply per-group limits if configured (before sorting and global limits)
                 if (HasPerGroupLimits())
                 {
@@ -1449,19 +1463,11 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // Apply ordering and limits with error handling
                 try
                 {
-                    // If using Similarity order, set the scores before sorting
-                    // If using RuleBlock order, set the group mappings before sorting
+                    // If using RuleBlock order, set the group mappings before sorting. Only now:
+                    // the per-group sort above must order each block by the other sorts alone.
                     foreach (var order in Orders)
                     {
-                        if (order is SimilarityOrder similarityOrder)
-                        {
-                            similarityOrder.Scores = _similarityScores;
-                        }
-                        else if (order is SimilarityOrderAsc similarityOrderAsc)
-                        {
-                            similarityOrderAsc.Scores = _similarityScores;
-                        }
-                        else if (order is Orders.RuleBlockOrder ruleBlockOrder)
+                        if (order is Orders.RuleBlockOrder ruleBlockOrder)
                         {
                             ruleBlockOrder.GroupMappings = _itemGroupMappings;
                         }

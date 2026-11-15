@@ -1,3 +1,4 @@
+using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.SmartLists.Core;
 using Jellyfin.Plugin.SmartLists.Core.Models;
 using Jellyfin.Plugin.SmartLists.Core.QueryEngine;
@@ -180,6 +181,42 @@ public class SimilarToGroupMappingTests
         Assert.True(
             Array.IndexOf(result, crossover.Id) < Array.IndexOf(result, titanic.Id),
             "the crossover must sort on its best block's score, not on the last block scored");
+    }
+
+    /// <summary>
+    /// The per-block limit sorts each block before the list-wide sort runs, so the similarity
+    /// scores must already be attached to the Similarity order by then. Unattached, every item
+    /// scored 0 and the block kept whichever item came first instead of its best match - also
+    /// when Similarity only ranks the groups a Least Recently Watched Round Robin leaves tied.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PerBlockLimit_WithSimilaritySort_KeepsTheBestMatch(bool behindRoundRobin)
+    {
+        var weakMatch = TestItems.Mov("Commando", genres: ["Action", "Sci-Fi"]);
+        var bestMatch = TestItems.Mov("Predator", genres: ["Action", "Sci-Fi", "Thriller"]);
+        var reference = TestItems.Mov("The Terminator", genres: ["Action", "Sci-Fi", "Thriller"]);
+
+        var similarity = new SortOption { SortBy = "Similarity", SortOrder = SortOrder.Descending };
+        var roundRobin = new SortOption
+        {
+            SortBy = "Least Recently Watched Round Robin",
+            SortOrder = SortOrder.Ascending,
+            GroupByField = "SeriesName",
+        };
+        var list = new SmartList(new SmartPlaylistDto
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Similar To List",
+            MediaTypes = [MediaTypeConstants.Movie],
+            ExpressionSets = [SimilarToBlock("The Terminator", maxItems: 1)],
+            Order = new OrderDto { SortOptions = behindRoundRobin ? [roundRobin, similarity] : [similarity] },
+        });
+
+        var result = Filter(list, weakMatch, bestMatch, reference);
+
+        Assert.Equal([bestMatch.Id], result);
     }
 
     [Fact]
