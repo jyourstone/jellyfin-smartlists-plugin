@@ -791,6 +791,15 @@
         return ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
     }
 
+    // Lists sharing a Sort Title fall back to case-sensitive Name order ("Mini" before "brott"),
+    // which is how Jellyfin orders the same ties on its own pages (#566)
+    function compareListSortTitle(a, b) {
+        const nameA = a.Name || '';
+        const nameB = b.Name || '';
+        return getListSortTitleKey(a).localeCompare(getListSortTitleKey(b)) ||
+            (nameA < nameB ? -1 : (nameA > nameB ? 1 : 0));
+    }
+
     SmartLists.sortPlaylists = function(playlists, sortBy) {
         if (!sortBy || !playlists) return playlists || [];
         
@@ -818,12 +827,10 @@
                 return nameB.localeCompare(nameA);
             });
         } else if (sortBy === 'sorttitle-asc') {
-            return sortedPlaylists.sort(function(a, b) {
-                return getListSortTitleKey(a).localeCompare(getListSortTitleKey(b));
-            });
+            return sortedPlaylists.sort(compareListSortTitle);
         } else if (sortBy === 'sorttitle-desc') {
             return sortedPlaylists.sort(function(a, b) {
-                return getListSortTitleKey(b).localeCompare(getListSortTitleKey(a));
+                return compareListSortTitle(b, a);
             });
         } else if (sortBy === 'created-desc') {
             return sortedPlaylists.sort(function(a, b) {
