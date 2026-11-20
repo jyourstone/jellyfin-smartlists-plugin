@@ -74,6 +74,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? OnlyParentGenres { get; set; } = null;
 
+        // Genres-specific option to check only the genres of the item's album (music), skipping the item, the
+        // artist folder and the library. Stands alone, no IncludeParentGenres needed - only serialize when meaningful
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? OnlyAlbumGenres { get; set; } = null;
+
         // Tags-specific option: also match values inherited from ancestors (season, series, album, folder, library) - only serialize when meaningful
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IncludeParentTags { get; set; } = null;

@@ -266,6 +266,10 @@ Each of these fields has three options:
 - **Yes - Also check parent [tags/studios/genres] (season, series, album, folder, library)** - Matches if the item **or** any of its parents has the value. Useful when the metadata lives higher up than the item itself.
 - **Yes - Only check parent [tags/studios/genres] (season, series, album, folder, library)** - Skips the item's own metadata entirely and checks only its parents.
 
+**Genres** has a fourth option for music:
+
+- **Yes - Only check album genres (music)** - Checks only the genres of the track's album. The track's own genres, the artist folder and the library are all left out, so a pop album by an artist tagged *Electronic* does not match an *Electronic* rule. Items that are not inside an album have no album genres, and that includes albums themselves - for a list of albums, use the item option instead.
+
 **What counts as a parent?** Everything above the item, all the way up to and including the Jellyfin library it lives in:
 
 | Item | What is checked |

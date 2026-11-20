@@ -724,6 +724,39 @@ public class AncestorWalkTests
         Assert.Equal(ExtractionGroup.None, ExtractionGroup.ParentFavorite & FieldRegistry.CheapExtractionGroups);
     }
 
+    /// <summary>
+    /// Same stale-rule hazard for the album-only Genres option (#580): it compiles to a different
+    /// field than both the plain rule and the only-parent rule.
+    /// </summary>
+    [Fact]
+    public void GenerateRuleSetHash_DiffersWhenOnlyAlbumGenresToggles()
+    {
+        var plain = Hash(new Expression("Genres", "Equal", "Jazz"));
+        var onlyParent = Hash(new Expression("Genres", "Equal", "Jazz") { OnlyParentGenres = true, IncludeParentGenres = true });
+        var albumOnly = Hash(new Expression("Genres", "Equal", "Jazz") { OnlyAlbumGenres = true });
+
+        Assert.NotEqual(plain, albumOnly);
+        Assert.NotEqual(onlyParent, albumOnly);
+    }
+
+    /// <summary>
+    /// The album-only key is omitted when unset, so re-saving an existing list writes exactly what
+    /// it wrote before, and it round-trips when set.
+    /// </summary>
+    [Fact]
+    public void Expression_OnlyAlbumGenres_OmittedWhenNullAndRoundTripsWhenSet()
+    {
+        var plain = JsonSerializer.Serialize(new Expression("Genres", "Equal", "Jazz"), SmartListFileSystem.SharedJsonOptions);
+
+        Assert.DoesNotContain("OnlyAlbumGenres", plain, StringComparison.Ordinal);
+
+        var set = JsonSerializer.Serialize(
+            new Expression("Genres", "Equal", "Jazz") { OnlyAlbumGenres = true }, SmartListFileSystem.SharedJsonOptions);
+        var roundTripped = JsonSerializer.Deserialize<Expression>(set, SmartListFileSystem.SharedJsonOptions)!;
+
+        Assert.True(roundTripped.OnlyAlbumGenres);
+    }
+
     private static string Hash(Expression expression)
     {
         var dto = new SmartPlaylistDto

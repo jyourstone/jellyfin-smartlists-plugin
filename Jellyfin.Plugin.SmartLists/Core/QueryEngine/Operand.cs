@@ -39,6 +39,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         public IReadOnlyList<string> ParentTags { get; set; } = [];
         public IReadOnlyList<string> ParentStudios { get; set; } = [];
         public IReadOnlyList<string> ParentGenres { get; set; } = [];
+        // The MusicAlbum ancestors' share of ParentGenres, for the "only album genres" option
+        public IReadOnlyList<string> ParentAlbumGenres { get; set; } = [];
         public double RuntimeMinutes { get; set; } = 0;
         public string OfficialRating { get; set; } = string.Empty;
         public List<string> AudioLanguages { get; set; } = [];

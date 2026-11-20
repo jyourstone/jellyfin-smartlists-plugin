@@ -2306,7 +2306,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
                 var values = AncestorValueResolver.Resolve(baseItem, libraryManager, cache.AncestorValuesById, logger);
                 if (wantTags) { operand.ParentTags = values.Tags; }
                 if (wantStudios) { operand.ParentStudios = values.Studios; }
-                if (wantGenres) { operand.ParentGenres = values.Genres; }
+                if (wantGenres)
+                {
+                    operand.ParentGenres = values.Genres;
+                    operand.ParentAlbumGenres = values.AlbumGenres;
+                }
             }
             catch (Exception ex)
             {
@@ -3201,7 +3205,11 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             if (!extractParentTags) { operand.ParentTags = []; }
             if (!extractParentStudios) { operand.ParentStudios = []; }
-            if (!extractParentGenres) { operand.ParentGenres = []; }
+            if (!extractParentGenres)
+            {
+                operand.ParentGenres = [];
+                operand.ParentAlbumGenres = [];
+            }
 
             // Ancestor favorites, per evaluated user (list user + every user a rule names). Expensive
             // (tree walk + per-ancestor user data), so gated on the requirement flag like the parent groups
