@@ -230,7 +230,7 @@ View and edit your smart playlists and collections:
 - **Organized Interface**: Clean, modern layout with grouped actions and filters
 - **Advanced Filtering**: Filter by list type, media type, visibility and user
 - **Real-time Search**: Search all properties in real-time
-- **Flexible Sorting**: Sort by name, sort title, list creation date, last refreshed, or enabled status
+- **Flexible Sorting**: Sort by name, sort title, list creation date, last refreshed, or enabled status. Sorting by sort title gives the same order as Jellyfin's own playlist and collection pages
 - **Bulk Operations**: Select multiple lists to enable, disable, delete, or convert them simultaneously
 - **Detailed View**: Expand lists to see rules, settings, creation date, and other properties
 - **Quick Actions**: Edit, clone, refresh, or delete individual lists with confirmation dialogs

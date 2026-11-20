@@ -376,7 +376,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                 
                 // Merge both lists
                 var allUserLists = userPlaylists.Concat(userCollections).ToList();
-                
+
+                LibraryManagerHelper.ApplyJellyfinSortNames(allUserLists, _libraryManager);
+
                 return Ok(allUserLists);
             }
             catch (Exception ex)

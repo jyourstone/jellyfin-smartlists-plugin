@@ -786,18 +786,22 @@
         }
     };
     
-    // The list's Sort Title, or its Name when none is set
+    // The sort name Jellyfin generated for the list's playlist or collection: the Sort Title, or
+    // the Name when none is set, lowercased with articles and diacritics dropped and numbers padded.
+    // A list Jellyfin has no item for yet falls back to its own Sort Title, then its Name.
     function getListSortTitleKey(list) {
-        return ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
+        return list.JellyfinSortName || ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
     }
 
-    // Lists sharing a Sort Title fall back to case-sensitive Name order ("Mini" before "brott"),
-    // which is how Jellyfin orders the same ties on its own pages (#566)
+    function compareByCodeUnit(a, b) {
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
+    // Orders lists the way Jellyfin orders its own pages (#566): by sort name in byte order, then,
+    // where sort names are equal, by case-sensitive Name ("Mini" before "brott")
     function compareListSortTitle(a, b) {
-        const nameA = a.Name || '';
-        const nameB = b.Name || '';
-        return getListSortTitleKey(a).localeCompare(getListSortTitleKey(b)) ||
-            (nameA < nameB ? -1 : (nameA > nameB ? 1 : 0));
+        return compareByCodeUnit(getListSortTitleKey(a), getListSortTitleKey(b)) ||
+            compareByCodeUnit(a.Name || '', b.Name || '');
     }
 
     SmartLists.sortPlaylists = function(playlists, sortBy) {
