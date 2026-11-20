@@ -294,6 +294,12 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
 
             if (r.MemberName == "Genres")
             {
+                if (r.OnlyAlbumGenres == true)
+                {
+                    logger?.LogDebug("SmartLists building Genres expression with ONLY album genres");
+                    return BuildCombinedStringEnumerableExpression(r, param, logger, "ParentAlbumGenres");
+                }
+
                 return BuildParentAwareFieldExpression(r, param, logger,
                     baseField: "Genres",
                     parentField: "ParentGenres",

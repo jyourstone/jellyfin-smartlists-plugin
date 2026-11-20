@@ -1902,7 +1902,9 @@
                         // Add Genres configuration info
                         let genresInfo = '';
                         if (rule.MemberName === 'Genres') {
-                            if (rule.OnlyParentGenres === true) {
+                            if (rule.OnlyAlbumGenres === true) {
+                                genresInfo = ' (only album genres)';
+                            } else if (rule.OnlyParentGenres === true) {
                                 genresInfo = ' (only parent genres)';
                             } else if (rule.IncludeParentGenres === true || rule.IncludeParentSeriesGenres === true || rule.IncludeParentAlbumGenres === true) {
                                 genresInfo = ' (including parent genres)';

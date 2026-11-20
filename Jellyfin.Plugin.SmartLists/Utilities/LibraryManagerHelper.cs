@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Plugin.SmartLists.Core.Models;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -17,6 +18,38 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
     /// </summary>
     public static class LibraryManagerHelper
     {
+        /// <summary>
+        /// Fills <see cref="SmartListDto.JellyfinSortName"/> and <see cref="SmartListDto.JellyfinName"/>
+        /// from each list's playlist or collection, so the Manage Lists page can order lists the way
+        /// Jellyfin does. A list whose Jellyfin item does not exist (yet) is left without them.
+        /// </summary>
+        /// <param name="lists">The lists about to be returned to the client.</param>
+        /// <param name="libraryManager">The library manager instance.</param>
+        public static void ApplyJellyfinSortKeys(IEnumerable<SmartListDto> lists, ILibraryManager libraryManager)
+        {
+            ArgumentNullException.ThrowIfNull(lists);
+            ArgumentNullException.ThrowIfNull(libraryManager);
+
+            foreach (var list in lists)
+            {
+                // A playlist shared by several users is one Jellyfin playlist per user, all with the same name
+                IEnumerable<string?> itemIds = list switch
+                {
+                    SmartCollectionDto collection => [collection.JellyfinCollectionId],
+                    SmartPlaylistDto playlist => [playlist.JellyfinPlaylistId, .. (playlist.UserPlaylists ?? []).Select(mapping => mapping.JellyfinPlaylistId)],
+                    _ => [],
+                };
+
+                // GetItemById throws on an empty Guid
+                var item = itemIds
+                    .Select(id => Guid.TryParse(id, out var itemId) && itemId != Guid.Empty ? libraryManager.GetItemById(itemId) : null)
+                    .FirstOrDefault(candidate => candidate is not null);
+
+                list.JellyfinSortName = item?.SortName;
+                list.JellyfinName = item?.Name;
+            }
+        }
+
         /// <summary>
         /// Triggers a library scan using reflection to call QueueLibraryScan if available.
         /// </summary>

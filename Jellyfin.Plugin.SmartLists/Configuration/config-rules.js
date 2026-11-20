@@ -1217,6 +1217,7 @@
             '<option value="false">No - Only check item genres</option>' +
             '<option value="true">Yes - Also check parent genres (season, series, album, folder, library)</option>' +
             '<option value="only">Yes - Only check parent genres (season, series, album, folder, library)</option>' +
+            '<option value="album">Yes - Only check album genres (music)</option>' +
             '</select>' +
             '</div>' +
             '<div class="rule-isfavorite-options" style="display: none; margin-bottom: 0.75em; padding: 0.5em; background: var(--jf-palette-background-paper); border: 1px solid var(--jf-palette-divider); border-radius: 4px;">' +
@@ -1608,6 +1609,8 @@
             if (genresValue === 'only') {
                 expression.OnlyParentGenres = true;
                 expression.IncludeParentGenres = true;
+            } else if (genresValue === 'album') {
+                expression.OnlyAlbumGenres = true;
             } else if (genresValue === 'true') {
                 expression.IncludeParentGenres = true;
             }
@@ -2870,6 +2873,8 @@
                         if (genresSelectValue === 'only') {
                             expression.OnlyParentGenres = true;
                             expression.IncludeParentGenres = true;
+                        } else if (genresSelectValue === 'album') {
+                            expression.OnlyAlbumGenres = true;
                         } else if (genresSelectValue === 'true') {
                             expression.IncludeParentGenres = true;
                         }
@@ -3134,7 +3139,9 @@
                 const genresSelect = ruleRow.querySelector('.rule-genres-select');
                 if (genresSelect) {
                     let includeValue = 'false';
-                    if (expression.OnlyParentGenres === true) {
+                    if (expression.OnlyAlbumGenres === true) {
+                        includeValue = 'album';
+                    } else if (expression.OnlyParentGenres === true) {
                         includeValue = 'only';
                     } else if (expression.IncludeParentGenres === true || expression.IncludeParentSeriesGenres === true || expression.IncludeParentAlbumGenres === true) {
                         includeValue = 'true';

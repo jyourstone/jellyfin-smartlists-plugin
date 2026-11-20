@@ -5,6 +5,7 @@ using System.Linq;
 using Jellyfin.Extensions;
 using Jellyfin.Plugin.SmartLists.Utilities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
 
@@ -26,17 +27,25 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
         /// string.Empty, whereas a null list returns false, so null and empty are observably
         /// different for MatchRegex.
         /// </summary>
-        public static readonly AncestorValues Empty = new([], [], []);
+        public static readonly AncestorValues Empty = new([], [], [], []);
 
         public IReadOnlyList<string> Tags { get; }
         public IReadOnlyList<string> Studios { get; }
         public IReadOnlyList<string> Genres { get; }
 
-        private AncestorValues(IReadOnlyList<string> tags, IReadOnlyList<string> studios, IReadOnlyList<string> genres)
+        /// <summary>The share of <see cref="Genres"/> that comes from MusicAlbum ancestors ("only album genres").</summary>
+        public IReadOnlyList<string> AlbumGenres { get; }
+
+        private AncestorValues(
+            IReadOnlyList<string> tags,
+            IReadOnlyList<string> studios,
+            IReadOnlyList<string> genres,
+            IReadOnlyList<string> albumGenres)
         {
             Tags = tags;
             Studios = studios;
             Genres = genres;
+            AlbumGenres = albumGenres;
         }
 
         /// <summary>
@@ -72,7 +81,8 @@ namespace Jellyfin.Plugin.SmartLists.Core.QueryEngine
             return new AncestorValues(
                 hasTags ? Combine(Tags, nodeTags) : Tags,
                 hasStudios ? Combine(Studios, nodeStudios) : Studios,
-                hasGenres ? Combine(Genres, nodeGenres) : Genres);
+                hasGenres ? Combine(Genres, nodeGenres) : Genres,
+                hasGenres && node is MusicAlbum ? Combine(AlbumGenres, nodeGenres) : AlbumGenres);
         }
 
         private static IReadOnlyList<string> Combine(IReadOnlyList<string> existing, string[] additions)

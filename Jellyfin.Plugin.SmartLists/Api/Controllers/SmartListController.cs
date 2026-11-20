@@ -553,7 +553,9 @@ namespace Jellyfin.Plugin.SmartLists.Api.Controllers
                     }
                     allLists.AddRange(collections);
                 }
-                
+
+                LibraryManagerHelper.ApplyJellyfinSortKeys(allLists, _libraryManager);
+
                 return Ok(allLists);
             }
             catch (Exception ex)

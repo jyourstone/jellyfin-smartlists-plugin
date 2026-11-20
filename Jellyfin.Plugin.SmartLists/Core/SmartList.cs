@@ -93,7 +93,7 @@ namespace Jellyfin.Plugin.SmartLists.Core
         {
             return (expr.MemberName == "Tags" && (expr.IncludeParentTagsEffective || expr.OnlyParentTags == true)) ||
                    (expr.MemberName == "Studios" && (expr.IncludeParentStudiosEffective || expr.OnlyParentStudios == true)) ||
-                   (expr.MemberName == "Genres" && (expr.IncludeParentGenresEffective || expr.OnlyParentGenres == true));
+                   (expr.MemberName == "Genres" && (expr.IncludeParentGenresEffective || expr.OnlyParentGenres == true || expr.OnlyAlbumGenres == true));
         }
 
         // Kept separate from IsParentAwareListExpression on purpose: that one means Tags/Studios/Genres
@@ -549,6 +549,8 @@ namespace Jellyfin.Plugin.SmartLists.Core
                         hashBuilder.Append(expr.IncludeParentGenresEffective);
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.OnlyParentGenres?.ToString() ?? "null");
+                        hashBuilder.Append(':');
+                        hashBuilder.Append(expr.OnlyAlbumGenres?.ToString() ?? "null");
                         hashBuilder.Append(':');
                         hashBuilder.Append(expr.IncludeParentFavorite?.ToString() ?? "null");
                         hashBuilder.Append(':');
@@ -4121,9 +4123,10 @@ namespace Jellyfin.Plugin.SmartLists.Core
                 // OnlyParent* alone does NOT trigger extraction: with no source it compiles to
                 // constant-false (Engine), so requesting the walk would be wasted work.
                 // IsFavorite follows the same rule with IncludeParentFavorite/OnlyParentFavorite.
+                // OnlyAlbumGenres is its own source (it reads the album genres the same walk collects).
                 AddParentGroupIfIncluded(requirements, expr.MemberName, "Tags",    expr.IncludeParentTagsEffective,    ExtractionGroup.ParentTags);
                 AddParentGroupIfIncluded(requirements, expr.MemberName, "Studios", expr.IncludeParentStudiosEffective, ExtractionGroup.ParentStudios);
-                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentGenresEffective,  ExtractionGroup.ParentGenres);
+                AddParentGroupIfIncluded(requirements, expr.MemberName, "Genres",  expr.IncludeParentGenresEffective || expr.OnlyAlbumGenres == true, ExtractionGroup.ParentGenres);
                 AddParentGroupIfIncluded(requirements, expr.MemberName, "IsFavorite", expr.IncludeParentFavorite,     ExtractionGroup.ParentFavorite);
 
                 // Collect SimilarTo expressions for reference item lookup

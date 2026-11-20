@@ -166,6 +166,24 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public Dictionary<string, string>? CustomImages { get; set; }
 
         /// <summary>
+        /// Response-only: the sort name Jellyfin generated for this list's playlist or collection
+        /// (lowercased, articles and diacritics dropped, numbers padded). The list endpoints fill it so
+        /// the Manage Lists page can sort the way Jellyfin does. The non-public setter keeps it from
+        /// being read back from a request body or from disk, so it is never stored.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? JellyfinSortName { get; internal set; }
+
+        /// <summary>
+        /// Response-only, like <see cref="JellyfinSortName"/>: the name of this list's playlist or
+        /// collection in Jellyfin, with the configured prefix and suffix. Jellyfin orders items with
+        /// equal sort names by it, and "Rock [Smart]" sorts after "Rock Classics [Smart]" although
+        /// "Rock" sorts before "Rock Classics".
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? JellyfinName { get; internal set; }
+
+        /// <summary>
         /// Custom sort title applied to the Jellyfin playlist/collection.
         /// Overrides the auto-generated sort name when set.
         /// </summary>

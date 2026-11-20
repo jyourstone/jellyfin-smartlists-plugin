@@ -786,9 +786,24 @@
         }
     };
     
-    // The list's Sort Title, or its Name when none is set
+    // The sort name Jellyfin generated for the list's playlist or collection: the Sort Title, or
+    // the Name when none is set, lowercased with articles and diacritics dropped and numbers padded.
+    // A list Jellyfin has no item for yet falls back to its own Sort Title, then its Name.
     function getListSortTitleKey(list) {
-        return ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
+        return list.JellyfinSortName || ((list.SortTitle || '').trim() || list.Name || '').toLowerCase();
+    }
+
+    function compareByCodeUnit(a, b) {
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
+    // Orders lists the way Jellyfin orders its own pages (#566): by sort name in byte order, then,
+    // where sort names are equal, by the case-sensitive name of the Jellyfin item ("Mini" before
+    // "brott"). That name carries the configured prefix and suffix, which can change the order:
+    // "Rock Classics [Smart]" sorts before "Rock [Smart]".
+    function compareListSortTitle(a, b) {
+        return compareByCodeUnit(getListSortTitleKey(a), getListSortTitleKey(b)) ||
+            compareByCodeUnit(a.JellyfinName || a.Name || '', b.JellyfinName || b.Name || '');
     }
 
     SmartLists.sortPlaylists = function(playlists, sortBy) {
@@ -818,12 +833,10 @@
                 return nameB.localeCompare(nameA);
             });
         } else if (sortBy === 'sorttitle-asc') {
-            return sortedPlaylists.sort(function(a, b) {
-                return getListSortTitleKey(a).localeCompare(getListSortTitleKey(b));
-            });
+            return sortedPlaylists.sort(compareListSortTitle);
         } else if (sortBy === 'sorttitle-desc') {
             return sortedPlaylists.sort(function(a, b) {
-                return getListSortTitleKey(b).localeCompare(getListSortTitleKey(a));
+                return compareListSortTitle(b, a);
             });
         } else if (sortBy === 'created-desc') {
             return sortedPlaylists.sort(function(a, b) {
