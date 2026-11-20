@@ -175,6 +175,15 @@ namespace Jellyfin.Plugin.SmartLists.Core.Models
         public string? JellyfinSortName { get; internal set; }
 
         /// <summary>
+        /// Response-only, like <see cref="JellyfinSortName"/>: the name of this list's playlist or
+        /// collection in Jellyfin, with the configured prefix and suffix. Jellyfin orders items with
+        /// equal sort names by it, and "Rock [Smart]" sorts after "Rock Classics [Smart]" although
+        /// "Rock" sorts before "Rock Classics".
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? JellyfinName { get; internal set; }
+
+        /// <summary>
         /// Custom sort title applied to the Jellyfin playlist/collection.
         /// Overrides the auto-generated sort name when set.
         /// </summary>

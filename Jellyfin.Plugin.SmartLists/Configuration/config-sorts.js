@@ -798,10 +798,12 @@
     }
 
     // Orders lists the way Jellyfin orders its own pages (#566): by sort name in byte order, then,
-    // where sort names are equal, by case-sensitive Name ("Mini" before "brott")
+    // where sort names are equal, by the case-sensitive name of the Jellyfin item ("Mini" before
+    // "brott"). That name carries the configured prefix and suffix, which can change the order:
+    // "Rock Classics [Smart]" sorts before "Rock [Smart]".
     function compareListSortTitle(a, b) {
         return compareByCodeUnit(getListSortTitleKey(a), getListSortTitleKey(b)) ||
-            compareByCodeUnit(a.Name || '', b.Name || '');
+            compareByCodeUnit(a.JellyfinName || a.Name || '', b.JellyfinName || b.Name || '');
     }
 
     SmartLists.sortPlaylists = function(playlists, sortBy) {

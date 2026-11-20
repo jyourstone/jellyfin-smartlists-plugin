@@ -19,13 +19,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
     public static class LibraryManagerHelper
     {
         /// <summary>
-        /// Fills <see cref="SmartListDto.JellyfinSortName"/> with the sort name Jellyfin generated for each
-        /// list's playlist or collection, so the Manage Lists page can order lists the way Jellyfin does.
-        /// A list whose Jellyfin item does not exist (yet) is left without one.
+        /// Fills <see cref="SmartListDto.JellyfinSortName"/> and <see cref="SmartListDto.JellyfinName"/>
+        /// from each list's playlist or collection, so the Manage Lists page can order lists the way
+        /// Jellyfin does. A list whose Jellyfin item does not exist (yet) is left without them.
         /// </summary>
         /// <param name="lists">The lists about to be returned to the client.</param>
         /// <param name="libraryManager">The library manager instance.</param>
-        public static void ApplyJellyfinSortNames(IEnumerable<SmartListDto> lists, ILibraryManager libraryManager)
+        public static void ApplyJellyfinSortKeys(IEnumerable<SmartListDto> lists, ILibraryManager libraryManager)
         {
             ArgumentNullException.ThrowIfNull(lists);
             ArgumentNullException.ThrowIfNull(libraryManager);
@@ -40,10 +40,13 @@ namespace Jellyfin.Plugin.SmartLists.Utilities
                     _ => [],
                 };
 
-                // GetItemById throws on an empty Guid, and a sort name must never cost the whole list page
-                list.JellyfinSortName = itemIds
-                    .Select(id => Guid.TryParse(id, out var itemId) && itemId != Guid.Empty ? libraryManager.GetItemById(itemId)?.SortName : null)
-                    .FirstOrDefault(sortName => !string.IsNullOrEmpty(sortName));
+                // GetItemById throws on an empty Guid
+                var item = itemIds
+                    .Select(id => Guid.TryParse(id, out var itemId) && itemId != Guid.Empty ? libraryManager.GetItemById(itemId) : null)
+                    .FirstOrDefault(candidate => candidate is not null);
+
+                list.JellyfinSortName = item?.SortName;
+                list.JellyfinName = item?.Name;
             }
         }
 
