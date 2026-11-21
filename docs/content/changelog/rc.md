@@ -13,6 +13,19 @@ A non-zero final segment is the RC number — older entries instead number the R
 itself (`v10.10.10.0-rc3`), which is the scheme used before the number moved into the version.
 
 
+## v12.3.0.2-rc
+
+*2026-11-21 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.3.0.2-rc)*
+
+**Features**
+
+- **Genres** rules have a new option for music, **Only check album genres**. It matches on the album's genres alone, so a track is no longer picked up because of its artist's genres ([Parent metadata options](../user-guide/fields-and-operators.md#parent-metadata-options), [#580](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/580)).
+
+**Bug Fixes**
+
+- Sorting **Manage lists** by **Sort Title** now gives the same order as Jellyfin's own playlist and collection pages. Lists sharing a Sort Title, names starting with "The" and names with numbers were out of place ([Manage Lists](../user-guide/configuration.md#2-manage-lists), [#566](https://github.com/jyourstone/jellyfin-smartlists-plugin/issues/566)).
+
+
 ## v12.3.0.1-rc
 
 *2026-11-15 · [release notes](https://github.com/jyourstone/jellyfin-smartlists-plugin/releases/tag/v12.3.0.1-rc)*
